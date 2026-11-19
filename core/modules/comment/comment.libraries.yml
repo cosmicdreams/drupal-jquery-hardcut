@@ -12,7 +12,6 @@ drupal.comment-by-viewer:
   js:
     js/comment-by-viewer.js: {}
   dependencies:
-    - core/jquery
     - core/drupal
     - core/drupalSettings
 
