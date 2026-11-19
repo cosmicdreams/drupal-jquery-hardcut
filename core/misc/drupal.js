@@ -100,6 +100,60 @@ window.Drupal = { behaviors: {}, locale: {} };
     return activeAnimations.size > 0;
   };
 
+  const ownedEventBindings = new Set();
+  const eventBindingObservers = new Set();
+
+  /**
+   * Exposes Drupal-owned bindings to explicitly loaded event adapters.
+   *
+   * The owner installs its native listener and reports the binding here.
+   * Removing an adapter leaves that listener in place.
+   *
+   * @namespace
+   * @internal
+   */
+  Drupal.eventBindings = {
+    /**
+     * Registers a binding while its native listener is installed.
+     *
+     * @param {object} binding
+     *   The descriptor for one owned binding, stable until removal.
+     * @return {function}
+     *   Removes the binding from the registry and all observers.
+     */
+    register(binding) {
+      if (!ownedEventBindings.has(binding)) {
+        ownedEventBindings.add(binding);
+        eventBindingObservers.forEach((observer) => observer.add(binding));
+      }
+      return () => {
+        if (ownedEventBindings.delete(binding)) {
+          eventBindingObservers.forEach((observer) => observer.remove(binding));
+        }
+      };
+    },
+
+    /**
+     * Observes bindings already installed and subsequent changes.
+     *
+     * @param {object} observer
+     *   An adapter with add and remove methods for an owned binding.
+     * @return {function}
+     *   Stops observing and removes this adapter's remaining subscriptions.
+     */
+    observe(observer) {
+      if (!eventBindingObservers.has(observer)) {
+        eventBindingObservers.add(observer);
+        ownedEventBindings.forEach((binding) => observer.add(binding));
+      }
+      return () => {
+        if (eventBindingObservers.delete(observer)) {
+          ownedEventBindings.forEach((binding) => observer.remove(binding));
+        }
+      };
+    },
+  };
+
   /**
    * Custom error thrown after attach/detach if one or more behaviors failed.
    * Initializes the JavaScript behaviors for page loads and Ajax requests.

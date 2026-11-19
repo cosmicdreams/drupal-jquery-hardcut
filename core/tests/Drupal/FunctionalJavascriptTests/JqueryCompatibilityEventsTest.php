@@ -25,6 +25,59 @@ final class JqueryCompatibilityEventsTest extends WebDriverTestBase {
   protected $defaultTheme = 'stark';
 
   /**
+   * Tests early and late observation of native owned bindings.
+   */
+  public function testOwnedBindingObservation(): void {
+    $this->drupalGet('jquery-bc-test/events');
+    $result = $this->getSession()->evaluateScript(<<<'JS'
+      (() => {
+        const target = document.createElement('button');
+        const trace = [];
+        const first = { target, type: 'first' };
+        const second = { target, type: 'second' };
+        const listener = ({ type }) => trace.push(`native:${type}`);
+        target.addEventListener(first.type, listener);
+        target.addEventListener(second.type, listener);
+        const registry = Drupal.eventBindings;
+        const removeFirst = registry.register(first);
+
+        const adapter = (label) => ({
+          add: ({ type }) => trace.push(`${label}:add:${type}`),
+          remove: ({ type }) => trace.push(`${label}:remove:${type}`),
+        });
+        const early = adapter('early');
+        const stopEarly = registry.observe(early);
+        registry.observe(early);
+        const removeSecond = registry.register(second);
+        registry.register(second);
+        const stopLate = registry.observe(adapter('late'));
+
+        target.dispatchEvent(new Event(first.type));
+        removeFirst();
+        removeFirst();
+        stopEarly();
+        stopEarly();
+        removeSecond();
+        stopLate();
+        target.dispatchEvent(new Event(second.type));
+        return trace;
+      })()
+      JS);
+    $this->assertSame([
+      'early:add:first',
+      'early:add:second',
+      'late:add:first',
+      'late:add:second',
+      'native:first',
+      'early:remove:first',
+      'late:remove:first',
+      'early:remove:second',
+      'late:remove:second',
+      'native:second',
+    ], $result);
+  }
+
+  /**
    * Tests that only finite, outstanding animations hold the test wait open.
    */
   public function testFiniteAnimationTracking(): void {
