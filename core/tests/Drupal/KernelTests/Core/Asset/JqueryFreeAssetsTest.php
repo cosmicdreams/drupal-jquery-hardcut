@@ -137,6 +137,16 @@ class JqueryFreeAssetsTest extends KernelTestBase {
   }
 
   /**
+   * Tests direct and URL imports of legacy stylesheets.
+   */
+  public function testStylesheetImports(): void {
+    $this->assertTrue(self::referencesJqueryCss('@import url("jquery-ui.css");'));
+    $this->assertTrue(self::referencesJqueryCss('@import url(jquery-ui.css);'));
+    $this->assertTrue(self::referencesJqueryCss('@import "jquery-ui.css";'));
+    $this->assertFalse(self::referencesJqueryCss('@import url("dialog.css");'));
+  }
+
+  /**
    * Matches local vendor paths and conventional remote jQuery asset names.
    */
   private static function isLegacyAssetPath(string $path): bool {
@@ -151,7 +161,7 @@ class JqueryFreeAssetsTest extends KernelTestBase {
    */
   private static function referencesJqueryCss(string $source): bool {
     $source = preg_replace('~/\*.*?\*/~s', '', $source);
-    preg_match_all('~(?:@import\s+|url\(\s*)["\']?([^"\'\s;)]+)~i', $source, $matches);
+    preg_match_all('~(?:@import\s+(?=["\'])|url\(\s*)["\']?([^"\'\s;)]+)~i', $source, $matches);
     foreach ($matches[1] as $url) {
       if (self::isLegacyAssetPath($url) || preg_match('~(?:^|/)ui-[^/]+\.css(?:$|[?#])~i', $url)) {
         return TRUE;
