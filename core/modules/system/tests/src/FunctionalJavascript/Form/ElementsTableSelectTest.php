@@ -65,6 +65,35 @@ class ElementsTableSelectTest extends WebDriverTestBase {
   }
 
   /**
+   * Tests that a selection range updates rows without emitting change events.
+   */
+  public function testSelectionRange(): void {
+    $this->drupalGet('form_test/tableselect/disabled-rows/multiple-true');
+    $trace = $this->getSession()->evaluateScript(<<<'JS'
+      (() => {
+        const checkboxes = ['row1', 'row2', 'row3'].map((value) =>
+          document.querySelector(`input[type="checkbox"][value="${value}"]`),
+        );
+        const rows = checkboxes.map((checkbox) => checkbox.closest('tr'));
+        let changes = 0;
+        rows.forEach((row) => row.addEventListener('change', () => { changes += 1; }));
+        const read = () => checkboxes.map((checkbox, index) => [
+          checkbox.checked, checkbox.disabled, rows[index].classList.contains('selected'),
+        ]);
+        Drupal.tableSelectRange(rows[0], rows[2], true);
+        const forward = read();
+        Drupal.tableSelectRange(rows[2], rows[0], false);
+        return [forward, read(), changes];
+      })()
+      JS);
+    $this->assertSame([
+      [[FALSE, FALSE, FALSE], [TRUE, TRUE, TRUE], [TRUE, FALSE, TRUE]],
+      [[FALSE, FALSE, FALSE], [FALSE, TRUE, FALSE], [TRUE, FALSE, TRUE]],
+      0,
+    ], $trace);
+  }
+
+  /**
    * Tests table select with disabled rows.
    */
   public function testDisabledRows(): void {
