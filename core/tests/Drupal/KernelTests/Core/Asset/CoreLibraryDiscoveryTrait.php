@@ -33,6 +33,7 @@ trait CoreLibraryDiscoveryTrait {
     $discovery = new ExtensionDiscovery($this->root);
     // Include extensions shipped inside any core profile.
     $discovery->setProfileDirectories([]);
+    // The scans exclude all test extensions, including Nightwatch fixtures.
     $is_core = static fn (Extension $extension): bool => str_starts_with($extension->getPath(), 'core/');
     $modules = array_filter($discovery->scan('module', FALSE), $is_core);
     $profiles = array_filter($discovery->scan('profile', FALSE), $is_core);
@@ -80,6 +81,13 @@ trait CoreLibraryDiscoveryTrait {
       }
       yield $theme => $libraries;
     }
+  }
+
+  /**
+   * Identifies paths outside the Nightwatch-free ratchets.
+   */
+  protected static function isNightwatchPath(string $path): bool {
+    return preg_match('#^core/(?:tests/Drupal/Nightwatch/|(?:.*/)?tests/(?:src/Nightwatch/|(?:modules|profiles)/nightwatch_[^/]+/)|profiles/tests/nightwatch_[^/]+/)#', $path) === 1;
   }
 
 }

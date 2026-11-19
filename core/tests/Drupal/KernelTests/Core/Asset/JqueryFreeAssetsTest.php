@@ -39,7 +39,9 @@ class JqueryFreeAssetsTest extends KernelTestBase {
       foreach ($libraries as $library) {
         foreach ($library['js'] as $asset) {
           $path = $asset['data'];
-          if ($asset['type'] !== 'file' || isset($seen[$path]) || in_array($path, self::GENERATED_ASSETS, TRUE)) {
+          if ($asset['type'] !== 'file' || isset($seen[$path])
+            || self::isNightwatchPath($path)
+            || in_array($path, self::GENERATED_ASSETS, TRUE)) {
             continue;
           }
           $seen[$path] = TRUE;

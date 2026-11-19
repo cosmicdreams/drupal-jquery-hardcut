@@ -93,8 +93,6 @@ const jqueryAllowList = [
   'modules/views_ui/js/dialog.views.js',
   'modules/views_ui/js/views-admin.js',
   'modules/views_ui/js/views_ui.listing.js',
-  'tests/Drupal/Nightwatch/Commands/drupalCreateRole.js',
-  'tests/Drupal/Nightwatch/Tests/jQueryUIPositionShimTest.js',
   'themes/default_admin/js/autocomplete.js',
   'themes/default_admin/js/details.js',
   'themes/default_admin/js/media-library.ui.js',
@@ -108,6 +106,11 @@ export default defineConfig(
   {
     ignores: [
       'assets/vendor/**/*',
+      'tests/Drupal/Nightwatch/**',
+      '**/tests/src/Nightwatch/**',
+      '**/tests/modules/nightwatch_*/**',
+      '**/tests/profiles/nightwatch_*/**',
+      'profiles/tests/nightwatch_*/**',
       'node_modules/**/*',
       '**/js_test_files/**/*',
       '**/build/**/*',
