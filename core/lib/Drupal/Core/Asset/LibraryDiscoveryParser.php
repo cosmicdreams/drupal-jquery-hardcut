@@ -154,7 +154,7 @@ class LibraryDiscoveryParser {
           if (!is_array($options)) {
             $options = [];
           }
-          unset($options['preserve_override_order']);
+          unset($options['preserve_override_order'], $options['_overridden_source']);
           if ($type == 'js' && isset($options['weight']) && $options['weight'] > 0) {
             throw new \UnexpectedValueException("The $extension/$id library defines a positive weight for '$source'. Only negative weights are allowed (but should be avoided). Instead of a positive weight, specify accurate dependencies for this library.");
           }
@@ -577,9 +577,21 @@ class LibraryDiscoveryParser {
    *   The theme or base theme.
    */
   protected function setOverrideValue(array &$library, array $sub_key, array $overrides, $theme_path) {
+    if ($sub_key === ['js']) {
+      // Resolve canonical paths against the inherited scripts once per theme.
+      // An explicit override of the current path takes precedence.
+      foreach ($library['js'] ?? [] as $path => $options) {
+        $source = $options['_overridden_source'] ?? NULL;
+        if ($source !== NULL && array_key_exists($source, $overrides) && !array_key_exists($source, $library['js'])) {
+          if (!array_key_exists($path, $overrides)) {
+            $overrides[$path] = $overrides[$source];
+          }
+          unset($overrides[$source]);
+        }
+      }
+    }
+
     foreach ($overrides as $original => $replacement) {
-      // Get the attributes of the asset to be overridden. If the key does
-      // not exist, then throw an exception.
       $key_exists = NULL;
       $parents = array_merge($sub_key, [$original]);
       // Save the attributes of the library asset to be overridden.
@@ -587,12 +599,16 @@ class LibraryDiscoveryParser {
       if ($key_exists) {
         if ($replacement) {
           $replacement = $this->resolveThemeAssetPath($theme_path, $replacement);
-          if ($sub_key === ['js'] && !empty($attributes['preserve_override_order']) && !array_key_exists($replacement, $library['js'])) {
-            // Keep subsequent scripts in the library after the replacement.
-            $paths = array_keys($library['js']);
-            $paths[array_search($original, $paths, TRUE)] = $replacement;
-            $library['js'] = array_combine($paths, $library['js']);
-            continue;
+          if ($sub_key === ['js'] && !empty($attributes['preserve_override_order'])) {
+            $attributes['_overridden_source'] ??= $original;
+            if (!array_key_exists($replacement, $library['js'])) {
+              // Keep subsequent scripts in the library after the replacement.
+              $paths = array_keys($library['js']);
+              $paths[array_search($original, $paths, TRUE)] = $replacement;
+              $library['js'][$original] = $attributes;
+              $library['js'] = array_combine($paths, $library['js']);
+              continue;
+            }
           }
         }
         // Remove asset to be overridden.

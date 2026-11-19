@@ -442,6 +442,61 @@ class LibraryDiscoveryIntegrationTest extends KernelTestBase {
   }
 
   /**
+   * Tests positional script overrides and inheritance.
+   */
+  public function testScriptOverrideOrdering(): void {
+    $themes = 'core/modules/system/tests/themes';
+    $base = "$themes/test_base_theme";
+    $sub = "$themes/test_subtheme";
+    $source = '/core/misc/example.js';
+    $next = '/core/misc/example-next.js';
+    $final = '/core/misc/example-final.js';
+    $base_file = "/$base/base.js";
+    $sub_file = "/$sub/sub.js";
+    $scripts = [$source => ['preserve_override_order' => TRUE], $next => [], $final => []];
+    $this->container->get('state')->set('theme_test_library_info_alter theme_test', [
+      'ordered_scripts' => ['js' => $scripts],
+      'ordinary_scripts' => ['js' => [$source => []] + $scripts],
+    ]);
+
+    $libraries = [
+      'theme_test/ordered_scripts' => ['js' => [$source => 'base.js']],
+      'theme_test/ordinary_scripts' => ['js' => [$source => 'base.js']],
+    ];
+    $cases = [
+      'unmodified' => [[], [], [$source, $next, $final]],
+      'in-place replacement' => [$libraries, [], [$base_file, $next, $final]],
+      'canonical target' => [$libraries, [$source => 'sub.js'], [$sub_file, $next, $final]],
+      'replacement target' => [$libraries, [$base_file => 'sub.js'], [$sub_file, $next, $final]],
+      'exact target wins' => [$libraries, [$source => 'ignored.js', $base_file => 'sub.js'], [$sub_file, $next, $final]],
+      'remove inherited replacement' => [$libraries, [$source => FALSE], [$next, $final]],
+      'existing destination' => [$libraries, [$source => $final], [$next, $final]],
+    ];
+    $this->assertInstanceOf(CacheCollectorInterface::class, $this->libraryDiscovery);
+    $normalize = static fn (array $paths): array => array_map(static fn (string $path): string => substr($path, 1), $paths);
+    foreach ($cases as $label => [$base_overrides, $sub_scripts, $expected]) {
+      $this->container->get('theme.manager')->setActiveTheme(new ActiveTheme([
+        'name' => 'test_subtheme',
+        'path' => $sub,
+        'extension' => $this->container->get('extension.list.theme')->get('test_subtheme'),
+        'libraries_override' => [
+          $base => $base_overrides,
+          $sub => ['theme_test/ordered_scripts' => ['js' => $sub_scripts]],
+        ],
+      ]));
+      $this->libraryDiscovery->reset();
+      $assets = $this->libraryDiscovery->getLibraryByName('theme_test', 'ordered_scripts')['js'];
+      $this->assertSame($normalize($expected), array_column($assets, 'data'), $label);
+      foreach ($assets as $asset) {
+        $this->assertArrayNotHasKey('preserve_override_order', $asset);
+        $this->assertArrayNotHasKey('_overridden_source', $asset);
+      }
+      $ordinary = $this->libraryDiscovery->getLibraryByName('theme_test', 'ordinary_scripts')['js'];
+      $this->assertSame($normalize($base_overrides ? [$next, $final, $base_file] : [$source, $next, $final]), array_column($ordinary, 'data'));
+    }
+  }
+
+  /**
    * Tests libraries-extend.
    */
   public function testLibrariesExtend(): void {
