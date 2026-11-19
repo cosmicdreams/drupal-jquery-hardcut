@@ -50,6 +50,16 @@ class JqueryFreeLibrariesTest extends KernelTestBase {
       return;
     }
 
+    $baseline = Yaml::decode(file_get_contents($fixture));
+    $new_edges = [];
+    foreach ($map as $library => $closure) {
+      $added = array_diff($closure, $baseline[$library] ?? []);
+      if ($added) {
+        $new_edges[] = "$library reaches new jQuery libraries or widgets: " . implode(', ', $added);
+      }
+    }
+    $this->assertSame([], $new_edges, implode("\n", $new_edges));
+
     $allowed = Yaml::decode(file_get_contents(__DIR__ . '/fixtures/jquery-library-allow-list.yml')) ?? [];
     $actual = array_keys(array_filter($map, static fn (array $closure): bool => (bool) array_intersect(self::JQUERY_LIBRARIES, $closure)));
 
