@@ -65,6 +65,41 @@ window.Drupal = { behaviors: {}, locale: {} };
     }, 0);
   };
 
+  const activeAnimations = new Set();
+
+  /**
+   * Tracks completion of a finite Drupal-owned animation.
+   *
+   * @param {Animation} animation
+   *   The animation to track.
+   * @return {Animation}
+   *   The same animation, so the caller can control it.
+   *
+   * @internal
+   */
+  Drupal.trackAnimation = function (animation) {
+    if (Number.isFinite(animation.effect?.getComputedTiming().endTime)) {
+      const completion = animation.finished;
+      activeAnimations.add(completion);
+      const clear = () => activeAnimations.delete(completion);
+      // Cancellation rejects the completion promise.
+      completion.then(clear, clear);
+    }
+    return animation;
+  };
+
+  /**
+   * Returns whether a tracked animation has yet to settle.
+   *
+   * @return {boolean}
+   *   Whether an animation is active.
+   *
+   * @internal
+   */
+  Drupal.hasActiveAnimations = function () {
+    return activeAnimations.size > 0;
+  };
+
   /**
    * Custom error thrown after attach/detach if one or more behaviors failed.
    * Initializes the JavaScript behaviors for page loads and Ajax requests.

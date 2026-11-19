@@ -25,6 +25,45 @@ final class JqueryCompatibilityEventsTest extends WebDriverTestBase {
   protected $defaultTheme = 'stark';
 
   /**
+   * Tests that only finite, outstanding animations hold the test wait open.
+   */
+  public function testFiniteAnimationTracking(): void {
+    $this->drupalGet('jquery-bc-test/events');
+    $session = $this->getSession();
+    $session->executeScript(<<<'JS'
+      (() => {
+        const element = document.querySelector('#jquery-bc-test-result');
+        const keyframes = [{ opacity: 0 }, { opacity: 1 }];
+        const repeating = element.animate(keyframes, { duration: 1000, iterations: Infinity });
+        repeating.pause();
+        Drupal.trackAnimation(repeating);
+        window.compatibilityAnimation = { repeating };
+      })()
+      JS);
+    $this->assertFalse($session->evaluateScript('window.drupalTestHasActiveAnimations()'));
+    $this->assertTrue($session->evaluateScript(<<<'JS'
+      (() => {
+        const element = document.querySelector('#jquery-bc-test-result');
+        const keyframes = [{ opacity: 0 }, { opacity: 1 }];
+        const finishing = element.animate(keyframes, 1000);
+        const cancelled = element.animate(keyframes, 1000);
+        finishing.pause();
+        cancelled.pause();
+        window.compatibilityAnimation.finishing = finishing;
+        window.compatibilityAnimation.cancelled = cancelled;
+        Drupal.trackAnimation(finishing);
+        return Drupal.trackAnimation(cancelled) === cancelled;
+      })()
+      JS));
+    $this->assertTrue($session->evaluateScript('window.drupalTestHasActiveAnimations()'));
+    $session->executeScript('window.compatibilityAnimation.finishing.finish();');
+    $this->assertTrue($session->evaluateScript('window.drupalTestHasActiveAnimations()'));
+    $session->executeScript('window.compatibilityAnimation.cancelled.cancel();');
+    $this->assertTrue($session->wait(1000, '!window.drupalTestHasActiveAnimations()'));
+    $session->executeScript('window.compatibilityAnimation.repeating.cancel();');
+  }
+
+  /**
    * Records native and jQuery delivery, including the handler return value.
    */
   public function testDispatchSemantics(): void {
