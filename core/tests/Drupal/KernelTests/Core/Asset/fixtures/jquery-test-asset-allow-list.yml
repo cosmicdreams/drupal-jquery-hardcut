@@ -2,9 +2,6 @@
 - fixture: core/modules/system/tests/modules/ajax_test/ajax_test.libraries.yml:ajax_insert
   removal: A
   assets: [js/insert-ajax.js]
-- fixture: core/modules/system/tests/modules/ajax_test/ajax_test.libraries.yml:command_promise
-  removal: A
-  assets: [js/command_promise-ajax.js]
 - fixture: core/modules/system/tests/modules/ajax_test/ajax_test.libraries.yml:global_events
   removal: A
   assets: [js/global_events.js]

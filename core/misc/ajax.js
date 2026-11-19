@@ -414,7 +414,15 @@
       },
     };
 
-    $.extend(this, defaults, elementSettings);
+    // Retain defined inherited settings and shallow object assignments.
+    for (const settings of [defaults, elementSettings]) {
+      for (const name in settings) {
+        const value = settings[name];
+        if (name !== '__proto__' && value !== undefined && value !== this) {
+          this[name] = value;
+        }
+      }
+    }
 
     /**
      * @type {Drupal.AjaxCommands}
@@ -1672,17 +1680,23 @@
      *   The XMLHttpRequest status.
      */
     restripe(ajax, response, status) {
-      // :even and :odd are reversed because jQuery counts from 0 and
-      // we count from 1, so we're out of sync.
-      // Match immediate children of the parent element to allow nesting.
-      $(response.selector)
-        .find('> tbody > tr:visible, > tr:visible')
-        .removeClass('odd even')
-        .filter(':even')
-        .addClass('odd')
-        .end()
-        .filter(':odd')
-        .addClass('even');
+      // Resolve legacy selectors as before. Include rows of the selected
+      // tables, with or without a tbody, and skip rows of nested tables.
+      const rows = $(response.selector)
+        .find('> tbody > tr, > tr')
+        .toArray()
+        .filter(Drupal.elementIsVisible);
+      rows.forEach((row) => row.classList.remove('odd', 'even'));
+
+      // Row indices are zero-based, but the first visible row is odd.
+      for (const [start, className] of [
+        [0, 'odd'],
+        [1, 'even'],
+      ]) {
+        for (let index = start; index < rows.length; index += 2) {
+          rows[index].classList.add(className);
+        }
+      }
     },
 
     /**

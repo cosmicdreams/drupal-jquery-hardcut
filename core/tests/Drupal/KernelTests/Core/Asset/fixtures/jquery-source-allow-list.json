@@ -268,10 +268,6 @@
       "owner": "U",
       "references": 1
     },
-    "modules/system/tests/modules/ajax_test/js/command_promise-ajax.js": {
-      "owner": "A",
-      "references": 1
-    },
     "modules/system/tests/modules/ajax_test/js/global_events.js": {
       "owner": "A",
       "references": 1
