@@ -67,6 +67,8 @@ final class JqueryEventBridgeTest extends WebDriverTestBase {
         const first = window.jQuery;
         const second = window.foreignInstance;
         const { connect } = Drupal.eventBindings.legacyFixture;
+        connect()();
+        connect({})();
         const target = document.getElementById('event-bridge-fixture');
         const type = 'compatibility:probe';
         let calls = 0;
@@ -102,6 +104,49 @@ final class JqueryEventBridgeTest extends WebDriverTestBase {
       })()
       JS);
     $this->assertSame([TRUE, TRUE, 1, NULL, 2, NULL, 3, 4, 5], $trace);
+  }
+
+  /**
+   * Tests that a synthetic select change creates no DOM event.
+   */
+  public function testSelectChange(): void {
+    $this->drupalGet('jquery-bc-test/bridge-events');
+    $trace = $this->getSession()->evaluateScript(<<<'JS'
+      (() => {
+        const parent = document.getElementById('event-bridge-fixture');
+        const select = parent.appendChild(document.createElement('select'));
+        select.add(new Option('Show', 'show'));
+        const trace = [];
+        const listener = function (event, argument) {
+          trace.push([event instanceof Event, this === select, event.target.value, argument ?? null]);
+          return 'handled';
+        };
+        select.addEventListener('change', listener);
+        const unregister = Drupal.eventBindings.register({
+          target: select, type: 'change', namespace: 'compat', listener,
+        });
+        parent.addEventListener('change', () => trace.push('DOM bubble'));
+
+        select.dispatchEvent(new Event('change', { bubbles: true }));
+        const legacy = jQuery(select);
+        legacy.trigger('change', ['synthetic']);
+        legacy.trigger('change.other');
+        const result = legacy.triggerHandler('change.compat', ['handler']);
+        unregister();
+        legacy.trigger('change');
+
+        return [result, trace];
+      })()
+      JS);
+    $this->assertSame([
+      'handled',
+      [
+        [TRUE, TRUE, 'show', NULL],
+        'DOM bubble',
+        [FALSE, TRUE, 'show', 'synthetic'],
+        [FALSE, TRUE, 'show', 'handler'],
+      ],
+    ], $trace);
   }
 
   /**

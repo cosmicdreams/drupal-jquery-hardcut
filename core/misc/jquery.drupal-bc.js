@@ -22,13 +22,19 @@
     return registry.observe({
       add(binding) {
         const { target, type, namespace, selector, listener } = binding;
-        // Only exercise paths that do not produce a second native delivery:
-        // a colon-delimited event, an anchor click, and a prevented form submit.
+        // Only subscribe to the paths exercised by the fixture. A select has
+        // no native change() method for jQuery's trigger to invoke.
+        const selectChange =
+          !selector && type === 'change' && target instanceof HTMLSelectElement;
         const directActivation =
           !selector &&
           ((type === 'click' && target instanceof HTMLAnchorElement) ||
             (type === 'submit' && target instanceof HTMLFormElement));
-        if (type !== 'compatibility:probe' && !directActivation) {
+        if (
+          type !== 'compatibility:probe' &&
+          !directActivation &&
+          !selectChange
+        ) {
           return;
         }
 
@@ -169,6 +175,10 @@
    *   Disconnects the instance and removes its subscriptions.
    */
   function connect(jquery) {
+    if (typeof jquery !== 'function') {
+      return () => undefined;
+    }
+
     if (!connections.has(jquery)) {
       const stop = observeLegacyEvents(jquery, window.Drupal.eventBindings);
       const disconnect = () => {
