@@ -28,16 +28,16 @@ class TestController extends ControllerBase {
   }
 
   /**
-   * Helper page to load jQuery in test.
+   * Helper page to attach a late JavaScript library.
    *
    * @return array
-   *   Empty page with jQuery.
+   *   Empty page that attaches the debounce utility.
    */
   public function testMethod() {
     return [
       '#markup' => '',
       '#attached' => [
-        'library' => 'core/jquery',
+        'library' => ['core/drupal.debounce'],
       ],
     ];
   }

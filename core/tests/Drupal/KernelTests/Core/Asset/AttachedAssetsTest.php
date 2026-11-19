@@ -74,6 +74,27 @@ class AttachedAssetsTest extends KernelTestBase {
   }
 
   /**
+   * Tests that a render attachment can add a legacy asset.
+   */
+  public function testExplicitLegacyAttachment(): void {
+    $build['#attached']['library'][] = 'common_test/files';
+    $language = \Drupal::languageManager()->getCurrentLanguage();
+    $legacy_paths = static fn (array $assets): array => array_values(preg_grep(
+      '#^core/(?:assets/vendor/jquery|misc/(?:jquery\.form|position|jquery\.drupal-bc)\.js$)#',
+      array_keys($assets),
+    ));
+    $resolve = function (array $build) use ($language): array {
+      $assets = AttachedAssets::createFromRenderArray($build);
+      [$header, $footer] = $this->assetResolver->getJsAssets($assets, FALSE, $language);
+      return $header + $footer + $this->assetResolver->getCssAssets($assets, FALSE, $language);
+    };
+    $this->assertSame([], $legacy_paths($resolve($build)));
+
+    $build['#attached']['library'][] = 'core/jquery';
+    $this->assertSame(['core/assets/vendor/jquery/jquery.min.js'], $legacy_paths($resolve($build)));
+  }
+
+  /**
    * Tests non-existing libraries.
    */
   public function testLibraryUnknown(): void {
@@ -179,8 +200,7 @@ class AttachedAssetsTest extends KernelTestBase {
    * Integration test for CSS/JS aggregation.
    */
   public function testAggregation(): void {
-    $build['#attached']['library'][] = 'core/drupal.timezone';
-    $build['#attached']['library'][] = 'core/drupal.vertical-tabs';
+    $build['#attached']['library'][] = 'common_test/aggregation';
     $assets = AttachedAssets::createFromRenderArray($build);
 
     $this->assertCount(1, $this->assetResolver->getCssAssets($assets, TRUE, \Drupal::languageManager()->getCurrentLanguage()), 'There is a sole aggregated CSS asset.');
@@ -190,10 +210,10 @@ class AttachedAssetsTest extends KernelTestBase {
     $rendered_footer_js = \Drupal::service('asset.js.collection_renderer')->render($footer_js);
     $this->assertCount(5, $rendered_footer_js, 'There are 5 JavaScript assets in the footer.');
     $this->assertEquals('drupal-settings-json', $rendered_footer_js[0]['#attributes']['data-drupal-selector'], 'The first of the five JavaScript assets in the footer has drupal settings.');
-    $this->assertStringContainsString('jquery.min.js', $rendered_footer_js[1]['#attributes']['src'], 'The second of the five JavaScript assets in the footer is jquery.min.js.');
-    $this->assertStringContainsString('once.min.js', $rendered_footer_js[2]['#attributes']['src'], 'The third of the five JavaScript assets in the footer is once.min.js.');
-    $this->assertStringStartsWith(base_path(), $rendered_footer_js[3]['#attributes']['src'], 'The fourth of the five JavaScript assets in the footer has an aggregated JavaScript asset.');
-    $this->assertStringStartsWith(base_path(), $rendered_footer_js[4]['#attributes']['src']);
+    $this->assertStringStartsWith(base_path(), $rendered_footer_js[1]['#attributes']['src'], 'The Drupal JavaScript group is aggregated.');
+    $this->assertStringContainsString('once.min.js', $rendered_footer_js[2]['#attributes']['src'], 'The third JavaScript asset is standalone.');
+    $this->assertStringContainsString('loadjs.min.js', $rendered_footer_js[3]['#attributes']['src'], 'The fourth JavaScript asset is standalone.');
+    $this->assertStringStartsWith(base_path(), $rendered_footer_js[4]['#attributes']['src'], 'The remaining JavaScript is aggregated.');
   }
 
   /**
@@ -356,24 +376,27 @@ class AttachedAssetsTest extends KernelTestBase {
   }
 
   /**
-   * Tests rendering the JavaScript with a file's weight above jQuery's.
+   * Tests rendering assets in weight order.
    */
   public function testRenderDifferentWeight(): void {
     // If a library contains assets A and B, and A is listed first, then B can
     // still make itself appear first by defining a lower weight.
-    $build['#attached']['library'][] = 'core/jquery';
+    $build['#attached']['library'][] = 'common_test/main';
     $build['#attached']['library'][] = 'common_test/weight';
     $assets = AttachedAssets::createFromRenderArray($build);
 
     $js = $this->assetResolver->getJsAssets($assets, FALSE, \Drupal::languageManager()->getCurrentLanguage())[1];
     $js_render_array = \Drupal::service('asset.js.collection_renderer')->render($js);
     $rendered_js = (string) $this->renderer->renderInIsolation($js_render_array);
-    // Verify that lighter CSS assets are rendered first.
-    $this->assertLessThan(strpos($rendered_js, 'first.js'), strpos($rendered_js, 'lighter.css'));
+    $css = $this->assetResolver->getCssAssets($assets, FALSE, \Drupal::languageManager()->getCurrentLanguage());
+    $css_render_array = \Drupal::service('asset.css.collection_renderer')->render($css);
+    $rendered_css = (string) $this->renderer->renderInIsolation($css_render_array);
+    $this->assertStringContainsString('lighter.css', $rendered_css);
+    $this->assertLessThan(strpos($rendered_css, 'first.css'), strpos($rendered_css, 'lighter.css'));
     // Verify that lighter JavaScript assets are rendered first.
     $this->assertLessThan(strpos($rendered_js, 'first.js'), strpos($rendered_js, 'lighter.js'));
-    // Verify that a JavaScript file is rendered before jQuery.
-    $this->assertLessThan(strpos($rendered_js, 'core/assets/vendor/jquery/jquery.min.js'), strpos($rendered_js, 'before-jquery.js'));
+    // Verify that the lightest file precedes the earlier library's file.
+    $this->assertLessThan(strpos($rendered_js, 'common_test/main.js'), strpos($rendered_js, 'lightest.js'));
   }
 
   /**
@@ -410,19 +433,19 @@ class AttachedAssetsTest extends KernelTestBase {
    * @see common_test_js_alter()
    */
   public function testAlter(): void {
-    // Add both tableselect.js and alter.js.
-    $build['#attached']['library'][] = 'core/drupal.tableselect';
+    // Add both main.js and alter.js.
+    $build['#attached']['library'][] = 'common_test/main';
     $build['#attached']['library'][] = 'common_test/hook_js_alter';
     $assets = AttachedAssets::createFromRenderArray($build);
 
     // Render the JavaScript, testing if alter.js was altered to be before
-    // tableselect.js. See common_test_js_alter() to see where this alteration
+    // main.js. See common_test_js_alter() to see where this alteration
     // takes place.
     $js = $this->assetResolver->getJsAssets($assets, FALSE, \Drupal::languageManager()->getCurrentLanguage())[1];
     $js_render_array = \Drupal::service('asset.js.collection_renderer')->render($js);
     $rendered_js = (string) $this->renderer->renderInIsolation($js_render_array);
     // Verify that JavaScript weight is correctly altered by the alter hook.
-    $this->assertLessThan(strpos($rendered_js, 'core/misc/tableselect.js'), strpos($rendered_js, 'alter.js'));
+    $this->assertLessThan(strpos($rendered_js, 'common_test/main.js'), strpos($rendered_js, 'alter.js'));
   }
 
   /**
@@ -437,13 +460,13 @@ class AttachedAssetsTest extends KernelTestBase {
     $library = $library_discovery->getLibraryByName('core', 'loadjs');
     $this->assertEquals('0.0', $library['version'], 'Registered libraries were altered.');
 
-    // common_test_library_info_alter() also added a dependency on jQuery Form.
+    // common_test_library_info_alter() also added a dependency on the debounce library.
     $build['#attached']['library'][] = 'core/loadjs';
     $assets = AttachedAssets::createFromRenderArray($build);
     $js = $this->assetResolver->getJsAssets($assets, FALSE, \Drupal::languageManager()->getCurrentLanguage())[1];
     $js_render_array = \Drupal::service('asset.js.collection_renderer')->render($js);
     $rendered_js = (string) $this->renderer->renderInIsolation($js_render_array);
-    $this->assertStringContainsString('core/misc/jquery.form.js', $rendered_js, 'Altered library dependencies are added to the page.');
+    $this->assertStringContainsString('core/misc/debounce.js', $rendered_js, 'Altered library dependencies are added to the page.');
   }
 
   /**
@@ -463,7 +486,7 @@ class AttachedAssetsTest extends KernelTestBase {
     // Make sure the dynamic library definition could be altered.
     // @see common_test_library_info_alter()
     $this->assertArrayHasKey('dependencies', $dynamic_library);
-    $this->assertSame(['core/jquery'], $dynamic_library['dependencies']);
+    $this->assertSame(['core/once'], $dynamic_library['dependencies']);
   }
 
   /**

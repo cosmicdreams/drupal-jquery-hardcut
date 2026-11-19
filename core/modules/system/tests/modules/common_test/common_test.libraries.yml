@@ -94,11 +94,23 @@ weight:
   css:
     theme:
       first.css: {}
-      lighter.js: { weight: -1 }
+      lighter.css: { weight: -1 }
   js:
     first.js: {}
     lighter.js: { weight: -1 }
-    before-jquery.js: { weight: -21 }
+    lightest.js: { weight: -21 }
+
+# Library to test grouping aggregatable and standalone JavaScript assets.
+aggregation:
+  js:
+    /core/assets/vendor/loadjs/loadjs.min.js: { minified: true, preprocess: false }
+    /core/misc/debounce.js: {}
+  css:
+    theme:
+      /core/assets/vendor/normalize-css/normalize.css: {}
+  dependencies:
+    - core/drupal
+    - core/once
 
 before_main:
   js:
@@ -122,7 +134,7 @@ hook_js_alter:
   js:
     alter.js: {}
   dependencies:
-    - core/drupal.tableselect
+    - common_test/main
 
 querystring:
   js:

@@ -32,33 +32,25 @@ class CsrfTokenRaceTest extends WebDriverTestBase {
     $user = $this->createUser(['access content']);
     $this->drupalLogin($user);
     $this->drupalGet('/csrf_race/test');
-    $script = '';
-    // Delay the request processing of the first request by one second through
-    // the request parameter, which will simulate the concurrent processing
-    // of both requests.
-    foreach ([1, 0] as $i) {
-      $script .= <<<EOT
-      jQuery.ajax({
-        url: "$this->baseUrl/csrf_race/get_csrf_token/$i",
-        method: "GET",
-        headers: {
-          "Content-Type": "application/json"
-        },
-        success: function(response) {
-          jQuery('body').append("<p class='csrf$i'></p>");
-          jQuery('.csrf$i').html(response);
-        },
-        error: function() {
-          jQuery('body').append('Nothing');
-        }
+    $this->assertSame('function', $this->getSession()->evaluateScript('typeof Drupal.debounce'));
+    // Delay the first response to overlap the two token requests.
+    $this->getSession()->executeScript(<<<JS
+      [1, 0].forEach(async (delay) => {
+        const response = await fetch("$this->baseUrl/csrf_race/get_csrf_token/" + delay, {
+          headers: { "Content-Type": "application/json" },
+        });
+        const token = document.createElement('p');
+        token.className = 'csrf' + delay;
+        token.textContent = await response.json();
+        document.body.append(token);
       });
-EOT;
-    }
-    $this->getSession()->getDriver()->executeScript($script);
-    $token0 = $this->assertSession()->waitForElement('css', '.csrf0')->getHtml();
-    $token1 = $this->assertSession()->waitForElement('css', '.csrf1')->getHtml();
-    $this->assertNotNull($token0);
-    $this->assertNotNull($token1);
+      JS);
+    $assert_session = $this->assertSession();
+    $assert_session->assertExpectedAjaxRequest(2);
+    $token0 = $assert_session->elementExists('css', '.csrf0')->getText();
+    $token1 = $assert_session->elementExists('css', '.csrf1')->getText();
+    $this->assertNotEmpty($token0);
+    $this->assertNotEmpty($token1);
     $this->assertEquals($token0, $token1);
   }
 
