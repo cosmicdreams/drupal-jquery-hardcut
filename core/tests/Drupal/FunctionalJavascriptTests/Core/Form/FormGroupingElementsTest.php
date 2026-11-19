@@ -139,6 +139,46 @@ class FormGroupingElementsTest extends WebDriverTestBase {
   }
 
   /**
+   * Tests the details summary update on a canceled legacy click.
+   */
+  public function testCanceledSummaryClick(): void {
+    $this->drupalGet('form-test/group-details');
+
+    $result = $this->getSession()->evaluateScript(<<<'JS'
+      (() => {
+        const details = document.createElement('details');
+        const summary = details.appendChild(document.createElement('summary'));
+        const label = summary.appendChild(document.createElement('span'));
+        label.textContent = 'Details';
+        document.body.append(details);
+        Drupal.attachBehaviors(details);
+        Drupal.attachBehaviors(details);
+
+        let nativeClicks = 0;
+        summary.addEventListener('click', () => { nativeClicks++; });
+        jQuery(summary).on('click.test', (event) => event.preventDefault());
+
+        return [null, 'open', ''].map((attribute) => {
+          if (attribute === null) {
+            details.removeAttribute('open');
+          } else {
+            details.setAttribute('open', attribute);
+          }
+          summary.removeAttribute('aria-expanded');
+          jQuery(label).trigger('click');
+          return [summary.getAttribute('aria-expanded'), details.open, nativeClicks];
+        });
+      })()
+      JS);
+
+    $this->assertSame([
+      ['true', FALSE, 0],
+      ['false', TRUE, 0],
+      ['true', TRUE, 0],
+    ], $result);
+  }
+
+  /**
    * Confirms tabs containing a field with a validation error are open.
    */
   public function testVerticalTabValidationVisibility(): void {
