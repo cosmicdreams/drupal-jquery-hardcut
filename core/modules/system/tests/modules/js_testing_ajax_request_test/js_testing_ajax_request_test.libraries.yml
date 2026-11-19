@@ -1,6 +1,5 @@
 track_ajax_requests:
   version: VERSION
+  header: true
   js:
     js/js_testing_ajax_request_test.js: {}
-  dependencies:
-    - core/jquery

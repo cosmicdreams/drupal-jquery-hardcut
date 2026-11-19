@@ -41,9 +41,24 @@ xhr.open('GET', '/foobar');
 xhr.send();
 JS);
     $this->expectException(\RuntimeException::class);
-    $this->expectExceptionMessageIs('0 XHR requests through jQuery, but 1 observed in the browser — this requires js_testing_ajax_request_test.js to be updated.');
+    $this->expectExceptionMessageIs('0 tracked AJAX requests, but 1 observed in the browser — this requires js_testing_ajax_request_test.js to be updated.');
 
     $this->assertSession()->assertExpectedAjaxRequest(1, 500);
+  }
+
+  /**
+   * Tests that XMLHttpRequest and fetch are tracked without a jQuery global.
+   */
+  public function testNativeRequests(): void {
+    $this->drupalGet('user');
+    $this->getSession()->executeScript(<<<JS
+      window.jQuery = undefined;
+      const xhr = new XMLHttpRequest();
+      xhr.open('GET', window.location.href);
+      xhr.send();
+      fetch(window.location.href);
+      JS);
+    $this->assertSession()->assertExpectedAjaxRequest(2);
   }
 
 }

@@ -69,7 +69,9 @@ class JSWebAssert extends WebAssert {
           // Assert no AJAX request is running (via jQuery or Drupal) and no
           // animation is running.
           (typeof jQuery === 'undefined' || (jQuery.active === 0 && jQuery(':animated').length === 0)) &&
-          (typeof Drupal === 'undefined' || typeof Drupal.ajax === 'undefined' || !Drupal.ajax.instances.some(isAjaxing))
+          (typeof Drupal === 'undefined' || !Drupal.ajax?.instances?.some(isAjaxing)) &&
+          // The test harness can connect Drupal's native animation counter here.
+          (typeof window.drupalTestHasActiveAnimations !== 'function' || !window.drupalTestHasActiveAnimations())
         );
       }())
 JS;
@@ -109,7 +111,7 @@ JS);
     // failing to provide an accurate count of requests.
     // @see core/modules/system/tests/modules/js_testing_ajax_request_test/js/js_testing_ajax_request_test.js
     if (!is_null($count) && $drupal_ajax_request_count !== $browser_xhr_request_count) {
-      throw new \RuntimeException(sprintf('%d XHR requests through jQuery, but %d observed in the browser — this requires js_testing_ajax_request_test.js to be updated.', $drupal_ajax_request_count, $browser_xhr_request_count));
+      throw new \RuntimeException(sprintf('%d tracked AJAX requests, but %d observed in the browser — this requires js_testing_ajax_request_test.js to be updated.', $drupal_ajax_request_count, $browser_xhr_request_count));
     }
 
     // Detect incomplete AJAX request.

@@ -9,7 +9,6 @@ wait_for_element:
   js:
     js/jswebassert_test.wait_for_element.js: {}
   dependencies:
-    - core/jquery
     - core/drupal
 
 no_element_after_wait:
@@ -17,5 +16,5 @@ no_element_after_wait:
   js:
     js/jswebassert_test.no_element_after_wait.js: {}
   dependencies:
-    - core/jquery
     - core/drupal
+    - core/once
