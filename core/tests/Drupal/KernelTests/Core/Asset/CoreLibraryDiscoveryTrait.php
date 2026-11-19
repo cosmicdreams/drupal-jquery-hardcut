@@ -14,6 +14,16 @@ use Drupal\Core\Extension\ExtensionDiscovery;
 trait CoreLibraryDiscoveryTrait {
 
   /**
+   * The jQuery family of libraries.
+   */
+  private const JQUERY_LIBRARIES = [
+    'core/drupal.jquery.position',
+    'core/internal.jquery.form',
+    'core/internal.jquery_ui',
+    'core/jquery',
+  ];
+
+  /**
    * {@inheritdoc}
    */
   public function register(ContainerBuilder $container): void {

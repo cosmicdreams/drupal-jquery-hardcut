@@ -27,16 +27,6 @@ class JqueryFreeLibrariesTest extends KernelTestBase {
   use CoreLibraryDiscoveryTrait;
 
   /**
-   * The jQuery family of libraries.
-   */
-  private const LIBRARIES = [
-    'core/drupal.jquery.position',
-    'core/internal.jquery.form',
-    'core/internal.jquery_ui',
-    'core/jquery',
-  ];
-
-  /**
    * The jQuery UI widgets tracked in the closure map.
    */
   private const WIDGETS = [
@@ -61,11 +51,11 @@ class JqueryFreeLibrariesTest extends KernelTestBase {
     }
 
     $allowed = Yaml::decode(file_get_contents(__DIR__ . '/fixtures/jquery-library-allow-list.yml')) ?? [];
-    $actual = array_keys(array_filter($map, static fn (array $closure): bool => (bool) array_intersect(self::LIBRARIES, $closure)));
+    $actual = array_keys(array_filter($map, static fn (array $closure): bool => (bool) array_intersect(self::JQUERY_LIBRARIES, $closure)));
 
     $messages = [];
     foreach (array_diff($actual, $allowed) as $library) {
-      $messages[] = "$library has a new jQuery dependency: " . implode(', ', array_intersect(self::LIBRARIES, $map[$library]));
+      $messages[] = "$library has a new jQuery dependency: " . implode(', ', array_intersect(self::JQUERY_LIBRARIES, $map[$library]));
     }
     foreach (array_diff($allowed, $actual) as $library) {
       $messages[] = "Remove '- $library' from jquery-library-allow-list.yml.";
@@ -85,7 +75,7 @@ class JqueryFreeLibrariesTest extends KernelTestBase {
       $resolver = $this->container->get('library.dependency_resolver');
       foreach (array_keys($libraries) as $library) {
         $closure = $resolver->getLibrariesWithDependencies([$library]);
-        $matches = array_intersect(self::LIBRARIES, $closure);
+        $matches = array_intersect(self::JQUERY_LIBRARIES, $closure);
         foreach ($closure as $dependency) {
           foreach ($libraries[$dependency]['js'] ?? [] as $asset) {
             if (isset(self::WIDGETS[$asset['data']])) {

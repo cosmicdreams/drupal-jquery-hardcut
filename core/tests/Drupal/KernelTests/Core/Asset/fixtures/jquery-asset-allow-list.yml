@@ -3,6 +3,15 @@
 - core/assets/vendor/ckeditor5/ckeditor5.umd.js
 - core/assets/vendor/floating-ui/floating-ui.dom.umd.min.js
 - core/assets/vendor/htmx/htmx.min.js
+- core/assets/vendor/jquery.ui/themes/base/autocomplete.css
+- core/assets/vendor/jquery.ui/themes/base/button.css
+- core/assets/vendor/jquery.ui/themes/base/checkboxradio.css
+- core/assets/vendor/jquery.ui/themes/base/controlgroup.css
+- core/assets/vendor/jquery.ui/themes/base/core.css
+- core/assets/vendor/jquery.ui/themes/base/dialog.css
+- core/assets/vendor/jquery.ui/themes/base/menu.css
+- core/assets/vendor/jquery.ui/themes/base/resizable.css
+- core/assets/vendor/jquery.ui/themes/base/theme.css
 - core/assets/vendor/jquery.ui/ui/data-min.js
 - core/assets/vendor/jquery.ui/ui/disable-selection-min.js
 - core/assets/vendor/jquery.ui/ui/focusable-min.js
@@ -26,6 +35,7 @@
 - core/assets/vendor/jquery.ui/ui/widgets/resizable-min.js
 - core/assets/vendor/jquery/jquery.min.js
 - core/assets/vendor/sortable/Sortable.min.js
+- core/lib/Drupal/Core/Render/Element/RenderElementBase.php
 - core/misc/ajax.js
 - core/misc/autocomplete.js
 - core/misc/batch.js
@@ -99,6 +109,7 @@
 - core/modules/views_ui/js/dialog.views.js
 - core/modules/views_ui/js/views-admin.js
 - core/modules/views_ui/js/views_ui.listing.js
+- core/themes/default_admin/css/components/jquery.ui/theme.css
 - core/themes/default_admin/js/autocomplete.js
 - core/themes/default_admin/js/details.js
 - core/themes/default_admin/js/media-library.ui.js
