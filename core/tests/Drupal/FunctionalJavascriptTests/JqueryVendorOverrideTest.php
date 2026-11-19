@@ -45,8 +45,8 @@ final class JqueryVendorOverrideTest extends WebDriverTestBase {
           const adapter = index('/core/misc/jquery.drupal-bc.js');
           const drupal = index('/core/misc/drupal.js');
           const dependent = index('/js/event-bridge-dependent.js');
-          return [vendor >= 0, original >= 0, alias >= 0, alias < vendor,
-            adapter > vendor, dependent > adapter && dependent > drupal, adapter < drupal];
+          return [vendor >= 0, original >= 0, alias > vendor, typeof window.$ === 'undefined',
+            adapter > alias, dependent > adapter && dependent > drupal, adapter < drupal];
         })()
         JS));
     }
