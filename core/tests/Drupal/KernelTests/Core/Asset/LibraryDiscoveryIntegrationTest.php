@@ -384,6 +384,64 @@ class LibraryDiscoveryIntegrationTest extends KernelTestBase {
   }
 
   /**
+   * Tests explicit and inherited overrides of moved stylesheets.
+   */
+  #[IgnoreDeprecations]
+  public function testMovedStylesheetOverridePrecedence(): void {
+    $themes = 'core/modules/system/tests/themes';
+    $base = "$themes/test_base_theme";
+    $sub = "$themes/test_subtheme";
+    $leaf = "$themes/test_subsubtheme";
+    $legacy = 'theme_test/moved_legacy';
+    $native = 'theme_test/moved_native';
+    $same = '/core/modules/system/css/components/align.module.css';
+    $old = '/core/modules/system/css/components/hidden.module.css';
+    $new = '/core/misc/components/ajax-progress.module.css';
+    $this->container->get('state')->set('theme_test_library_info_alter theme_test', [
+      'moved_legacy' => ['css' => ['component' => [$same => [], $old => []]]],
+      'moved_native' => [
+        'css' => ['component' => [$same => ['override_only' => TRUE], $new => ['override_only' => TRUE]]],
+        'moved_files' => [
+          $legacy => [
+            'deprecation_version' => 'drupal:12.0.0',
+            'removed_version' => 'drupal:13.0.0',
+            'deprecation_link' => 'https://example.com',
+            'css' => ['component' => [$same => ['component' => $same], $old => ['component' => $new]]],
+          ],
+        ],
+      ],
+    ]);
+    $overrides = [
+      $base => [
+        $legacy => ['css' => ['component' => [$same => 'css/ignored.css', $old => 'css/base.css']]],
+        $native => ['css' => ['component' => [$same => FALSE]]],
+      ],
+      $sub => [
+        $legacy => ['css' => ['component' => ["/$base/css/base.css" => 'css/ignored.css']]],
+        $native => ['css' => ['component' => [$new => 'css/sub.css']]],
+      ],
+      $leaf => [
+        $legacy => ['css' => ['component' => ["/$sub/css/sub.css" => 'css/leaf.css']]],
+      ],
+    ];
+    $chain = [];
+    $this->assertInstanceOf(CacheCollectorInterface::class, $this->libraryDiscovery);
+    foreach ([$base => 'base', $sub => 'sub', $leaf => 'leaf'] as $theme_path => $filename) {
+      $chain[$theme_path] = $overrides[$theme_path];
+      $name = basename($theme_path);
+      $this->container->get('theme.manager')->setActiveTheme(new ActiveTheme([
+        'name' => $name,
+        'path' => $theme_path,
+        'extension' => $this->container->get('extension.list.theme')->get($name),
+        'libraries_override' => $chain,
+      ]));
+      $this->libraryDiscovery->reset();
+      $assets = (new AttachedAssets())->setLibraries([$native]);
+      $this->assertSame(["$theme_path/css/$filename.css"], array_keys($this->container->get('asset.resolver')->getCssAssets($assets, FALSE)));
+    }
+  }
+
+  /**
    * Tests libraries-extend.
    */
   public function testLibrariesExtend(): void {

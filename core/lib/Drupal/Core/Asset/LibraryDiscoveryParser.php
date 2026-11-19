@@ -387,6 +387,17 @@ class LibraryDiscoveryParser {
       return $overrides;
     }
     $library_id = "$extension/$library_name";
+    $explicit_css = $overrides[$library_id]['css'] ?? [];
+    // A direct override may still name the canonical destination after a base
+    // theme has replaced it. Resolve it before translating old library keys.
+    foreach ($library['css'] ?? [] as $category => $assets) {
+      foreach ($assets as $path => $options) {
+        $source = $options['_overridden_source'] ?? NULL;
+        if ($source !== NULL && isset($explicit_css[$category][$source])) {
+          $overrides[$library_id]['css'][$category][$path] ??= $explicit_css[$category][$source];
+        }
+      }
+    }
     foreach ($library['moved_files'] as $old_library_name => $moved_files) {
       $deprecation_version = $moved_files['deprecation_version'];
       $removed_version = $moved_files['removed_version'];
@@ -395,25 +406,31 @@ class LibraryDiscoveryParser {
         foreach ($overrides[$old_library_name]['css'] as $category => $files) {
           $moves = $moved_files['css'][$category] ?? [];
           foreach ($files as $original => $target) {
+            $new_file = NULL;
+            $override_path = $original;
             if (isset($moves[$original])) {
               $new_category = array_key_first($moves[$original]);
               $new_file = $moves[$original][$new_category];
-              $theme_name = $active_theme->getName();
-              // phpcs:ignore
-              @trigger_error("Targeting $old_library_name $original from $theme_name library_overrides is deprecated in $deprecation_version and will be removed in $removed_version. Target $library_id $new_file instead. See $deprecation_link", E_USER_DEPRECATED);
-              $overrides[$library_id]['css'][$new_category][$new_file] = $target;
-              continue;
+              $override_path = $new_file;
             }
-
-            // A subtheme may target a base theme's replacement using the
-            // replacement's absolute path under the original library ID.
-            foreach ($library['css'] ?? [] as $new_category => $assets) {
-              $source = $assets[$original]['_overridden_source'] ?? NULL;
-              if ($source !== NULL && in_array($source, array_column($moves, $new_category), TRUE)) {
-                $overrides[$library_id]['css'][$new_category][$original] = $target;
-                break;
+            else {
+              // Follow a base theme's replacement under the old library ID.
+              foreach ($library['css'] ?? [] as $new_category => $assets) {
+                $source = $assets[$original]['_overridden_source'] ?? NULL;
+                if ($source !== NULL && in_array($source, array_column($moves, $new_category), TRUE)) {
+                  $new_file = $source;
+                  break;
+                }
               }
             }
+
+            if ($new_file === NULL || isset($explicit_css[$new_category][$new_file]) || isset($explicit_css[$new_category][$override_path])) {
+              continue;
+            }
+            $theme_name = $active_theme->getName();
+            // phpcs:ignore
+            @trigger_error("Targeting $old_library_name $original from $theme_name library_overrides is deprecated in $deprecation_version and will be removed in $removed_version. Target $library_id $new_file instead. See $deprecation_link", E_USER_DEPRECATED);
+            $overrides[$library_id]['css'][$new_category][$override_path] = $target;
           }
         }
       }
