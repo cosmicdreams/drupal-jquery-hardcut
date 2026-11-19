@@ -677,6 +677,7 @@ jquery:
     # libraries that depend on jQuery, so that it is only downloaded once per
     # browser instead of potentially multiple times from different pages.
     assets/vendor/jquery/jquery.min.js: { preprocess: false, minified: true }
+    misc/jquery.no-conflict.js: { preprocess: false, minified: false }
 
 internal.jquery.form:
   # Internal library. Do not depend on it outside core nor add new core usage.
