@@ -8,7 +8,6 @@
 - default_admin/ckeditor5/internal.drupal.ckeditor5.filter.admin
 - default_admin/ckeditor5/internal.drupal.ckeditor5.link-entity-suggestions
 - default_admin/comment/drupal.comment
-- default_admin/comment/drupal.comment-by-viewer
 - default_admin/content_translation/drupal.content_translation.admin
 - default_admin/contextual/drupal.contextual-links
 - default_admin/core/drupal.ajax
@@ -88,7 +87,6 @@
 - stark/ckeditor5/internal.drupal.ckeditor5.filter.admin
 - stark/ckeditor5/internal.drupal.ckeditor5.link-entity-suggestions
 - stark/comment/drupal.comment
-- stark/comment/drupal.comment-by-viewer
 - stark/content_translation/drupal.content_translation.admin
 - stark/contextual/drupal.contextual-links
 - stark/core/drupal.ajax
@@ -167,7 +165,6 @@
 - starterkit_theme/ckeditor5/internal.drupal.ckeditor5.filter.admin
 - starterkit_theme/ckeditor5/internal.drupal.ckeditor5.link-entity-suggestions
 - starterkit_theme/comment/drupal.comment
-- starterkit_theme/comment/drupal.comment-by-viewer
 - starterkit_theme/content_translation/drupal.content_translation.admin
 - starterkit_theme/contextual/drupal.contextual-links
 - starterkit_theme/core/drupal.ajax
@@ -246,7 +243,6 @@
 - umami/ckeditor5/internal.drupal.ckeditor5.filter.admin
 - umami/ckeditor5/internal.drupal.ckeditor5.link-entity-suggestions
 - umami/comment/drupal.comment
-- umami/comment/drupal.comment-by-viewer
 - umami/content_translation/drupal.content_translation.admin
 - umami/contextual/drupal.contextual-links
 - umami/core/drupal.ajax
