@@ -216,6 +216,57 @@ JS;
   }
 
   /**
+   * Tests header mutation and abort in a global Ajax send handler.
+   */
+  public function testAjaxSendHeaderAndAbort(): void {
+    $this->drupalGet('ajax-test/global-events');
+    $session = $this->getSession();
+    $session->executeScript(<<<'JS'
+(function ($) {
+  const send = XMLHttpRequest.prototype.send;
+  window.ajaxSendResult = { sends: 0, failures: [], complete: [] };
+  XMLHttpRequest.prototype.send = function () {
+    window.ajaxSendResult.sends++;
+    return send.apply(this, arguments);
+  };
+  $(document).on('ajaxSend.characterization', function (event, xhr) {
+    xhr.setRequestHeader('X-Test-Ajax-Send', 'from-ajax-send');
+  });
+  Drupal.ajax({ url: Drupal.url('ajax-test/echo-header') }).execute()
+    .fail(function (xhr, status) { window.ajaxSendResult.failures.push(status); });
+})(jQuery);
+JS);
+    $this->assertTrue($session->wait(10000, "document.querySelector('#test_global_events_log').textContent.startsWith('from-ajax-send') && jQuery.active === 0"));
+    $this->assertSame(1, $session->evaluateScript('window.ajaxSendResult.sends'));
+    $this->assertSame([], $session->evaluateScript('window.ajaxSendResult.failures'));
+
+    $session->executeScript(<<<'JS'
+(function ($) {
+  $(document).off('ajaxSend.characterization');
+  window.ajaxSendResult.sends = 0;
+  $(document).on('ajaxSend.characterization', function (event, xhr) {
+    xhr.abort();
+  });
+  $(document).on('ajaxComplete.characterization', function (event, xhr) {
+    window.ajaxSendResult.complete.push(xhr.statusText);
+  });
+  const request = Drupal.ajax({ url: Drupal.url('ajax-test/echo-header') }).execute();
+  request.fail(function (xhr, status) {
+    window.ajaxSendResult.failures.push([xhr.status, status, xhr.statusText]);
+  });
+  window.ajaxSendResult.state = request.state();
+  window.ajaxSendResult.active = $.active;
+  $(document).off('.characterization');
+})(jQuery);
+JS);
+    $this->assertSame(0, $session->evaluateScript('window.ajaxSendResult.sends'));
+    $this->assertSame([[0, 'abort', 'abort']], $session->evaluateScript('window.ajaxSendResult.failures'));
+    $this->assertSame(['abort'], $session->evaluateScript('window.ajaxSendResult.complete'));
+    $this->assertSame('rejected', $session->evaluateScript('window.ajaxSendResult.state'));
+    $this->assertSame(0, $session->evaluateScript('window.ajaxSendResult.active'));
+  }
+
+  /**
    * Assert insert.
    *
    * @param string $render_type

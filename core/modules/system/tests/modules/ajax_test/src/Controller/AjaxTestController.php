@@ -424,6 +424,17 @@ class AjaxTestController {
   }
 
   /**
+   * Returns the request header in an Ajax command.
+   */
+  public function echoHeader(Request $request): AjaxResponse {
+    $response = new AjaxResponse();
+    $response->addCommand(new HtmlCommand('#test_global_events_log', [
+      '#plain_text' => $request->headers->get('X-Test-Ajax-Send', 'missing'),
+    ]));
+    return $response;
+  }
+
+  /**
    * Callback to provide an exception via Ajax.
    *
    * @throws \Exception

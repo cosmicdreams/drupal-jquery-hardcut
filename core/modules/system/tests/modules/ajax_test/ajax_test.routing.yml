@@ -123,6 +123,13 @@ ajax_test.global_events_clear_log:
   requirements:
     _access: 'TRUE'
 
+ajax_test.echo_header:
+  path: '/ajax-test/echo-header'
+  defaults:
+    _controller: '\Drupal\ajax_test\Controller\AjaxTestController::echoHeader'
+  requirements:
+    _access: 'TRUE'
+
 ajax_test.exception_link:
   path: '/ajax-test/exception-link'
   defaults:

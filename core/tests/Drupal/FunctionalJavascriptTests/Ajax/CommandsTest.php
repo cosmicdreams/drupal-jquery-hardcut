@@ -26,6 +26,35 @@ class CommandsTest extends WebDriverTestBase {
   protected $defaultTheme = 'stark';
 
   /**
+   * Tests that each command waits for the previous command to finish.
+   */
+  public function testPromiseCommandOrder(): void {
+    $this->drupalGet('ajax-test/promise-form');
+    $this->getSession()->getPage()->pressButton('Execute commands button');
+    $this->assertSession()->assertExpectedAjaxRequest(1);
+    $this->assertSession()->elementTextEquals('css', '#ajax_test_form_promise_wrapper', '12345');
+  }
+
+  /**
+   * Tests restriping visible rows without changing hidden or nested rows.
+   */
+  public function testRestripeCommand(): void {
+    $this->drupalLogin($this->drupalCreateUser(['access content']));
+    $this->drupalGet('ajax_forms_test_ajax_commands_form');
+    $this->getSession()->getPage()->pressButton("AJAX 'restripe' command");
+    $this->assertSession()->assertExpectedAjaxRequest(1);
+
+    $rows = $this->getSession()->getPage()->findAll('css', '#restripe_table > tbody > tr');
+    $this->assertCount(4, $rows);
+    $this->assertSame('odd', $rows[0]->getAttribute('class'));
+    $this->assertSame('odd', $rows[1]->getAttribute('class'));
+    $this->assertSame('even', $rows[2]->getAttribute('class'));
+    $this->assertSame('odd', $rows[3]->getAttribute('class'));
+    $nested = $this->assertSession()->elementExists('css', '#table-nested');
+    $this->assertSame('odd', $nested->getAttribute('class'));
+  }
+
+  /**
    * Tests the various Ajax Commands.
    */
   public function testAjaxCommands(): void {
@@ -126,11 +155,6 @@ class CommandsTest extends WebDriverTestBase {
     // Tests the 'remove' command.
     $page->pressButton("AJAX 'remove': Click to remove text");
     $this->assertWaitPageContains('<div id="remove_div"></div>');
-
-    // Tests the 'restripe' command.
-    $page->pressButton("AJAX 'restripe' command");
-    $this->assertWaitPageContains('<tr id="table-first" class="odd"><td>first row</td></tr>');
-    $this->assertWaitPageContains('<tr class="even"><td>second row</td></tr>');
 
     // Tests the 'settings' command.
     $test_settings_command = <<<JS
