@@ -154,6 +154,7 @@ class LibraryDiscoveryParser {
           if (!is_array($options)) {
             $options = [];
           }
+          unset($options['preserve_override_order']);
           if ($type == 'js' && isset($options['weight']) && $options['weight'] > 0) {
             throw new \UnexpectedValueException("The $extension/$id library defines a positive weight for '$source'. Only negative weights are allowed (but should be avoided). Instead of a positive weight, specify accurate dependencies for this library.");
           }
@@ -263,6 +264,8 @@ class LibraryDiscoveryParser {
    *   external resource (e.g., //cdn.com/library.js). Full URLs
    *   (e.g., http://cdn.com/library.js) as well as URLs that use a valid
    *   stream wrapper (e.g., public://path/to/file.js) are also supported.
+   *   Set preserve_override_order: true when later scripts in the same
+   *   library must run after a theme replacement of this file.
    * - css: A list of categories for which the library provides CSS files. The
    *   available categories are:
    *   - base
@@ -582,12 +585,20 @@ class LibraryDiscoveryParser {
       // Save the attributes of the library asset to be overridden.
       $attributes = NestedArray::getValue($library, $parents, $key_exists);
       if ($key_exists) {
+        if ($replacement) {
+          $replacement = $this->resolveThemeAssetPath($theme_path, $replacement);
+          if ($sub_key === ['js'] && !empty($attributes['preserve_override_order']) && !array_key_exists($replacement, $library['js'])) {
+            // Keep subsequent scripts in the library after the replacement.
+            $paths = array_keys($library['js']);
+            $paths[array_search($original, $paths, TRUE)] = $replacement;
+            $library['js'] = array_combine($paths, $library['js']);
+            continue;
+          }
+        }
         // Remove asset to be overridden.
         NestedArray::unsetValue($library, $parents);
         // No need to replace if FALSE is specified, since that is a removal.
         if ($replacement) {
-          // Ensure the replacement path is relative to drupal root.
-          $replacement = $this->resolveThemeAssetPath($theme_path, $replacement);
           $new_parents = array_merge($sub_key, [$replacement]);
           if ($sub_key[0] === 'css') {
             // Retain the declared destination for later moved-file overrides.
