@@ -20,6 +20,11 @@ class AjaxWaitTest extends WebDriverTestBase {
   protected $defaultTheme = 'starterkit_theme';
 
   /**
+   * {@inheritdoc}
+   */
+  protected static $modules = ['ajax_test'];
+
+  /**
    * Tests that an unnecessary wait triggers an error.
    */
   public function testUnnecessaryWait(): void {
@@ -59,6 +64,40 @@ JS);
       fetch(window.location.href);
       JS);
     $this->assertSession()->assertExpectedAjaxRequest(2);
+  }
+
+  /**
+   * Tests that idle waits include commands pending after the response.
+   */
+  public function testPendingCommands(): void {
+    $this->drupalGet('ajax-test/promise-form');
+    $session = $this->getSession();
+    $condition = JSWebAssert::ajaxIdleCondition();
+    $this->assertTrue($session->wait(500, $condition));
+    $session->executeScript(<<<'JS'
+      const commands = Drupal.AjaxCommands.prototype;
+      const original = commands.ajaxCommandReturnPromise;
+      commands.ajaxCommandReturnPromise = function (ajax, response) {
+        commands.ajaxCommandReturnPromise = original;
+        return new Promise((resolve) => {
+          window.releaseAjaxCommand = () => {
+            this.insert(ajax, response);
+            resolve();
+          };
+        });
+      };
+      JS);
+    try {
+      $session->getPage()->pressButton('Execute commands button');
+      $this->assertTrue($session->wait(5000, 'window.drupalActiveXhrCount === 0 && typeof window.releaseAjaxCommand === "function"'));
+      $this->assertSession()->elementTextEquals('css', '#ajax_test_form_promise_wrapper', '1');
+      $this->assertFalse($session->wait(250, $condition));
+    }
+    finally {
+      $session->executeScript('window.releaseAjaxCommand?.()');
+    }
+    $this->assertTrue($session->wait(5000, $condition));
+    $this->assertSession()->elementTextEquals('css', '#ajax_test_form_promise_wrapper', '12345');
   }
 
 }

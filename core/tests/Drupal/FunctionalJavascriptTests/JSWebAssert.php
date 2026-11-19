@@ -23,6 +23,33 @@ use WebDriver\Exception;
 class JSWebAssert extends WebAssert {
 
   /**
+   * Returns a browser wait condition for requests and their commands.
+   *
+   * @param bool $expect_request
+   *   Whether to require a completed request and wait for animations.
+   */
+  public static function ajaxIdleCondition(bool $expect_request = FALSE): string {
+    $expect_request = $expect_request ? 'true' : 'false';
+    return <<<JS
+      (() => {
+        const activeRequests = window.drupalActiveXhrCount;
+        const pendingCommands = window.Drupal?.ajax?.instances?.some(
+          (instance) => instance?.ajaxing === true,
+        );
+        if (pendingCommands || (activeRequests !== undefined && activeRequests !== 0)) {
+          return false;
+        }
+        if (!$expect_request) {
+          return true;
+        }
+        return activeRequests === 0 && window.drupalCumulativeXhrCount >= 1 &&
+          (typeof jQuery === 'undefined' || (jQuery.active === 0 && jQuery(':animated').length === 0)) &&
+          (typeof window.drupalTestHasActiveAnimations !== 'function' || !window.drupalTestHasActiveAnimations());
+      })()
+      JS;
+  }
+
+  /**
    * Waits for AJAX request to be completed.
    *
    * @param int $timeout
@@ -55,27 +82,7 @@ class JSWebAssert extends WebAssert {
   public function assertExpectedAjaxRequest(?int $count = NULL, int $timeout = 10000, $message = 'Unable to complete AJAX request.'): void {
     // Wait for a very short time to allow page state to update after clicking.
     usleep(5000);
-    $condition = <<<JS
-      (function() {
-        function isAjaxing(instance) {
-          return instance && instance.ajaxing === true;
-        }
-        return (
-          // Assert at least one AJAX request was started and completed.
-          // For example, the machine name UI component does not use the Drupal
-          // AJAX system, which means the other two checks below are inadequate.
-          // @see Drupal.behaviors.machineName
-          window.drupalActiveXhrCount === 0 && window.drupalCumulativeXhrCount >= 1 &&
-          // Assert no AJAX request is running (via jQuery or Drupal) and no
-          // animation is running.
-          (typeof jQuery === 'undefined' || (jQuery.active === 0 && jQuery(':animated').length === 0)) &&
-          (typeof Drupal === 'undefined' || !Drupal.ajax?.instances?.some(isAjaxing)) &&
-          // The test harness can connect Drupal's native animation counter here.
-          (typeof window.drupalTestHasActiveAnimations !== 'function' || !window.drupalTestHasActiveAnimations())
-        );
-      }())
-JS;
-    $completed = $this->session->wait($timeout, $condition);
+    $completed = $this->session->wait($timeout, self::ajaxIdleCondition(TRUE));
 
     // Now that there definitely is no more AJAX request in progress, count the
     // number of AJAX responses.
