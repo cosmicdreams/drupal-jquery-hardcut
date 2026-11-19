@@ -45,10 +45,10 @@
 - core/misc/dialog/off-canvas/js/off-canvas.js
 - core/misc/displace.js
 - core/misc/dropbutton/dropbutton.js
-- core/misc/drupal.init.js
 - core/misc/entity-form.js
 - core/misc/form.js
 - core/misc/jquery.form.js
+- core/misc/jquery.no-conflict.js
 - core/misc/machine-name.js
 - core/misc/position.js
 - core/misc/progress.js

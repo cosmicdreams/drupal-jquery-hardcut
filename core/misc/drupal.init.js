@@ -1,8 +1,3 @@
-// Allow other JavaScript libraries to use $.
-if (window.jQuery) {
-  jQuery.noConflict();
-}
-
 // Class indicating that JS is enabled; used for styling purpose.
 document.documentElement.className += ' js';
 

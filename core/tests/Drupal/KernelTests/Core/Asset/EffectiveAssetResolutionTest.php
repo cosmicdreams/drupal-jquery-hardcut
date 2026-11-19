@@ -141,6 +141,7 @@ class EffectiveAssetResolutionTest extends KernelTestBase {
     $this->assertSame(!$already_loaded, isset($footer['core/misc/checkbox.js']));
     $this->assertArrayHasKey('core/misc/debounce.js', $footer);
     $this->assertSame($legacy, isset($footer['core/assets/vendor/jquery/jquery.min.js']));
+    $this->assertSame($legacy, isset($footer['core/misc/jquery.no-conflict.js']));
     $this->assertSame($legacy, isset($footer['core/misc/jquery.form.js']));
 
     $optimized_css = $resolver->getCssAssets($assets, TRUE);
@@ -161,6 +162,12 @@ class EffectiveAssetResolutionTest extends KernelTestBase {
     $this->assertSame($already_loaded, $exclusions !== []);
     foreach ($exclusions as $exclude) {
       $this->assertSame($loaded, explode(',', UrlHelper::uncompressQueryParameter($exclude)));
+    }
+    // The explicit jQuery bootstrap is served separately after the vendor.
+    if ($legacy) {
+      $jquery_group = array_search(['core/assets/vendor/jquery/jquery.min.js'], $expected_groups['js'], TRUE);
+      $this->assertNotFalse($jquery_group);
+      array_splice($expected_groups['js'], $jquery_group + 1, 0, [['core/misc/jquery.no-conflict.js']]);
     }
     $this->assertAggregates('js', array_filter($footer, $files_only), $optimized_footer, $expected_groups['js']);
   }

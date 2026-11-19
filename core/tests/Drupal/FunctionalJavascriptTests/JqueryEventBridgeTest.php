@@ -25,6 +25,38 @@ final class JqueryEventBridgeTest extends WebDriverTestBase {
   protected $defaultTheme = 'stark';
 
   /**
+   * Tests that only the explicitly loaded jQuery library releases the alias.
+   */
+  public function testDollarAliasOwnership(): void {
+    $driver = $this->getSession()->getDriver();
+    $this->assertInstanceOf(DrupalSelenium2Driver::class, $driver);
+    $webdriver = $driver->getWebDriverSession();
+    if (($webdriver->capabilities()['browserName'] ?? NULL) !== 'chrome') {
+      $this->markTestSkipped('The document-start fixture requires Chromium.');
+    }
+    $source = <<<'JS'
+      window.$ = 'other library';
+      window.foreignNoConflictCalls = 0;
+      window.jQuery = { fx: {}, noConflict() { window.foreignNoConflictCalls += 1; } };
+      JS;
+    \Drupal::httpClient()->post($webdriver->getURL() . '/goog/cdp/execute', [
+      'json' => [
+        'cmd' => 'Page.addScriptToEvaluateOnNewDocument',
+        'params' => ['source' => $source],
+      ],
+    ]);
+
+    $session = $this->getSession();
+    $this->drupalGet('jquery-bc-test/native-events');
+    $this->assertSame(0, $session->evaluateScript('window.foreignNoConflictCalls'));
+    $this->assertSame('other library', $session->evaluateScript('window.$'));
+
+    $this->drupalGet('jquery-bc-test/bridge-events');
+    $this->assertSame('4.0.0', $session->evaluateScript('window.jQuery.fn.jquery'));
+    $this->assertSame('other library', $session->evaluateScript('window.$'));
+  }
+
+  /**
    * Tests that the fixture can use native listeners without legacy assets.
    */
   public function testNativeWithoutBridge(): void {

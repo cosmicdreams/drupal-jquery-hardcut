@@ -56,16 +56,16 @@
       "owner": "U",
       "references": 1
     },
-    "misc/drupal.init.js": {
-      "owner": "B",
-      "references": 2
-    },
     "misc/entity-form.js": {
       "owner": "U",
       "references": 1
     },
     "misc/form.js": {
       "owner": "U",
+      "references": 1
+    },
+    "misc/jquery.no-conflict.js": {
+      "owner": "B",
       "references": 1
     },
     "misc/jquery.form.js": {

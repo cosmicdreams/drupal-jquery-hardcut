@@ -117,7 +117,19 @@ class InstalledProfileAssetsTest extends KernelTestBase {
     $actual = ['libraries' => $libraries, 'css' => $metadata($css), 'js' => $metadata($footer)];
     // The fixture records resolution at 92e5c3a3047.
     $baseline = Json::decode(file_get_contents(__DIR__ . '/fixtures/effective-assets-pinned.json'));
-    $this->assertSame($baseline['profiles']["$profile:$theme"], $actual);
+    $expected = $baseline['profiles']["$profile:$theme"];
+    // The explicit compatibility library now restores the alias immediately
+    // after the distribution. Keep the historical metadata for other assets.
+    foreach ($expected['js'] as $index => $asset) {
+      if ($asset['data'] === 'core/assets/vendor/jquery/jquery.min.js') {
+        $bootstrap = $asset;
+        $bootstrap['data'] = 'core/misc/jquery.no-conflict.js';
+        $bootstrap['minified'] = FALSE;
+        array_splice($expected['js'], $index + 1, 0, [$bootstrap]);
+        break;
+      }
+    }
+    $this->assertSame($expected, $actual);
   }
 
 }
