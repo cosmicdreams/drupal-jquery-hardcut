@@ -156,6 +156,9 @@ window.Drupal = { behaviors: {}, locale: {} };
 
     /**
      * Dispatches one owned event after notifying connected adapters.
+     *
+     * An observer exception is reported without interrupting native dispatch
+     * or other observers.
      * @param {EventTarget} target
      *   The original dispatch target.
      * @param {CustomEvent} event
@@ -167,14 +170,24 @@ window.Drupal = { behaviors: {}, locale: {} };
       const cleanups = [];
       try {
         eventPublicationObservers.forEach((prepare) => {
-          const cleanup = prepare(event);
-          if (cleanup) {
-            cleanups.push(cleanup);
+          try {
+            const cleanup = prepare(event);
+            if (cleanup) {
+              cleanups.push(cleanup);
+            }
+          } catch (error) {
+            Drupal.throwError(error);
           }
         });
         return target.dispatchEvent(event);
       } finally {
-        cleanups.forEach((cleanup) => cleanup());
+        cleanups.forEach((cleanup) => {
+          try {
+            cleanup();
+          } catch (error) {
+            Drupal.throwError(error);
+          }
+        });
       }
     },
 

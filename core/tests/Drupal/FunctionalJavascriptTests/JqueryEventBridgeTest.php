@@ -717,6 +717,99 @@ final class JqueryEventBridgeTest extends WebDriverTestBase {
   }
 
   /**
+   * Tests publication despite observer errors and nested listener exceptions.
+   */
+  public function testPublicationErrors(): void {
+    $this->loadAdapter();
+    $result = $this->getSession()->evaluateScript(<<<'JS'
+      (() => {
+        const { publish, observePublications, connectLegacy } = Drupal.eventBindings;
+        const root = document.getElementById('event-bridge-fixture');
+        const field = root.appendChild(document.createElement('input'));
+        const outer = new CustomEvent('state:outer', {
+          bubbles: true, cancelable: true, detail: { value: 'outer' },
+        });
+        const inner = new CustomEvent('state:inner', {
+          bubbles: true, detail: { value: 'inner' },
+        });
+        const phases = [];
+        const errors = [];
+        const listenerError = new Error('listener');
+        const report = Drupal.throwError;
+        const reportListenerError = (event) => {
+          if (event.error === listenerError) {
+            event.preventDefault();
+          }
+        };
+        Drupal.throwError = (error) => { errors.push(error.message); };
+        window.addEventListener('error', reportListenerError);
+        const stopPrepare = observePublications((event) => {
+          if (event === outer) {
+            throw new Error('prepare');
+          }
+        });
+        const stopCleanup = observePublications((event) => {
+          if (event === outer) {
+            return () => { throw new Error('cleanup'); };
+          }
+        });
+        const stopHealthy = observePublications((event) => {
+          phases.push(['prepare', event.type]);
+          return () => phases.push(['cleanup', event.type]);
+        });
+        const disconnect = connectLegacy(jQuery);
+        const delivery = [];
+        const legacy = jQuery(root).on('state:outer state:inner', (event) => {
+          const original = event.type === outer.type ? outer : inner;
+          delivery.push([event.type, event.value ?? null, event.originalEvent === original]);
+          if (event.value === 'outer') {
+            event.preventDefault();
+          }
+        });
+        field.addEventListener(inner.type, () => {
+          phases.push(['listener', inner.type]);
+          throw listenerError;
+        }, { once: true });
+        field.addEventListener(outer.type, () => {
+          publish(field, inner);
+          field.dispatchEvent(inner);
+        }, { once: true });
+
+        try {
+          const result = publish(field, outer);
+          field.dispatchEvent(outer);
+          return [result, errors, phases, delivery];
+        } finally {
+          disconnect();
+          stopHealthy();
+          stopCleanup();
+          stopPrepare();
+          legacy.off('state:outer state:inner');
+          Drupal.throwError = report;
+          window.removeEventListener('error', reportListenerError);
+        }
+      })()
+      JS);
+    $this->assertSame([
+      FALSE,
+      ['prepare', 'cleanup'],
+      [
+        ['prepare', 'state:outer'],
+        ['prepare', 'state:inner'],
+        ['listener', 'state:inner'],
+        ['cleanup', 'state:inner'],
+        ['cleanup', 'state:outer'],
+      ],
+      [
+        ['state:inner', 'inner', TRUE],
+        ['state:inner', NULL, TRUE],
+        ['state:outer', 'outer', TRUE],
+        ['state:outer', NULL, TRUE],
+      ],
+    ], $result);
+  }
+
+  /**
    * Tests an explicit adapter load on a page with an independent vendor.
    */
   public function testStandaloneOptIn(): void {
