@@ -152,10 +152,6 @@
       "owner": "C",
       "references": 1
     },
-    "modules/comment/js/comment-by-viewer.js": {
-      "owner": "U",
-      "references": 1
-    },
     "modules/comment/js/comment-entity-form.js": {
       "owner": "U",
       "references": 1

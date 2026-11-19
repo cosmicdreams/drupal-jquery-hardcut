@@ -68,7 +68,6 @@
 - core/modules/ckeditor5/js/ckeditor5.image.admin.js
 - core/modules/ckeditor5/js/ckeditor5.js
 - core/modules/ckeditor5/js/ckeditor5.style.admin.js
-- core/modules/comment/js/comment-by-viewer.js
 - core/modules/comment/js/comment-entity-form.js
 - core/modules/content_translation/js/content_translation.admin.js
 - core/modules/contextual/js/contextual.js
