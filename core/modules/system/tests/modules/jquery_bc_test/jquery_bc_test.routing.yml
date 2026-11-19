@@ -30,3 +30,13 @@ jquery_bc_test.bridge_events:
     legacy: true
   requirements:
     _access: 'TRUE'
+
+jquery_bc_test.bridge_events_early:
+  path: '/jquery-bc-test/bridge-events-early'
+  defaults:
+    _controller: '\Drupal\jquery_bc_test\Controller\EventBridgeController::build'
+    _title: 'Early legacy events fixture'
+    legacy: true
+    early: true
+  requirements:
+    _access: 'TRUE'

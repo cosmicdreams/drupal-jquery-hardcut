@@ -36,6 +36,20 @@
     stark: [core/jquery]
     starterkit_theme: [core/jquery]
     umami: [core/jquery]
+- fixture: core/modules/system/tests/modules/jquery_bc_test/jquery_bc_test.libraries.yml:event_bridge_early
+  removal: Z
+  themes:
+    default_admin: [core/jquery]
+    stark: [core/jquery]
+    starterkit_theme: [core/jquery]
+    umami: [core/jquery]
+- fixture: core/modules/system/tests/modules/jquery_bc_test/jquery_bc_test.libraries.yml:event_bridge_late
+  removal: Z
+  themes:
+    default_admin: [core/jquery]
+    stark: [core/jquery]
+    starterkit_theme: [core/jquery]
+    umami: [core/jquery]
 - fixture: core/modules/system/tests/modules/jquery_bc_test/jquery_bc_test.libraries.yml:explicit_jquery
   removal: Z
   themes:

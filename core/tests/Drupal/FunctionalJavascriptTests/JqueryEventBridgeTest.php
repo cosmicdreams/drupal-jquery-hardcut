@@ -25,6 +25,86 @@ final class JqueryEventBridgeTest extends WebDriverTestBase {
   protected $defaultTheme = 'stark';
 
   /**
+   * Tests that classic dependents can use the bridge in either load order.
+   */
+  public function testClassicScriptRegistration(): void {
+    $session = $this->getSession();
+    foreach (['bridge-events' => FALSE, 'bridge-events-early' => TRUE] as $path => $early) {
+      $this->drupalGet("jquery-bc-test/$path");
+      $this->assertSame(['ready', 1], $session->evaluateScript(<<<'JS'
+        JSON.parse(document.getElementById('event-bridge-fixture').dataset.bridgeTrace)
+        JS));
+      $this->assertSame($early, $session->evaluateScript(<<<'JS'
+        (() => {
+          const scripts = Array.from(document.scripts);
+          const library = (path) => scripts.findIndex(({ src }) => src && new URL(src).pathname.endsWith(path));
+          const adapter = library('/core/misc/jquery.drupal-bc.js');
+          const drupal = library('/core/misc/drupal.js');
+          return adapter >= 0 && drupal >= 0 ? adapter < drupal : null;
+        })()
+        JS));
+    }
+  }
+
+  /**
+   * Tests explicit opt-in and teardown with two independent instances.
+   */
+  public function testIndependentInstances(): void {
+    $this->drupalGet('jquery-bc-test/bridge-events');
+    $session = $this->getSession();
+    $session->executeScript(<<<'JS'
+      const vendor = Array.from(document.scripts).find(({ src }) => src.includes('/assets/vendor/jquery/jquery.min.js'));
+      const script = document.createElement('script');
+      script.src = vendor.src;
+      script.onload = () => {
+        window.foreignInstance = window.jQuery.noConflict(true);
+      };
+      document.head.append(script);
+      JS);
+    $this->assertJsCondition('typeof window.foreignInstance === "function"');
+    $trace = $session->evaluateScript(<<<'JS'
+      (() => {
+        const first = window.jQuery;
+        const second = window.foreignInstance;
+        const { connect } = Drupal.eventBindings.legacyFixture;
+        const target = document.getElementById('event-bridge-fixture');
+        const type = 'compatibility:probe';
+        let calls = 0;
+        const listener = () => ++calls;
+        target.addEventListener(type, listener);
+        const unregister = Drupal.eventBindings.register({ target, type, listener });
+        const firstBeforeOptIn = first(target).triggerHandler(type);
+        const secondBeforeOptIn = second(target).triggerHandler(type);
+        const stop = connect(second);
+        const sameStop = connect(second) === stop;
+        const secondAfterOptIn = second(target).triggerHandler(type);
+        stop();
+        const secondAfterStop = second(target).triggerHandler(type);
+        const resume = connect(second);
+        stop();
+        const secondAfterResume = second(target).triggerHandler(type);
+        resume();
+        const firstAfterStop = first(target).triggerHandler(type);
+        target.dispatchEvent(new Event(type));
+        unregister();
+        target.removeEventListener(type, listener);
+        return [
+          first !== second,
+          sameStop,
+          firstBeforeOptIn,
+          secondBeforeOptIn ?? null,
+          secondAfterOptIn,
+          secondAfterStop ?? null,
+          secondAfterResume,
+          firstAfterStop,
+          calls,
+        ];
+      })()
+      JS);
+    $this->assertSame([TRUE, TRUE, 1, NULL, 2, NULL, 3, 4, 5], $trace);
+  }
+
+  /**
    * Tests that only the explicitly loaded jQuery library releases the alias.
    */
   public function testDollarAliasOwnership(): void {
@@ -558,18 +638,16 @@ final class JqueryEventBridgeTest extends WebDriverTestBase {
   }
 
   /**
-   * Exposes the fixture module's observers to WebDriver scripts.
+   * Resets the fixture so delivery tests can control observer setup.
    */
   private function loadAdapter(): void {
     $this->drupalGet('jquery-bc-test/bridge-events');
     $this->getSession()->executeScript(<<<'JS'
-      const script = document.querySelector('script[src*="/core/misc/jquery.drupal-bc.js"]');
-      import(script.src).then(({ observeLegacyEvents, observeNativePayloads }) => {
-        window.observeTestLegacyEvents = observeLegacyEvents;
-        window.observeTestNativePayloads = observeNativePayloads;
-      });
+      const { connect, observeLegacyEvents, observeNativePayloads } = Drupal.eventBindings.legacyFixture;
+      connect(window.jQuery)();
+      window.observeTestLegacyEvents = observeLegacyEvents;
+      window.observeTestNativePayloads = observeNativePayloads;
       JS);
-    $this->assertJsCondition('typeof window.observeTestLegacyEvents === "function"');
   }
 
 }

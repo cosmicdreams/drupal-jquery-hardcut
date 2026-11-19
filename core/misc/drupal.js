@@ -752,3 +752,5 @@ window.Drupal = { behaviors: {}, locale: {} };
   window.Proxy,
   window.Reflect,
 );
+
+document.dispatchEvent(new Event('drupal:event-bindings-ready'));

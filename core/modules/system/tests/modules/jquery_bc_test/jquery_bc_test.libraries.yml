@@ -5,6 +5,20 @@ explicit_jquery:
 
 event_bridge:
   js:
-    /core/misc/jquery.drupal-bc.js: { preprocess: false, attributes: { type: module } }
+    /core/misc/jquery.drupal-bc.js: { preprocess: false }
   dependencies:
-    - jquery_bc_test/explicit_jquery
+    - core/jquery
+
+event_bridge_early:
+  js:
+    js/event-bridge-dependent.js: {}
+  dependencies:
+    - jquery_bc_test/event_bridge
+    - core/drupal
+
+event_bridge_late:
+  js:
+    js/event-bridge-dependent.js: {}
+  dependencies:
+    - core/drupal
+    - jquery_bc_test/event_bridge

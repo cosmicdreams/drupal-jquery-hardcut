@@ -64,6 +64,10 @@
       "owner": "U",
       "references": 1
     },
+    "misc/jquery.drupal-bc.js": {
+      "owner": "B",
+      "references": 1
+    },
     "misc/jquery.no-conflict.js": {
       "owner": "B",
       "references": 1
@@ -282,6 +286,10 @@
     },
     "modules/system/tests/modules/form_test/js/form_test.js": {
       "owner": "U",
+      "references": 1
+    },
+    "modules/system/tests/modules/jquery_bc_test/js/event-bridge-dependent.js": {
+      "owner": "B",
       "references": 1
     },
     "modules/system/tests/modules/js_message_test/js/js_message_test.js": {
