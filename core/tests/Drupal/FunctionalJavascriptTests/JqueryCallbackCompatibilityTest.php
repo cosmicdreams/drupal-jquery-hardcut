@@ -78,4 +78,54 @@ final class JqueryCallbackCompatibilityTest extends WebDriverTestBase {
     $this->assertTrue($session->evaluateScript('window.restoreCallback()'));
   }
 
+  /**
+   * Tests callback assignment and explicit opt-in on the fixture pages.
+   */
+  public function testCallbackAssignmentSeam(): void {
+    $session = $this->getSession();
+    $native = [
+      ['built-in', TRUE, 3, TRUE, TRUE, TRUE],
+      ['native default result', TRUE],
+      ['native override', TRUE, 0],
+      ['built-in', TRUE, 3, TRUE, TRUE, TRUE],
+      ['before opt-in', TRUE, TRUE],
+    ];
+    $legacy_call = [
+      ['second', TRUE, 3],
+      ['first', TRUE, 3, TRUE, TRUE, TRUE, TRUE, TRUE],
+      ['built-in', TRUE, 3, TRUE, TRUE, TRUE],
+      ['predecessor result', TRUE, TRUE],
+    ];
+    $mixed = [
+      ...$native,
+      ['late opt-in', TRUE, 0],
+      ['native override', TRUE, 0],
+      ['built-in', TRUE, 3, TRUE, TRUE, TRUE],
+      ['mixed native', TRUE, TRUE],
+      ...$legacy_call,
+      ['legacy veto', TRUE, 1],
+      ...$legacy_call,
+      ['legacy veto again', TRUE, 2],
+      ['built-in', TRUE, 3, TRUE, TRUE, TRUE],
+      ['restored', TRUE, TRUE, 3],
+      ['disconnected', TRUE, TRUE, TRUE, TRUE, TRUE, 3],
+      ['native override', TRUE, 3],
+      ['built-in', TRUE, 3, TRUE, TRUE, TRUE],
+      ['native after teardown', TRUE, 3],
+    ];
+    foreach (['native-events' => $native, 'bridge-events' => $mixed] as $page => $expected) {
+      $this->drupalGet("jquery-bc-test/$page");
+      $session->executeScript(<<<'JS'
+        const path = 'core/modules/system/tests/modules/jquery_bc_test/js/callback-chain.js';
+        import(drupalSettings.path.baseUrl + path).then(({ runCallbackChain }) => {
+          window.runCallbackChain = runCallbackChain;
+        });
+        JS);
+      $this->assertJsCondition('typeof window.runCallbackChain === "function"');
+      $this->assertSame($expected, $session->evaluateScript(<<<'JS'
+        window.runCallbackChain(document.getElementById('event-bridge-fixture'), window.jQuery)
+        JS), $page);
+    }
+  }
+
 }
