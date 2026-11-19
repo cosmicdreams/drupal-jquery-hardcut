@@ -35,6 +35,7 @@ class JqueryFreeAssetsTest extends KernelTestBase {
    */
   public function testJqueryReferences(): void {
     $allowed = Yaml::decode(file_get_contents(__DIR__ . '/fixtures/jquery-asset-allow-list.yml')) ?? [];
+    $legacy_js = self::legacyJavascriptPaths();
     $seen = [];
     $actual = [];
     foreach ($this->coreLibrariesByTheme() as $libraries) {
@@ -56,10 +57,9 @@ class JqueryFreeAssetsTest extends KernelTestBase {
                 continue;
               }
               $this->assertFileIsReadable($file);
-              $source = file_get_contents($file);
               $references_jquery = $references_jquery || match ($type) {
-                'js' => self::referencesJquery($source),
-                'css' => self::referencesJqueryCss($source),
+                'js' => isset($legacy_js[$path]),
+                'css' => self::referencesJqueryCss(file_get_contents($file)),
               };
             }
             if ($references_jquery) {
@@ -86,6 +86,7 @@ class JqueryFreeAssetsTest extends KernelTestBase {
    * Checks the assets declared by ordinary test extensions.
    */
   public function testOrdinaryTestLibraryAssets(): void {
+    $legacy_js = self::legacyJavascriptPaths();
     $actual = [];
     foreach ($this->testLibraryDeclarations() as $path => $libraries) {
       foreach ($libraries as $id => $definition) {
@@ -104,10 +105,9 @@ class JqueryFreeAssetsTest extends KernelTestBase {
               // or URL handling. Scan shipped bytes where there is a file.
               if (is_file($file)) {
                 $this->assertFileIsReadable($file);
-                $source = file_get_contents($file);
                 $references_jquery = $references_jquery || match ($type) {
-                  'js' => self::referencesJquery($source),
-                  'css' => self::referencesJqueryCss($source),
+                  'js' => isset($legacy_js[$asset_path]),
+                  'css' => self::referencesJqueryCss(file_get_contents($file)),
                 };
               }
             }
@@ -222,26 +222,18 @@ class JqueryFreeAssetsTest extends KernelTestBase {
   }
 
   /**
-   * Matches jQuery spellings in JavaScript, ignoring source comments.
+   * Returns legacy JavaScript paths checked by the Node source ratchet.
+   *
+   * Keep checking where these files are attached, even when an owning slice
+   * still has a source exception for the file.
+   *
+   * @return array<string, true>
+   *   Legacy files keyed by repository-relative path.
    */
-  private static function referencesJquery(string $source): bool {
-    // Consume literals before looking for comments so their slash sequences
-    // do not hide the rest of a line. Preserve the literals for the scan.
-    $tokens = <<<'REGEX'
-      ~
-        "(?:[^"\\\r\n]++|\\.)*+"
-        | '(?:[^'\\\r\n]++|\\.)*+'
-        | `(?:[^`\\]++|\\.)*+`
-        | (?:(?<=[=(,:;!&|?{\[])|(?<=\breturn))\h*\K
-          /(?![/*])(?:[^/\[\\\r\n]++|\\[^\r\n]|\[(?:[^\]\\\r\n]++|\\[^\r\n])*+\])++/[a-z]*+
-        | (?<comment>//[^\r\n]*|/\*.*?\*/)
-      ~sx
-      REGEX;
-    $source = preg_replace_callback($tokens, static fn (array $match): string => isset($match['comment']) ? ' ' : $match[0], $source);
-    if ($source === NULL) {
-      throw new \RuntimeException(preg_last_error_msg());
-    }
-    return preg_match('/(?<![\w$])(?:jQuery(?![\w$])|\$[.(])/', $source) === 1;
+  private static function legacyJavascriptPaths(): array {
+    $allow_list = json_decode(file_get_contents(__DIR__ . '/fixtures/jquery-source-allow-list.json'), TRUE, flags: JSON_THROW_ON_ERROR);
+    $files = array_keys($allow_list['sources'] + $allow_list['distribution']);
+    return array_fill_keys(array_map(static fn (string $path): string => "core/$path", $files), TRUE);
   }
 
 }

@@ -1,8 +1,4 @@
-# Remove each path once its JavaScript no longer matches the scanner.
-# Some minified assets use $ as a local identifier.
-- core/assets/vendor/ckeditor5/ckeditor5.umd.js
-- core/assets/vendor/floating-ui/floating-ui.dom.umd.min.js
-- core/assets/vendor/htmx/htmx.min.js
+# Attachment evidence from 92e5c3a3047. JavaScript classification uses the source ratchet.
 - core/assets/vendor/jquery.ui/themes/base/autocomplete.css
 - core/assets/vendor/jquery.ui/themes/base/button.css
 - core/assets/vendor/jquery.ui/themes/base/checkboxradio.css
@@ -66,7 +62,6 @@
 - core/modules/block/js/block.admin.js
 - core/modules/block/js/block.js
 - core/modules/ckeditor5/js/build/drupalEntityLinkSuggestions.js
-- core/modules/ckeditor5/js/build/drupalMedia.js
 - core/modules/ckeditor5/js/ckeditor5.admin.js
 - core/modules/ckeditor5/js/ckeditor5.dialog.fix.js
 - core/modules/ckeditor5/js/ckeditor5.image.admin.js

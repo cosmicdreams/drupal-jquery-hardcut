@@ -1,4 +1,5 @@
 // cspell:ignore UIDOM
+import { readFileSync } from 'node:fs';
 import { defineConfig } from 'eslint/config';
 import importPlugin from 'eslint-plugin-import';
 import noJQuery from 'eslint-plugin-no-jquery';
@@ -8,106 +9,26 @@ import jsdoc from 'eslint-plugin-jsdoc';
 import js from '@eslint/js';
 import globals from 'globals';
 
-// Remove files as they stop using the jQuery globals.
-const jqueryAllowList = [
-  'misc/ajax.js',
-  'misc/autocomplete.js',
-  'misc/batch.js',
-  'misc/details-aria.js',
-  'misc/details-summarized-content.js',
-  'misc/details.js',
-  'misc/dialog/dialog.ajax.js',
-  'misc/dialog/dialog.jquery-ui.js',
-  'misc/dialog/dialog.js',
-  'misc/dialog/dialog.position.js',
-  'misc/dialog/off-canvas/js/off-canvas.js',
-  'misc/displace.js',
-  'misc/dropbutton/dropbutton.js',
-  'misc/drupal.init.js',
-  'misc/entity-form.js',
-  'misc/form.js',
-  'misc/machine-name.js',
-  'misc/position.js',
-  'misc/progress.js',
-  'misc/states.js',
-  'misc/tabbingmanager.js',
-  'misc/tabledrag.js',
-  'misc/tableresponsive.js',
-  'misc/tableselect.js',
-  'misc/timezone.js',
-  'misc/vertical-tabs.js',
-  'modules/block/js/block.admin.js',
-  'modules/block/js/block.js',
-  'modules/ckeditor5/js/ckeditor5.admin.js',
-  'modules/ckeditor5/js/ckeditor5.dialog.fix.js',
-  'modules/ckeditor5/js/ckeditor5.image.admin.js',
-  'modules/ckeditor5/js/ckeditor5.js',
-  'modules/ckeditor5/js/ckeditor5.style.admin.js',
-  'modules/ckeditor5/js/ckeditor5_plugins/drupalEntityLinkSuggestions/src/autocomplete.js',
-  'modules/comment/js/comment-by-viewer.js',
-  'modules/comment/js/comment-entity-form.js',
-  'modules/content_translation/js/content_translation.admin.js',
-  'modules/contextual/js/contextual.js',
-  'modules/editor/js/editor.dialog.js',
-  'modules/editor/js/editor.js',
-  'modules/field_ui/js/field_ui.js',
-  'modules/file/js/file.js',
-  'modules/filter/js/filter.admin.js',
-  'modules/filter/js/filter.js',
-  'modules/language/js/language.admin.js',
-  'modules/layout_builder/js/layout-builder.js',
-  'modules/locale/js/locale.admin.js',
-  'modules/locale/js/locale.bulk.js',
-  'modules/media/js/form.js',
-  'modules/media/js/type_form.js',
-  'modules/media_library/js/media_library.click_to_select.js',
-  'modules/media_library/js/media_library.ui.js',
-  'modules/media_library/js/media_library.view.js',
-  'modules/media_library/js/media_library.widget.js',
-  'modules/menu_ui/js/menu_ui.admin.js',
-  'modules/menu_ui/js/menu_ui.js',
-  'modules/node/js/content_types.js',
-  'modules/node/js/node.js',
-  'modules/node/js/node.preview.js',
-  'modules/path/js/path.js',
-  'modules/system/js/system.date.js',
-  'modules/system/js/system.js',
-  'modules/system/js/system.modules.js',
-  'modules/system/tests/modules/ajax_test/js/command_promise-ajax.js',
-  'modules/system/tests/modules/ajax_test/js/global_events.js',
-  'modules/system/tests/modules/ajax_test/js/insert-ajax.js',
-  'modules/system/tests/modules/css_disable_transitions_test/js/disable_transitions.theme.js',
-  'modules/system/tests/modules/form_test/js/form_test.js',
-  'modules/system/tests/modules/js_message_test/js/js_message_test.js',
-  'modules/system/tests/modules/tabledrag_test/js/tabledrag_test.js',
-  'modules/taxonomy/js/taxonomy.js',
-  'modules/text/js/text.js',
-  'modules/user/js/user.js',
-  'modules/user/js/user.permissions.js',
-  'modules/views/js/ajax_view.js',
-  'modules/views/js/base.js',
-  'modules/views_ui/js/ajax.js',
-  'modules/views_ui/js/dialog.views.js',
-  'modules/views_ui/js/views-admin.js',
-  'modules/views_ui/js/views_ui.listing.js',
-  'themes/default_admin/js/autocomplete.js',
-  'themes/default_admin/js/details.js',
-  'themes/default_admin/js/media-library.ui.js',
-  'themes/default_admin/js/nav-tabs.js',
-  'themes/default_admin/js/tabledrag.js',
-  'themes/default_admin/js/tableselect.js',
-  'themes/default_admin/js/vertical-tabs.js',
-];
+import {
+  jqueryPlugin,
+  jqueryRules,
+  nightwatchPaths,
+} from './scripts/js/jquery-ratchet.mjs';
+const jqueryRatchet = JSON.parse(
+  readFileSync(
+    new URL(
+      './tests/Drupal/KernelTests/Core/Asset/fixtures/jquery-source-allow-list.json',
+      import.meta.url,
+    ),
+    'utf8',
+  ),
+);
 
 export default defineConfig(
   {
     ignores: [
       'assets/vendor/**/*',
-      'tests/Drupal/Nightwatch/**',
-      '**/tests/src/Nightwatch/**',
-      '**/tests/modules/nightwatch_*/**',
-      '**/tests/profiles/nightwatch_*/**',
-      'profiles/tests/nightwatch_*/**',
+      ...nightwatchPaths,
       'node_modules/**/*',
       '**/js_test_files/**/*',
       '**/build/**/*',
@@ -203,12 +124,8 @@ export default defineConfig(
   },
   {
     files: ['**/*.{js,mjs,cjs}'],
-    ignores: jqueryAllowList,
-    rules: {
-      'no-restricted-globals': [
-        'error',
-        { globals: ['jQuery', '$'], checkGlobalObject: true },
-      ],
-    },
+    ignores: Object.keys(jqueryRatchet.sources),
+    plugins: { 'drupal-jquery': jqueryPlugin },
+    rules: jqueryRules,
   },
 );
