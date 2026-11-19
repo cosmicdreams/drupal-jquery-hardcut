@@ -1,0 +1,51 @@
+# Evidence from 92e5c3a3047. Remove each entry as its owning slice converts it.
+# Slice Z stages library declaration changes for the named slices.
+- fixture: core/modules/system/tests/modules/ajax_test/ajax_test.libraries.yml:ajax_insert
+  removal: A
+  themes:
+    default_admin: [core/jquery]
+    stark: [core/jquery]
+    starterkit_theme: [core/jquery]
+    umami: [core/jquery]
+- fixture: core/modules/system/tests/modules/ajax_test/ajax_test.libraries.yml:command_promise
+  removal: A
+  themes:
+    default_admin: [core/jquery]
+    stark: [core/jquery]
+    starterkit_theme: [core/jquery]
+    umami: [core/jquery]
+- fixture: core/modules/system/tests/modules/ajax_test/ajax_test.libraries.yml:global_events
+  removal: A
+  themes:
+    default_admin: [core/jquery]
+    stark: [core/jquery]
+    starterkit_theme: [core/jquery]
+    umami: [core/jquery]
+- fixture: core/modules/system/tests/modules/form_test/form_test.libraries.yml:form_test
+  removal: U
+  themes:
+    default_admin: [core/jquery]
+    stark: [core/jquery]
+    starterkit_theme: [core/jquery]
+    umami: [core/jquery]
+- fixture: core/modules/system/tests/modules/js_message_test/js_message_test.libraries.yml:show_message
+  removal: U
+  themes:
+    default_admin: [core/jquery]
+    stark: [core/jquery]
+    starterkit_theme: [core/jquery]
+    umami: [core/jquery]
+- fixture: core/modules/system/tests/modules/off_canvas_test/off_canvas_test.libraries.yml:resize_helper
+  removal: D
+  themes:
+    default_admin: [core/drupal.jquery.position, core/internal.jquery_ui, core/jquery, jquery-ui-dialog]
+    stark: [core/drupal.jquery.position, core/internal.jquery_ui, core/jquery, jquery-ui-dialog]
+    starterkit_theme: [core/drupal.jquery.position, core/internal.jquery_ui, core/jquery, jquery-ui-dialog]
+    umami: [core/drupal.jquery.position, core/internal.jquery_ui, core/jquery, jquery-ui-dialog]
+- fixture: core/modules/system/tests/modules/tabledrag_test/tabledrag_test.libraries.yml:tabledrag
+  removal: T
+  themes:
+    default_admin: [core/jquery]
+    stark: [core/jquery]
+    starterkit_theme: [core/jquery]
+    umami: [core/jquery]

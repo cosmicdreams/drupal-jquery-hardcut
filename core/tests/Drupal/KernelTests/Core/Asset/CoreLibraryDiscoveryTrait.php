@@ -4,9 +4,11 @@ declare(strict_types=1);
 
 namespace Drupal\KernelTests\Core\Asset;
 
+use Drupal\Component\Serialization\Yaml;
 use Drupal\Core\DependencyInjection\ContainerBuilder;
 use Drupal\Core\Extension\Extension;
 use Drupal\Core\Extension\ExtensionDiscovery;
+use Symfony\Component\Finder\Finder;
 
 /**
  * Discovers core libraries under each core theme.
@@ -43,7 +45,7 @@ trait CoreLibraryDiscoveryTrait {
     $discovery = new ExtensionDiscovery($this->root);
     // Include extensions shipped inside any core profile.
     $discovery->setProfileDirectories([]);
-    // The scans exclude all test extensions, including Nightwatch fixtures.
+    // Test declarations are inventoried separately to keep their hooks out.
     $is_core = static fn (Extension $extension): bool => str_starts_with($extension->getPath(), 'core/');
     $modules = array_filter($discovery->scan('module', FALSE), $is_core);
     $profiles = array_filter($discovery->scan('profile', FALSE), $is_core);
@@ -94,10 +96,36 @@ trait CoreLibraryDiscoveryTrait {
   }
 
   /**
+   * Reads declared test libraries without registering any test extensions.
+   *
+   * Library parser unit data has no sibling extension info file. Use paths
+   * to keep the identity of each fixture even when extension names collide.
+   *
+   * @return \Generator<string, array>
+   *   Declarations keyed by core-relative library file path.
+   */
+  protected function testLibraryDeclarations(): \Generator {
+    $files = new Finder()
+      ->files()
+      ->in("$this->root/core")
+      ->exclude('node_modules')
+      ->path('#(?:^|/)tests/#')
+      ->name('*.libraries.yml');
+
+    foreach ($files as $file) {
+      $path = 'core/' . $file->getRelativePathname();
+      $info = substr($file->getPathname(), 0, -strlen('.libraries.yml')) . '.info.yml';
+      if (!self::isNightwatchPath($path) && is_file($info)) {
+        yield $path => Yaml::decode($file->getContents()) ?? [];
+      }
+    }
+  }
+
+  /**
    * Identifies paths outside the Nightwatch-free ratchets.
    */
   protected static function isNightwatchPath(string $path): bool {
-    return preg_match('#^core/(?:tests/Drupal/Nightwatch/|(?:.*/)?tests/(?:src/Nightwatch/|(?:modules|profiles)/nightwatch_[^/]+/)|profiles/tests/nightwatch_[^/]+/)#', $path) === 1;
+    return preg_match('#^core/(?:tests/Drupal/Nightwatch/|(?:.*/)?tests/(?:src/Nightwatch/|(?:modules|profiles)/nightwatch_[^/]*/)|profiles/tests/nightwatch_[^/]*/)#', $path) === 1;
   }
 
 }

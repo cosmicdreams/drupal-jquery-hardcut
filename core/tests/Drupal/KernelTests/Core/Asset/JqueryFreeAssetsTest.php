@@ -9,6 +9,7 @@ use Drupal\KernelTests\KernelTestBase;
 use PHPUnit\Framework\Attributes\Group;
 use PHPUnit\Framework\Attributes\IgnoreDeprecations;
 use PHPUnit\Framework\Attributes\RunTestsInSeparateProcesses;
+use Symfony\Component\Filesystem\Path;
 use Symfony\Component\Finder\Finder;
 
 /**
@@ -68,7 +69,7 @@ class JqueryFreeAssetsTest extends KernelTestBase {
         }
       }
     }
-    $actual = array_merge($actual, $this->phpAssetReferences());
+    $actual = array_merge($actual, array_keys($this->phpAssetReferences(test_sources: FALSE)));
     sort($actual, SORT_STRING);
 
     $messages = [];
@@ -79,6 +80,60 @@ class JqueryFreeAssetsTest extends KernelTestBase {
       $messages[] = "Remove '- $path' from jquery-asset-allow-list.yml.";
     }
     $this->assertSame($allowed, $actual, implode("\n", $messages));
+  }
+
+  /**
+   * Checks the assets declared by ordinary test extensions.
+   */
+  public function testOrdinaryTestLibraryAssets(): void {
+    $actual = [];
+    foreach ($this->testLibraryDeclarations() as $path => $libraries) {
+      foreach ($libraries as $id => $definition) {
+        $css = array_merge(...array_values($definition['css'] ?? []));
+        foreach (['js' => $definition['js'] ?? [], 'css' => $css] as $type => $assets) {
+          foreach ($assets as $uri => $options) {
+            $references_jquery = self::isLegacyAssetPath($uri);
+            if (($options['type'] ?? NULL) !== 'external' && !str_contains($uri, '://') && !str_starts_with($uri, '//')) {
+              $asset_path = str_starts_with($uri, '/') ? substr($uri, 1) : dirname($path) . '/' . $uri;
+              $asset_path = Path::canonicalize(preg_split('/[?#]/', $asset_path, 2)[0]);
+              if (self::isNightwatchPath($asset_path)) {
+                continue;
+              }
+              $file = "$this->root/$asset_path";
+              // Some attachment fixtures use synthetic paths to test sorting
+              // or URL handling. Scan shipped bytes where there is a file.
+              if (is_file($file)) {
+                $this->assertFileIsReadable($file);
+                $source = file_get_contents($file);
+                $references_jquery = $references_jquery || match ($type) {
+                  'js' => self::referencesJquery($source),
+                  'css' => self::referencesJqueryCss($source),
+                };
+              }
+            }
+            if ($references_jquery) {
+              $actual["$path:$id"][] = $uri;
+            }
+          }
+        }
+      }
+    }
+    foreach ($actual as &$uris) {
+      sort($uris, SORT_STRING);
+    }
+    unset($uris);
+    ksort($actual, SORT_STRING);
+    $allowed = Yaml::decode(file_get_contents(__DIR__ . '/fixtures/jquery-test-asset-allow-list.yml')) ?? [];
+    $this->assertSame(array_column($allowed, 'assets', 'fixture'), $actual);
+  }
+
+  /**
+   * Checks literal legacy references in test PHP, including test extensions.
+   */
+  public function testOrdinaryTestPhpAttachments(): void {
+    $actual = $this->phpAssetReferences(test_sources: TRUE);
+    $allowed = Yaml::decode(file_get_contents(__DIR__ . '/fixtures/jquery-test-php-allow-list.yml')) ?? [];
+    $this->assertSame(array_column($allowed, 'literals', 'path'), $actual);
   }
 
   /**
@@ -111,33 +166,48 @@ class JqueryFreeAssetsTest extends KernelTestBase {
    * Tokenization excludes comments. Computed attachments are covered by
    * resolved assets and runtime tests when the relevant routes are exercised.
    *
-   * @return string[]
-   *   Relative paths of PHP source files containing legacy asset references.
+   * @param bool $test_sources
+   *   Whether to check test source files or production source files.
+   *
+   * @return array<string, array<string, int>>
+   *   Literal counts keyed by the relative source file path.
    */
-  private function phpAssetReferences(): array {
+  private function phpAssetReferences(bool $test_sources): array {
     $sources = new Finder()
       ->files()
-      ->in(["$this->root/core/lib", "$this->root/core/modules", "$this->root/core/profiles", "$this->root/core/themes"])
-      ->exclude('tests')
-      ->notName('*.api.php')
-      ->name('/\.(?:php|inc|module|install|profile|theme)$/');
+      ->in([
+        "$this->root/core/lib",
+        "$this->root/core/modules",
+        "$this->root/core/profiles",
+        "$this->root/core/themes",
+        "$this->root/core/tests",
+      ])
+      ->exclude('node_modules')
+      ->name('/\.(?:php|inc|module|install|profile|theme|engine)$/');
+    if (!$test_sources) {
+      $sources->notName('*.api.php');
+    }
 
     $paths = [];
     foreach ($sources as $file) {
       $path = substr($file->getPathname(), strlen($this->root) + 1);
-      if (self::isNightwatchPath($path)) {
+      if (self::isNightwatchPath($path) || str_contains($path, '/tests/') !== $test_sources) {
         continue;
       }
       foreach (token_get_all($file->getContents()) as $token) {
         if (is_array($token) && $token[0] === T_CONSTANT_ENCAPSED_STRING) {
           $literal = substr($token[1], 1, -1);
           if (in_array($literal, self::JQUERY_LIBRARIES, TRUE) || self::isLegacyAssetPath($literal)) {
-            $paths[] = $path;
-            break;
+            $paths[$path][$literal] = ($paths[$path][$literal] ?? 0) + 1;
           }
         }
       }
     }
+    foreach ($paths as &$literals) {
+      ksort($literals, SORT_STRING);
+    }
+    unset($literals);
+    ksort($paths, SORT_STRING);
     return $paths;
   }
 

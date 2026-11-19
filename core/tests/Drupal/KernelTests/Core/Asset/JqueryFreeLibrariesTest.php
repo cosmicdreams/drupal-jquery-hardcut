@@ -5,6 +5,8 @@ declare(strict_types=1);
 namespace Drupal\KernelTests\Core\Asset;
 
 use Drupal\Component\Serialization\Yaml;
+use Drupal\Core\Asset\LibraryDependencyResolver;
+use Drupal\Core\Asset\LibraryDiscoveryInterface;
 use Drupal\KernelTests\KernelTestBase;
 use PHPUnit\Framework\Attributes\Group;
 use PHPUnit\Framework\Attributes\IgnoreDeprecations;
@@ -74,6 +76,46 @@ class JqueryFreeLibrariesTest extends KernelTestBase {
   }
 
   /**
+   * Checks each ordinary test declaration against the pinned core closures.
+   */
+  public function testOrdinaryTestLibraryClosures(): void {
+    $declarations = iterator_to_array($this->testLibraryDeclarations());
+    $this->assertNotEmpty($declarations);
+    $definitions = [];
+    foreach ($declarations as $path => $extension_libraries) {
+      $extension = basename($path, '.libraries.yml');
+      $definitions[$extension] = ($definitions[$extension] ?? []) + $extension_libraries;
+    }
+
+    $actual = [];
+    foreach ($this->coreLibrariesByTheme() as $theme => $libraries) {
+      $discovery = $this->container->get('library.discovery');
+      // Expose declarations to the dependency resolver without enabling their
+      // extensions. Use production library lookups for other dependencies.
+      foreach ($declarations as $path => $extension_libraries) {
+        $extension = basename($path, '.libraries.yml');
+        $registry = $this->createStub(LibraryDiscoveryInterface::class);
+        $registry->method('getLibraryByName')
+          ->willReturnCallback(static fn ($name, $id) => ($name === $extension ? $extension_libraries[$id] ?? NULL : NULL)
+            ?? $definitions[$name][$id]
+            ?? $discovery->getLibraryByName($name, $id));
+        $resolver = new LibraryDependencyResolver($registry);
+        foreach (array_keys($extension_libraries) as $id) {
+          $closure = $resolver->getLibrariesWithDependencies(["$extension/$id"]);
+          $matches = self::trackedDependencies($closure, $libraries);
+          if ($matches) {
+            $actual["$path:$id"][$theme] = $matches;
+          }
+        }
+      }
+    }
+    ksort($actual, SORT_STRING);
+
+    $allowed = Yaml::decode(file_get_contents(__DIR__ . '/fixtures/jquery-test-library-allow-list.yml')) ?? [];
+    $this->assertSame(array_column($allowed, 'themes', 'fixture'), $actual);
+  }
+
+  /**
    * Builds the map of resolved jQuery dependencies and widget assets.
    *
    * @return array<string, string[]>
@@ -85,21 +127,36 @@ class JqueryFreeLibrariesTest extends KernelTestBase {
       $resolver = $this->container->get('library.dependency_resolver');
       foreach (array_keys($libraries) as $library) {
         $closure = $resolver->getLibrariesWithDependencies([$library]);
-        $matches = array_intersect(self::JQUERY_LIBRARIES, $closure);
-        foreach ($closure as $dependency) {
-          foreach ($libraries[$dependency]['js'] ?? [] as $asset) {
-            if (isset(self::WIDGETS[$asset['data']])) {
-              $matches[] = self::WIDGETS[$asset['data']];
-            }
-          }
-        }
-        $matches = array_values(array_unique($matches));
-        sort($matches, SORT_STRING);
-        $map["$theme/$library"] = $matches;
+        $map["$theme/$library"] = self::trackedDependencies($closure, $libraries);
       }
     }
     ksort($map, SORT_STRING);
     return $map;
+  }
+
+  /**
+   * Returns the legacy libraries and widgets in a resolved closure.
+   *
+   * @param string[] $closure
+   *   The resolved library IDs.
+   * @param array $libraries
+   *   Library definitions keyed by ID.
+   *
+   * @return string[]
+   *   The sorted legacy IDs and widgets.
+   */
+  private static function trackedDependencies(array $closure, array $libraries): array {
+    $matches = array_intersect(self::JQUERY_LIBRARIES, $closure);
+    foreach ($closure as $dependency) {
+      foreach ($libraries[$dependency]['js'] ?? [] as $asset) {
+        if (isset(self::WIDGETS[$asset['data']])) {
+          $matches[] = self::WIDGETS[$asset['data']];
+        }
+      }
+    }
+    $matches = array_values(array_unique($matches));
+    sort($matches, SORT_STRING);
+    return $matches;
   }
 
 }
