@@ -33,16 +33,20 @@ class JSWebAssert extends WebAssert {
     return <<<JS
       (() => {
         const activeRequests = window.drupalActiveXhrCount;
+        // Some pages lack the monitor, and tests may disable it explicitly.
+        if (activeRequests === undefined) {
+          return !$expect_request;
+        }
         const pendingCommands = window.Drupal?.ajax?.instances?.some(
           (instance) => instance?.ajaxing === true,
         );
-        if (pendingCommands || (activeRequests !== undefined && activeRequests !== 0)) {
+        if (pendingCommands || activeRequests !== 0) {
           return false;
         }
         if (!$expect_request) {
           return true;
         }
-        return activeRequests === 0 && window.drupalCumulativeXhrCount >= 1 &&
+        return window.drupalCumulativeXhrCount >= 1 &&
           (typeof jQuery === 'undefined' || (jQuery.active === 0 && jQuery(':animated').length === 0)) &&
           (typeof window.drupalTestHasActiveAnimations !== 'function' || !window.drupalTestHasActiveAnimations());
       })()
