@@ -1,6 +1,6 @@
 /**
  * @file
- * Prototypes legacy delivery for the explicit event bridge test fixture.
+ * Prototypes event delivery for the explicit event bridge test fixture.
  */
 
 /**
@@ -80,4 +80,78 @@ export function observeLegacyEvents(jquery, registry) {
       subscriptions.delete(binding);
     },
   });
+}
+
+/**
+ * Projects explicitly marked native events at jQuery's handler dispatch.
+ * @param {object} jquery
+ *   The jQuery instance opting in to the fixture.
+ * @param {string} type
+ *   The unmapped event type. Install one projection per instance and type.
+ * @param {WeakMap} payloads
+ *   Maps native CustomEvents to objects with optional properties and args.
+ * @return {function(): void}
+ *   Disconnects the projection.
+ * @internal
+ */
+export function observeNativePayloads(jquery, type, payloads) {
+  const specials = jquery.event.special;
+  const existing = specials[type];
+  const special = existing ?? {};
+  const previousHandle = special.handle;
+  const hadHandle = Object.hasOwn(special, 'handle');
+  const projected = new WeakSet();
+  let connected = true;
+
+  /**
+   * Supplies the declared payload to the existing handler.
+   * @param {object} event
+   *   The active jQuery event.
+   * @param {...unknown} args
+   *   The arguments already supplied by jQuery.
+   * @return {unknown}
+   *   The downstream handler's return value.
+   */
+  function handle(event, ...args) {
+    const payload =
+      connected &&
+      !event.isTrigger &&
+      event.handleObj.origType === type &&
+      event.originalEvent?.type === type &&
+      payloads.get(event.originalEvent);
+    if (payload && !projected.has(event)) {
+      // Preserve writes by earlier handlers on this jQuery event.
+      Object.assign(event, payload.properties);
+      projected.add(event);
+    }
+    return (previousHandle || event.handleObj.handler).call(
+      this,
+      event,
+      ...(payload?.args ?? args),
+    );
+  }
+
+  special.handle = handle;
+  if (!existing) {
+    specials[type] = special;
+  }
+  return () => {
+    connected = false;
+    // A later hook may wrap this handler. Leave it in place and pass through.
+    if (special.handle !== handle) {
+      return;
+    }
+    if (hadHandle) {
+      special.handle = previousHandle;
+    } else {
+      delete special.handle;
+    }
+    if (
+      !existing &&
+      specials[type] === special &&
+      !Reflect.ownKeys(special).length
+    ) {
+      delete specials[type];
+    }
+  };
 }

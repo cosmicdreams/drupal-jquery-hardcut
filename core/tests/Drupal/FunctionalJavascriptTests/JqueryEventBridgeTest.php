@@ -8,7 +8,7 @@ use PHPUnit\Framework\Attributes\Group;
 use PHPUnit\Framework\Attributes\RunTestsInSeparateProcesses;
 
 /**
- * Tests fixture-only synthetic delivery at owned native bindings.
+ * Tests fixture-only delivery between native and jQuery listeners.
  */
 #[Group('javascript')]
 #[RunTestsInSeparateProcesses]
@@ -361,6 +361,148 @@ final class JqueryEventBridgeTest extends WebDriverTestBase {
   }
 
   /**
+   * Tests explicit native payload projection through an existing jQuery hook.
+   */
+  public function testNativePayloadProjection(): void {
+    $this->loadAdapter();
+    $result = $this->getSession()->evaluateScript(<<<'JS'
+      (() => {
+        const fixture = document.getElementById('event-bridge-fixture');
+        const field = fixture.appendChild(document.createElement('input'));
+        const table = fixture.appendChild(document.createElement('table'));
+        const visible = new CustomEvent('state:visible', {
+          bubbles: true, detail: { value: false, trigger: true },
+        });
+        const columns = new CustomEvent('columnschange', {
+          bubbles: true, cancelable: true, detail: { displayWeight: false },
+        });
+        const payloads = new WeakMap([
+          [visible, { properties: visible.detail }],
+          [columns, { args: [columns.detail.displayWeight] }],
+        ]);
+        const trace = [];
+        const lifecycle = [];
+        const data = {};
+        const root = jQuery(fixture);
+        const specials = jQuery.event.special;
+        const columnHook = {
+          setup() {
+            lifecycle.push('setup');
+            return false;
+          },
+          handle(event, ...args) {
+            trace.push(['columns hook', args]);
+            return event.handleObj.handler.call(this, event, ...args);
+          },
+          teardown() {
+            lifecycle.push('teardown');
+            return false;
+          },
+        };
+        const existingHandle = columnHook.handle;
+        specials.columnschange = columnHook;
+        const before = {
+          dispatch: jQuery.event.dispatch,
+          change: specials.change,
+          ordinary: specials['fixture:ordinary'],
+        };
+
+        fixture.addEventListener('state:visible', (event) => {
+          trace.push(['DOM state', event === visible, event.detail.value, typeof event.value]);
+        });
+        fixture.addEventListener('columnschange', (event) => {
+          trace.push(['DOM columns', event === columns, event.detail.displayWeight]);
+        });
+        jQuery(document).on('state:visible.fixture', function (event, ...args) {
+          trace.push(['jQuery state', event.originalEvent === visible, this === document &&
+            event.currentTarget === document && event.target === field, event.value,
+            event.oldValue, event.trigger, args]);
+        });
+        root.on('columnschange.fixture', 'table', data, function (event, ...args) {
+          const context = this === table && event.currentTarget === table &&
+            event.target === table && event.delegateTarget === fixture &&
+            event.data === data && event.handleObj.namespace === 'fixture';
+          trace.push(['jQuery columns', event.originalEvent === columns, context, args]);
+          return args[0] === false ? false : 'columns handled';
+        });
+        const disconnectState = window.observeTestNativePayloads(jQuery, 'state:visible', payloads);
+        const disconnectColumns = window.observeTestNativePayloads(jQuery, 'columnschange', payloads);
+
+        const dispatched = [field.dispatchEvent(visible), table.dispatchEvent(columns)];
+        const projected = trace.splice(0);
+
+        // Identical detail alone does not opt in. A synthetic trigger keeps its own args.
+        table.dispatchEvent(new CustomEvent('columnschange', { bubbles: true, detail: columns.detail }));
+        const synthetic = jQuery.Event('columnschange.fixture');
+        jQuery(table).trigger(synthetic, [true]);
+        const ordinary = new CustomEvent('fixture:ordinary', { detail: visible.detail });
+        payloads.set(ordinary, { properties: visible.detail, args: [false] });
+        for (const type of [ordinary.type, 'change']) {
+          field.addEventListener(type, (event) => trace.push(['DOM ordinary', event.type]));
+          jQuery(field).on(`${type}.fixture`, (event, ...args) => {
+            trace.push(['jQuery ordinary', event.type, Boolean(event.originalEvent), typeof event.value, args]);
+          });
+        }
+        field.dispatchEvent(ordinary);
+        field.dispatchEvent(new Event('change', { bubbles: true }));
+        jQuery(field).triggerHandler('change.fixture', ['synthetic']);
+        const control = trace.splice(0);
+
+        disconnectState();
+        disconnectColumns();
+        field.dispatchEvent(visible);
+        table.dispatchEvent(columns);
+        const after = trace.splice(0);
+        root.off('.fixture');
+        jQuery(document).off('.fixture');
+        jQuery(field).off('.fixture');
+        return {
+          dispatched, projected, control, after, lifecycle,
+          cancelled: columns.defaultPrevented,
+          syntheticResult: synthetic.result,
+          restored: specials.columnschange === columnHook && columnHook.handle === existingHandle &&
+            !Object.hasOwn(specials, 'state:visible'),
+          isolated: jQuery.event.dispatch === before.dispatch && specials.change === before.change &&
+            specials[ordinary.type] === before.ordinary,
+        };
+      })()
+      JS);
+
+    $this->assertSame([TRUE, FALSE], $result['dispatched']);
+    $this->assertTrue($result['cancelled']);
+    $this->assertSame([
+      ['DOM state', TRUE, FALSE, 'undefined'],
+      ['jQuery state', TRUE, TRUE, FALSE, NULL, TRUE, []],
+      ['DOM columns', TRUE, FALSE],
+      ['columns hook', [FALSE]],
+      ['jQuery columns', TRUE, TRUE, [FALSE]],
+    ], $result['projected']);
+    $this->assertSame('columns handled', $result['syntheticResult']);
+    $this->assertSame([
+      ['DOM columns', FALSE, FALSE],
+      ['columns hook', []],
+      ['jQuery columns', FALSE, TRUE, []],
+      ['columns hook', [TRUE]],
+      ['jQuery columns', FALSE, TRUE, [TRUE]],
+      ['DOM ordinary', 'fixture:ordinary'],
+      ['jQuery ordinary', 'fixture:ordinary', TRUE, 'undefined', []],
+      ['DOM ordinary', 'change'],
+      ['jQuery ordinary', 'change', TRUE, 'undefined', []],
+      ['jQuery ordinary', 'change', FALSE, 'undefined', ['synthetic']],
+    ], $result['control']);
+    $this->assertSame([
+      ['DOM state', TRUE, FALSE, 'undefined'],
+      ['jQuery state', TRUE, TRUE, NULL, NULL, NULL, []],
+      ['DOM columns', TRUE, FALSE],
+      ['columns hook', []],
+      ['jQuery columns', TRUE, TRUE, []],
+    ], $result['after']);
+    $this->assertSame(['setup', 'teardown'], $result['lifecycle']);
+    $this->assertTrue($result['restored']);
+    $this->assertTrue($result['isolated']);
+  }
+
+  /**
    * Records excluded leveraged click, focus and blur dispatch shapes.
    */
   public function testLeveragedNativeEvents(): void {
@@ -416,14 +558,15 @@ final class JqueryEventBridgeTest extends WebDriverTestBase {
   }
 
   /**
-   * Exposes the fixture module's observer to WebDriver scripts.
+   * Exposes the fixture module's observers to WebDriver scripts.
    */
   private function loadAdapter(): void {
     $this->drupalGet('jquery-bc-test/bridge-events');
     $this->getSession()->executeScript(<<<'JS'
       const script = document.querySelector('script[src*="/core/misc/jquery.drupal-bc.js"]');
-      import(script.src).then(({ observeLegacyEvents }) => {
+      import(script.src).then(({ observeLegacyEvents, observeNativePayloads }) => {
         window.observeTestLegacyEvents = observeLegacyEvents;
+        window.observeTestNativePayloads = observeNativePayloads;
       });
       JS);
     $this->assertJsCondition('typeof window.observeTestLegacyEvents === "function"');
