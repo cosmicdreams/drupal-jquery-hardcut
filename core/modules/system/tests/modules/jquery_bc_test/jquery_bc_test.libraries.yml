@@ -1,0 +1,4 @@
+explicit_jquery:
+  dependencies:
+    - core/drupal
+    - core/jquery

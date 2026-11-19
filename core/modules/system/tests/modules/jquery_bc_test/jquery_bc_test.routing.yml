@@ -1,0 +1,14 @@
+jquery_bc_test.events:
+  path: '/jquery-bc-test/events'
+  defaults:
+    _form: '\Drupal\jquery_bc_test\Form\CompatibilityEventsForm'
+    _title: 'Compatibility events'
+  requirements:
+    _access: 'TRUE'
+
+jquery_bc_test.link_response:
+  path: '/jquery-bc-test/link-response'
+  defaults:
+    _controller: '\Drupal\jquery_bc_test\Form\CompatibilityEventsForm::linkResponse'
+  requirements:
+    _access: 'TRUE'

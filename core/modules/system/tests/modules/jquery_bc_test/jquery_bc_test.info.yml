@@ -1,0 +1,5 @@
+name: 'jQuery compatibility test'
+type: module
+description: 'Tests explicitly declared jQuery event compatibility.'
+package: Testing
+version: VERSION
