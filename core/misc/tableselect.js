@@ -15,10 +15,24 @@
   Drupal.behaviors.tableSelect = {
     attach(context, settings) {
       // Select the inner-most table in case of nested tables.
-      once(
-        'table-select',
-        $(context).find('th.select-all').closest('table'),
-      ).forEach((table) => Drupal.tableSelect.call(table));
+      const tables =
+        context && (context.nodeType === 1 || context.nodeType === 9)
+          ? Array.from(
+              new Set(
+                Array.from(
+                  context.querySelectorAll('th.select-all'),
+                  (header) => header.closest('table'),
+                ).filter(Boolean),
+              ),
+            ).sort((a, b) =>
+              a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_PRECEDING
+                ? 1
+                : -1,
+            )
+          : $(context).find('th.select-all').closest('table');
+      once('table-select', tables).forEach((table) =>
+        Drupal.tableSelect.call(table),
+      );
     },
   };
 
@@ -28,7 +42,7 @@
   Drupal.tableSelect = function () {
     // Do not add a "Select all" checkbox if there are no rows with checkboxes
     // in the table.
-    if ($(this).find('td input[type="checkbox"]').length === 0) {
+    if (!this.querySelector('td input[type="checkbox"]')) {
       return;
     }
 
@@ -44,26 +58,31 @@
     };
     const updateSelectAll = function (state) {
       // Update table's select-all checkbox (and sticky header's if available).
-      $table
-        .prev('table.sticky-header')
-        .addBack()
-        .find('th.select-all input[type="checkbox"]')
-        .each(function () {
-          const $checkbox = $(this);
-          const stateChanged = $checkbox.prop('checked') !== state;
+      const previous = table.previousElementSibling;
+      const tables = previous?.matches('table.sticky-header')
+        ? [previous, table]
+        : [table];
+      const selectAll = tables.flatMap((element) =>
+        Array.from(
+          element.querySelectorAll('th.select-all input[type="checkbox"]'),
+        ),
+      );
+      selectAll.forEach((checkbox) => {
+        const stateChanged = checkbox.checked !== state;
 
-          $checkbox.attr(
-            'title',
-            state ? strings.selectNone : strings.selectAll,
-          );
+        checkbox.setAttribute(
+          'title',
+          state ? strings.selectNone : strings.selectAll,
+        );
 
-          /**
-           * @checkbox {HTMLElement}
-           */
-          if (stateChanged) {
-            $checkbox.prop('checked', state).trigger('change');
-          }
-        });
+        /**
+         * @checkbox {HTMLElement}
+         */
+        if (stateChanged) {
+          checkbox.checked = state;
+          $(checkbox).trigger('change');
+        }
+      });
     };
 
     // Find all <th> with class select-all, and insert the check all checkbox.
@@ -75,15 +94,14 @@
           // Loop through all checkboxes and set their state to the select all
           // checkbox' state.
           checkboxes.each(function () {
-            const $checkbox = $(this);
-            const stateChanged =
-              $checkbox.prop('checked') !== event.target.checked;
+            const stateChanged = this.checked !== event.target.checked;
 
             /**
              * @checkbox {HTMLElement}
              */
             if (stateChanged) {
-              $checkbox.prop('checked', event.target.checked).trigger('change');
+              this.checked = event.target.checked;
+              $(this).trigger('change');
             }
             // Either add or remove the selected class based on the state of the
             // check all checkbox.
@@ -91,7 +109,7 @@
             /**
              * @checkbox {HTMLElement}
              */
-            $checkbox.closest('tr').toggleClass('selected', this.checked);
+            this.closest('tr')?.classList.toggle('selected', this.checked);
           });
           // Update the title and the state of the check all box.
           updateSelectAll(event.target.checked);
@@ -108,7 +126,7 @@
         /**
          * @this {HTMLElement}
          */
-        $(this).closest('tr').toggleClass('selected', this.checked);
+        this.closest('tr')?.classList.toggle('selected', this.checked);
 
         // If this is a shift click, we need to highlight everything in the
         // range. Also make sure that we are actually checking checkboxes
@@ -125,7 +143,7 @@
         // If all checkboxes are checked, make sure the select-all one is checked
         // too, otherwise keep unchecked.
         updateSelectAll(
-          checkboxes.length === checkboxes.filter(':checked').length,
+          Array.from(checkboxes).every((checkbox) => checkbox.checked),
         );
 
         // Keep track of the last checked checkbox.
@@ -134,7 +152,9 @@
 
     // If all checkboxes are checked on page load, make sure the select-all one
     // is checked too, otherwise keep unchecked.
-    updateSelectAll(checkboxes.length === checkboxes.filter(':checked').length);
+    updateSelectAll(
+      Array.from(checkboxes).every((checkbox) => checkbox.checked),
+    );
   };
 
   /**
@@ -152,15 +172,22 @@
 
     // Traverse through the sibling nodes.
     for (let i = from[mode]; i; i = i[mode]) {
-      const $i = $(i);
       // Make sure that we're only dealing with elements.
       if (i.nodeType !== Node.ELEMENT_NODE) {
         continue;
       }
       // Either add or remove the selected class based on the state of the
       // target checkbox.
-      $i.toggleClass('selected', state);
-      $i.find('input[type="checkbox"]').prop('checked', state);
+      if (to.nodeType && typeof state === 'boolean') {
+        i.classList.toggle('selected', state);
+        i.querySelectorAll('input[type="checkbox"]').forEach((checkbox) => {
+          checkbox.checked = state;
+        });
+      } else {
+        const $i = $(i);
+        $i.toggleClass('selected', state);
+        $i.find('input[type="checkbox"]').prop('checked', state);
+      }
 
       if (to.nodeType) {
         // If we are at the end of the range, stop.

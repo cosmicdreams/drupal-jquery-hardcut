@@ -77,6 +77,22 @@ class TableDragTest extends WebDriverTestBase {
     $weight_select2 = $page->findField("table[2][weight]");
     $weight_select3 = $page->findField("table[3][weight]");
 
+    $session->executeScript(<<<'JS'
+      const table = document.getElementById('tabledrag-test-table');
+      const nativeEvents = [];
+      const legacyEvents = [];
+      table.addEventListener('columnschange', (event) => nativeEvents.push(event));
+      jQuery(table).on('columnschange', (event, displayWeight) => {
+        legacyEvents.push({ event: event.originalEvent, displayWeight });
+      });
+      window.readColumnEvents = () => [
+        nativeEvents.map((event) => event.detail.displayWeight),
+        legacyEvents.map(({ displayWeight }) => displayWeight),
+        nativeEvents.every((event, index) => event === legacyEvents[index]?.event &&
+          event.target === table && event.bubbles && event.cancelable),
+      ];
+      JS);
+
     // Check that rows weight selects are hidden.
     $this->assertFalse($weight_select1->isVisible());
     $this->assertFalse($weight_select2->isVisible());
@@ -97,6 +113,7 @@ class TableDragTest extends WebDriverTestBase {
     $this->assertFalse($weight_select1->isVisible());
     $this->assertFalse($weight_select2->isVisible());
     $this->assertFalse($weight_select3->isVisible());
+    $this->assertSame([[TRUE, FALSE], [TRUE, FALSE], TRUE], $session->evaluateScript('window.readColumnEvents()'));
   }
 
   /**

@@ -403,12 +403,17 @@
       Drupal.theme('toggleButtonContent', displayWeight),
     );
 
-    // Trigger an event to allow other scripts to react to this display change.
-    // Force the extra parameter as a boolean.
-    $(once.filter('tabledrag', 'table')).trigger(
-      'columnschange',
-      !!displayWeight,
-    );
+    // Publish an event to allow other scripts to react to this display change.
+    once.filter('tabledrag', 'table').forEach((table) => {
+      Drupal.eventBindings.publish(
+        table,
+        new CustomEvent('columnschange', {
+          bubbles: true,
+          cancelable: true,
+          detail: { displayWeight: !!displayWeight },
+        }),
+      );
+    });
   };
 
   /**
@@ -429,24 +434,44 @@
   };
 
   /**
+   * Find descendants once, including those in nested registered tables.
+   *
+   * @param {Element[]} tables
+   *   Registered tables in document order.
+   * @param {string} selector
+   *   Descendant selector.
+   *
+   * @return {Element[]}
+   *   Matching elements in document order.
+   */
+  function tableDragDescendants(tables, selector) {
+    const descendants = tables.flatMap((table) => [
+      ...table.querySelectorAll(selector),
+    ]);
+    return [...new Set(descendants)];
+  }
+
+  /**
    * Hide the columns containing weight/parent form elements.
    *
    * Undo showColumns().
    */
   Drupal.tableDrag.prototype.hideColumns = function () {
-    const $tables = $(once.filter('tabledrag', 'table'));
+    const tables = once.filter('tabledrag', 'table');
     // Hide weight/parent cells and headers.
-    $tables.find('.tabledrag-hide').each(function () {
-      this.style.display = 'none';
+    tableDragDescendants(tables, '.tabledrag-hide').forEach((element) => {
+      element.style.display = 'none';
     });
     // Show TableDrag handles.
-    $tables.find('.tabledrag-handle').each(function () {
-      this.style.display = '';
+    tableDragDescendants(tables, '.tabledrag-handle').forEach((element) => {
+      element.style.display = '';
     });
     // Reduce the colspan of any effected multi-span columns.
-    $tables.find('.tabledrag-has-colspan').each(function () {
-      this.colSpan -= 1;
-    });
+    tableDragDescendants(tables, '.tabledrag-has-colspan').forEach(
+      (element) => {
+        element.colSpan -= 1;
+      },
+    );
   };
 
   /**
@@ -455,19 +480,21 @@
    * Undo hideColumns().
    */
   Drupal.tableDrag.prototype.showColumns = function () {
-    const $tables = $(once.filter('tabledrag', 'table'));
+    const tables = once.filter('tabledrag', 'table');
     // Show weight/parent cells and headers.
-    $tables.find('.tabledrag-hide').each(function () {
-      this.style.display = '';
+    tableDragDescendants(tables, '.tabledrag-hide').forEach((element) => {
+      element.style.display = '';
     });
     // Hide TableDrag handles.
-    $tables.find('.tabledrag-handle').each(function () {
-      this.style.display = 'none';
+    tableDragDescendants(tables, '.tabledrag-handle').forEach((element) => {
+      element.style.display = 'none';
     });
     // Increase the colspan for any columns where it was previously reduced.
-    $tables.find('.tabledrag-has-colspan').each(function () {
-      this.colSpan += 1;
-    });
+    tableDragDescendants(tables, '.tabledrag-has-colspan').forEach(
+      (element) => {
+        element.colSpan += 1;
+      },
+    );
   };
 
   /**
