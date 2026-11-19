@@ -11,11 +11,13 @@ use PHPUnit\Framework\Attributes\IgnoreDeprecations;
 use PHPUnit\Framework\Attributes\RunTestsInSeparateProcesses;
 
 /**
- * Records jQuery libraries and widgets reachable from core libraries.
+ * Prevents new jQuery dependencies in resolved core library closures.
  *
- * The fixture lists one theme and library combination per line. Empty lists
- * indicate that none of the tracked libraries or widgets are reachable.
- * To regenerate the baseline, run this test with JQUERY_FREE_REGENERATE=1.
+ * The baseline fixture records reachable libraries and widgets per theme and
+ * library. Empty lists mean none of the tracked dependencies are reachable.
+ * To regenerate it, run this test with JQUERY_FREE_REGENERATE=1. Keep the
+ * baseline for compatibility work and remove entries from the separate
+ * allow-list as the libraries stop depending on jQuery.
  */
 #[Group('Asset')]
 #[IgnoreDeprecations]
@@ -43,7 +45,7 @@ class JqueryFreeLibrariesTest extends KernelTestBase {
   ];
 
   /**
-   * Checks the baseline closure map.
+   * Checks the jQuery dependencies against the shrinking allow-list.
    */
   public function testLibraryClosures(): void {
     $map = $this->buildClosureMap();
@@ -54,8 +56,21 @@ class JqueryFreeLibrariesTest extends KernelTestBase {
         $contents .= "$key: [" . implode(', ', $closure) . "]\n";
       }
       $this->assertNotFalse(file_put_contents($fixture, $contents));
+      $this->assertSame($map, Yaml::decode(file_get_contents($fixture)));
+      return;
     }
-    $this->assertSame(Yaml::decode(file_get_contents($fixture)), $map);
+
+    $allowed = Yaml::decode(file_get_contents(__DIR__ . '/fixtures/jquery-library-allow-list.yml')) ?? [];
+    $actual = array_keys(array_filter($map, static fn (array $closure): bool => (bool) array_intersect(self::LIBRARIES, $closure)));
+
+    $messages = [];
+    foreach (array_diff($actual, $allowed) as $library) {
+      $messages[] = "$library has a new jQuery dependency: " . implode(', ', array_intersect(self::LIBRARIES, $map[$library]));
+    }
+    foreach (array_diff($allowed, $actual) as $library) {
+      $messages[] = "Remove '- $library' from jquery-library-allow-list.yml.";
+    }
+    $this->assertSame($allowed, $actual, implode("\n", $messages));
   }
 
   /**
