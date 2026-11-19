@@ -4,8 +4,10 @@ declare(strict_types=1);
 
 namespace Drupal\KernelTests\Core\Asset;
 
+use Drupal\Core\Asset\AttachedAssets;
 use Drupal\Core\Asset\Exception\InvalidLibrariesExtendSpecificationException;
 use Drupal\Core\Asset\Exception\InvalidLibrariesOverrideSpecificationException;
+use Drupal\Core\Theme\ActiveTheme;
 use Drupal\KernelTests\KernelTestBase;
 use PHPUnit\Framework\Attributes\Group;
 use PHPUnit\Framework\Attributes\IgnoreDeprecations;
@@ -189,6 +191,116 @@ class LibraryDiscoveryIntegrationTest extends KernelTestBase {
     // in the sub theme.
     $this->assertNoAssetInLibrary('core/misc/dialog/dialog.js', 'core', 'drupal.dialog', 'js');
     $this->assertAssetInLibrary('core/modules/system/tests/themes/test_base_theme/js/loadjs.min.js', 'core', 'loadjs', 'js');
+  }
+
+  /**
+   * Tests the cascade order of widget stylesheet overrides before a move.
+   */
+  public function testWidgetCssOverrideOrdering(): void {
+    $vendor = '/core/assets/vendor/jquery.ui/themes/base';
+    $themes = 'core/modules/system/tests/themes';
+    $base_theme = "$themes/test_base_theme";
+    $subtheme = "$themes/test_subtheme";
+    $shared_options = ['weight' => 4, 'media' => 'print', 'preprocess' => FALSE];
+    $dialog_options = ['weight' => 4, 'media' => 'screen'];
+    $libraries = [
+      'widget_shared' => [
+        'css' => [
+          'component' => ["$vendor/core.css" => $shared_options],
+          'theme' => ["$vendor/theme.css" => []],
+        ],
+      ],
+      'widget_dialog' => [
+        'css' => [
+          'component' => [
+            "$vendor/dialog.css" => $dialog_options,
+            "$vendor/button.css" => [],
+            "$vendor/resizable.css" => ['weight' => 4],
+          ],
+        ],
+        'dependencies' => ['theme_test/widget_shared'],
+      ],
+      'widget_autocomplete' => [
+        'css' => [
+          'component' => ["$vendor/autocomplete.css" => ['weight' => 4]],
+        ],
+        'dependencies' => ['theme_test/widget_shared'],
+      ],
+    ];
+    $this->container->get('state')->set('theme_test_library_info_alter theme_test', $libraries);
+
+    $overrides = [
+      $base_theme => [
+        'theme_test/widget_shared' => [
+          'css' => [
+            'component' => ["$vendor/core.css" => 'css/base-shared.css'],
+            'theme' => ["$vendor/theme.css" => FALSE],
+          ],
+        ],
+        'theme_test/widget_dialog' => [
+          'css' => ['component' => [
+            "$vendor/dialog.css" => 'css/base-dialog.css',
+            "$vendor/button.css" => FALSE,
+          ]],
+        ],
+      ],
+      $subtheme => [
+        'theme_test/widget_shared' => [
+          'css' => ['component' => [
+            "$vendor/core.css" => 'css/ignored.css',
+            "/$base_theme/css/base-shared.css" => 'css/sub-shared.css',
+          ]],
+        ],
+        'theme_test/widget_dialog' => [
+          'css' => ['component' => [
+            "$vendor/dialog.css" => 'css/ignored.css',
+            "$vendor/button.css" => 'css/ignored.css',
+            "/$base_theme/css/base-dialog.css" => 'css/sub-dialog.css',
+          ]],
+        ],
+      ],
+    ];
+    $dialog = 'theme_test/widget_dialog';
+    $autocomplete = 'theme_test/widget_autocomplete';
+    $resolver = $this->container->get('asset.resolver');
+    foreach ([$base_theme, $subtheme] as $theme_path) {
+      $active_theme = new ActiveTheme([
+        'name' => basename($theme_path),
+        'path' => $theme_path,
+        'extension' => $this->container->get('extension.list.theme')->get(basename($theme_path)),
+        'libraries_override' => $theme_path === $base_theme ? [$base_theme => $overrides[$base_theme]] : $overrides,
+      ]);
+      $this->container->get('theme.manager')->setActiveTheme($active_theme);
+      $this->libraryDiscovery->reset();
+      $prefix = $theme_path === $base_theme ? 'base' : 'sub';
+      $shared_css = "$theme_path/css/$prefix-shared.css";
+      $dialog_css = "$theme_path/css/$prefix-dialog.css";
+      $resizable_css = ltrim("$vendor/resizable.css", '/');
+      $autocomplete_css = ltrim("$vendor/autocomplete.css", '/');
+
+      foreach ([
+        [$shared_css, $resizable_css, $dialog_css],
+        [$shared_css, $autocomplete_css],
+        [$shared_css, $autocomplete_css, $resizable_css, $dialog_css],
+      ] as $index => $expected) {
+        $attachments = [[$dialog], [$autocomplete], [$dialog, $autocomplete, $dialog]];
+        $assets = (new AttachedAssets())->setLibraries($attachments[$index]);
+        $css = $resolver->getCssAssets($assets, FALSE);
+        $this->assertSame($expected, array_keys($css));
+        foreach ($shared_options + ['category' => 'component'] as $option => $value) {
+          $this->assertSame($value, $css[$shared_css][$option]);
+        }
+        if (isset($css[$dialog_css])) {
+          foreach ($dialog_options + ['category' => 'component'] as $option => $value) {
+            $this->assertSame($value, $css[$dialog_css][$option]);
+          }
+        }
+        $this->container->get('cache.memory')->deleteAll();
+        $this->assertSame($css, $resolver->getCssAssets(clone $assets, FALSE));
+      }
+      $assets = (new AttachedAssets())->setLibraries([$dialog])->setAlreadyLoadedLibraries([$autocomplete]);
+      $this->assertSame([$resizable_css, $dialog_css], array_keys($resolver->getCssAssets($assets, FALSE)));
+    }
   }
 
   /**
