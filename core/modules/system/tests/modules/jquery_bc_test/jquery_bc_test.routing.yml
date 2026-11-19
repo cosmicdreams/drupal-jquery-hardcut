@@ -12,3 +12,21 @@ jquery_bc_test.link_response:
     _controller: '\Drupal\jquery_bc_test\Form\CompatibilityEventsForm::linkResponse'
   requirements:
     _access: 'TRUE'
+
+jquery_bc_test.native_events:
+  path: '/jquery-bc-test/native-events'
+  defaults:
+    _controller: '\Drupal\jquery_bc_test\Controller\EventBridgeController::build'
+    _title: 'Native events fixture'
+    legacy: false
+  requirements:
+    _access: 'TRUE'
+
+jquery_bc_test.bridge_events:
+  path: '/jquery-bc-test/bridge-events'
+  defaults:
+    _controller: '\Drupal\jquery_bc_test\Controller\EventBridgeController::build'
+    _title: 'Legacy events fixture'
+    legacy: true
+  requirements:
+    _access: 'TRUE'

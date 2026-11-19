@@ -2,3 +2,9 @@ explicit_jquery:
   dependencies:
     - core/drupal
     - core/jquery
+
+event_bridge:
+  js:
+    /core/misc/jquery.drupal-bc.js: { preprocess: false, attributes: { type: module } }
+  dependencies:
+    - jquery_bc_test/explicit_jquery

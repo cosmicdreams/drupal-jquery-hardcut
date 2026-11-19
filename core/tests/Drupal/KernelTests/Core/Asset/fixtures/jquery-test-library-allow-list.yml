@@ -29,6 +29,13 @@
     starterkit_theme: [core/jquery]
     umami: [core/jquery]
 # Deliberate legacy coverage. Z separates compatibility-only fixtures.
+- fixture: core/modules/system/tests/modules/jquery_bc_test/jquery_bc_test.libraries.yml:event_bridge
+  removal: Z
+  themes:
+    default_admin: [core/jquery]
+    stark: [core/jquery]
+    starterkit_theme: [core/jquery]
+    umami: [core/jquery]
 - fixture: core/modules/system/tests/modules/jquery_bc_test/jquery_bc_test.libraries.yml:explicit_jquery
   removal: Z
   themes:

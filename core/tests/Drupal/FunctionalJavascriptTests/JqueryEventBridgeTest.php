@@ -1,0 +1,357 @@
+<?php
+
+declare(strict_types=1);
+
+namespace Drupal\FunctionalJavascriptTests;
+
+use PHPUnit\Framework\Attributes\Group;
+use PHPUnit\Framework\Attributes\RunTestsInSeparateProcesses;
+
+/**
+ * Tests fixture-only synthetic delivery at owned native bindings.
+ */
+#[Group('javascript')]
+#[RunTestsInSeparateProcesses]
+final class JqueryEventBridgeTest extends WebDriverTestBase {
+
+  /**
+   * {@inheritdoc}
+   */
+  protected static $modules = ['jquery_bc_test'];
+
+  /**
+   * {@inheritdoc}
+   */
+  protected $defaultTheme = 'stark';
+
+  /**
+   * Tests that the fixture can use native listeners without legacy assets.
+   */
+  public function testNativeWithoutBridge(): void {
+    $this->drupalGet('jquery-bc-test/native-events');
+    $this->assertSame([
+      'undefined', FALSE, FALSE, TRUE, ['compatibility:probe'],
+    ], $this->getSession()->evaluateScript(<<<'JS'
+      (() => {
+        const target = document.getElementById('event-bridge-fixture');
+        const type = 'compatibility:probe';
+        const trace = [];
+        const listener = (event) => {
+          trace.push(event.type);
+          event.preventDefault();
+        };
+        target.addEventListener(type, listener);
+        const unregister = Drupal.eventBindings.register({ target, type, listener });
+        const delivered = target.dispatchEvent(new Event(type, { cancelable: true }));
+        unregister();
+        target.removeEventListener(type, listener);
+        const removed = target.dispatchEvent(new Event(type, { cancelable: true }));
+        return [
+          typeof window.jQuery,
+          Boolean(document.querySelector('script[src*="/core/misc/jquery.drupal-bc.js"]')),
+          delivered,
+          removed,
+          trace,
+        ];
+      })()
+      JS));
+  }
+
+  /**
+   * Compares anchor click and prevented submit with native jQuery bindings.
+   */
+  public function testSyntheticActivation(): void {
+    $this->loadAdapter();
+    $url = $this->getSession()->getCurrentUrl();
+    $results = $this->getSession()->evaluateScript(<<<'JS'
+      (() => {
+        function exercise(tag, type, mode) {
+          const trace = [];
+          const target = document.createElement(tag);
+          if (tag === 'a') {
+            target.href = '#unexpected-navigation';
+          }
+          else {
+            // Record a default method call without leaving the fixture page.
+            target.submit = () => trace.push('native submit method');
+          }
+          document.getElementById('event-bridge-fixture').append(target);
+          const legacy = jQuery(target);
+          legacy.on(type, (event, value) => {
+            trace.push('before');
+            if (value === 'blocked') {
+              event.preventDefault();
+              event.stopImmediatePropagation();
+            }
+          });
+          const listener = (event, value) => {
+            trace.push(['owned', event.target === target, event.currentTarget === target, value]);
+            if (tag === 'form') {
+              event.preventDefault();
+            }
+            return 'handled';
+          };
+          target.addEventListener(type, () => trace.push('DOM listener'));
+
+          let disconnect;
+          let unregister;
+          const install = () => window.observeTestLegacyEvents(jQuery, Drupal.eventBindings);
+          if (mode === 'legacy') {
+            legacy.on(`${type}.compat`, listener);
+          }
+          else {
+            if (mode === 'early') {
+              disconnect = install();
+            }
+            target.addEventListener(type, listener);
+            unregister = Drupal.eventBindings.register({ target, type, namespace: 'compat', listener });
+            if (mode === 'late') {
+              disconnect = install();
+            }
+          }
+          legacy.on(type, () => { trace.push('after'); });
+
+          const triggered = jQuery.Event(type);
+          legacy.trigger(triggered, ['trigger']);
+          const result = legacy.triggerHandler(`${type}.compat`, ['handler']);
+          const blocked = jQuery.Event(type);
+          legacy.trigger(blocked, ['blocked']);
+          disconnect?.();
+          unregister?.();
+          target.remove();
+
+          return [triggered.result, triggered.isDefaultPrevented(), result, blocked.isDefaultPrevented(), trace];
+        }
+
+        return ['legacy', 'early', 'late'].map((mode) => [
+          exercise('a', 'click', mode),
+          exercise('form', 'submit', mode),
+        ]);
+      })()
+      JS);
+
+    $trace = [
+      'before',
+      ['owned', TRUE, TRUE, 'trigger'],
+      'after',
+      ['owned', TRUE, TRUE, 'handler'],
+      'before',
+    ];
+    $expected = [
+      ['handled', FALSE, 'handled', TRUE, $trace],
+      ['handled', TRUE, 'handled', TRUE, $trace],
+    ];
+    $this->assertSame($expected, $results[0], 'Pinned jQuery behavior with the owned handler registered in jQuery.');
+    $this->assertSame($results[0], $results[1], 'Observer attached before the owned listener.');
+    $this->assertSame($results[0], $results[2], 'Observer attached after the owned listener.');
+    $this->assertSame($url, $this->getSession()->getCurrentUrl());
+  }
+
+  /**
+   * Tests mixed native and synthetic delivery, propagation, and cleanup.
+   */
+  public function testNamedEvent(): void {
+    $this->loadAdapter();
+    $result = $this->getSession()->evaluateScript(<<<'JS'
+      (() => {
+        const type = 'compatibility:probe';
+        const name = `${type}.compat`;
+        const parent = document.getElementById('event-bridge-fixture');
+        const target = document.createElement('button');
+        parent.append(target);
+        const trace = [];
+        const legacy = jQuery(target);
+        const native = (value) =>
+          target.dispatchEvent(new CustomEvent(type, { bubbles: true, cancelable: true, detail: value }));
+        const direct = (event, value, extra) => {
+          trace.push(['owned', value, extra ?? null, event.defaultPrevented]);
+          if (value === 'cancel') {
+            event.preventDefault();
+          }
+          if (value === 'stop') {
+            event.stopPropagation();
+          }
+          if (value === 'immediate') {
+            event.stopImmediatePropagation();
+          }
+          if (value === 'outer') {
+            legacy.trigger(name, ['inner']);
+            native('nested DOM');
+          }
+          return value === 'false' ? false : 'handled';
+        };
+        const delegated = function (event, value) {
+          trace.push(['delegate', value, this === target && event.target === target, event.defaultPrevented]);
+        };
+        const onTarget = (event) => direct(event, event.detail);
+        const onParent = (event) => {
+          if (event.target.matches('button')) {
+            delegated.call(event.target, event, event.detail);
+          }
+        };
+        target.addEventListener(type, onTarget);
+        parent.addEventListener(type, onParent);
+        parent.addEventListener(type, () => trace.push('DOM bubble'));
+        const disconnect = window.observeTestLegacyEvents(jQuery, Drupal.eventBindings);
+        const removeDirect = Drupal.eventBindings.register({
+          target, type, namespace: 'compat', listener: direct,
+        });
+        const removeDelegate = Drupal.eventBindings.register({
+          target: parent, type, namespace: 'compat', selector: 'button', listener: delegated,
+        });
+
+        // With the bridge present, ordinary DOM delivery uses only the native binding.
+        const nativeResult = [native('mixed'), native('false'), native('cancel')];
+        legacy.on(`${type}.other`, () => { trace.push('other namespace'); });
+        legacy.on(name, (event, value) => { trace.push(['later legacy', value]); });
+        const handler = legacy.triggerHandler(name, ['handler', 7]);
+        legacy.trigger(name, ['outer']);
+        const cancelled = jQuery.Event(name);
+        legacy.trigger(cancelled, ['false']);
+        const prevented = jQuery.Event(name);
+        legacy.trigger(prevented, ['cancel']);
+        const stopped = jQuery.Event(name);
+        legacy.trigger(stopped, ['stop']);
+        legacy.trigger(name, ['immediate']);
+
+        // A removed binding must no longer intercept legacy work.
+        removeDelegate();
+        parent.removeEventListener(type, onParent);
+        legacy.trigger(name, ['unregistered delegate']);
+        target.remove();
+        legacy.trigger(name, ['detached']);
+        disconnect();
+        legacy.trigger(name, ['disconnected']);
+        native('DOM after disconnect');
+        removeDirect();
+        target.removeEventListener(type, onTarget);
+
+        return [
+          nativeResult, handler,
+          [cancelled.result, cancelled.isDefaultPrevented(), cancelled.isPropagationStopped()],
+          [prevented.result, prevented.isDefaultPrevented(), prevented.isPropagationStopped()],
+          [stopped.result, stopped.isDefaultPrevented(), stopped.isPropagationStopped()],
+          trace,
+        ];
+      })()
+      JS);
+
+    $this->assertSame([
+      [TRUE, TRUE, FALSE],
+      'handled',
+      [FALSE, TRUE, TRUE],
+      ['handled', TRUE, FALSE],
+      ['handled', FALSE, TRUE],
+      [
+        ['owned', 'mixed', NULL, FALSE],
+        ['delegate', 'mixed', TRUE, FALSE],
+        'DOM bubble',
+        ['owned', 'false', NULL, FALSE],
+        ['delegate', 'false', TRUE, FALSE],
+        'DOM bubble',
+        ['owned', 'cancel', NULL, FALSE],
+        ['delegate', 'cancel', TRUE, TRUE],
+        'DOM bubble',
+        ['owned', 'handler', 7, FALSE],
+        ['later legacy', 'handler'],
+        ['owned', 'outer', NULL, FALSE],
+        ['owned', 'inner', NULL, FALSE],
+        ['later legacy', 'inner'],
+        ['delegate', 'inner', TRUE, FALSE],
+        ['owned', 'nested DOM', NULL, FALSE],
+        'other namespace',
+        ['later legacy', NULL],
+        ['delegate', 'nested DOM', TRUE, FALSE],
+        'DOM bubble',
+        ['later legacy', 'outer'],
+        ['delegate', 'outer', TRUE, FALSE],
+        ['owned', 'false', NULL, FALSE],
+        ['later legacy', 'false'],
+        ['owned', 'cancel', NULL, FALSE],
+        ['later legacy', 'cancel'],
+        ['delegate', 'cancel', TRUE, TRUE],
+        ['owned', 'stop', NULL, FALSE],
+        ['later legacy', 'stop'],
+        ['owned', 'immediate', NULL, FALSE],
+        ['owned', 'unregistered delegate', NULL, FALSE],
+        ['later legacy', 'unregistered delegate'],
+        ['owned', 'detached', NULL, FALSE],
+        ['later legacy', 'detached'],
+        ['later legacy', 'disconnected'],
+        ['owned', 'DOM after disconnect', NULL, FALSE],
+        'other namespace',
+        ['later legacy', NULL],
+      ],
+    ], $result);
+  }
+
+  /**
+   * Records excluded leveraged click, focus and blur dispatch shapes.
+   */
+  public function testLeveragedNativeEvents(): void {
+    $this->loadAdapter();
+    $result = $this->getSession()->evaluateScript(<<<'JS'
+      (() => {
+        const parent = document.getElementById('event-bridge-fixture');
+        const run = (observe) => {
+          const target = document.createElement('input');
+          target.type = 'checkbox';
+          parent.append(target);
+          const trace = [];
+          const record = (source, event) => {
+            trace.push([source, event.type, target.checked, document.activeElement === target]);
+          };
+          const listener = (event) => record(event instanceof Event ? 'DOM' : 'projected', event);
+          const legacy = jQuery(target);
+          legacy.on('click.compat focus.compat blur.compat', (event) => {
+            record(event.originalEvent ? 'jQuery native' : 'jQuery synthetic', event);
+          });
+          const disconnect = observe ? window.observeTestLegacyEvents(jQuery, Drupal.eventBindings) : null;
+          const remove = ['click', 'focus', 'blur'].map((type) => {
+            target.addEventListener(type, listener);
+            return Drupal.eventBindings.register({ target, type, namespace: 'compat', listener });
+          });
+          for (const type of ['click', 'focus', 'blur']) {
+            legacy.trigger(`${type}.compat`);
+          }
+          for (const type of ['click', 'focus', 'blur']) {
+            legacy.triggerHandler(`${type}.compat`);
+          }
+          disconnect?.();
+          remove.forEach((unregister) => unregister());
+          target.remove();
+          return trace;
+        };
+        return [run(false), run(true)];
+      })()
+      JS);
+
+    $this->assertSame([
+      ['jQuery synthetic', 'click', TRUE, FALSE],
+      ['DOM', 'click', TRUE, FALSE],
+      ['jQuery synthetic', 'focus', TRUE, TRUE],
+      ['DOM', 'focus', TRUE, TRUE],
+      ['jQuery synthetic', 'blur', TRUE, FALSE],
+      ['DOM', 'blur', TRUE, FALSE],
+      ['jQuery synthetic', 'click', TRUE, FALSE],
+      ['jQuery synthetic', 'focus', TRUE, FALSE],
+      ['jQuery synthetic', 'blur', TRUE, FALSE],
+    ], $result[0]);
+    $this->assertSame($result[0], $result[1]);
+  }
+
+  /**
+   * Exposes the fixture module's observer to WebDriver scripts.
+   */
+  private function loadAdapter(): void {
+    $this->drupalGet('jquery-bc-test/bridge-events');
+    $this->getSession()->executeScript(<<<'JS'
+      const script = document.querySelector('script[src*="/core/misc/jquery.drupal-bc.js"]');
+      import(script.src).then(({ observeLegacyEvents }) => {
+        window.observeTestLegacyEvents = observeLegacyEvents;
+      });
+      JS);
+    $this->assertJsCondition('typeof window.observeTestLegacyEvents === "function"');
+  }
+
+}
