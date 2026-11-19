@@ -329,6 +329,38 @@ final class JqueryEventBridgeTest extends WebDriverTestBase {
   }
 
   /**
+   * Records the pinned States and tabledrag jQuery payloads.
+   */
+  public function testPinnedPayloads(): void {
+    $this->drupalGet('jquery-bc-test/bridge-events');
+    $result = $this->getSession()->evaluateScript(<<<'JS'
+      (() => {
+        const fixture = document.getElementById('event-bridge-fixture');
+        const field = fixture.appendChild(document.createElement('input'));
+        const table = fixture.appendChild(document.createElement('table'));
+        const trace = [];
+        fixture.addEventListener('state:visible', () => trace.push('DOM state'));
+        fixture.addEventListener('columnschange', () => trace.push('DOM columns'));
+        jQuery(document).on('state:visible', (event, ...args) => {
+          trace.push([event.type, event.target === field, event.value, event.trigger, args]);
+        });
+        jQuery(table).on('columnschange', (event, ...args) => {
+          trace.push([event.type, event.target === table, args]);
+        });
+
+        jQuery(field).trigger({ type: 'state:visible', value: false, trigger: true });
+        jQuery(table).trigger('columnschange', false);
+        return trace;
+      })()
+      JS);
+
+    $this->assertSame([
+      ['state:visible', TRUE, FALSE, TRUE, []],
+      ['columnschange', TRUE, [FALSE]],
+    ], $result);
+  }
+
+  /**
    * Records excluded leveraged click, focus and blur dispatch shapes.
    */
   public function testLeveragedNativeEvents(): void {
