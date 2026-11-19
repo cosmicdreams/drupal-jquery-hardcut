@@ -82,6 +82,54 @@ final class JqueryCompatibilityEventsTest extends WebDriverTestBase {
   }
 
   /**
+   * Records where jQuery forwards special events to native DOM listeners.
+   */
+  public function testSpecialEvents(): void {
+    $this->drupalGet('jquery-bc-test/events');
+    $session = $this->getSession();
+    $session->executeScript(<<<'JS'
+      (() => {
+        const form = document.createElement('form');
+        const checkbox = document.createElement('input');
+        checkbox.type = 'checkbox';
+        checkbox.id = 'compatibility-checkbox';
+        form.append(checkbox);
+        document.body.append(form);
+        const trace = [];
+        window.compatibilitySpecialEvents = trace;
+        jQuery(checkbox).on('click.compat', (event) => {
+          trace.push(['jquery click', checkbox.checked, Boolean(event.originalEvent)]);
+        });
+        checkbox.addEventListener('click', () => trace.push(['native click', checkbox.checked]));
+        jQuery(checkbox).on('focus.compat blur.compat', (event) => {
+          trace.push([event.type, document.activeElement === checkbox]);
+        });
+        jQuery(form).on('submit.compat', (event) => {
+          event.preventDefault();
+          trace.push(['jquery submit']);
+        });
+        form.addEventListener('submit', () => trace.push(['native submit']));
+
+        jQuery(checkbox).trigger('click');
+        jQuery(checkbox).trigger('focus');
+        jQuery(checkbox).trigger('blur');
+        jQuery(form).trigger('submit');
+      })()
+      JS);
+    $this->assertSession()->elementExists('css', '#compatibility-checkbox')->click();
+    $this->assertSame([
+      ['jquery click', TRUE, FALSE],
+      ['native click', TRUE],
+      ['focus', TRUE],
+      ['blur', FALSE],
+      ['jquery submit'],
+      ['focus', TRUE],
+      ['jquery click', FALSE, TRUE],
+      ['native click', FALSE],
+    ], $session->evaluateScript('window.compatibilitySpecialEvents'));
+  }
+
+  /**
    * Tests that a synthetic link click sends one Ajax request.
    */
   public function testSyntheticAjaxLink(): void {
