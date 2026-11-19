@@ -59,6 +59,7 @@ export function observeLegacyEvents(jquery, registry) {
             type: event.type,
             target: event.target,
             currentTarget: event.currentTarget,
+            delegateTarget: event.delegateTarget,
             get defaultPrevented() {
               return event.isDefaultPrevented();
             },

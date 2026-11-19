@@ -142,6 +142,9 @@ final class JqueryEventBridgeTest extends WebDriverTestBase {
             }
           }
           legacy.on(type, () => { trace.push('after'); });
+          if (mode === 'bound-before-observer') {
+            disconnect = install();
+          }
 
           const triggered = jQuery.Event(type);
           legacy.trigger(triggered, ['trigger']);
@@ -155,7 +158,7 @@ final class JqueryEventBridgeTest extends WebDriverTestBase {
           return [triggered.result, triggered.isDefaultPrevented(), result, blocked.isDefaultPrevented(), trace];
         }
 
-        return ['legacy', 'early', 'late'].map((mode) => [
+        return ['legacy', 'early', 'late', 'bound-before-observer'].map((mode) => [
           exercise('a', 'click', mode),
           exercise('form', 'submit', mode),
         ]);
@@ -176,6 +179,13 @@ final class JqueryEventBridgeTest extends WebDriverTestBase {
     $this->assertSame($expected, $results[0], 'Pinned jQuery behavior with the owned handler registered in jQuery.');
     $this->assertSame($results[0], $results[1], 'Observer attached before the owned listener.');
     $this->assertSame($results[0], $results[2], 'Observer attached after the owned listener.');
+    // A listener bound before the observer takes the earlier jQuery slot.
+    // Production registration must run before dependent scripts to avoid it.
+    [$trace[1], $trace[2]] = [$trace[2], $trace[1]];
+    $this->assertSame([
+      ['handled', FALSE, 'handled', TRUE, $trace],
+      ['handled', TRUE, 'handled', TRUE, $trace],
+    ], $results[3], 'Characterizes an already-bound jQuery listener.');
     $this->assertSame($url, $this->getSession()->getCurrentUrl());
   }
 
@@ -213,7 +223,8 @@ final class JqueryEventBridgeTest extends WebDriverTestBase {
           return value === 'false' ? false : 'handled';
         };
         const delegated = function (event, value) {
-          trace.push(['delegate', value, this === target && event.target === target, event.defaultPrevented]);
+          const root = event.delegateTarget ?? event.currentTarget;
+          trace.push(['delegate', value, this === target && event.target === target && root === parent, event.defaultPrevented]);
         };
         const onTarget = (event) => direct(event, event.detail);
         const onParent = (event) => {
