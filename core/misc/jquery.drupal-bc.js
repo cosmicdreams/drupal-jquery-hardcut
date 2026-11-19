@@ -245,15 +245,12 @@
   }
 
   /**
-   * Makes the fixture API available and connects the selected instance.
+   * Allows explicit opt-in and connects the supplied instance.
    */
   function initialize() {
     const registry = window.Drupal.eventBindings;
-    registry.legacyFixture = registry.legacyFixture ?? {
-      connect,
-      observeLegacyEvents,
-    };
-    registry.legacyFixture.connect(instance);
+    registry.connectLegacy = registry.connectLegacy ?? connect;
+    registry.connectLegacy(instance);
   }
 
   if (window.Drupal?.eventBindings) {

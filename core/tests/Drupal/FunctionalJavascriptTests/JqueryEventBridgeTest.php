@@ -34,13 +34,15 @@ final class JqueryEventBridgeTest extends WebDriverTestBase {
       $this->assertSame(['ready', 1], $session->evaluateScript(<<<'JS'
         JSON.parse(document.getElementById('event-bridge-fixture').dataset.bridgeTrace)
         JS));
-      $this->assertSame($early, $session->evaluateScript(<<<'JS'
+      $this->assertSame([TRUE, $early], $session->evaluateScript(<<<'JS'
         (() => {
           const scripts = Array.from(document.scripts);
           const library = (path) => scripts.findIndex(({ src }) => src && new URL(src).pathname.endsWith(path));
+          const vendor = library('/core/assets/vendor/jquery/jquery.min.js');
+          const alias = library('/core/misc/jquery.no-conflict.js');
           const adapter = library('/core/misc/jquery.drupal-bc.js');
           const drupal = library('/core/misc/drupal.js');
-          return adapter >= 0 && drupal >= 0 ? adapter < drupal : null;
+          return [vendor >= 0 && alias > vendor && adapter > alias, drupal >= 0 && adapter < drupal];
         })()
         JS));
     }
@@ -66,7 +68,7 @@ final class JqueryEventBridgeTest extends WebDriverTestBase {
       (() => {
         const first = window.jQuery;
         const second = window.foreignInstance;
-        const { connect } = Drupal.eventBindings.legacyFixture;
+        const { connectLegacy: connect } = Drupal.eventBindings;
         connect()();
         connect({})();
         const target = document.getElementById('event-bridge-fixture');
@@ -277,7 +279,7 @@ final class JqueryEventBridgeTest extends WebDriverTestBase {
 
           let disconnect;
           let unregister;
-          const install = () => window.observeTestLegacyEvents(jQuery, Drupal.eventBindings);
+          const install = () => Drupal.eventBindings.connectLegacy(jQuery);
           if (mode === 'legacy') {
             legacy.on(`${type}.compat`, listener);
           }
@@ -385,7 +387,7 @@ final class JqueryEventBridgeTest extends WebDriverTestBase {
         target.addEventListener(type, onTarget);
         parent.addEventListener(type, onParent);
         parent.addEventListener(type, () => trace.push('DOM bubble'));
-        const disconnect = window.observeTestLegacyEvents(jQuery, Drupal.eventBindings);
+        const disconnect = Drupal.eventBindings.connectLegacy(jQuery);
         const removeDirect = Drupal.eventBindings.register({
           target, type, namespace: 'compat', listener: direct,
         });
@@ -529,7 +531,7 @@ final class JqueryEventBridgeTest extends WebDriverTestBase {
         const columns = new CustomEvent('columnschange', {
           bubbles: true, cancelable: true, detail: { displayWeight: false },
         });
-        const { publish, legacyFixture: { connect } } = Drupal.eventBindings;
+        const { publish, connectLegacy: connect } = Drupal.eventBindings;
         const trace = [];
         const lifecycle = [];
         const data = {};
@@ -680,7 +682,7 @@ final class JqueryEventBridgeTest extends WebDriverTestBase {
           legacy.on('click.compat focus.compat blur.compat', (event) => {
             record(event.originalEvent ? 'jQuery native' : 'jQuery synthetic', event);
           });
-          const disconnect = observe ? window.observeTestLegacyEvents(jQuery, Drupal.eventBindings) : null;
+          const disconnect = observe ? Drupal.eventBindings.connectLegacy(jQuery) : null;
           const remove = ['click', 'focus', 'blur'].map((type) => {
             target.addEventListener(type, listener);
             return Drupal.eventBindings.register({ target, type, namespace: 'compat', listener });
@@ -715,14 +717,67 @@ final class JqueryEventBridgeTest extends WebDriverTestBase {
   }
 
   /**
+   * Tests an explicit adapter load on a page with an independent vendor.
+   */
+  public function testStandaloneOptIn(): void {
+    $this->drupalGet('jquery-bc-test/native-events');
+    $session = $this->getSession();
+    $session->executeScript(<<<'JS'
+      window.foreignAdapterTrace = null;
+      (async () => {
+        const load = (path) => new Promise((resolve, reject) => {
+          const script = document.createElement('script');
+          script.src = drupalSettings.path.baseUrl + path;
+          script.onload = resolve;
+          script.onerror = reject;
+          document.head.append(script);
+        });
+        const target = document.getElementById('event-bridge-fixture');
+        const type = 'compatibility:probe';
+        const trace = [];
+        const listener = (event) => {
+          trace.push(event instanceof Event ? 'native' : 'owned');
+          return 'handled';
+        };
+        target.addEventListener(type, listener);
+        const unregister = Drupal.eventBindings.register({ target, type, listener });
+        const beforeVendor = typeof window.jQuery;
+        await load('core/assets/vendor/jquery/jquery.min.js');
+        const instance = window.jQuery;
+        target.dispatchEvent(new Event(type));
+        const beforeOptIn = instance(target).triggerHandler(type);
+
+        await load('core/misc/jquery.drupal-bc.js');
+        const collection = instance(target);
+        collection.on(type, () => { trace.push('dependent'); });
+        const afterOptIn = collection.triggerHandler(type);
+        unregister();
+        collection.triggerHandler(type);
+
+        window.foreignAdapterTrace = [
+          beforeVendor,
+          beforeOptIn ?? null,
+          window.$ === instance,
+          afterOptIn,
+          trace,
+        ];
+      })().catch((error) => {
+        window.foreignAdapterTrace = String(error);
+      });
+      JS);
+    $this->assertJsCondition('window.foreignAdapterTrace !== null');
+    $this->assertSame([
+      'undefined', NULL, TRUE, 'handled', ['native', 'owned', 'dependent', 'dependent'],
+    ], $session->evaluateScript('window.foreignAdapterTrace'));
+  }
+
+  /**
    * Resets the fixture so delivery tests can control observer setup.
    */
   private function loadAdapter(): void {
     $this->drupalGet('jquery-bc-test/bridge-events');
     $this->getSession()->executeScript(<<<'JS'
-      const { connect, observeLegacyEvents } = Drupal.eventBindings.legacyFixture;
-      connect(window.jQuery)();
-      window.observeTestLegacyEvents = observeLegacyEvents;
+      Drupal.eventBindings.connectLegacy(window.jQuery)();
       JS);
   }
 

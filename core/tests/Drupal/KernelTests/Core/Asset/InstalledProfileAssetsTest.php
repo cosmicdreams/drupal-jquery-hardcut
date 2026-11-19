@@ -118,14 +118,16 @@ class InstalledProfileAssetsTest extends KernelTestBase {
     // The fixture records resolution at 92e5c3a3047.
     $baseline = Json::decode(file_get_contents(__DIR__ . '/fixtures/effective-assets-pinned.json'));
     $expected = $baseline['profiles']["$profile:$theme"];
-    // The explicit compatibility library now restores the alias immediately
-    // after the distribution. Keep the historical metadata for other assets.
+    // The explicit compatibility library restores the alias and connects its
+    // adapter immediately after the distribution.
     foreach ($expected['js'] as $index => $asset) {
       if ($asset['data'] === 'core/assets/vendor/jquery/jquery.min.js') {
         $bootstrap = $asset;
         $bootstrap['data'] = 'core/misc/jquery.no-conflict.js';
         $bootstrap['minified'] = FALSE;
-        array_splice($expected['js'], $index + 1, 0, [$bootstrap]);
+        $adapter = $bootstrap;
+        $adapter['data'] = 'core/misc/jquery.drupal-bc.js';
+        array_splice($expected['js'], $index + 1, 0, [$bootstrap, $adapter]);
         break;
       }
     }

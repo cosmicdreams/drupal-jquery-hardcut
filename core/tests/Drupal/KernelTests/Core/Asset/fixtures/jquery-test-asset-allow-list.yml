@@ -14,10 +14,7 @@
 - fixture: core/modules/system/tests/modules/form_test/form_test.libraries.yml:form_test
   removal: U
   assets: [js/form_test.js]
-# Explicit P1 fixture attachment of the compatibility adapter.
-- fixture: core/modules/system/tests/modules/jquery_bc_test/jquery_bc_test.libraries.yml:event_bridge
-  removal: Z
-  assets: [/core/misc/jquery.drupal-bc.js]
+# Explicit P1 fixture dependents.
 - fixture: core/modules/system/tests/modules/jquery_bc_test/jquery_bc_test.libraries.yml:event_bridge_early
   removal: Z
   assets: [js/event-bridge-dependent.js]

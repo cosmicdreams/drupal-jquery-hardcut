@@ -94,6 +94,7 @@ class AttachedAssetsTest extends KernelTestBase {
     $this->assertSame([
       'core/assets/vendor/jquery/jquery.min.js',
       'core/misc/jquery.no-conflict.js',
+      'core/misc/jquery.drupal-bc.js',
     ], $legacy_paths($resolve($build)));
   }
 
