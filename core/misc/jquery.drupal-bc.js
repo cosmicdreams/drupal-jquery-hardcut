@@ -1,6 +1,6 @@
 /**
  * @file
- * Prototypes event delivery for the explicit event bridge test fixture.
+ * Adapts owned events for explicitly connected jQuery instances.
  * @param {function(HTMLElement): object} instance
  *   The explicitly loaded jQuery instance.
  */
@@ -94,7 +94,7 @@
   /**
    * Projects explicitly marked native events at jQuery's handler dispatch.
    * @param {object} jquery
-   *   The jQuery instance opting in to the fixture.
+   *   The explicitly connected jQuery instance.
    * @param {string} type
    *   The unmapped event type. Install one projection per instance and type.
    * @param {WeakMap} payloads
@@ -165,10 +165,59 @@
     };
   }
 
+  /**
+   * Projects the legacy payloads of supported owned publications.
+   * @param {object} jquery
+   *   The explicitly connected jQuery instance.
+   * @param {object} registry
+   *   The owned event registry.
+   * @return {function(): void}
+   *   Stops observing publications and removes the projections.
+   */
+  function observeOwnedPublications(jquery, registry) {
+    const payloads = new WeakMap();
+    const projections = new Map();
+    const stop = registry.observePublications((event) => {
+      const { type, detail } = event;
+      const state = type.startsWith('state:');
+      if ((!state && type !== 'columnschange') || payloads.has(event)) {
+        return undefined;
+      }
+
+      let payload;
+      if (state) {
+        const properties = {};
+        for (const field of ['value', 'oldValue', 'trigger']) {
+          const value =
+            detail && Object.hasOwn(detail, field) ? detail[field] : undefined;
+          // jQuery's event constructor skips undefined properties.
+          if (value !== undefined) {
+            properties[field] = value;
+          }
+        }
+        payload = { properties };
+      } else {
+        payload = { args: [Boolean(detail?.displayWeight)] };
+      }
+
+      if (!projections.has(type)) {
+        projections.set(type, observeNativePayloads(jquery, type, payloads));
+      }
+      payloads.set(event, payload);
+      return () => payloads.delete(event);
+    });
+
+    return () => {
+      stop();
+      projections.forEach((disconnect) => disconnect());
+      projections.clear();
+    };
+  }
+
   const connections = new WeakMap();
 
   /**
-   * Connects the fixture to one explicitly selected jQuery instance.
+   * Connects one explicitly selected jQuery instance to owned events.
    * @param {object} jquery
    *   The jQuery instance to connect.
    * @return {function(): void}
@@ -180,10 +229,13 @@
     }
 
     if (!connections.has(jquery)) {
-      const stop = observeLegacyEvents(jquery, window.Drupal.eventBindings);
+      const registry = window.Drupal.eventBindings;
+      const stopBindings = observeLegacyEvents(jquery, registry);
+      const stopPublications = observeOwnedPublications(jquery, registry);
       const disconnect = () => {
         if (connections.get(jquery) === disconnect) {
-          stop();
+          stopBindings();
+          stopPublications();
           connections.delete(jquery);
         }
       };
@@ -200,7 +252,6 @@
     registry.legacyFixture = registry.legacyFixture ?? {
       connect,
       observeLegacyEvents,
-      observeNativePayloads,
     };
     registry.legacyFixture.connect(instance);
   }

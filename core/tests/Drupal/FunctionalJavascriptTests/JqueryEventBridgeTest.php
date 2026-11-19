@@ -8,7 +8,7 @@ use PHPUnit\Framework\Attributes\Group;
 use PHPUnit\Framework\Attributes\RunTestsInSeparateProcesses;
 
 /**
- * Tests fixture-only delivery between native and jQuery listeners.
+ * Tests delivery between native and jQuery listeners in the event fixture.
  */
 #[Group('javascript')]
 #[RunTestsInSeparateProcesses]
@@ -71,20 +71,35 @@ final class JqueryEventBridgeTest extends WebDriverTestBase {
         connect({})();
         const target = document.getElementById('event-bridge-fixture');
         const type = 'compatibility:probe';
+        const columns = new CustomEvent('columnschange', { detail: { displayWeight: true } });
+        const publications = [];
+        for (const [instance, label] of [[first, 'first'], [second, 'second']]) {
+          instance(target).on(columns.type, (event, ...args) => {
+            publications.push([label, event.originalEvent === columns, args]);
+          });
+        }
+        const publish = () => {
+          Drupal.eventBindings.publish(target, columns);
+          return publications.splice(0);
+        };
         let calls = 0;
         const listener = () => ++calls;
         target.addEventListener(type, listener);
         const unregister = Drupal.eventBindings.register({ target, type, listener });
         const firstBeforeOptIn = first(target).triggerHandler(type);
         const secondBeforeOptIn = second(target).triggerHandler(type);
+        const before = publish();
         const stop = connect(second);
         const sameStop = connect(second) === stop;
         const secondAfterOptIn = second(target).triggerHandler(type);
+        const connected = publish();
         stop();
         const secondAfterStop = second(target).triggerHandler(type);
+        const disconnected = publish();
         const resume = connect(second);
         stop();
         const secondAfterResume = second(target).triggerHandler(type);
+        const reconnected = publish();
         resume();
         const firstAfterStop = first(target).triggerHandler(type);
         target.dispatchEvent(new Event(type));
@@ -100,10 +115,19 @@ final class JqueryEventBridgeTest extends WebDriverTestBase {
           secondAfterResume,
           firstAfterStop,
           calls,
+          [before, connected, disconnected, reconnected],
         ];
       })()
       JS);
-    $this->assertSame([TRUE, TRUE, 1, NULL, 2, NULL, 3, 4, 5], $trace);
+    $this->assertSame([
+      TRUE, TRUE, 1, NULL, 2, NULL, 3, 4, 5,
+      [
+        [['first', TRUE, [TRUE]], ['second', TRUE, []]],
+        [['first', TRUE, [TRUE]], ['second', TRUE, [TRUE]]],
+        [['first', TRUE, [TRUE]], ['second', TRUE, []]],
+        [['first', TRUE, [TRUE]], ['second', TRUE, [TRUE]]],
+      ],
+    ], $trace);
   }
 
   /**
@@ -182,27 +206,28 @@ final class JqueryEventBridgeTest extends WebDriverTestBase {
   }
 
   /**
-   * Tests that the fixture can use native listeners without legacy assets.
+   * Tests native publication without legacy assets.
    */
   public function testNativeWithoutBridge(): void {
     $this->drupalGet('jquery-bc-test/native-events');
     $this->assertSame([
-      'undefined', FALSE, FALSE, TRUE, ['compatibility:probe'],
+      'undefined', FALSE, FALSE, TRUE, [['state:visible', TRUE, TRUE, FALSE, 'undefined']],
     ], $this->getSession()->evaluateScript(<<<'JS'
       (() => {
         const target = document.getElementById('event-bridge-fixture');
-        const type = 'compatibility:probe';
+        const type = 'state:visible';
+        const visible = new CustomEvent(type, { cancelable: true, detail: { value: false } });
         const trace = [];
         const listener = (event) => {
-          trace.push(event.type);
+          trace.push([event.type, event === visible, event.target === target, event.detail.value, typeof event.value]);
           event.preventDefault();
         };
         target.addEventListener(type, listener);
         const unregister = Drupal.eventBindings.register({ target, type, listener });
-        const delivered = target.dispatchEvent(new Event(type, { cancelable: true }));
+        const delivered = Drupal.eventBindings.publish(target, visible);
         unregister();
         target.removeEventListener(type, listener);
-        const removed = target.dispatchEvent(new Event(type, { cancelable: true }));
+        const removed = Drupal.eventBindings.publish(target, new CustomEvent(type, { detail: visible.detail }));
         return [
           typeof window.jQuery,
           Boolean(document.querySelector('script[src*="/core/misc/jquery.drupal-bc.js"]')),
@@ -486,7 +511,7 @@ final class JqueryEventBridgeTest extends WebDriverTestBase {
   }
 
   /**
-   * Tests explicit native payload projection through an existing jQuery hook.
+   * Tests owned publications through an existing jQuery hook.
    */
   public function testNativePayloadProjection(): void {
     $this->loadAdapter();
@@ -498,13 +523,13 @@ final class JqueryEventBridgeTest extends WebDriverTestBase {
         const visible = new CustomEvent('state:visible', {
           bubbles: true, detail: { value: false, trigger: true },
         });
+        const custom = new CustomEvent('state:fixture', {
+          bubbles: true, detail: { value: true, oldValue: false, trigger: undefined, extra: 'native only' },
+        });
         const columns = new CustomEvent('columnschange', {
           bubbles: true, cancelable: true, detail: { displayWeight: false },
         });
-        const payloads = new WeakMap([
-          [visible, { properties: visible.detail }],
-          [columns, { args: [columns.detail.displayWeight] }],
-        ]);
+        const { publish, legacyFixture: { connect } } = Drupal.eventBindings;
         const trace = [];
         const lifecycle = [];
         const data = {};
@@ -543,6 +568,10 @@ final class JqueryEventBridgeTest extends WebDriverTestBase {
             event.currentTarget === document && event.target === field, event.value,
             event.oldValue, event.trigger, args]);
         });
+        jQuery(field).on('state:fixture.fixture', (event, ...args) => {
+          trace.push(['jQuery custom state', event.originalEvent === custom,
+            event.value, event.oldValue, 'trigger' in event, 'extra' in event, args]);
+        });
         root.on('columnschange.fixture', 'table', data, function (event, ...args) {
           const context = this === table && event.currentTarget === table &&
             event.target === table && event.delegateTarget === fixture &&
@@ -550,33 +579,33 @@ final class JqueryEventBridgeTest extends WebDriverTestBase {
           trace.push(['jQuery columns', event.originalEvent === columns, context, args]);
           return args[0] === false ? false : 'columns handled';
         });
-        const disconnectState = window.observeTestNativePayloads(jQuery, 'state:visible', payloads);
-        const disconnectColumns = window.observeTestNativePayloads(jQuery, 'columnschange', payloads);
+        // Connect after the listeners and the column special hook are in place.
+        const disconnect = connect(jQuery);
 
-        const dispatched = [field.dispatchEvent(visible), table.dispatchEvent(columns)];
+        const dispatched = [publish(field, visible), publish(field, custom), publish(table, columns)];
         const projected = trace.splice(0);
 
-        // Identical detail alone does not opt in. A synthetic trigger keeps its own args.
+        // Neither reusing an event nor copying its detail opts in.
+        field.dispatchEvent(visible);
         table.dispatchEvent(new CustomEvent('columnschange', { bubbles: true, detail: columns.detail }));
+        // A synthetic trigger keeps its own args.
         const synthetic = jQuery.Event('columnschange.fixture');
         jQuery(table).trigger(synthetic, [true]);
         const ordinary = new CustomEvent('fixture:ordinary', { detail: visible.detail });
-        payloads.set(ordinary, { properties: visible.detail, args: [false] });
         for (const type of [ordinary.type, 'change']) {
           field.addEventListener(type, (event) => trace.push(['DOM ordinary', event.type]));
           jQuery(field).on(`${type}.fixture`, (event, ...args) => {
             trace.push(['jQuery ordinary', event.type, Boolean(event.originalEvent), typeof event.value, args]);
           });
         }
-        field.dispatchEvent(ordinary);
+        publish(field, ordinary);
         field.dispatchEvent(new Event('change', { bubbles: true }));
         jQuery(field).triggerHandler('change.fixture', ['synthetic']);
         const control = trace.splice(0);
 
-        disconnectState();
-        disconnectColumns();
-        field.dispatchEvent(visible);
-        table.dispatchEvent(columns);
+        disconnect();
+        publish(field, visible);
+        publish(table, columns);
         const after = trace.splice(0);
         root.off('.fixture');
         jQuery(document).off('.fixture');
@@ -586,24 +615,27 @@ final class JqueryEventBridgeTest extends WebDriverTestBase {
           cancelled: columns.defaultPrevented,
           syntheticResult: synthetic.result,
           restored: specials.columnschange === columnHook && columnHook.handle === existingHandle &&
-            !Object.hasOwn(specials, 'state:visible'),
+            !Object.hasOwn(specials, 'state:visible') && !Object.hasOwn(specials, 'state:fixture'),
           isolated: jQuery.event.dispatch === before.dispatch && specials.change === before.change &&
             specials[ordinary.type] === before.ordinary,
         };
       })()
       JS);
 
-    $this->assertSame([TRUE, FALSE], $result['dispatched']);
+    $this->assertSame([TRUE, TRUE, FALSE], $result['dispatched']);
     $this->assertTrue($result['cancelled']);
     $this->assertSame([
       ['DOM state', TRUE, FALSE, 'undefined'],
       ['jQuery state', TRUE, TRUE, FALSE, NULL, TRUE, []],
+      ['jQuery custom state', TRUE, TRUE, FALSE, FALSE, FALSE, []],
       ['DOM columns', TRUE, FALSE],
       ['columns hook', [FALSE]],
       ['jQuery columns', TRUE, TRUE, [FALSE]],
     ], $result['projected']);
     $this->assertSame('columns handled', $result['syntheticResult']);
     $this->assertSame([
+      ['DOM state', TRUE, FALSE, 'undefined'],
+      ['jQuery state', TRUE, TRUE, NULL, NULL, NULL, []],
       ['DOM columns', FALSE, FALSE],
       ['columns hook', []],
       ['jQuery columns', FALSE, TRUE, []],
@@ -688,10 +720,9 @@ final class JqueryEventBridgeTest extends WebDriverTestBase {
   private function loadAdapter(): void {
     $this->drupalGet('jquery-bc-test/bridge-events');
     $this->getSession()->executeScript(<<<'JS'
-      const { connect, observeLegacyEvents, observeNativePayloads } = Drupal.eventBindings.legacyFixture;
+      const { connect, observeLegacyEvents } = Drupal.eventBindings.legacyFixture;
       connect(window.jQuery)();
       window.observeTestLegacyEvents = observeLegacyEvents;
-      window.observeTestNativePayloads = observeNativePayloads;
       JS);
   }
 

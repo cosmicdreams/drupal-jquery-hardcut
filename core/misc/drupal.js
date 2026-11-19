@@ -102,9 +102,10 @@ window.Drupal = { behaviors: {}, locale: {} };
 
   const ownedEventBindings = new Set();
   const eventBindingObservers = new Set();
+  const eventPublicationObservers = new Set();
 
   /**
-   * Exposes Drupal-owned bindings to explicitly loaded event adapters.
+   * Exposes Drupal-owned bindings and publications to event adapters.
    *
    * The owner installs its native listener and reports the binding here.
    * Removing an adapter leaves that listener in place.
@@ -150,6 +151,44 @@ window.Drupal = { behaviors: {}, locale: {} };
         if (eventBindingObservers.delete(observer)) {
           ownedEventBindings.forEach((binding) => observer.remove(binding));
         }
+      };
+    },
+
+    /**
+     * Dispatches one owned event after notifying connected adapters.
+     * @param {EventTarget} target
+     *   The original dispatch target.
+     * @param {CustomEvent} event
+     *   The native event to dispatch.
+     * @return {boolean}
+     *   The result of dispatchEvent().
+     */
+    publish(target, event) {
+      const cleanups = [];
+      try {
+        eventPublicationObservers.forEach((prepare) => {
+          const cleanup = prepare(event);
+          if (cleanup) {
+            cleanups.push(cleanup);
+          }
+        });
+        return target.dispatchEvent(event);
+      } finally {
+        cleanups.forEach((cleanup) => cleanup());
+      }
+    },
+
+    /**
+     * Observes future owned publications before their native dispatch.
+     * @param {(event: CustomEvent) => (() => void) | undefined} prepare
+     *   Prepares delivery and may return a cleanup to run after dispatch.
+     * @return {() => void}
+     *   Stops observing publications.
+     */
+    observePublications(prepare) {
+      eventPublicationObservers.add(prepare);
+      return () => {
+        eventPublicationObservers.delete(prepare);
       };
     },
   };
