@@ -442,11 +442,14 @@
    *
    * @param {object} options
    *   The request settings.
+   * @param {function} [onCancel]
+   *   Called if the request ends before its callbacks are registered, as when
+   *   a prefilter or beforeSend aborts it.
    *
    * @return {object}
    *   The jqXHR-shaped request facade.
    */
-  function send(options) {
+  function send(options, onCancel) {
     let transport;
     let responseHeadersString;
     let responseHeaders;
@@ -456,6 +459,7 @@
     // As in jQuery, globals stay off until the prefilters have run.
     let fireGlobals;
     let strAbort = 'canceled';
+    let callbacksAdded = false;
     const s = jQuery.ajaxSetup({}, options);
     const callbackContext = s.context || s;
     const globalEventContext =
@@ -689,6 +693,10 @@
           attempt(() => jQuery.event.trigger('ajaxStop'));
         }
       }
+      // A request cancelled before its callbacks were added runs none.
+      if (!callbacksAdded && onCancel) {
+        attempt(onCancel);
+      }
       if (failure) {
         throw failure.error;
       }
@@ -720,99 +728,105 @@
     }
 
     fireGlobals = jQuery.event && s.global;
-    if (fireGlobals && jQuery.active++ === 0) {
-      jQuery.event.trigger('ajaxStart');
-    }
-    s.type = s.type.toUpperCase();
-    s.hasContent = !rNoContent.test(s.type);
-    cacheURL = s.url.replace(rHash, '');
-    if (!s.hasContent) {
-      let uncached = s.url.slice(cacheURL.length);
-      if (s.data && (s.processData || typeof s.data === 'string')) {
-        cacheURL += (rQuery.test(cacheURL) ? '&' : '?') + s.data;
-        delete s.data;
+    try {
+      if (fireGlobals && jQuery.active++ === 0) {
+        jQuery.event.trigger('ajaxStart');
       }
-      if (s.cache === false) {
-        cacheURL = cacheURL.replace(rAntiCache, '$1');
-        uncached = `${rQuery.test(cacheURL) ? '&' : '?'}_=${guid++}${uncached}`;
+      s.type = s.type.toUpperCase();
+      s.hasContent = !rNoContent.test(s.type);
+      cacheURL = s.url.replace(rHash, '');
+      if (!s.hasContent) {
+        let uncached = s.url.slice(cacheURL.length);
+        if (s.data && (s.processData || typeof s.data === 'string')) {
+          cacheURL += (rQuery.test(cacheURL) ? '&' : '?') + s.data;
+          delete s.data;
+        }
+        if (s.cache === false) {
+          cacheURL = cacheURL.replace(rAntiCache, '$1');
+          uncached = `${rQuery.test(cacheURL) ? '&' : '?'}_=${guid++}${uncached}`;
+        }
+        s.url = cacheURL + uncached;
+      } else if (
+        s.data &&
+        s.processData &&
+        (s.contentType || '').indexOf('application/x-www-form-urlencoded') === 0
+      ) {
+        s.data = s.data.replace(r20, '+');
       }
-      s.url = cacheURL + uncached;
-    } else if (
-      s.data &&
-      s.processData &&
-      (s.contentType || '').indexOf('application/x-www-form-urlencoded') === 0
-    ) {
-      s.data = s.data.replace(r20, '+');
-    }
-    if (s.ifModified) {
-      if (jQuery.lastModified[cacheURL]) {
-        jqXHR.setRequestHeader(
-          'If-Modified-Since',
-          jQuery.lastModified[cacheURL],
-        );
-      }
-      if (jQuery.etag[cacheURL]) {
-        jqXHR.setRequestHeader('If-None-Match', jQuery.etag[cacheURL]);
-      }
-    }
-    if (
-      (s.data && s.hasContent && s.contentType !== false) ||
-      options.contentType
-    ) {
-      jqXHR.setRequestHeader('Content-Type', s.contentType);
-    }
-    jqXHR.setRequestHeader(
-      'Accept',
-      s.dataTypes[0] && s.accepts[s.dataTypes[0]]
-        ? s.accepts[s.dataTypes[0]] +
-            (s.dataTypes[0] !== '*' ? `, ${allTypes}; q=0.01` : '')
-        : s.accepts['*'],
-    );
-    Object.keys(s.headers || {}).forEach((name) => {
-      jqXHR.setRequestHeader(name, s.headers[name]);
-    });
-    // Core's own callbacks receive the native request. Until it is sent, its
-    // header writes and abort go through the facade, as the jqXHR's would.
-    const request = new XMLHttpRequest();
-    request.setRequestHeader = (name, value) => {
-      jqXHR.setRequestHeader(name, value);
-    };
-    request.abort = () => {
-      jqXHR.abort();
-    };
-    nativeRequests.set(jqXHR, request);
-    if (
-      s.beforeSend &&
-      (s.beforeSend.call(callbackContext, jqXHR, s) === false || completed)
-    ) {
-      return jqXHR.abort();
-    }
-    strAbort = 'abort';
-    completeDeferred.add(s.complete);
-    jqXHR.done(s.success);
-    jqXHR.fail(s.error);
-
-    transport = inspect(transports, s, options, jqXHR);
-    if (!transport?.native) {
-      // A contributed transport has no native request to offer.
-      nativeRequests.delete(jqXHR);
-    }
-    if (!transport) {
-      done(-1, 'No Transport');
-    } else {
-      jqXHR.readyState = 1;
-      if (fireGlobals) {
-        try {
-          globalEventContext.trigger('ajaxSend', [jqXHR, s]);
-        } catch (e) {
-          // Do not send, and finish the request before reporting the error.
-          jqXHR.abort();
-          throw e;
+      if (s.ifModified) {
+        if (jQuery.lastModified[cacheURL]) {
+          jqXHR.setRequestHeader(
+            'If-Modified-Since',
+            jQuery.lastModified[cacheURL],
+          );
+        }
+        if (jQuery.etag[cacheURL]) {
+          jqXHR.setRequestHeader('If-None-Match', jQuery.etag[cacheURL]);
         }
       }
-      if (completed) {
-        return jqXHR;
+      if (
+        (s.data && s.hasContent && s.contentType !== false) ||
+        options.contentType
+      ) {
+        jqXHR.setRequestHeader('Content-Type', s.contentType);
       }
+      jqXHR.setRequestHeader(
+        'Accept',
+        s.dataTypes[0] && s.accepts[s.dataTypes[0]]
+          ? s.accepts[s.dataTypes[0]] +
+              (s.dataTypes[0] !== '*' ? `, ${allTypes}; q=0.01` : '')
+          : s.accepts['*'],
+      );
+      Object.keys(s.headers || {}).forEach((name) => {
+        jqXHR.setRequestHeader(name, s.headers[name]);
+      });
+      // Core's own callbacks receive the native request. Until it is sent, its
+      // header writes and abort go through the facade, as the jqXHR's would.
+      const request = new XMLHttpRequest();
+      request.setRequestHeader = (name, value) => {
+        jqXHR.setRequestHeader(name, value);
+      };
+      request.abort = () => {
+        jqXHR.abort();
+      };
+      nativeRequests.set(jqXHR, request);
+      if (
+        s.beforeSend &&
+        (s.beforeSend.call(callbackContext, jqXHR, s) === false || completed)
+      ) {
+        return jqXHR.abort();
+      }
+      strAbort = 'abort';
+      callbacksAdded = true;
+      completeDeferred.add(s.complete);
+      jqXHR.done(s.success);
+      jqXHR.fail(s.error);
+
+      transport = inspect(transports, s, options, jqXHR);
+      if (!transport?.native) {
+        // A contributed transport has no native request to offer.
+        nativeRequests.delete(jqXHR);
+      }
+      if (!transport) {
+        done(-1, 'No Transport');
+      } else {
+        jqXHR.readyState = 1;
+        if (fireGlobals) {
+          globalEventContext.trigger('ajaxSend', [jqXHR, s]);
+        }
+        if (completed) {
+          return jqXHR;
+        }
+      }
+    } catch (e) {
+      // An observer, beforeSend or transport factory threw. Do not send, and
+      // finish the request before reporting the error.
+      if (!completed) {
+        jqXHR.abort();
+      }
+      throw e;
+    }
+    if (transport) {
       if (s.async && s.timeout > 0) {
         timeoutTimer = window.setTimeout(() => {
           jqXHR.abort('timeout');

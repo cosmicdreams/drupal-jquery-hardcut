@@ -9,7 +9,7 @@ use Drupal\FunctionalJavascriptTests\WebDriverTestBase;
 use PHPUnit\Framework\Attributes\Group;
 use PHPUnit\Framework\Attributes\RunTestsInSeparateProcesses;
 
-// cspell:ignore Completeajax handleajax jqxhr prefilter prefilters Successajax
+// cspell:ignore Completeajax handleajax jqxhr nocontent prefilter prefilters Successajax
 /**
  * Tests AJAX responses.
  */
@@ -936,6 +936,46 @@ JS);
     $this->assertTrue($session->wait(10000, 'Boolean(window.observerFailure)'));
     $this->assertSame([0, FALSE], $session->evaluateScript('window.observerFailure'));
     $this->assertSame(['ajaxStart', 'ajaxSend', 'dataFilter json', 'ajaxSuccess', 'ajaxComplete', 'ajaxStop'], $session->evaluateScript('window.failureTrace'));
+
+    // A throwing data filter and a response that is a JSON string both fail
+    // the request without leaving it counted once both have finished.
+    $session->executeScript(<<<'JS'
+      window.failureResults = {};
+      const run = (name, configure) => {
+        const ajax = Drupal.ajax({ url: Drupal.url('ajax-test/echo-header'), progress: false });
+        configure(ajax);
+        const handle = ajax.execute();
+        Promise.allSettled([handle.network, handle.commands]).then(([network, commands]) => {
+          window.failureResults[name] = [network.value.status, commands.reason?.message ?? commands.reason?.name, ajax.ajaxing];
+        });
+      };
+      run('filter', (ajax) => {
+        ajax.options.dataFilter = () => {
+          throw new Error('filter');
+        };
+      });
+      run('string', (ajax) => {
+        ajax.options.converters = { 'text json': () => 'not json' };
+      });
+      JS);
+    $this->assertTrue($session->wait(10000, 'Object.keys(window.failureResults).length === 2 && jQuery.active === 0'));
+    $results = $session->evaluateScript('window.failureResults');
+    $this->assertSame(['parsererror', 'filter', FALSE], $results['filter']);
+    $this->assertSame('success', $results['string'][0]);
+    $this->assertFalse($results['string'][2]);
+
+    // A throwing start observer does not leave the request counted.
+    $this->assertSame([0, FALSE, 'rejected'], $session->evaluateScript(<<<'JS'
+      (() => {
+        window.alert = () => {};
+        jQuery(document).one('ajaxStart', () => {
+          throw new Error('start');
+        });
+        const ajax = Drupal.ajax({ url: Drupal.url('ajax-test/echo-header'), progress: false });
+        const handle = ajax.execute();
+        return [jQuery.active, ajax.ajaxing, handle.state()];
+      })()
+      JS));
   }
 
   /**
@@ -1220,6 +1260,60 @@ JS);
     $this->assertSame(['abort', FALSE, FALSE, FALSE], $session->evaluateScript('window.nativeAbort'));
     $this->assertSame(['canceled', FALSE, FALSE], $session->evaluateScript('window.nativeCancel'));
 
+    // The response is classified by the method beforeSend chose.
+    $session->executeScript(<<<'JS'
+      const ajax = Drupal.ajax({ url: Drupal.url('ajax-test/echo-request'), progress: false, httpMethod: 'GET' });
+      const { beforeSend } = ajax.options;
+      ajax.options.beforeSend = function (xhr, settings) {
+        settings.type = 'HEAD';
+        return beforeSend.call(this, xhr, settings);
+      };
+      ajax.execute().network.then(({ status }) => {
+        window.nativeHead = status;
+      });
+      JS);
+    $this->assertTrue($session->wait(10000, 'Boolean(window.nativeHead)'));
+    $this->assertSame('nocontent', $session->evaluateScript('window.nativeHead'));
+
+    // A beforeSend veto on a multipart form does not send, and can be retried
+    // at once.
+    $this->assertSame([0, FALSE, FALSE, NULL], $session->evaluateScript(<<<'JS'
+      (() => {
+        document.body.insertAdjacentHTML('beforeend', '<form id="native-veto"><button name="op" value="clicked">Go</button><input type="file" name="upload"></form>');
+        const form = document.getElementById('native-veto');
+        const transfer = new DataTransfer();
+        transfer.items.add(new File(['veto'], 'veto.txt', { type: 'text/plain' }));
+        form.querySelector('input').files = transfer.files;
+        const button = form.querySelector('button');
+        const ajax = Drupal.ajax({ element: button, url: Drupal.url('ajax-test/echo-request'), event: 'native-veto', setClick: true });
+        const { beforeSend } = ajax;
+        let vetoes = 1;
+        ajax.beforeSend = function (...args) {
+          beforeSend.apply(this, args);
+          return vetoes-- > 0 ? false : undefined;
+        };
+        const send = XMLHttpRequest.prototype.send;
+        let sends = 0;
+        XMLHttpRequest.prototype.send = function (...args) {
+          sends++;
+          return send.apply(this, args);
+        };
+        try {
+          button.dispatchEvent(new Event('native-veto', { bubbles: true, cancelable: true }));
+          const state = [sends, ajax.ajaxing, button.disabled, form.clk ?? null];
+          document.getElementById('request-lane-echo').textContent = '';
+          button.dispatchEvent(new Event('native-veto', { bubbles: true, cancelable: true }));
+          return state;
+        }
+        finally {
+          XMLHttpRequest.prototype.send = send;
+        }
+      })()
+      JS));
+    $this->assertTrue($session->wait(10000, "document.getElementById('request-lane-echo').textContent.length > 0"));
+    $result = json_decode($session->evaluateScript("document.getElementById('request-lane-echo').textContent"), TRUE, flags: JSON_THROW_ON_ERROR);
+    $this->assertSame('veto.txt', $result['upload'][0]);
+
     // A file input associated from outside the form is uploaded.
     $session->executeScript(<<<'JS'
       const echo = document.getElementById('request-lane-echo');
@@ -1309,26 +1403,41 @@ JS);
       jQuery.ajaxPrefilter((settings, original, request) => {
         if (abortNext) {
           abortNext = false;
-          request.abort();
+          request.abort('skipped');
         }
       });
       jQuery(fixture.form).on('form-submit-notify', () => {
         window.notifiedRequest = typeof jQuery(fixture.form).data('jqxhr')?.abort;
       });
       fixture.trigger();
-      JS);
-    $this->assertTrue($session->wait(10000, 'window.restored(window.prefilterFixture)'));
-    $session->executeScript(<<<'JS'
+      window.prefilterRestored = window.restored(fixture);
+      // The restored form can be submitted again at once.
       document.getElementById('request-lane-echo').textContent = '';
       window.notifiedRequest = null;
       jQuery.ajaxSetup({ traditional: true });
-      window.prefilterFixture.trigger();
+      fixture.trigger();
       jQuery.ajaxSetup({ traditional: false });
       JS);
+    $this->assertTrue($session->evaluateScript('window.prefilterRestored'));
     $this->assertTrue($session->wait(10000, "document.getElementById('request-lane-echo').textContent.length > 0 && jQuery.active === 0"));
     $result = json_decode($session->evaluateScript("document.getElementById('request-lane-echo').textContent"), TRUE, flags: JSON_THROW_ON_ERROR);
     $this->assertStringContainsString('a=1&a=2', $result['body']);
     $this->assertSame('function', $session->evaluateScript('window.notifiedRequest'));
+
+    // The serialize callback can still choose the encoding.
+    $session->executeScript(<<<'JS'
+      const fixture = window.buildForm('serialize-encoding', false);
+      const { beforeSerialize } = fixture.ajax;
+      fixture.ajax.beforeSerialize = function (element, options) {
+        options.traditional = true;
+        return beforeSerialize.call(this, element, options);
+      };
+      document.getElementById('request-lane-echo').textContent = '';
+      fixture.trigger();
+      JS);
+    $this->assertTrue($session->wait(10000, "document.getElementById('request-lane-echo').textContent.length > 0 && jQuery.active === 0"));
+    $result = json_decode($session->evaluateScript("document.getElementById('request-lane-echo').textContent"), TRUE, flags: JSON_THROW_ON_ERROR);
+    $this->assertStringContainsString('a=1&a=2', $result['body']);
 
     // An abort in beforeSend, a throwing send observer and an abort with a
     // custom status all leave the element usable and nothing counted.

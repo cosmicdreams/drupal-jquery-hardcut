@@ -152,6 +152,7 @@
         }
         if (proceed === false || aborted) {
           settle('canceled');
+          options.canceled?.();
           return false;
         }
       },

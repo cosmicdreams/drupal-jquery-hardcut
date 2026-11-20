@@ -355,11 +355,13 @@
    *
    * @param {object} options
    *   Request settings with the keys of Drupal.Ajax#options.
+   * @param {function} [onCancel]
+   *   Called if beforeSend cancels the request.
    *
    * @return {{network: Promise, commands: Promise, abort: function}}
    *   The request handle.
    */
-  function sendNative(options) {
+  function sendNative(options, onCancel) {
     const settings = { ...options };
     const context = settings.context || settings;
     settings.type = (settings.method || settings.type || 'GET').toUpperCase();
@@ -430,16 +432,19 @@
       headers.set(name, value);
     });
 
-    const requestMethod = settings.type;
+    const transport = {
+      url,
+      method: settings.type,
+      async: settings.async !== false,
+      username: settings.username,
+      password: settings.password,
+    };
     const request = Drupal.ajaxRequest(
       {
-        url,
-        method: settings.type,
-        async: settings.async !== false,
-        username: settings.username,
-        password: settings.password,
+        ...transport,
         headers,
         body: () => (settings.hasContent && settings.data) || null,
+        canceled: onCancel,
         beforeSend(xhr) {
           if (
             settings.beforeSend &&
@@ -448,15 +453,25 @@
             return false;
           }
           // As jQuery opened the request after beforeSend, use its changes.
-          const method = `${settings.type}`.toUpperCase();
-          if (settings.url !== url || method !== requestMethod) {
+          const opened = {
+            url: settings.url,
+            method: `${settings.type}`.toUpperCase(),
+            async: settings.async !== false,
+            username: settings.username,
+            password: settings.password,
+          };
+          if (
+            Object.keys(opened).some((key) => opened[key] !== transport[key])
+          ) {
             xhr.open(
-              method,
-              new URL(settings.url, document.baseURI).href,
-              settings.async !== false,
-              settings.username ?? null,
-              settings.password ?? null,
+              opened.method,
+              new URL(opened.url, document.baseURI).href,
+              opened.async,
+              opened.username ?? null,
+              opened.password ?? null,
             );
+            // The response is classified by the method actually sent.
+            Object.assign(this, opened);
           }
           // A synchronous request cannot have a timeout.
           if (settings.async !== false && settings.timeout > 0) {
@@ -514,14 +529,19 @@
    *
    * @param {object} options
    *   Request settings with the keys of Drupal.Ajax#options.
+   * @param {function} [onCancel]
+   *   Called if the request is cancelled before it is sent, which runs none of
+   *   its callbacks.
    *
    * @return {object}
    *   The native request handle, or the compatibility handle of an explicitly
    *   loaded jQuery adapter.
    */
-  function sendRequest(options) {
+  function sendRequest(options, onCancel) {
     const adapter = Drupal.ajax.compatibility;
-    return adapter ? adapter.send(options) : sendNative(options);
+    return adapter
+      ? adapter.send(options, onCancel)
+      : sendNative(options, onCancel);
   }
 
   /**
@@ -571,31 +591,6 @@
   }
 
   /**
-   * Restores the element if its request is cancelled before it is sent.
-   *
-   * A cancellation runs no callbacks: a beforeSend veto or abort(), or an
-   * abort from an adapter request filter.
-   *
-   * @param {Drupal.Ajax} ajax
-   *   The Ajax object.
-   * @param {object|undefined} request
-   *   The request handle.
-   * @param {function} [undo]
-   *   Undoes other changes made for the attempt.
-   */
-  function restoreOnCancel(ajax, request, undo) {
-    request?.network?.then(
-      ({ status }) => {
-        if (status === 'canceled') {
-          undo?.();
-          restoreElement(ajax);
-        }
-      },
-      () => {},
-    );
-  }
-
-  /**
    * Submits a form with the jQuery Form plugin's sequence of callbacks.
    *
    * @param {HTMLFormElement} form
@@ -635,8 +630,6 @@
       onVeto(false);
       return;
     }
-    // Read after the pre-serialize listeners, which may change it.
-    const traditional = settings.traditional ?? adapter?.defaults().traditional;
     if (
       settings.beforeSerialize &&
       settings.beforeSerialize(formArgument, settings) === false
@@ -644,6 +637,8 @@
       onVeto(true);
       return;
     }
+    // Read after the serialize listeners and callback, which may change it.
+    const traditional = settings.traditional ?? adapter?.defaults().traditional;
 
     const values = formToArray(form);
     let extraQuery;
@@ -752,9 +747,9 @@
           return beforeSend.call(this, xhr, requestSettings);
         }
       };
-      request = sendRequest(upload);
+      request = sendRequest(upload, () => onVeto(true));
     } else {
-      request = sendRequest(settings);
+      request = sendRequest(settings, () => onVeto(true));
     }
 
     adapter?.notify(form, [formArgument, settings], request);
@@ -1429,8 +1424,7 @@
 
     try {
       this.beforeSerialize(this.element, this.options);
-      const request = sendRequest(this.options);
-      restoreOnCancel(this, request);
+      const request = sendRequest(this.options, () => restoreElement(this));
       // Return the request handle so that external code can observe it.
       return request;
     } catch (e) {
@@ -1523,19 +1517,15 @@
 
         // A veto or cancellation undoes what this attempt changed, so it can
         // be retried.
-        const unclick = () => {
+        submitForm(ajax.form, ajax.options, (serialized) => {
           if (ajax.setClick) {
             element.form.clk = null;
           }
-        };
-        const request = submitForm(ajax.form, ajax.options, (serialized) => {
-          unclick();
           restoreElement(ajax, serialized);
         });
-        restoreOnCancel(ajax, request, unclick);
       } else {
         ajax.beforeSerialize(ajax.element, ajax.options);
-        restoreOnCancel(ajax, sendRequest(ajax.options));
+        sendRequest(ajax.options, () => restoreElement(ajax));
       }
     } catch (e) {
       // Unset the ajax.ajaxing flag here because it won't be unset during
@@ -1786,7 +1776,11 @@
     // Sanity check for browser support (object expected).
     // When using iFrame uploads, responses must be returned as a string.
     if (typeof response === 'string') {
-      response = JSON.parse(response);
+      try {
+        response = JSON.parse(response);
+      } catch (e) {
+        return this.error(xmlhttprequest, this.url);
+      }
     }
 
     // Prior to invoking the response's commands, verify that they can be
