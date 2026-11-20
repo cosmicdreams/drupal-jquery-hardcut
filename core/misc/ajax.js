@@ -575,8 +575,10 @@
    *   The Ajax object.
    * @param {boolean} [reattach=true]
    *   Whether to reattach behaviors detached before serialization.
+   * @param {boolean} [cancelled=false]
+   *   Whether the attempt ended before it was sent.
    */
-  function restoreElement(ajax, reattach = true) {
+  function restoreElement(ajax, reattach = true, cancelled = false) {
     ajax.ajaxing = false;
     const prepared = preparedRequests.delete(ajax);
     // Remove the progress element.
@@ -586,8 +588,9 @@
     if (ajax.progress.object) {
       ajax.progress.object.stopMonitoring();
     }
-    // Re-enable the element, if beforeSend disabled it for this attempt.
-    if (prepared) {
+    // Re-enable the element. A cancelled attempt only re-enables it if
+    // beforeSend disabled it.
+    if (!cancelled || prepared) {
       $(ajax.element).prop('disabled', false);
     }
     // Reattach behaviors, if they were detached in beforeSerialize(), and the
@@ -1306,11 +1309,19 @@
       },
       beforeSend(xmlhttprequest, options) {
         ajax.ajaxing = true;
-        preparedRequests.add(ajax);
-        return ajax.beforeSend(nativeRequest(xmlhttprequest), options);
+        const wasDisabled = ajax.element?.disabled;
+        try {
+          return ajax.beforeSend(nativeRequest(xmlhttprequest), options);
+        } finally {
+          // Remember whether this attempt disabled the element.
+          if (!wasDisabled && ajax.element?.disabled) {
+            preparedRequests.add(ajax);
+          }
+        }
       },
       success(response, status, xmlhttprequest) {
         receivedRequests.add(xmlhttprequest);
+        Drupal.ajax.compatibility?.received?.(xmlhttprequest);
         return ajax.receiveResponse(
           response,
           status,
@@ -1440,7 +1451,9 @@
     preparedRequests.delete(this);
     try {
       this.beforeSerialize(this.element, this.options);
-      const request = sendRequest(this.options, () => restoreElement(this));
+      const request = sendRequest(this.options, () =>
+        restoreElement(this, true, true),
+      );
       // Return the request handle so that external code can observe it.
       return request;
     } catch (e) {
@@ -1538,11 +1551,11 @@
           if (ajax.setClick) {
             element.form.clk = null;
           }
-          restoreElement(ajax, serialized);
+          restoreElement(ajax, serialized, true);
         });
       } else {
         ajax.beforeSerialize(ajax.element, ajax.options);
-        sendRequest(ajax.options, () => restoreElement(ajax));
+        sendRequest(ajax.options, () => restoreElement(ajax, true, true));
       }
     } catch (e) {
       // Unset the ajax.ajaxing flag here because it won't be unset during

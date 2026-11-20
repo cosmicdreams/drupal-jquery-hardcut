@@ -485,8 +485,10 @@
   const pendingCompletion = new WeakMap();
   const commandWaiters = new WeakMap();
   const successData = new WeakMap();
-  // Requests sent by this adapter, which delays their events itself.
+  // Requests sent by this adapter, which delays their events itself, and
+  // those whose response Drupal's success callback received.
   const facades = new WeakSet();
+  const received = new WeakSet();
 
   // A raw $.ajax() call can still carry Drupal Ajax settings, so keep delaying
   // its global completion events until the commands have run.
@@ -732,10 +734,12 @@
       attempt(() => jqXHR.statusCode(statusCode));
       statusCode = undefined;
 
-      // Drupal responses run their commands after the success callback. Their
-      // global completion events wait for the commands, as before.
-      const waiting =
-        !failure && fireGlobals && isSuccess && commandsPending(jqXHR, s);
+      // Drupal responses run their commands after Drupal's success callback.
+      // If that callback ran, the global completion events wait for the
+      // commands, as before, even if another callback threw.
+      const queued =
+        isSuccess && received.has(jqXHR) && commandsPending(jqXHR, s);
+      const waiting = fireGlobals && queued;
       if (fireGlobals && !waiting) {
         attempt(() =>
           globalEventContext.trigger(isSuccess ? 'ajaxSuccess' : 'ajaxError', [
@@ -748,15 +752,20 @@
       attempt(() =>
         completeDeferred.fireWith(callbackContext, [jqXHR, statusText]),
       );
-      // The commands promise follows the Drupal command queue.
-      if (failure) {
-        failCommands(failure.error);
-      } else if (
+      // The commands promise follows the Drupal command queue, and reports a
+      // callback failure once the queue has finished.
+      if (
         isSuccess &&
+        received.has(jqXHR) &&
         typeof s.isInProgress === 'function' &&
         s.isInProgress()
       ) {
-        commandWaiters.set(jqXHR, [settleCommands, failCommands]);
+        commandWaiters.set(jqXHR, [
+          failure ? () => failCommands(failure.error) : settleCommands,
+          failCommands,
+        ]);
+      } else if (failure) {
+        failCommands(failure.error);
       } else {
         settleCommands();
       }
@@ -798,16 +807,16 @@
       }
     }
 
-    inspect(prefilters, s, options, jqXHR);
-    if (s.data && s.processData && typeof s.data !== 'string') {
-      s.data = jQuery.param(s.data, s.traditional);
-    }
-    if (completed) {
-      return jqXHR;
-    }
-
-    fireGlobals = jQuery.event && s.global;
     try {
+      inspect(prefilters, s, options, jqXHR);
+      if (s.data && s.processData && typeof s.data !== 'string') {
+        s.data = jQuery.param(s.data, s.traditional);
+      }
+      if (completed) {
+        return jqXHR;
+      }
+
+      fireGlobals = jQuery.event && s.global;
       if (fireGlobals && jQuery.active++ === 0) {
         jQuery.event.trigger('ajaxStart');
       }
@@ -898,8 +907,8 @@
         }
       }
     } catch (e) {
-      // An observer, beforeSend or transport factory threw. Do not send, and
-      // finish the request before reporting the error.
+      // A prefilter, observer, beforeSend or transport factory threw. Do not
+      // send, and finish the request before reporting the error.
       if (!completed) {
         try {
           jqXHR.abort();
@@ -1012,6 +1021,7 @@
         return handle;
       },
       native: (xhr) => nativeRequests.get(xhr) || xhr,
+      received: (xhr) => received.add(xhr),
       defaults: () => jQuery.ajaxSettings,
       wrap: (form) => jQuery(form),
       trigger(form, type, args) {

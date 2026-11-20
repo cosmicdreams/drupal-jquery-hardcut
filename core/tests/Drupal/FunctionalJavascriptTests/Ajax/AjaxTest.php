@@ -977,6 +977,45 @@ JS);
     $this->assertTrue($session->wait(10000, 'Boolean(window.successList) && jQuery.active === 0'));
     $this->assertSame(['first', FALSE, FALSE, FALSE], $session->evaluateScript('window.successList'));
 
+    // A callback that throws after Drupal's success callback leaves the
+    // completion events waiting for the commands, and a success callback that
+    // replaces Drupal's lets them fire at once.
+    $session->executeScript(<<<'JS'
+      const trace = window.statusTrace = [];
+      jQuery(document).on('ajaxSuccess.status ajaxComplete.status ajaxStop.status', (event) => trace.push([event.type, jQuery.active]));
+      const ajax = Drupal.ajax({ url: Drupal.url('ajax-test/echo-header'), progress: false });
+      const insert = ajax.commands.insert;
+      const gate = new Promise((resolve) => {
+        window.releaseStatusCommands = resolve;
+      });
+      ajax.commands.insert = function (...args) {
+        window.statusCommandsWaiting = true;
+        return gate.then(() => insert.apply(this, args));
+      };
+      ajax.options.statusCode = { 200: () => {
+        throw new Error('status');
+      } };
+      ajax.execute().commands.catch((error) => {
+        window.statusResult = [error.message, ajax.ajaxing, trace.map(([type]) => type)];
+      });
+      JS);
+    $this->assertTrue($session->wait(10000, 'window.statusCommandsWaiting === true'));
+    $this->assertSame([], $session->evaluateScript('window.statusTrace'));
+    $this->assertSame(1, $session->evaluateScript('jQuery.active'));
+    $this->assertNull($session->evaluateScript('window.statusResult ?? null'));
+    $session->executeScript('window.releaseStatusCommands();');
+    $this->assertTrue($session->wait(10000, 'Boolean(window.statusResult)'));
+    $this->assertSame(['status', FALSE, ['ajaxSuccess', 'ajaxComplete', 'ajaxStop']], $session->evaluateScript('window.statusResult'));
+    $session->executeScript(<<<'JS'
+      jQuery(document).off('.status');
+      const ajax = Drupal.ajax({ url: Drupal.url('ajax-test/echo-header'), progress: false });
+      ajax.options.success = () => {};
+      ajax.execute().commands.then(() => {
+        window.replacedSuccess = ajax.ajaxing;
+      });
+      JS);
+    $this->assertTrue($session->wait(10000, 'window.replacedSuccess === false && jQuery.active === 0'));
+
     // A throwing start observer does not leave the request counted.
     $this->assertSame([0, FALSE, 'rejected'], $session->evaluateScript(<<<'JS'
       (() => {
@@ -1556,6 +1595,46 @@ JS);
       window.cancelInstance = cancelled;
       JS);
     $this->assertSame([0, 'rejected'], $session->evaluateScript('window.cancelState'));
+
+    // A beforeSend that vetoes without touching a disabled control leaves it
+    // disabled, and a replaced beforeSend that disables it still has it
+    // re-enabled after a failed response.
+    $this->assertTrue($session->evaluateScript(<<<'JS'
+      (() => {
+        const disabled = document.body.appendChild(document.createElement('button'));
+        disabled.disabled = true;
+        const ajax = Drupal.ajax({ element: disabled, url: Drupal.url('ajax-test/echo-request'), event: 'disabled-veto' });
+        ajax.beforeSend = () => false;
+        ajax.execute();
+        return disabled.disabled;
+      })()
+      JS));
+    $session->executeScript(<<<'JS'
+      const failing = document.body.appendChild(document.createElement('button'));
+      window.failingButton = failing;
+      const ajax = Drupal.ajax({ element: failing, url: Drupal.url('ajax-test/native-error-does-not-exist'), event: 'replaced-send' });
+      ajax.options.beforeSend = function (xhr, settings) {
+        return ajax.beforeSend(xhr, settings);
+      };
+      ajax.execute();
+      window.replacedDisabled = failing.disabled;
+      JS);
+    $this->assertTrue($session->evaluateScript('window.replacedDisabled'));
+    $this->assertTrue($session->wait(10000, '!window.failingButton.disabled && jQuery.active === 0'));
+
+    // A throwing prefilter on a form submission restores the form.
+    $session->executeScript(<<<'JS'
+      const fixture = window.throwingFixture = window.buildForm('prefilter-throw', false);
+      let throwNext = true;
+      jQuery.ajaxPrefilter(() => {
+        if (throwNext) {
+          throwNext = false;
+          throw new Error('prefilter');
+        }
+      });
+      fixture.trigger();
+      JS);
+    $this->assertTrue($session->evaluateScript('window.restored(window.throwingFixture)'));
 
     // An early cancellation leaves a control that started disabled alone.
     $this->assertTrue($session->evaluateScript(<<<'JS'
