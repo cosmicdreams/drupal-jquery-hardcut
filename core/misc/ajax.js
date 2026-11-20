@@ -1,6 +1,6 @@
 /**
  * @file
- * Provides Ajax page updating via jQuery $.ajax.
+ * Provides Ajax page updating.
  *
  * Ajax is a method of making a request via JavaScript while viewing an HTML
  * page. The request returns an array of commands encoded in JSON, which is
@@ -11,6 +11,8 @@
  * included to provide Ajax capabilities.
  */
 
+// cspell:ignore nocontent notmodified
+
 (function (
   $,
   window,
@@ -19,6 +21,604 @@
   loadjs,
   { isFocusable, tabbable },
 ) {
+  const rCRLF = /\r?\n/g;
+  const rBracket = /\[\]$/;
+  const multipartType = 'multipart/form-data';
+  const builtinTypes = {
+    '[object Boolean]': 'boolean',
+    '[object Number]': 'number',
+    '[object String]': 'string',
+    '[object Function]': 'function',
+    '[object Array]': 'array',
+    '[object Date]': 'date',
+    '[object RegExp]': 'regexp',
+    '[object Object]': 'object',
+    '[object Error]': 'error',
+    '[object Symbol]': 'symbol',
+  };
+  const accepts = {
+    '*': '*/*',
+    text: 'text/plain',
+    html: 'text/html',
+    xml: 'application/xml, text/xml',
+    json: 'application/json, text/javascript',
+    script:
+      'text/javascript, application/javascript, application/ecmascript, application/x-ecmascript',
+  };
+
+  /**
+   * Returns the type name used by the pinned jQuery.param().
+   *
+   * @param {*} value
+   *   The value to inspect.
+   *
+   * @return {string}
+   *   The type name.
+   */
+  function typeOf(value) {
+    if (value == null) {
+      return `${value}`;
+    }
+    return typeof value === 'object' || typeof value === 'function'
+      ? builtinTypes[Object.prototype.toString.call(value)] || 'object'
+      : typeof value;
+  }
+
+  /**
+   * Checks for an object created by an object literal or Object.create(null).
+   *
+   * @param {*} value
+   *   The value to inspect.
+   *
+   * @return {boolean}
+   *   Whether the value is a plain object.
+   */
+  function isPlainObject(value) {
+    if (Object.prototype.toString.call(value) !== '[object Object]') {
+      return false;
+    }
+    const prototype = Object.getPrototypeOf(value);
+    return (
+      !prototype ||
+      (Object.prototype.hasOwnProperty.call(prototype, 'constructor') &&
+        prototype.constructor === Object)
+    );
+  }
+
+  /**
+   * Deeply copies plain objects and arrays as jQuery.extend(true, ...) did.
+   *
+   * @param {object} target
+   *   The object to copy into.
+   * @param {...object} sources
+   *   The objects to copy from, in order.
+   *
+   * @return {object}
+   *   The target.
+   */
+  function extendDeep(target, ...sources) {
+    sources.forEach((source) => {
+      // eslint-disable-next-line no-restricted-syntax, guard-for-in
+      for (const name in source) {
+        const copy = source[name];
+        if (name !== '__proto__' && target !== copy) {
+          const copyIsArray = Array.isArray(copy);
+          if (copy && (copyIsArray || isPlainObject(copy))) {
+            const current = target[name];
+            let clone;
+            if (copyIsArray) {
+              clone = Array.isArray(current) ? current : [];
+            } else {
+              clone = isPlainObject(current) ? current : {};
+            }
+            target[name] = extendDeep(clone, copy);
+          } else if (copy !== undefined) {
+            target[name] = copy;
+          }
+        }
+      }
+    });
+    return target;
+  }
+
+  /**
+   * Adds one value or nested structure to a parameter list.
+   *
+   * @param {string} prefix
+   *   The parameter name.
+   * @param {*} value
+   *   The value.
+   * @param {function(string, *)} add
+   *   Adds one encoded pair.
+   */
+  function buildParams(prefix, value, add) {
+    if (Array.isArray(value)) {
+      value.forEach((item, index) => {
+        if (rBracket.test(prefix)) {
+          add(prefix, item);
+        } else {
+          buildParams(
+            `${prefix}[${typeof item === 'object' && item != null ? index : ''}]`,
+            item,
+            add,
+          );
+        }
+      });
+    } else if (typeOf(value) === 'object') {
+      // eslint-disable-next-line no-restricted-syntax, guard-for-in
+      for (const name in value) {
+        buildParams(`${prefix}[${name}]`, value[name], add);
+      }
+    } else {
+      add(prefix, value);
+    }
+  }
+
+  /**
+   * Encodes data as the pinned jQuery.param() did, without traditional mode.
+   *
+   * @param {object|Array<{name: string, value: *}>} data
+   *   An object, or a list of name and value pairs.
+   *
+   * @return {string}
+   *   The encoded parameters.
+   *
+   * @internal
+   */
+  function param(data) {
+    const parts = [];
+    const add = (key, valueOrFunction) => {
+      const value =
+        typeof valueOrFunction === 'function'
+          ? valueOrFunction()
+          : valueOrFunction;
+      parts.push(
+        `${encodeURIComponent(key)}=${encodeURIComponent(value == null ? '' : value)}`,
+      );
+    };
+    if (data == null) {
+      return '';
+    }
+    if (Array.isArray(data) || (data.jquery && !isPlainObject(data))) {
+      Array.from(data).forEach(({ name, value }) => add(name, value));
+    } else {
+      // eslint-disable-next-line no-restricted-syntax, guard-for-in
+      for (const prefix in data) {
+        buildParams(prefix, data[prefix], add);
+      }
+    }
+    return parts.join('&');
+  }
+
+  /**
+   * Returns the value a form control submits, as the jQuery Form plugin did.
+   *
+   * @param {HTMLElement} element
+   *   The form control.
+   * @param {boolean} [successful=true]
+   *   Whether to return null for a control that would not be submitted.
+   *
+   * @return {string|Array<string>|null}
+   *   The value, the selected values of a multiple select, or null.
+   *
+   * @internal
+   */
+  function fieldValue(element, successful = true) {
+    const { name, type } = element;
+    const tag = element.tagName.toLowerCase();
+    if (
+      successful &&
+      (!name ||
+        element.disabled ||
+        type === 'reset' ||
+        type === 'button' ||
+        ((type === 'checkbox' || type === 'radio') && !element.checked) ||
+        ((type === 'submit' || type === 'image') &&
+          element.form &&
+          element.form.clk !== element) ||
+        (tag === 'select' && element.selectedIndex === -1))
+    ) {
+      return null;
+    }
+    if (tag === 'select') {
+      const index = element.selectedIndex;
+      if (index < 0) {
+        return null;
+      }
+      const values = [];
+      const one = type === 'select-one';
+      const max = one ? index + 1 : element.options.length;
+      for (let i = one ? index : 0; i < max; i++) {
+        const option = element.options[i];
+        if (option.selected && !option.disabled) {
+          if (one) {
+            return option.value;
+          }
+          values.push(option.value);
+        }
+      }
+      return values;
+    }
+    const { value } = element;
+    return (
+      typeof value === 'string' ? value.replace(/\r/g, '') : `${value ?? ''}`
+    ).replace(rCRLF, '\r\n');
+  }
+
+  /**
+   * Collects the successful controls of a form in the jQuery Form plugin order.
+   *
+   * @param {HTMLFormElement} form
+   *   The form, including its clicked control in `form.clk`.
+   *
+   * @return {Array<{name: string, value: *, type: (string|undefined), required: (boolean|undefined)}>}
+   *   The submitted entries.
+   *
+   * @internal
+   */
+  function formToArray(form) {
+    const values = [];
+    Array.from(form.elements).forEach((element) => {
+      const { name } = element;
+      if (!name || element.disabled) {
+        return;
+      }
+      const value = fieldValue(element);
+      if (Array.isArray(value)) {
+        value.forEach((item) => values.push({ name, value: item }));
+      } else if (element.type === 'file') {
+        if (element.files.length) {
+          Array.from(element.files).forEach((file) =>
+            values.push({ name, value: file, type: element.type }),
+          );
+        } else {
+          values.push({ name, value: '', type: element.type });
+        }
+      } else if (value !== null && value !== undefined) {
+        values.push({
+          name,
+          value,
+          type: element.type,
+          required: element.required,
+        });
+      }
+    });
+    const { clk } = form;
+    if (clk && clk.name && !clk.disabled && clk.type === 'image') {
+      values.push(
+        { name: clk.name, value: clk.value },
+        { name: `${clk.name}.x`, value: form.clk_x },
+        { name: `${clk.name}.y`, value: form.clk_y },
+      );
+    }
+    return values;
+  }
+
+  /**
+   * Calls one callback or a list of callbacks.
+   *
+   * @param {function|Array<function>|undefined} callbacks
+   *   The callbacks.
+   * @param {object} context
+   *   The value of `this`.
+   * @param {Array} args
+   *   The arguments.
+   *
+   * @return {*}
+   *   The result of the last callback.
+   */
+  function callAll(callbacks, context, args) {
+    let result;
+    [callbacks].flat(Infinity).forEach((callback) => {
+      if (typeof callback === 'function') {
+        result = callback.apply(context, args);
+      }
+    });
+    return result;
+  }
+
+  /**
+   * Sends request settings through the native request transport.
+   *
+   * @param {object} options
+   *   Request settings with the keys of Drupal.Ajax#options.
+   *
+   * @return {{network: Promise, commands: Promise, abort: function}}
+   *   The request handle.
+   */
+  function sendNative(options) {
+    const settings = { ...options };
+    const context = settings.context || settings;
+    settings.type = (settings.method || settings.type || 'GET').toUpperCase();
+    settings.hasContent = !/^(?:GET|HEAD)$/.test(settings.type);
+    const dataType = (settings.dataType || '*').toLowerCase().split(/\s+/)[0];
+    let { contentType } = settings;
+    if (contentType === undefined) {
+      contentType = 'application/x-www-form-urlencoded; charset=UTF-8';
+    }
+    Object.keys(settings.headers || {}).forEach((name) => {
+      if (name.toLowerCase() === 'content-type') {
+        contentType = settings.headers[name] || '';
+      }
+    });
+    let processData = settings.processData !== false;
+    if (
+      typeof settings.data !== 'string' &&
+      !isPlainObject(settings.data) &&
+      !Array.isArray(settings.data) &&
+      !('processData' in options)
+    ) {
+      processData = false;
+    }
+    if (settings.data instanceof FormData) {
+      contentType = false;
+    }
+    if (settings.data && processData && typeof settings.data !== 'string') {
+      settings.data = param(settings.data);
+    }
+
+    let url = `${settings.url || window.location.href}`;
+    if (!settings.hasContent) {
+      const hashIndex = url.indexOf('#');
+      const hash = hashIndex < 0 ? '' : url.slice(hashIndex);
+      url = hashIndex < 0 ? url : url.slice(0, hashIndex);
+      if (settings.data && (processData || typeof settings.data === 'string')) {
+        url += (url.includes('?') ? '&' : '?') + settings.data;
+        delete settings.data;
+      }
+      if (settings.cache === false) {
+        url = url.replace(/([?&])_=[^&]*/, '$1');
+        url += `${url.includes('?') ? '&' : '?'}_=${Date.now()}`;
+      }
+      url += hash;
+    } else if (
+      settings.data &&
+      processData &&
+      `${contentType || ''}`.startsWith('application/x-www-form-urlencoded')
+    ) {
+      settings.data = settings.data.replace(/%20/g, '+');
+    }
+    settings.url = url;
+
+    const headers = new Headers();
+    if (
+      (settings.data && settings.hasContent && contentType !== false) ||
+      options.contentType
+    ) {
+      headers.set('Content-Type', contentType);
+    }
+    headers.set(
+      'Accept',
+      accepts[dataType]
+        ? accepts[dataType] + (dataType !== '*' ? ', */*; q=0.01' : '')
+        : accepts['*'],
+    );
+    Object.entries(settings.headers || {}).forEach(([name, value]) => {
+      headers.set(name, value);
+    });
+
+    return Drupal.ajaxRequest(
+      {
+        url,
+        method: settings.type,
+        async: settings.async !== false,
+        headers,
+        body: () => (settings.hasContent && settings.data) || null,
+        beforeSend(xhr) {
+          if (settings.timeout > 0) {
+            xhr.timeout = settings.timeout;
+          }
+          if (
+            settings.beforeSend &&
+            settings.beforeSend.call(context, xhr, settings) === false
+          ) {
+            return false;
+          }
+        },
+      },
+      ({ status, response, error, xhr }) => {
+        // As in jQuery, a request cancelled before sending has no callbacks.
+        if (status === 'canceled') {
+          return;
+        }
+        let result;
+        if (['success', 'notmodified', 'nocontent'].includes(status)) {
+          result = callAll(settings.success, context, [response, status, xhr]);
+        } else {
+          callAll(settings.error, context, [xhr, status, error]);
+        }
+        callAll(settings.complete, context, [xhr, status]);
+        return result;
+      },
+    );
+  }
+
+  /**
+   * Sends Drupal Ajax request settings.
+   *
+   * @param {object} options
+   *   Request settings with the keys of Drupal.Ajax#options.
+   *
+   * @return {object}
+   *   The native request handle, or the compatibility handle of an explicitly
+   *   loaded jQuery adapter.
+   */
+  function sendRequest(options) {
+    const adapter = Drupal.ajax.compatibility;
+    return adapter ? adapter.send(options) : sendNative(options);
+  }
+
+  /**
+   * Returns a handle for a request that failed before it was sent.
+   *
+   * @param {Error} error
+   *   The failure.
+   *
+   * @return {object}
+   *   A rejected request handle.
+   */
+  function rejectedRequest(error) {
+    const adapter = Drupal.ajax.compatibility;
+    if (adapter) {
+      return adapter.rejected();
+    }
+    const failed = Promise.reject(error);
+    failed.catch(() => {});
+    return { network: failed, commands: failed, abort() {} };
+  }
+
+  /**
+   * Submits a form with the jQuery Form plugin's sequence of callbacks.
+   *
+   * @param {HTMLFormElement} form
+   *   The form.
+   * @param {object} options
+   *   Request settings with the keys of Drupal.Ajax#options.
+   *
+   * @return {object|undefined}
+   *   The request handle, or undefined if a callback vetoed the submission.
+   */
+  function submitForm(form, options) {
+    const adapter = Drupal.ajax.compatibility;
+    // Callbacks receive the form, or the jQuery collection the jQuery Form
+    // plugin passed when an explicitly loaded adapter is present.
+    const formArgument = adapter ? adapter.wrap(form) : form;
+    const method =
+      options.method || options.type || form.getAttribute('method');
+    const action = options.url || form.getAttribute('action');
+    let url = (typeof action === 'string' ? action.trim() : '') || '';
+    url = url || window.location.href || '';
+    url = (url.match(/^([^#]+)/) || [])[1];
+    const settings = extendDeep(
+      { url, type: method || 'GET', iframeSrc: 'about:blank' },
+      options,
+    );
+
+    const veto = {};
+    adapter?.trigger(form, 'form-pre-serialize', [
+      formArgument,
+      settings,
+      veto,
+    ]);
+    if (veto.veto) {
+      return;
+    }
+    if (
+      settings.beforeSerialize &&
+      settings.beforeSerialize(formArgument, settings) === false
+    ) {
+      return;
+    }
+
+    const values = formToArray(form);
+    let extraQuery;
+    if (settings.data) {
+      const data =
+        typeof settings.data === 'function'
+          ? settings.data(values)
+          : settings.data;
+      settings.extraData = data;
+      extraQuery = param(data);
+    }
+    if (
+      settings.beforeSubmit &&
+      settings.beforeSubmit(values, formArgument, settings) === false
+    ) {
+      return;
+    }
+    adapter?.trigger(form, 'form-submit-validate', [
+      values,
+      formArgument,
+      settings,
+      veto,
+    ]);
+    if (veto.veto) {
+      return;
+    }
+
+    let query = param(values);
+    if (extraQuery) {
+      query = query ? `${query}&${extraQuery}` : extraQuery;
+    }
+    if (settings.type.toUpperCase() === 'GET') {
+      settings.url += (settings.url.includes('?') ? '&' : '?') + query;
+      settings.data = null;
+    } else {
+      settings.data = query;
+    }
+
+    const { success, error, complete } = settings;
+    settings.success = function (data, status, xhr) {
+      return callAll(success, settings.context || this, [
+        data,
+        status,
+        xhr || formArgument,
+        formArgument,
+      ]);
+    };
+    if (error) {
+      settings.error = function (xhr, status, thrown) {
+        return error.apply(settings.context || this, [
+          xhr,
+          status,
+          thrown,
+          formArgument,
+        ]);
+      };
+    }
+    if (complete) {
+      settings.complete = function (xhr, status) {
+        return complete.apply(settings.context || this, [
+          xhr,
+          status,
+          formArgument,
+        ]);
+      };
+    }
+
+    const hasFiles = Array.from(form.querySelectorAll('input[type=file]')).some(
+      (input) => input.matches(':enabled') && input.value !== '',
+    );
+    const multipart =
+      form.getAttribute('enctype') === multipartType ||
+      form.getAttribute('encoding') === multipartType;
+    let request;
+    if (hasFiles || multipart) {
+      const body = new FormData();
+      values.forEach(({ name, value }) => body.append(name, value));
+      if (settings.extraData) {
+        // Matches the plugin's decoding of jQuery.param() output.
+        param(settings.extraData)
+          .split('&')
+          .forEach((pair) => {
+            const [name, value] = pair.replace(/\+/g, ' ').split('=');
+            body.append(decodeURIComponent(name), decodeURIComponent(value));
+          });
+      }
+      settings.data = null;
+      const upload = extendDeep({}, settings, {
+        contentType: false,
+        processData: false,
+        cache: false,
+        type: method || 'POST',
+      });
+      upload.data = null;
+      const { beforeSend } = upload;
+      upload.beforeSend = function (xhr, requestSettings) {
+        requestSettings.data = settings.formData || body;
+        if (beforeSend) {
+          beforeSend.call(this, xhr, requestSettings);
+        }
+      };
+      request = sendRequest(upload);
+    } else {
+      request = sendRequest(settings);
+    }
+
+    adapter?.trigger(form, 'form-submit-notify', [formArgument, settings]);
+    return request;
+  }
+
   /**
    * Attaches the Ajax behavior to each Ajax form element.
    *
@@ -197,7 +797,7 @@
   Drupal.AjaxError.prototype.constructor = Drupal.AjaxError;
 
   /**
-   * Provides Ajax page updating via jQuery $.ajax.
+   * Provides Ajax page updating.
    *
    * This function is designed to improve developer experience by wrapping the
    * initialization of {@link Drupal.Ajax} objects and storing all created
@@ -462,13 +1062,15 @@
      */
     this.elementSettings = elementSettings;
 
-    // If there isn't a form, jQuery.ajax() will be used instead, allowing us to
-    // bind Ajax to links as well.
+    // Without a form, the request is sent directly, allowing us to bind Ajax
+    // to links as well.
     if (this.element?.form) {
       /**
-       * @type {jQuery}
+       * The form submitted with the request.
+       *
+       * @type {HTMLFormElement}
        */
-      this.$form = $(this.element.form);
+      this.form = this.element.form;
     }
 
     // If no Ajax callback URL was given, use the link href or form action.
@@ -477,7 +1079,7 @@
       if (this.element.tagName === 'A') {
         this.url = $element.attr('href');
       } else if (this.element && element.form) {
-        this.url = this.$form.attr('action');
+        this.url = this.form.getAttribute('action') ?? undefined;
       }
     }
 
@@ -557,12 +1159,9 @@
       },
       success(response, status, xmlhttprequest) {
         return ajax.receiveResponse(response, status, xmlhttprequest, () => {
-          // The global completion events follow the command queue.
-          $(document).trigger('ajaxSuccess', [xmlhttprequest, this]);
-          $(document).trigger('ajaxComplete', [xmlhttprequest, this]);
-          if (--$.active === 0) {
-            $(document).trigger('ajaxStop');
-          }
+          // An explicitly loaded jQuery adapter projects the global completion
+          // events after the command queue.
+          Drupal.ajax.compatibility?.commandsComplete(xmlhttprequest, this);
         });
       },
       error(xmlhttprequest, status, error) {
@@ -656,9 +1255,10 @@
    * an event to respond to.
    *
    * @return {object}
-   *   Returns the jQuery.Deferred object underlying the Ajax request. If
-   *   pre-serialization fails, the Deferred will be returned in the rejected
-   *   state.
+   *   The request handle, with `network` and `commands` promises and an
+   *   `abort()` method. With an explicitly loaded jQuery adapter, the jqXHR
+   *   object underlying the request. If pre-serialization fails, the handle is
+   *   rejected.
    */
   Drupal.Ajax.prototype.execute = function () {
     // Do not perform another ajax command if one is already in progress.
@@ -668,8 +1268,8 @@
 
     try {
       this.beforeSerialize(this.element, this.options);
-      // Return the jqXHR so that external code can hook into the Deferred API.
-      return $.ajax(this.options);
+      // Return the request handle so that external code can observe it.
+      return sendRequest(this.options);
     } catch (e) {
       // Unset the ajax.ajaxing flag here because it won't be unset during
       // the complete response.
@@ -677,9 +1277,9 @@
       window.alert(
         `An error occurred while attempting to process ${this.options.url}: ${e.message}`,
       );
-      // For consistency, return a rejected Deferred (i.e., jqXHR's superclass)
-      // so that calling code can take appropriate action.
-      return $.Deferred().reject();
+      // For consistency, return a rejected handle so that calling code can
+      // take appropriate action.
+      return rejectedRequest(e);
     }
   };
 
@@ -747,7 +1347,7 @@
     }
 
     try {
-      if (ajax.$form) {
+      if (ajax.form) {
         // If setClick is set, we must set this to ensure that the button's
         // value is passed.
         if (ajax.setClick) {
@@ -758,10 +1358,10 @@
           element.form.clk = element;
         }
 
-        ajax.$form.ajaxSubmit(ajax.options);
+        submitForm(ajax.form, ajax.options);
       } else {
         ajax.beforeSerialize(ajax.element, ajax.options);
-        $.ajax(ajax.options);
+        sendRequest(ajax.options);
       }
     } catch (e) {
       // Unset the ajax.ajaxing flag here because it won't be unset during
@@ -787,12 +1387,10 @@
   Drupal.Ajax.prototype.beforeSerialize = function (element, options) {
     // Allow detaching behaviors to update field values before collecting them.
     // This is only needed when field values are added to the POST data, so only
-    // when there is a form such that this.$form.ajaxSubmit() is used instead of
-    // $.ajax(). When there is no form and $.ajax() is used, beforeSerialize()
-    // isn't called, but don't rely on that: explicitly check this.$form.
-    if (this.$form && document.body.contains(this.$form.get(0))) {
+    // when there is a form. Explicitly check this.form.
+    if (this.form && document.body.contains(this.form)) {
       const settings = this.settings || drupalSettings;
-      Drupal.detachBehaviors(this.$form.get(0), settings, 'serialize');
+      Drupal.detachBehaviors(this.form, settings, 'serialize');
     }
 
     // Inform Drupal that this is an AJAX request.
@@ -844,7 +1442,7 @@
     // There is no simple way to know which submission mechanism will be used,
     // so we add to extraData regardless, and allow it to be ignored in the
     // former case.
-    if (this.$form) {
+    if (this.form) {
       options.extraData = options.extraData || {};
 
       // Let the server know when the IFRAME submission mechanism is used. The
@@ -857,7 +1455,7 @@
       // that value is included in the submission. As per above, submissions
       // that use $.ajax() are already serialized prior to the element being
       // disabled, so this is only needed for IFRAME submissions.
-      const v = $.fieldValue(this.element);
+      const v = fieldValue(this.element);
       if (v !== null) {
         options.extraData[this.element.name] = v;
       }
@@ -1156,9 +1754,9 @@
           // attachBehaviors() called on the new content from processing the
           // response commands is not sufficient, because behaviors from the
           // entire form need to be reattached.
-          if (this.$form && document.body.contains(this.$form.get(0))) {
+          if (this.form && document.body.contains(this.form)) {
             const settings = this.settings || drupalSettings;
-            Drupal.attachBehaviors(this.$form.get(0), settings);
+            Drupal.attachBehaviors(this.form, settings);
           }
           // Remove any response-specific settings so they don't get used on the
           // next call by mistake.
@@ -1238,9 +1836,9 @@
     $(this.element).prop('disabled', false);
     // Reattach behaviors, if they were detached in beforeSerialize(), and the
     // form is still part of the document.
-    if (this.$form && document.body.contains(this.$form.get(0))) {
+    if (this.form && document.body.contains(this.form)) {
       const settings = this.settings || drupalSettings;
-      Drupal.attachBehaviors(this.$form.get(0), settings);
+      Drupal.attachBehaviors(this.form, settings);
     }
     throw new Drupal.AjaxError(xmlhttprequest, uri, customMessage);
   };
@@ -1895,48 +2493,13 @@
   };
 
   /**
-   * Delay jQuery's global completion events until after commands have executed.
+   * The request adapter of an explicitly loaded jQuery instance, if any.
    *
-   * jQuery triggers the ajaxSuccess, ajaxComplete, and ajaxStop events after
-   * a successful response is returned and local success and complete events
-   * are triggered. However, Drupal Ajax responses contain commands that run
-   * asynchronously in a queue, so the following stops these events from getting
-   * triggered until after the Promise that executes the command queue is
-   * resolved.
+   * @type {object|null}
+   *
+   * @internal
    */
-  const stopEvent = (xhr, settings) => {
-    return (
-      // Only interfere with Drupal's Ajax responses.
-      xhr.getResponseHeader('X-Drupal-Ajax-Token') === '1' &&
-      // The isInProgress() function might not be defined if the Ajax request
-      // was initiated without Drupal.ajax() or new Drupal.Ajax().
-      typeof settings.isInProgress === 'function' &&
-      // Until this is false, the Ajax request isn't completely done (the
-      // response's commands might still be running).
-      settings.isInProgress()
-    );
-  };
-  $.extend(true, $.event.special, {
-    ajaxSuccess: {
-      trigger(event, xhr, settings) {
-        if (stopEvent(xhr, settings)) {
-          return false;
-        }
-      },
-    },
-    ajaxComplete: {
-      trigger(event, xhr, settings) {
-        if (stopEvent(xhr, settings)) {
-          // jQuery decrements its internal active ajax counter even when we
-          // stop the ajaxComplete event, but we don't want that counter
-          // decremented, because for our purposes this request is still active
-          // while commands are executing. By incrementing it here, the net
-          // effect is that it remains unchanged. By remaining above 0, the
-          // ajaxStop event is also prevented.
-          $.active++;
-          return false;
-        }
-      },
-    },
-  });
+  Drupal.ajax.compatibility = Drupal.ajax.compatibility ?? null;
+
+  document.dispatchEvent(new CustomEvent('drupal:ajax-ready'));
 })(jQuery, window, Drupal, drupalSettings, loadjs, window.tabbable);

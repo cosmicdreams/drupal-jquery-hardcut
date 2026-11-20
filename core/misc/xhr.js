@@ -18,8 +18,9 @@
    *   Whether the request is asynchronous.
    * @param {HeadersInit} [options.headers]
    *   The HTTP headers.
-   * @param {XMLHttpRequestBodyInit|Document|null} [options.body=null]
-   *   The encoded request body.
+   * @param {XMLHttpRequestBodyInit|Document|function|null} [options.body=null]
+   *   The encoded request body, or a function that returns it after
+   *   beforeSend has run.
    * @param {function(XMLHttpRequest, Headers): (boolean|undefined)} [options.beforeSend]
    *   Configures the opened request, attaches listeners, or changes the
    *   headers. Return false to cancel sending it.
@@ -52,7 +53,7 @@
     requestHeaders.forEach((value, name) => {
       request.setRequestHeader(name, value);
     });
-    request.send(body);
+    request.send(typeof body === 'function' ? body() : body);
     return request;
   };
 
