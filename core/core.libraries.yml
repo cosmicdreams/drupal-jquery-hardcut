@@ -234,6 +234,7 @@ drupal.ajax:
     - core/tabbable
     - core/loadjs
     - core/drupal.message
+    - core/drupal.xhr
 
 drupal.announce:
   version: VERSION
@@ -686,6 +687,7 @@ jquery:
     assets/vendor/jquery/jquery.min.js: { preprocess: false, minified: true, preserve_override_order: true }
     misc/jquery.no-conflict.js: { preprocess: false, minified: false }
     misc/jquery.drupal-bc.js: { preprocess: false, minified: false }
+    misc/jquery.drupal-ajax-bc.js: { preprocess: false, minified: false }
 
 internal.jquery.form:
   # Internal library. Do not depend on it outside core nor add new core usage.
