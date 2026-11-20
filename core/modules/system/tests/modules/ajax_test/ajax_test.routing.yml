@@ -137,6 +137,20 @@ ajax_test.echo_request:
   requirements:
     _access: 'TRUE'
 
+ajax_test.native_request:
+  path: '/ajax-test/native-request'
+  defaults:
+    _controller: '\Drupal\ajax_test\Controller\AjaxTestController::nativeRequest'
+  requirements:
+    _access: 'TRUE'
+
+ajax_test.echo_native_request:
+  path: '/ajax-test/echo-native-request'
+  defaults:
+    _controller: '\Drupal\ajax_test\Controller\AjaxTestController::echoNativeRequest'
+  requirements:
+    _access: 'TRUE'
+
 ajax_test.exception_link:
   path: '/ajax-test/exception-link'
   defaults:

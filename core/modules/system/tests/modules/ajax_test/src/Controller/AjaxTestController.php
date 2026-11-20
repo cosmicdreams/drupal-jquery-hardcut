@@ -436,27 +436,51 @@ class AjaxTestController {
   }
 
   /**
-   * Returns the request method and encoded payload in an Ajax command.
+   * Loads the shared transport for a test page.
+   */
+  public function nativeRequest(): array {
+    return [
+      '#markup' => 'Native request test',
+      '#attached' => ['library' => ['core/drupal.xhr']],
+    ];
+  }
+
+  /**
+   * Returns the request method and payload as an Ajax command.
    */
   public function echoRequest(Request $request): AjaxResponse {
-    $upload = $request->files->get('upload');
     $response = new AjaxResponse();
     $response->addCommand(new HtmlCommand('#request-lane-echo', [
-      '#plain_text' => json_encode([
-        'method' => $request->getMethod(),
-        'query' => $request->server->get('QUERY_STRING'),
-        'body' => $request->getContent(),
-        'requestedWith' => $request->headers->get('X-Requested-With'),
-        'contentType' => $request->headers->get('Content-Type'),
-        'fields' => $request->request->all(),
-        'upload' => $upload instanceof UploadedFile ? [
-          $upload->getClientOriginalName(),
-          $upload->getSize(),
-          hash_file('sha256', $upload->getPathname()),
-        ] : NULL,
-      ], JSON_THROW_ON_ERROR),
+      '#plain_text' => json_encode($this->getRequestData($request), JSON_THROW_ON_ERROR),
     ]));
     return $response;
+  }
+
+  /**
+   * Returns the request method and payload as JSON.
+   */
+  public function echoNativeRequest(Request $request): JsonResponse {
+    return new JsonResponse($this->getRequestData($request));
+  }
+
+  /**
+   * Collects the request method, headers, fields, and uploaded file details.
+   */
+  private function getRequestData(Request $request): array {
+    $upload = $request->files->get('upload');
+    return [
+      'method' => $request->getMethod(),
+      'query' => $request->server->get('QUERY_STRING'),
+      'body' => $request->getContent(),
+      'requestedWith' => $request->headers->get('X-Requested-With'),
+      'contentType' => $request->headers->get('Content-Type'),
+      'fields' => $request->request->all(),
+      'upload' => $upload instanceof UploadedFile ? [
+        $upload->getClientOriginalName(),
+        $upload->getSize(),
+        hash_file('sha256', $upload->getPathname()),
+      ] : NULL,
+    ];
   }
 
   /**

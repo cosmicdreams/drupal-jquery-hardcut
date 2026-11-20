@@ -368,6 +368,113 @@ JS;
   }
 
   /**
+   * Tests the shared transport on a page without jQuery.
+   */
+  public function testNativeRequestTransport(): void {
+    $this->drupalGet('ajax-test/native-request');
+    $session = $this->getSession();
+
+    // The response and the load callback are available before control returns.
+    $this->assertSame([
+      'undefined',
+      200,
+      'GET',
+      'tag=a%20b',
+      'XMLHttpRequest',
+      TRUE,
+    ], $session->evaluateScript(<<<'JS'
+      (() => {
+        let loaded = false;
+        const request = Drupal.xhr({
+          url: 'echo-native-request?tag=a%20b',
+          async: false,
+          beforeSend(xhr) {
+            xhr.addEventListener('load', () => { loaded = true; });
+          },
+        });
+        const response = JSON.parse(request.responseText);
+        return [
+          typeof jQuery, request.status, response.method, response.query,
+          response.requestedWith, loaded,
+        ];
+      })()
+      JS));
+
+    $session->executeScript(<<<'JS'
+      const body = new FormData();
+      body.append('tags[]', 'a b');
+      body.append('tags[]', '+&');
+      body.append('upload', new File(['hello'], 'payload.txt'));
+      Drupal.xhr({
+        url: Drupal.url('ajax-test/echo-native-request'),
+        method: 'POST',
+        headers: { 'x-requested-with': 'explicit' },
+        body,
+        beforeSend(xhr, headers) {
+          const originalHeader = headers.get('X-Requested-With');
+          headers.set('X-Requested-With', 'changed');
+          xhr.responseType = 'json';
+          xhr.addEventListener('load', () => {
+            window.nativeRequestResult = [originalHeader, xhr.status, xhr.response];
+          });
+        },
+      });
+      JS);
+    $this->assertTrue($session->wait(10000, 'Boolean(window.nativeRequestResult)'));
+    [$header, $status, $response] = $session->evaluateScript('window.nativeRequestResult');
+    $this->assertSame('explicit', $header);
+    $this->assertSame(200, $status);
+    $this->assertSame('POST', $response['method']);
+    $this->assertSame('changed', $response['requestedWith']);
+    $this->assertStringStartsWith('multipart/form-data; boundary=', $response['contentType']);
+    $this->assertSame(['a b', '+&'], $response['fields']['tags']);
+    $this->assertSame(['payload.txt', 5, hash('sha256', 'hello')], $response['upload']);
+
+    $this->assertSame([TRUE, 0, NULL], $session->evaluateScript(<<<'JS'
+      (() => {
+        const url = Drupal.url('ajax-test/echo-native-request');
+        const send = XMLHttpRequest.prototype.send;
+        let sends = 0;
+        XMLHttpRequest.prototype.send = function (...args) {
+          sends++;
+          return send.apply(this, args);
+        };
+        try {
+          const vetoed = Drupal.xhr({ url, beforeSend: () => false });
+          const otherOrigin = new URL(url, document.baseURI);
+          otherOrigin.port = otherOrigin.port === '1234' ? '1235' : '1234';
+          let crossOriginHeader;
+          Drupal.xhr({
+            url: otherOrigin.href,
+            beforeSend(xhr, headers) {
+              crossOriginHeader = headers.get('X-Requested-With');
+              return false;
+            },
+          });
+          return [vetoed.readyState === XMLHttpRequest.OPENED, sends, crossOriginHeader];
+        }
+        finally {
+          XMLHttpRequest.prototype.send = send;
+        }
+      })()
+      JS));
+
+    $this->assertTrue($session->evaluateScript(<<<'JS'
+      (() => {
+        let aborted = false;
+        const request = Drupal.xhr({
+          url: Drupal.url('ajax-test/echo-native-request'),
+          beforeSend(xhr) {
+            xhr.addEventListener('abort', () => { aborted = true; });
+          },
+        });
+        request.abort();
+        return aborted;
+      })()
+      JS));
+  }
+
+  /**
    * Tests header mutation and abort in a global Ajax send handler.
    */
   public function testAjaxSendHeaderAndAbort(): void {
