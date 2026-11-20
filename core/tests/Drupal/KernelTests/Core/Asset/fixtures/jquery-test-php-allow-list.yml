@@ -13,6 +13,7 @@
   literals:
     "core/assets/vendor/jquery/jquery.min.js": 1
     "core/jquery": 1
+    "core/misc/jquery.drupal-ajax-bc.js": 1
     "core/misc/jquery.drupal-bc.js": 1
     "core/misc/jquery.no-conflict.js": 1
 - path: core/tests/Drupal/KernelTests/Core/Asset/CoreLibraryDiscoveryTrait.php
@@ -27,6 +28,7 @@
   literals:
     "core/assets/vendor/jquery/jquery.min.js": 2
     "core/internal.jquery.form": 1
+    "core/misc/jquery.drupal-ajax-bc.js": 2
     "core/misc/jquery.drupal-bc.js": 2
     "core/misc/jquery.form.js": 1
     "core/misc/jquery.no-conflict.js": 2
@@ -34,6 +36,7 @@
   removal: Z (Drupal 13)
   literals:
     "core/assets/vendor/jquery/jquery.min.js": 1
+    "core/misc/jquery.drupal-ajax-bc.js": 1
     "core/misc/jquery.drupal-bc.js": 1
     "core/misc/jquery.no-conflict.js": 1
 - path: core/tests/Drupal/KernelTests/Core/Asset/JqueryFreeLibrariesTest.php

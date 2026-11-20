@@ -151,7 +151,7 @@ class JqueryFreeAssetsTest extends KernelTestBase {
    */
   private static function isLegacyAssetPath(string $path): bool {
     return preg_match(
-      '~(?:^|/)(?:assets/vendor/jquery[^/]*/|css/components/jquery\.ui/|misc/(?:jquery\.form|position|jquery\.drupal-bc|jquery\.no-conflict)\.js(?:$|[?#])|jquery(?:[.-]ui)?(?:[.-]\d[\d.]*)?(?:\.min)?\.(?:js|css)(?:$|[?#]))~i',
+      '~(?:^|/)(?:assets/vendor/jquery[^/]*/|css/components/jquery\.ui/|misc/(?:jquery\.form|position|jquery\.drupal-(?:ajax-)?bc|jquery\.no-conflict)\.js(?:$|[?#])|jquery(?:[.-]ui)?(?:[.-]\d[\d.]*)?(?:\.min)?\.(?:js|css)(?:$|[?#]))~i',
       $path,
     ) === 1;
   }
