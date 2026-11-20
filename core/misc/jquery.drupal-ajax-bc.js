@@ -389,6 +389,9 @@
     );
   }
 
+  // Requests waiting for their commands, keyed by request facade.
+  const pendingCompletion = new WeakMap();
+
   // A raw $.ajax() call can still carry Drupal Ajax settings, so keep delaying
   // its global completion events until the commands have run.
   jQuery.extend(true, jQuery.event.special, {
@@ -404,14 +407,12 @@
         if (commandsPending(xhr, settings)) {
           // Keep the request counted while its commands run.
           jQuery.active++;
+          pendingCompletion.set(xhr, true);
           return false;
         }
       },
     },
   });
-
-  // Requests waiting for their commands, keyed by request facade.
-  const pendingCompletion = new WeakMap();
 
   /**
    * Sends Drupal Ajax request settings following jQuery.ajax().
@@ -429,6 +430,8 @@
     let timeoutTimer;
     let completed;
     let cacheURL;
+    // As in jQuery, globals stay off until the prefilters have run.
+    let fireGlobals;
     let strAbort = 'canceled';
     const s = jQuery.ajaxSetup({}, options);
     const callbackContext = s.context || s;
@@ -583,7 +586,6 @@
       jqXHR.statusCode(statusCode);
       statusCode = undefined;
 
-      const fireGlobals = jQuery.event && s.global;
       // Drupal responses run their commands after the success callback. Their
       // global completion events wait for the commands, as before.
       const waiting = fireGlobals && isSuccess && commandsPending(jqXHR, s);
@@ -630,7 +632,7 @@
       return jqXHR;
     }
 
-    const fireGlobals = jQuery.event && s.global;
+    fireGlobals = jQuery.event && s.global;
     if (fireGlobals && jQuery.active++ === 0) {
       jQuery.event.trigger('ajaxStart');
     }

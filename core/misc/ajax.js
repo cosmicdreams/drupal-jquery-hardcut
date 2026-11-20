@@ -405,7 +405,8 @@
         headers,
         body: () => (settings.hasContent && settings.data) || null,
         beforeSend(xhr) {
-          if (settings.timeout > 0) {
+          // A synchronous request cannot have a timeout.
+          if (settings.async !== false && settings.timeout > 0) {
             xhr.timeout = settings.timeout;
           }
           if (

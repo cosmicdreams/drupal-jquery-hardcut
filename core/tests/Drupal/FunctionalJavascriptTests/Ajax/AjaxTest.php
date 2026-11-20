@@ -747,6 +747,46 @@ JS);
   }
 
   /**
+   * Tests adapter accounting for a prefilter abort and a raw jQuery request.
+   */
+  public function testAdapterAbortAndRawRequest(): void {
+    $this->drupalGet('ajax-test/global-events');
+    $session = $this->getSession();
+    $session->executeScript(<<<'JS'
+      const trace = [];
+      window.adapterTrace = trace;
+      jQuery(document).on(
+        'ajaxStart.adapter ajaxSend.adapter ajaxError.adapter ajaxSuccess.adapter ajaxComplete.adapter ajaxStop.adapter',
+        (event) => trace.push([event.type, jQuery.active]),
+      );
+      let abortNext = true;
+      jQuery.ajaxPrefilter((settings, original, request) => {
+        if (abortNext) {
+          abortNext = false;
+          request.abort();
+        }
+      });
+      // A prefilter abort happens before the global events start.
+      const handle = Drupal.ajax({ url: Drupal.url('ajax-test/echo-header') }).execute();
+      window.prefilterAbort = [handle.state(), jQuery.active, trace.length];
+      // A raw jQuery request with Drupal Ajax settings delays its completion
+      // events until the commands have run.
+      const ajax = Drupal.ajax({ url: Drupal.url('ajax-test/echo-header') });
+      ajax.beforeSerialize(ajax.element, ajax.options);
+      jQuery.ajax(ajax.options);
+      JS);
+    $this->assertSame(['rejected', 0, 0], $session->evaluateScript('window.prefilterAbort'));
+    $this->assertTrue($session->wait(10000, 'window.adapterTrace.some(([type]) => type === "ajaxStop")'));
+    $this->assertSame([
+      ['ajaxStart', 1],
+      ['ajaxSend', 1],
+      ['ajaxSuccess', 1],
+      ['ajaxComplete', 1],
+      ['ajaxStop', 0],
+    ], $session->evaluateScript('window.adapterTrace'));
+  }
+
+  /**
    * Tests the order of Ajax settings, prefilters, and a custom transport.
    */
   public function testAjaxSettingsAndTransport(): void {
