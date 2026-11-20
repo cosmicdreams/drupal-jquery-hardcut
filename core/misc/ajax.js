@@ -1324,7 +1324,10 @@
           return ajax.error(nativeRequest(xmlhttprequest), ajax.url);
         }
         // An abort, with any status text, or a timeout.
-        if (!['success', 'notmodified', 'nocontent'].includes(status)) {
+        if (
+          !['success', 'notmodified', 'nocontent'].includes(status) ||
+          !xmlhttprequest.status
+        ) {
           restoreElement(ajax);
         }
       },

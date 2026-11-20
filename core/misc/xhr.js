@@ -87,6 +87,8 @@
    *
    * @param {object} options
    *   Transport options passed to Drupal.xhr.
+   * @param {function} [options.canceled]
+   *   Called if beforeSend cancels the request or throws.
    * @param {function} receive
    *   Handles the network result and returns any pending command work.
    *
@@ -147,6 +149,11 @@
         let proceed;
         try {
           proceed = options.beforeSend?.(xhr, headers);
+        } catch (error) {
+          // The request is not sent; let the caller undo its preparations.
+          settle('canceled');
+          options.canceled?.();
+          throw error;
         } finally {
           xhr.abort = prepared;
         }

@@ -53,6 +53,10 @@
       if (s.cache === undefined) {
         s.cache = false;
       }
+      // Requests handled with a script tag are GET requests.
+      if (canUseScriptTag(s)) {
+        s.type = 'GET';
+      }
     },
     jsonp(s) {
       if (s.jsonp !== false || s.dataTypes[0] === 'jsonp') {
@@ -158,6 +162,69 @@
     };
   }
 
+  /**
+   * Tests whether jQuery would load a script with a script tag.
+   *
+   * @param {object} s
+   *   The effective request settings.
+   *
+   * @return {boolean}
+   *   Whether to use a script tag.
+   */
+  function canUseScriptTag(s) {
+    return (
+      !!s.scriptAttrs ||
+      (!s.headers &&
+        (s.crossDomain || (s.async && !s.dataTypes.includes('json'))))
+    );
+  }
+
+  /**
+   * Loads a script with a script tag, as jQuery's script transport does.
+   *
+   * @param {object} s
+   *   The effective request settings.
+   *
+   * @return {{send: function, abort: function}|undefined}
+   *   The transport, if a script tag can be used.
+   */
+  function scriptTransport(s) {
+    if (!canUseScriptTag(s)) {
+      return undefined;
+    }
+    let script;
+    let callback;
+    return {
+      send(headers, complete) {
+        script = document.createElement('script');
+        Object.entries(s.scriptAttrs || {}).forEach(([name, value]) => {
+          script.setAttribute(name, value);
+        });
+        if (s.scriptCharset) {
+          script.charset = s.scriptCharset;
+        }
+        script.src = s.url;
+        callback = (event) => {
+          script.removeEventListener('load', callback);
+          script.removeEventListener('error', callback);
+          script.remove();
+          callback = null;
+          if (event) {
+            complete(event.type === 'error' ? 404 : 200, event.type);
+          }
+        };
+        script.addEventListener('load', callback);
+        script.addEventListener('error', callback);
+        document.head.appendChild(script);
+      },
+      abort() {
+        if (callback) {
+          callback();
+        }
+      },
+    };
+  }
+
   // The native request behind each request facade, for core callbacks.
   const nativeRequests = new WeakMap();
 
@@ -168,7 +235,7 @@
   };
   const transports = {
     '*': [nativeTransport],
-    script: [() => undefined],
+    script: [scriptTransport],
   };
 
   /**
@@ -822,7 +889,12 @@
       // An observer, beforeSend or transport factory threw. Do not send, and
       // finish the request before reporting the error.
       if (!completed) {
-        jqXHR.abort();
+        try {
+          jqXHR.abort();
+        } catch (secondary) {
+          // Keep the original error; report the one from the cleanup.
+          window.reportError(secondary);
+        }
       }
       throw e;
     }

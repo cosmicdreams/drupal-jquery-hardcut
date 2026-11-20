@@ -946,7 +946,7 @@ JS);
         configure(ajax);
         const handle = ajax.execute();
         Promise.allSettled([handle.network, handle.commands]).then(([network, commands]) => {
-          window.failureResults[name] = [network.value.status, commands.reason?.message ?? commands.reason?.name, ajax.ajaxing];
+          window.failureResults[name] = [network.value.status, commands.reason?.name === 'AjaxError' ? 'AjaxError' : commands.reason?.message, ajax.ajaxing];
         });
       };
       run('filter', (ajax) => {
@@ -961,8 +961,7 @@ JS);
     $this->assertTrue($session->wait(10000, 'Object.keys(window.failureResults).length === 2 && jQuery.active === 0'));
     $results = $session->evaluateScript('window.failureResults');
     $this->assertSame(['parsererror', 'filter', FALSE], $results['filter']);
-    $this->assertSame('success', $results['string'][0]);
-    $this->assertFalse($results['string'][2]);
+    $this->assertSame(['success', 'AjaxError', FALSE], $results['string']);
 
     // A throwing start observer does not leave the request counted.
     $this->assertSame([0, FALSE, 'rejected'], $session->evaluateScript(<<<'JS'
@@ -1144,6 +1143,30 @@ JS);
     $this->assertTrue($session->wait(10000, 'Boolean(window.quietResult)'));
     $this->assertSame([0, 0], $session->evaluateScript('window.quietResult'));
 
+    // A script request with attributes uses a script tag, as jQuery did.
+    $session->executeScript(<<<'JS'
+      window.scriptTags = [];
+      const observer = new MutationObserver((records) => {
+        records.forEach(({ addedNodes }) => addedNodes.forEach((node) => {
+          if (node.nodeName === 'SCRIPT' && node.src.includes('ajax-script-transport')) {
+            window.scriptTags.push(node.nonce || node.getAttribute('nonce'));
+          }
+        }));
+      });
+      observer.observe(document.head, { childList: true });
+      Drupal.ajax.compatibility.send({
+        url: `${Drupal.url('ajax-test/echo-header')}?ajax-script-transport`,
+        type: 'POST',
+        dataType: 'script',
+        scriptAttrs: { nonce: 'test-nonce' },
+        global: false,
+      }).always((data, status, xhr) => {
+        window.scriptResult = [status, window.scriptTags];
+      });
+      JS);
+    $this->assertTrue($session->wait(10000, 'Boolean(window.scriptResult)'));
+    $this->assertSame([['test-nonce']], array_slice($session->evaluateScript('window.scriptResult'), 1));
+
     // A raw jQuery request and a Drupal request share one start and stop.
     $session->executeScript(<<<'JS'
       jQuery.ajax({ url: Drupal.url('ajax-test/echo-header'), dataType: 'json' });
@@ -1259,6 +1282,36 @@ JS);
     $this->assertTrue($session->wait(10000, 'Boolean(window.nativeAbort && window.nativeCancel)'));
     $this->assertSame(['abort', FALSE, FALSE, FALSE], $session->evaluateScript('window.nativeAbort'));
     $this->assertSame(['canceled', FALSE, FALSE], $session->evaluateScript('window.nativeCancel'));
+
+    // A request made synchronous in beforeSend runs its callbacks before
+    // returning, and a throwing beforeSend restores the element.
+    $this->assertSame([TRUE, FALSE, FALSE, FALSE], $session->evaluateScript(<<<'JS'
+      (() => {
+        window.alert = () => {};
+        const sync = Drupal.ajax({ url: Drupal.url('ajax-test/echo-request'), progress: false });
+        const { beforeSend, success } = sync.options;
+        let ran = false;
+        sync.options.beforeSend = function (xhr, settings) {
+          settings.async = false;
+          return beforeSend.call(this, xhr, settings);
+        };
+        sync.options.success = function (...args) {
+          ran = true;
+          return success.apply(this, args);
+        };
+        sync.execute();
+
+        const button = document.body.appendChild(document.createElement('button'));
+        const throwing = Drupal.ajax({ element: button, url: Drupal.url('ajax-test/echo-request'), event: 'native-throw' });
+        const prototypeBeforeSend = throwing.beforeSend;
+        throwing.beforeSend = function (...args) {
+          prototypeBeforeSend.apply(this, args);
+          throw new Error('before send');
+        };
+        throwing.execute();
+        return [ran, throwing.ajaxing, button.disabled, Boolean(button.nextElementSibling?.classList.contains('ajax-progress'))];
+      })()
+      JS));
 
     // The response is classified by the method beforeSend chose.
     $session->executeScript(<<<'JS'
@@ -1457,6 +1510,30 @@ JS);
       observed.execute();
       window.observerState = [window.adapterSends, observed.ajaxing, button.disabled, jQuery.active];
 
+      // A throwing beforeSend and a throwing transport factory.
+      const throwing = make('adapter-throwing');
+      const { beforeSend } = throwing;
+      throwing.beforeSend = function (...args) {
+        beforeSend.apply(this, args);
+        throw new Error('before send');
+      };
+      throwing.execute();
+      let failFactory = true;
+      jQuery.ajaxTransport('json', () => {
+        if (failFactory) {
+          failFactory = false;
+          throw new Error('factory');
+        }
+      });
+      make('adapter-factory').execute();
+      window.throwState = [window.adapterSends, throwing.ajaxing, button.disabled, Boolean(button.nextElementSibling?.classList.contains('ajax-progress')), jQuery.active];
+
+      // An abort whose status text reads like success still restores.
+      jQuery(document).one('ajaxSend', (event, xhr) => xhr.abort('success'));
+      const misnamed = make('adapter-misnamed');
+      misnamed.execute();
+      window.misnamedState = [misnamed.ajaxing, button.disabled, Boolean(button.nextElementSibling?.classList.contains('ajax-progress'))];
+
       const custom = make('adapter-custom');
       custom.execute().abort('cancelled');
       window.customState = [custom.ajaxing, button.disabled, Boolean(button.nextElementSibling?.classList.contains('ajax-progress')), jQuery.active];
@@ -1466,6 +1543,8 @@ JS);
     $this->assertSame([0, 'rejected'], $session->evaluateScript('window.cancelState'));
     $this->assertSame([0, FALSE, FALSE, 0], $session->evaluateScript('window.observerState'));
     $this->assertSame([FALSE, FALSE, FALSE, 0], $session->evaluateScript('window.customState'));
+    $this->assertSame([0, FALSE, FALSE, FALSE, 0], $session->evaluateScript('window.throwState'));
+    $this->assertSame([FALSE, FALSE, FALSE], $session->evaluateScript('window.misnamedState'));
     $this->assertTrue($session->wait(10000, '!window.cancelInstance.ajaxing && !window.cancelButton.disabled'));
 
     // A failed command still restores focus and behaviors, and finishes.
