@@ -16,7 +16,12 @@
         const tz = new Intl.DateTimeFormat().resolvedOptions().timeZone;
         // Ensure that the timezone value returned by the browser is supported
         // by the server.
-        if (tz && $(timezone).find(`option[value="${tz}"]`).length) {
+        if (
+          tz &&
+          timezone.some((select) =>
+            select.querySelector(`option[value="${CSS.escape(tz)}"]`),
+          )
+        ) {
           timezone.forEach((item) => {
             item.value = tz;
           });
