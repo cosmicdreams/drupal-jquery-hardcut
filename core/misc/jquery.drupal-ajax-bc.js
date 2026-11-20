@@ -13,7 +13,7 @@
  *   native Ajax lifecycle, request handle, form element or request options.
  */
 
-// cspell:ignore nocontent notmodified prefilter prefilters
+// cspell:ignore jqxhr nocontent notmodified prefilter prefilters
 ((jQuery) => {
   if (typeof jQuery !== 'function' || !jQuery.ajaxSettings) {
     return;
@@ -79,18 +79,29 @@
    *
    * @param {object} s
    *   The effective request settings.
+   * @param {object} original
+   *   The settings passed by the caller.
+   * @param {object} jqXHR
+   *   The request facade.
    *
    * @return {{send: function, abort: function}}
    *   A transport with the interface of jQuery's XMLHttpRequest transport.
    */
-  function nativeTransport(s) {
+  function nativeTransport(s, original, jqXHR) {
     let callback;
     return {
+      native: true,
       send(headers, complete) {
+        const request = nativeRequests.get(jqXHR);
+        // Header writes during beforeSend went to the facade; send them now.
+        delete request?.setRequestHeader;
         window.Drupal.xhr({
+          request,
           url: s.url,
           method: s.type,
           async: s.async,
+          username: s.username,
+          password: s.password,
           headers,
           body: () => (s.hasContent && s.data) || null,
           beforeSend(xhr) {
@@ -145,6 +156,9 @@
       },
     };
   }
+
+  // The native request behind each request facade, for core callbacks.
+  const nativeRequests = new WeakMap();
 
   const prefilters = {
     '*': [builtinPrefilters.contentType, builtinPrefilters.binaryData],
@@ -393,13 +407,15 @@
   // command promises waiting for the queue, keyed by request facade.
   const pendingCompletion = new WeakMap();
   const commandWaiters = new WeakMap();
+  const successData = new WeakMap();
 
   // A raw $.ajax() call can still carry Drupal Ajax settings, so keep delaying
   // its global completion events until the commands have run.
   jQuery.extend(true, jQuery.event.special, {
     ajaxSuccess: {
-      trigger(event, xhr, settings) {
+      trigger(event, xhr, settings, data) {
         if (commandsPending(xhr, settings)) {
+          successData.set(xhr, data);
           return false;
         }
       },
@@ -409,7 +425,11 @@
         if (commandsPending(xhr, settings)) {
           // Keep the request counted while its commands run.
           jQuery.active++;
-          pendingCompletion.set(xhr, true);
+          pendingCompletion.set(xhr, {
+            target: jQuery(this),
+            settings,
+            data: successData.get(xhr),
+          });
           return false;
         }
       },
@@ -511,12 +531,16 @@
     // The native request handle members, so core sees the same handle type.
     let settleNetwork;
     let settleCommands;
+    let failCommands;
     jqXHR.network = new Promise((resolve) => {
       settleNetwork = resolve;
     });
-    jqXHR.commands = new Promise((resolve) => {
+    jqXHR.commands = new Promise((resolve, reject) => {
       settleCommands = resolve;
+      failCommands = reject;
     });
+    // A failure is reported where it is thrown; callers can still observe it.
+    jqXHR.commands.catch(() => {});
 
     /**
      * Completes the request as jQuery's done() does.
@@ -589,48 +613,76 @@
       }
       jqXHR.status = status;
       jqXHR.statusText = `${nativeStatusText || statusText}`;
-      if (isSuccess) {
-        deferred.resolveWith(callbackContext, [success, statusText, jqXHR]);
-      } else {
-        deferred.rejectWith(callbackContext, [jqXHR, statusText, error]);
-      }
-      jqXHR.statusCode(statusCode);
-      statusCode = undefined;
-
-      // Drupal responses run their commands after the success callback. Their
-      // global completion events wait for the commands, as before.
-      const waiting = fireGlobals && isSuccess && commandsPending(jqXHR, s);
-      if (fireGlobals && !waiting) {
-        globalEventContext.trigger(isSuccess ? 'ajaxSuccess' : 'ajaxError', [
-          jqXHR,
-          s,
-          isSuccess ? success : error,
-        ]);
-      }
+      // As on the native lane, the network result is known before callbacks.
       settleNetwork({
         status: statusText,
         response: success,
         error,
         xhr: jqXHR,
       });
+
+      // Callbacks and observers may throw, as Drupal's error handling does.
+      // Finish the request's bookkeeping first, then rethrow the first error.
+      let failure;
+      const attempt = (callback) => {
+        try {
+          callback();
+        } catch (e) {
+          failure = failure || { error: e };
+        }
+      };
+      attempt(() => {
+        if (isSuccess) {
+          deferred.resolveWith(callbackContext, [success, statusText, jqXHR]);
+        } else {
+          deferred.rejectWith(callbackContext, [jqXHR, statusText, error]);
+        }
+      });
+      attempt(() => jqXHR.statusCode(statusCode));
+      statusCode = undefined;
+
+      // Drupal responses run their commands after the success callback. Their
+      // global completion events wait for the commands, as before.
+      const waiting =
+        !failure && fireGlobals && isSuccess && commandsPending(jqXHR, s);
+      if (fireGlobals && !waiting) {
+        attempt(() =>
+          globalEventContext.trigger(isSuccess ? 'ajaxSuccess' : 'ajaxError', [
+            jqXHR,
+            s,
+            isSuccess ? success : error,
+          ]),
+        );
+      }
+      attempt(() =>
+        completeDeferred.fireWith(callbackContext, [jqXHR, statusText]),
+      );
       // The commands promise follows the Drupal command queue.
-      if (
+      if (failure) {
+        failCommands(failure.error);
+      } else if (
         isSuccess &&
         typeof s.isInProgress === 'function' &&
         s.isInProgress()
       ) {
-        commandWaiters.set(jqXHR, settleCommands);
+        commandWaiters.set(jqXHR, [settleCommands, failCommands]);
       } else {
         settleCommands();
       }
-      completeDeferred.fireWith(callbackContext, [jqXHR, statusText]);
       if (waiting) {
-        pendingCompletion.set(jqXHR, true);
+        pendingCompletion.set(jqXHR, {
+          target: globalEventContext,
+          settings: s,
+          data: success,
+        });
       } else if (fireGlobals) {
-        globalEventContext.trigger('ajaxComplete', [jqXHR, s]);
+        attempt(() => globalEventContext.trigger('ajaxComplete', [jqXHR, s]));
         if (!--jQuery.active) {
-          jQuery.event.trigger('ajaxStop');
+          attempt(() => jQuery.event.trigger('ajaxStop'));
         }
+      }
+      if (failure) {
+        throw failure.error;
       }
     };
 
@@ -711,6 +763,13 @@
     Object.keys(s.headers || {}).forEach((name) => {
       jqXHR.setRequestHeader(name, s.headers[name]);
     });
+    // Core's own callbacks receive the native request. Until it is sent, its
+    // header writes go through the facade, as the jqXHR's would.
+    const request = new XMLHttpRequest();
+    request.setRequestHeader = (name, value) => {
+      jqXHR.setRequestHeader(name, value);
+    };
+    nativeRequests.set(jqXHR, request);
     if (
       s.beforeSend &&
       (s.beforeSend.call(callbackContext, jqXHR, s) === false || completed)
@@ -723,6 +782,10 @@
     jqXHR.fail(s.error);
 
     transport = inspect(transports, s, options, jqXHR);
+    if (!transport?.native) {
+      // A contributed transport has no native request to offer.
+      nativeRequests.delete(jqXHR);
+    }
     if (!transport) {
       done(-1, 'No Transport');
     } else {
@@ -758,20 +821,43 @@
    *   The request facade.
    * @param {object} context
    *   The success callback context.
+   * @param {*} [error]
+   *   The reason the command queue failed, if it did.
    */
-  function commandsComplete(xhr, context) {
-    const settle = commandWaiters.get(xhr);
+  function commandsComplete(xhr, context, error) {
+    const [resolve, reject] = commandWaiters.get(xhr) || [];
     commandWaiters.delete(xhr);
-    if (!pendingCompletion.delete(xhr)) {
-      settle?.();
-      return;
+    const pending = pendingCompletion.get(xhr);
+    pendingCompletion.delete(xhr);
+    let failure;
+    if (pending) {
+      const target = pending.target || jQuery(document);
+      const settings = pending.settings || context;
+      const trigger = (type, args) => {
+        try {
+          target.trigger(type, args);
+        } catch (e) {
+          failure = failure || { error: e };
+        }
+      };
+      trigger('ajaxSuccess', [xhr, settings, pending.data]);
+      trigger('ajaxComplete', [xhr, settings]);
+      if (--jQuery.active === 0) {
+        try {
+          jQuery.event.trigger('ajaxStop');
+        } catch (e) {
+          failure = failure || { error: e };
+        }
+      }
     }
-    jQuery(document).trigger('ajaxSuccess', [xhr, context]);
-    jQuery(document).trigger('ajaxComplete', [xhr, context]);
-    if (--jQuery.active === 0) {
-      jQuery(document).trigger('ajaxStop');
+    if (error === undefined) {
+      resolve?.();
+    } else {
+      reject?.(error);
     }
-    settle?.();
+    if (failure) {
+      throw failure.error;
+    }
   }
 
   // Capture registrations from now on, and still register them with jQuery
@@ -807,11 +893,19 @@
         failed.catch(() => {});
         handle.network = failed;
         handle.commands = failed;
+        handle.abort = () => handle;
         return handle;
       },
+      native: (xhr) => nativeRequests.get(xhr) || xhr,
+      defaults: () => jQuery.ajaxSettings,
       wrap: (form) => jQuery(form),
       trigger(form, type, args) {
         jQuery(form).trigger(type, args);
+      },
+      notify(form, args, request) {
+        // The jQuery Form plugin stored the request before notifying.
+        jQuery(form).removeData('jqxhr').data('jqxhr', request);
+        jQuery(form).trigger('form-submit-notify', args);
       },
     };
     // The jQuery form member is an accessor over the native form.

@@ -9,7 +9,7 @@ use Drupal\FunctionalJavascriptTests\WebDriverTestBase;
 use PHPUnit\Framework\Attributes\Group;
 use PHPUnit\Framework\Attributes\RunTestsInSeparateProcesses;
 
-// cspell:ignore prefilter prefilters
+// cspell:ignore Completeajax handleajax prefilter prefilters Successajax
 /**
  * Tests AJAX responses.
  */
@@ -276,11 +276,11 @@ JS;
           return lane !== 'execute' && lane !== 'veto';
         };
         ajax.beforeSubmit = function (values, element, options) {
-          trace.push(['submit', element[0] === form, options === ajax.options]);
+          trace.push(['submit', element === form, options === ajax.options]);
           return beforeSubmit.call(this, values, element, options);
         };
         ajax.beforeSend = function (xhr, options) {
-          trace.push('send');
+          trace.push(['send', xhr instanceof XMLHttpRequest]);
           if (lane === 'multipart') {
             window.requestLaneParts = Array.from(options.data, ([name, value]) =>
               [name, value instanceof File ? [value.name, value.size] : value],
@@ -307,7 +307,7 @@ JS;
 
     $direct_trace = [
       ['serialize', 'button', TRUE],
-      'send',
+      ['send', TRUE],
       ['success', TRUE, FALSE],
       ['complete', TRUE, FALSE],
     ];
@@ -332,7 +332,7 @@ JS;
         ['serialize', 'form', FALSE],
         ['submit', TRUE, FALSE],
         'form-submit-validate',
-        'send',
+        ['send', TRUE],
         'form-submit-notify',
         ['success', TRUE, TRUE],
         ['complete', TRUE, TRUE],
@@ -454,31 +454,31 @@ JS;
         };
         ajax.options.context = button;
         const { success, complete } = ajax.options;
+        const adapter = Drupal.ajax.compatibility;
         ajax.options.success = function (data, status, xhr, element) {
           trace.push(['success', this === button, xhr instanceof XMLHttpRequest, describe(element)]);
-          return success.apply(this, arguments);
+          const result = success.apply(this, arguments);
+          // Keep the adapter detached until the commands have run.
+          Promise.resolve(result).finally(() => {
+            Drupal.ajax.compatibility = adapter;
+          });
+          return result;
         };
         ajax.options.complete = function (xhr, status, element) {
           trace.push(['complete', this === button, status, describe(element)]);
           return complete.apply(this, arguments);
         };
-        const adapter = Drupal.ajax.compatibility;
         Drupal.ajax.compatibility = null;
-        try {
-          const result = lane === 'execute'
-            ? ajax.execute()
-            : button.dispatchEvent(new Event('request-lane', { bubbles: true, cancelable: true }));
-          window.requestLaneResult = lane === 'execute'
-            ? [typeof result.network.then, typeof result.commands.then, typeof result.abort]
-            : result;
-          if (lane === 'execute') {
-            result.commands.then(() => {
-              window.requestLaneCommands = ajax.ajaxing;
-            });
-          }
-        }
-        finally {
-          Drupal.ajax.compatibility = adapter;
+        const result = lane === 'execute'
+          ? ajax.execute()
+          : button.dispatchEvent(new Event('request-lane', { bubbles: true, cancelable: true }));
+        window.requestLaneResult = lane === 'execute'
+          ? [typeof result.network.then, typeof result.commands.then, typeof result.abort]
+          : result;
+        if (lane === 'execute') {
+          result.commands.then(() => {
+            window.requestLaneCommands = ajax.ajaxing;
+          });
         }
       };
       JS);
@@ -505,7 +505,7 @@ JS;
       $this->assertSame('XMLHttpRequest', $request['requestedWith']);
       $this->assertSame($lane === 'outside' ? 'GET' : 'POST', $request['method']);
       $expected_trace = in_array($lane, ['form', 'multipart'], TRUE) ? $form_trace : $direct_trace;
-      $this->assertTrue($session->wait(10000, 'window.requestLaneTrace.length === ' . count($expected_trace)));
+      $this->assertTrue($session->wait(10000, 'window.requestLaneTrace.length === ' . count($expected_trace) . ' && Boolean(Drupal.ajax.compatibility)'));
       $this->assertSame($expected_trace, $session->evaluateScript('window.requestLaneTrace'));
       if ($lane === 'execute') {
         $this->assertTrue($session->wait(10000, 'window.requestLaneCommands === false'));
@@ -860,10 +860,24 @@ JS);
       // A raw jQuery request with Drupal Ajax settings delays its completion
       // events until the commands have run.
       const ajax = Drupal.ajax({ url: Drupal.url('ajax-test/echo-header') });
+      const insert = ajax.commands.insert;
+      const gate = new Promise((resolve) => {
+        window.releaseRawCommands = resolve;
+      });
+      ajax.commands.insert = function (...args) {
+        window.rawCommandsWaiting = true;
+        return gate.then(() => insert.apply(this, args));
+      };
       ajax.beforeSerialize(ajax.element, ajax.options);
       jQuery.ajax(ajax.options);
       JS);
     $this->assertSame(['rejected', 0, 0], $session->evaluateScript('window.prefilterAbort'));
+    $this->assertTrue($session->wait(10000, 'window.rawCommandsWaiting === true'));
+    $this->assertSame([
+      ['ajaxStart', 1],
+      ['ajaxSend', 1],
+    ], $session->evaluateScript('window.adapterTrace'));
+    $session->executeScript('window.releaseRawCommands();');
     $this->assertTrue($session->wait(10000, 'window.adapterTrace.some(([type]) => type === "ajaxStop")'));
     $this->assertSame([
       ['ajaxStart', 1],
@@ -872,6 +886,238 @@ JS);
       ['ajaxComplete', 1],
       ['ajaxStop', 0],
     ], $session->evaluateScript('window.adapterTrace'));
+  }
+
+  /**
+   * Tests adapter completion after failures and throwing observers.
+   */
+  public function testAdapterFailureCompletion(): void {
+    // The Ajax errors and observer errors are the subject of this test.
+    $this->failOnJavascriptConsoleErrors = FALSE;
+    $this->drupalGet('ajax-test/global-events');
+    $session = $this->getSession();
+    $session->executeScript(<<<'JS'
+      window.failureErrors = [];
+      window.addEventListener('error', (event) => {
+        window.failureErrors.push(event.error?.name ?? event.message);
+      });
+      const trace = window.failureTrace = [];
+      jQuery(document).on(
+        'ajaxStart.failure ajaxSend.failure ajaxError.failure ajaxSuccess.failure ajaxComplete.failure ajaxStop.failure',
+        (event) => trace.push(event.type),
+      );
+      const ajax = Drupal.ajax({ url: Drupal.url('ajax-test/native-error-does-not-exist'), progress: false });
+      ajax.options.statusCode = { 404: () => trace.push('statusCode 404') };
+      const handle = ajax.execute();
+      Promise.allSettled([handle.network, handle.commands]).then(([network, commands]) => {
+        window.adapterFailure = [network.value.status, commands.reason?.name, ajax.ajaxing, jQuery.active];
+      });
+      JS);
+    $this->assertTrue($session->wait(10000, 'Boolean(window.adapterFailure)'));
+    $this->assertSame(['error', 'AjaxError', FALSE, 0], $session->evaluateScript('window.adapterFailure'));
+    $this->assertSame(['ajaxStart', 'ajaxSend', 'statusCode 404', 'ajaxError', 'ajaxComplete', 'ajaxStop'], $session->evaluateScript('window.failureTrace'));
+    $this->assertSame(['AjaxError'], $session->evaluateScript('window.failureErrors'));
+
+    // An observer that throws does not leave the request counted.
+    $session->executeScript(<<<'JS'
+      window.failureTrace.length = 0;
+      jQuery(document).one('ajaxComplete', () => {
+        throw new Error('observer');
+      });
+      const ajax = Drupal.ajax({ url: Drupal.url('ajax-test/echo-header') });
+      ajax.options.dataFilter = (data, type) => {
+        window.failureTrace.push(`dataFilter ${type}`);
+        return data;
+      };
+      ajax.execute().commands.then(() => {
+        window.observerFailure = [jQuery.active, ajax.ajaxing];
+      });
+      JS);
+    $this->assertTrue($session->wait(10000, 'Boolean(window.observerFailure)'));
+    $this->assertSame([0, FALSE], $session->evaluateScript('window.observerFailure'));
+    $this->assertSame(['ajaxStart', 'ajaxSend', 'dataFilter json', 'ajaxSuccess', 'ajaxComplete', 'ajaxStop'], $session->evaluateScript('window.failureTrace'));
+  }
+
+  /**
+   * Tests that a vetoed or aborted request leaves its element usable.
+   */
+  public function testVetoAndAbortCleanup(): void {
+    $this->drupalLogin($this->drupalCreateUser(['access content']));
+    $this->drupalGet('ajax_forms_test_ajax_commands_form');
+    $session = $this->getSession();
+    $session->executeScript(<<<'JS'
+      const fixture = document.createElement('div');
+      fixture.id = 'request-lane';
+      fixture.innerHTML = `
+        <div id="request-lane-echo"></div>
+        <button type="button">Outside the form</button>
+        <form><button name="op" value="clicked">Inside the form</button></form>
+      `;
+      document.body.append(fixture);
+      const form = fixture.querySelector('form');
+      const button = form.querySelector('button');
+      const ajax = Drupal.ajax({
+        element: button,
+        url: Drupal.url('ajax-test/echo-request'),
+        event: 'cleanup-lane',
+        setClick: true,
+      });
+      let vetoes = 1;
+      const { beforeSubmit } = ajax;
+      ajax.beforeSubmit = function (...args) {
+        if (vetoes-- > 0) {
+          return false;
+        }
+        return beforeSubmit.apply(this, args);
+      };
+      const trigger = (element) => element.dispatchEvent(new Event('cleanup-lane', { bubbles: true, cancelable: true }));
+      trigger(button);
+      window.vetoState = [ajax.ajaxing, button.disabled, form.clk ?? null, fixture.querySelectorAll('.ajax-progress').length];
+      // The vetoed attempt can be retried.
+      trigger(button);
+
+      // An abort from a global send handler restores the element.
+      const outside = fixture.querySelector('button');
+      const aborted = Drupal.ajax({
+        element: outside,
+        url: Drupal.url('ajax-test/echo-request'),
+        event: 'cleanup-lane',
+      });
+      const hasProgress = () => Boolean(outside.nextElementSibling?.classList.contains('ajax-progress'));
+      jQuery(document).one('ajaxSend', (event, xhr) => {
+        window.abortProgress = [hasProgress(), outside.disabled];
+        xhr.abort();
+      });
+      trigger(outside);
+      window.abortState = [window.abortProgress, aborted.ajaxing, outside.disabled, hasProgress()];
+      JS);
+    $this->assertSame([FALSE, FALSE, NULL, 0], $session->evaluateScript('window.vetoState'));
+    $this->assertSame([[TRUE, TRUE], FALSE, FALSE, FALSE], $session->evaluateScript('window.abortState'));
+    $this->assertTrue($session->wait(10000, "document.getElementById('request-lane-echo').textContent.length > 0 && jQuery.active === 0"));
+    $request = json_decode($session->evaluateScript("document.getElementById('request-lane-echo').textContent"), TRUE, flags: JSON_THROW_ON_ERROR);
+    $this->assertStringContainsString('op=clicked', $request['body']);
+  }
+
+  /**
+   * Tests native command completion, synchronous requests and late adapters.
+   */
+  public function testNativeRequestCompletion(): void {
+    $this->drupalGet('ajax-test/global-events');
+    $session = $this->getSession();
+    $session->executeScript(<<<'JS'
+      const adapter = Drupal.ajax.compatibility;
+      Drupal.ajax.compatibility = null;
+      const url = Drupal.url('ajax-test/echo-header');
+
+      // Extra success callbacks do not settle the commands early.
+      const ajax = Drupal.ajax({ url });
+      const insert = ajax.commands.insert;
+      const gate = new Promise((resolve) => {
+        window.releaseNativeCommands = resolve;
+      });
+      ajax.commands.insert = function (...args) {
+        return gate.then(() => insert.apply(this, args));
+      };
+      ajax.options.success = [ajax.options.success, () => undefined];
+      const handle = ajax.execute();
+      handle.network.then(() => {
+        window.nativeNetworkDone = true;
+      });
+      handle.commands.then(() => {
+        window.nativeArrayCommands = [ajax.ajaxing, document.getElementById('test_global_events_log').textContent];
+      });
+
+      // A synchronous request runs its callbacks before it returns.
+      const sync = Drupal.ajax({ url, progress: false });
+      sync.options.async = false;
+      const { success } = sync.options;
+      let ran = false;
+      sync.options.success = function (...args) {
+        ran = true;
+        return success.apply(this, args);
+      };
+      sync.execute();
+      window.syncRan = ran;
+      Drupal.ajax.compatibility = adapter;
+      JS);
+    $this->assertTrue($session->evaluateScript('window.syncRan'));
+    $this->assertTrue($session->wait(10000, 'window.nativeNetworkDone === true'));
+    $this->assertNull($session->evaluateScript('window.nativeArrayCommands ?? null'));
+    $session->executeScript('window.releaseNativeCommands();');
+    $this->assertTrue($session->wait(10000, 'Boolean(window.nativeArrayCommands)'));
+    $this->assertFalse($session->evaluateScript('window.nativeArrayCommands[0]'));
+
+    // An adapter that arrives during a native request projects no events.
+    $session->executeScript(<<<'JS'
+      const trace = window.lateTrace = [];
+      jQuery(document).on(
+        'ajaxStart.late ajaxSend.late ajaxSuccess.late ajaxComplete.late ajaxStop.late',
+        (event) => trace.push(event.type),
+      );
+      const adapter = Drupal.ajax.compatibility;
+      Drupal.ajax.compatibility = null;
+      const handle = Drupal.ajax({ url: Drupal.url('ajax-test/echo-header') }).execute();
+      Drupal.ajax.compatibility = adapter;
+      handle.commands.then(() => {
+        window.lateAdapter = [jQuery.active, trace.length];
+      });
+      JS);
+    $this->assertTrue($session->wait(10000, 'Boolean(window.lateAdapter)'));
+    $this->assertSame([0, 0], $session->evaluateScript('window.lateAdapter'));
+  }
+
+  /**
+   * Tests the adapter's form accessor, global option and overlapping requests.
+   */
+  public function testAdapterSurface(): void {
+    $this->drupalGet('ajax-test/global-events');
+    $session = $this->getSession();
+    $this->assertSame([TRUE, TRUE, TRUE, TRUE, TRUE], $session->evaluateScript(<<<'JS'
+      (() => {
+        const form = document.body.appendChild(document.createElement('form'));
+        const other = document.body.appendChild(document.createElement('form'));
+        const button = form.appendChild(document.createElement('button'));
+        const ajax = Drupal.ajax({ element: button, url: Drupal.url('ajax-test/echo-header'), event: 'surface' });
+        const result = [ajax.$form === ajax.$form, ajax.$form[0] === form];
+        const collection = jQuery(other);
+        ajax.$form = collection;
+        result.push(ajax.form === other, ajax.$form === collection);
+        ajax.$form = form;
+        result.push(ajax.$form[0] === form);
+        return result;
+      })()
+      JS));
+
+    $session->executeScript(<<<'JS'
+      const trace = window.surfaceTrace = [];
+      jQuery(document).on(
+        'ajaxStart.surface ajaxSend.surface ajaxSuccess.surface ajaxComplete.surface ajaxStop.surface',
+        (event) => trace.push(event.type),
+      );
+      // A request without global events still completes its commands.
+      const quiet = Drupal.ajax({ url: Drupal.url('ajax-test/echo-header') });
+      quiet.options.global = false;
+      quiet.execute().commands.then(() => {
+        window.quietResult = [jQuery.active, trace.length];
+      });
+      JS);
+    $this->assertTrue($session->wait(10000, 'Boolean(window.quietResult)'));
+    $this->assertSame([0, 0], $session->evaluateScript('window.quietResult'));
+
+    // A raw jQuery request and a Drupal request share one start and stop.
+    $session->executeScript(<<<'JS'
+      jQuery.ajax({ url: Drupal.url('ajax-test/echo-header'), dataType: 'json' });
+      window.overlapActive = jQuery.active;
+      Drupal.ajax({ url: Drupal.url('ajax-test/echo-header') }).execute();
+      window.overlapActive = [window.overlapActive, jQuery.active];
+      JS);
+    $this->assertSame([1, 2], $session->evaluateScript('window.overlapActive'));
+    $this->assertTrue($session->wait(10000, 'window.surfaceTrace.filter((type) => type === "ajaxComplete").length === 2 && jQuery.active === 0'));
+    $trace = $session->evaluateScript('window.surfaceTrace');
+    $this->assertSame(['ajaxStart', 'ajaxSend', 'ajaxSend'], array_slice($trace, 0, 3));
+    $this->assertSame('ajaxStop', end($trace));
+    $this->assertSame(1, count(array_keys($trace, 'ajaxStart', TRUE)));
+    $this->assertSame(1, count(array_keys($trace, 'ajaxStop', TRUE)));
   }
 
   /**

@@ -36,7 +36,7 @@ class CommandsTest extends WebDriverTestBase {
   }
 
   /**
-   * Tests restriping visible rows without changing hidden or nested rows.
+   * Tests striping visible rows again without changing hidden or nested rows.
    */
   public function testRestripeCommand(): void {
     $this->drupalLogin($this->drupalCreateUser(['access content']));
