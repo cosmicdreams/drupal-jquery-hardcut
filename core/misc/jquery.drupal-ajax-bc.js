@@ -389,8 +389,10 @@
     );
   }
 
-  // Requests waiting for their commands, keyed by request facade.
+  // Requests whose global completion events wait for their commands, and
+  // command promises waiting for the queue, keyed by request facade.
   const pendingCompletion = new WeakMap();
+  const commandWaiters = new WeakMap();
 
   // A raw $.ajax() call can still carry Drupal Ajax settings, so keep delaying
   // its global completion events until the commands have run.
@@ -506,6 +508,15 @@
       },
     };
     deferred.promise(jqXHR);
+    // The native request handle members, so core sees the same handle type.
+    let settleNetwork;
+    let settleCommands;
+    jqXHR.network = new Promise((resolve) => {
+      settleNetwork = resolve;
+    });
+    jqXHR.commands = new Promise((resolve) => {
+      settleCommands = resolve;
+    });
 
     /**
      * Completes the request as jQuery's done() does.
@@ -595,6 +606,22 @@
           s,
           isSuccess ? success : error,
         ]);
+      }
+      settleNetwork({
+        status: statusText,
+        response: success,
+        error,
+        xhr: jqXHR,
+      });
+      // The commands promise follows the Drupal command queue.
+      if (
+        isSuccess &&
+        typeof s.isInProgress === 'function' &&
+        s.isInProgress()
+      ) {
+        commandWaiters.set(jqXHR, settleCommands);
+      } else {
+        settleCommands();
       }
       completeDeferred.fireWith(callbackContext, [jqXHR, statusText]);
       if (waiting) {
@@ -733,7 +760,10 @@
    *   The success callback context.
    */
   function commandsComplete(xhr, context) {
+    const settle = commandWaiters.get(xhr);
+    commandWaiters.delete(xhr);
     if (!pendingCompletion.delete(xhr)) {
+      settle?.();
       return;
     }
     jQuery(document).trigger('ajaxSuccess', [xhr, context]);
@@ -741,6 +771,7 @@
     if (--jQuery.active === 0) {
       jQuery(document).trigger('ajaxStop');
     }
+    settle?.();
   }
 
   // Capture registrations from now on, and still register them with jQuery
@@ -770,7 +801,14 @@
     Drupal.ajax.compatibility = {
       send,
       commandsComplete,
-      rejected: () => jQuery.Deferred().reject(),
+      rejected(error) {
+        const handle = jQuery.Deferred().reject();
+        const failed = Promise.reject(error);
+        failed.catch(() => {});
+        handle.network = failed;
+        handle.commands = failed;
+        return handle;
+      },
       wrap: (form) => jQuery(form),
       trigger(form, type, args) {
         jQuery(form).trigger(type, args);

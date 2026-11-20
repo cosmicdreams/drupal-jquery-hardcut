@@ -397,7 +397,7 @@
       headers.set(name, value);
     });
 
-    return Drupal.ajaxRequest(
+    const request = Drupal.ajaxRequest(
       {
         url,
         method: settings.type,
@@ -423,15 +423,29 @@
           return;
         }
         let result;
-        if (['success', 'notmodified', 'nocontent'].includes(status)) {
-          result = callAll(settings.success, context, [response, status, xhr]);
-        } else {
-          callAll(settings.error, context, [xhr, status, error]);
+        try {
+          if (['success', 'notmodified', 'nocontent'].includes(status)) {
+            result = callAll(settings.success, context, [
+              response,
+              status,
+              xhr,
+            ]);
+          } else {
+            callAll(settings.error, context, [xhr, status, error]);
+          }
+          callAll(settings.complete, context, [xhr, status]);
+        } catch (e) {
+          // Report callback errors, such as Drupal.AjaxError, as uncaught
+          // errors, as when they were thrown from the request's load handler.
+          window.reportError(e);
+          throw e;
         }
-        callAll(settings.complete, context, [xhr, status]);
         return result;
       },
     );
+    // The error was reported; callers can still observe the rejection.
+    request.commands.catch(() => {});
+    return request;
   }
 
   /**
@@ -461,7 +475,7 @@
   function rejectedRequest(error) {
     const adapter = Drupal.ajax.compatibility;
     if (adapter) {
-      return adapter.rejected();
+      return adapter.rejected(error);
     }
     const failed = Promise.reject(error);
     failed.catch(() => {});

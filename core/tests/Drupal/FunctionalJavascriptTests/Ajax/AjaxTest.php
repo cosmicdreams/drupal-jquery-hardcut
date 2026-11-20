@@ -536,6 +536,94 @@ JS;
   }
 
   /**
+   * Tests that native request failures surface as uncaught Ajax errors.
+   */
+  public function testNativeRequestError(): void {
+    // The Ajax errors are the subject of this test.
+    $this->failOnJavascriptConsoleErrors = FALSE;
+    $this->drupalLogin($this->drupalCreateUser(['access content']));
+    $this->drupalGet('ajax_forms_test_ajax_commands_form');
+    $session = $this->getSession();
+    $session->executeScript(<<<'JS'
+      window.nativeErrors = [];
+      window.addEventListener('error', (event) => {
+        window.nativeErrors.push(event.error?.name ?? event.message);
+      });
+      window.runNativeFailure = (url) => {
+        window.nativeFailure = null;
+        const adapter = Drupal.ajax.compatibility;
+        // Keep the adapter detached until the request has completed.
+        Drupal.ajax.compatibility = null;
+        const ajax = Drupal.ajax({ url, progress: false });
+        const handle = ajax.execute();
+        handle.commands.then(
+          () => ['resolved'],
+          (error) => ['rejected', error.name, ajax.ajaxing],
+        ).then((result) => {
+          Drupal.ajax.compatibility = adapter;
+          window.nativeFailure = result;
+        });
+      };
+      JS);
+    foreach (['ajax-test/native-error-does-not-exist', 'core/COPYRIGHT.txt'] as $index => $path) {
+      $session->executeScript("window.runNativeFailure(Drupal.url('$path'))");
+      $this->assertTrue($session->wait(10000, 'Boolean(window.nativeFailure)'));
+      $this->assertSame(['rejected', 'AjaxError', FALSE], $session->evaluateScript('window.nativeFailure'));
+      $this->assertSame(array_fill(0, $index + 1, 'AjaxError'), $session->evaluateScript('window.nativeErrors'));
+    }
+  }
+
+  /**
+   * Tests that the adapter handle carries the native request promises.
+   */
+  public function testAdapterRequestHandle(): void {
+    $this->drupalGet('ajax-test/global-events');
+    $session = $this->getSession();
+    $session->executeScript(<<<'JS'
+      const url = Drupal.url('ajax-test/echo-header');
+      const ajax = Drupal.ajax({ url });
+      const insert = ajax.commands.insert;
+      const gate = new Promise((resolve) => {
+        window.releaseAdapterCommands = resolve;
+      });
+      ajax.commands.insert = function (...args) {
+        return gate.then(() => insert.apply(this, args));
+      };
+      ajax.options.headers = { 'X-Test-Ajax-Send': 'adapter handle' };
+      const handle = ajax.execute();
+      window.adapterHandle = [typeof handle.done, typeof handle.network.then, typeof handle.commands.then];
+      handle.network.then(({ status, xhr }) => {
+        window.adapterNetwork = [status, xhr === handle, ajax.ajaxing];
+      });
+      handle.commands.then(() => {
+        window.adapterCommands = [ajax.ajaxing, document.getElementById('test_global_events_log').textContent];
+      });
+
+      // A failure before sending returns a rejected handle.
+      window.alert = () => {};
+      const failing = Drupal.ajax({ url });
+      failing.beforeSerialize = () => {
+        throw new Error('before serialize');
+      };
+      const rejected = failing.execute();
+      window.adapterRejected = [rejected.state()];
+      rejected.commands.catch((error) => {
+        window.adapterRejected.push(error.message);
+      });
+      JS);
+    $this->assertSame(['function', 'function', 'function'], $session->evaluateScript('window.adapterHandle'));
+    $this->assertTrue($session->wait(10000, 'Boolean(window.adapterNetwork)'));
+    $this->assertSame(['success', TRUE, TRUE], $session->evaluateScript('window.adapterNetwork'));
+    $this->assertNull($session->evaluateScript('window.adapterCommands ?? null'));
+    $session->executeScript('window.releaseAdapterCommands();');
+    $this->assertTrue($session->wait(10000, 'Boolean(window.adapterCommands)'));
+    // The delayed global completion events run before the commands promise
+    // settles, and log themselves on this page.
+    $this->assertSame([FALSE, 'adapter handleajaxSuccessajaxCompleteajaxStop'], $session->evaluateScript('window.adapterCommands'));
+    $this->assertSame(['rejected', 'before serialize'], $session->evaluateScript('window.adapterRejected'));
+  }
+
+  /**
    * Tests the shared transport on a page without jQuery.
    */
   public function testNativeRequestTransport(): void {
