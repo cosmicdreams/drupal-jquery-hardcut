@@ -53,6 +53,22 @@
   }
 
   /**
+   * Finds priority headers hidden by the current layout.
+   *
+   * @param {HTMLElement[]} headers
+   *   The table headers.
+   * @return {HTMLElement[]}
+   *   The hidden priority headers in table order.
+   */
+  function hiddenPriorityHeaders(headers) {
+    return headers.filter(
+      (header) =>
+        header.matches('.priority-medium, .priority-low') &&
+        Drupal.elementIsHidden(header),
+    );
+  }
+
+  /**
    * Attach the tableResponsive function to {@link Drupal.behaviors}.
    *
    * @type {Drupal~behavior}
@@ -103,8 +119,8 @@
        */
       eventhandlerEvaluateColumnVisibility(e) {
         const pegged = parseInt(this.$link.data('pegged'), 10);
-        const hiddenLength = this.$headers.filter(
-          '.priority-medium:hidden, .priority-low:hidden',
+        const hiddenLength = hiddenPriorityHeaders(
+          this.$headers.toArray(),
         ).length;
         // If the table has hidden columns, associate an action link with the
         // table to show the columns.
@@ -132,15 +148,22 @@
       eventhandlerToggleColumns(e) {
         e.preventDefault();
         const self = this;
-        const $hiddenHeaders = this.$headers.filter(
-          '.priority-medium:hidden, .priority-low:hidden',
-        );
+        const hiddenHeaders = hiddenPriorityHeaders(this.$headers.toArray());
         this.$revealedCells = this.$revealedCells || $();
         // Reveal hidden columns.
-        if ($hiddenHeaders.length > 0) {
-          $hiddenHeaders.each(function (index, element) {
-            const $header = $(this);
-            const position = $header.prevAll('th').length;
+        if (hiddenHeaders.length > 0) {
+          hiddenHeaders.forEach((header) => {
+            const $header = $(header);
+            let position = 0;
+            for (
+              let sibling = header.previousElementSibling;
+              sibling;
+              sibling = sibling.previousElementSibling
+            ) {
+              if (sibling.matches('th')) {
+                position++;
+              }
+            }
             self.$table.find('tbody tr').each(function () {
               const $cells = $(this).find('td').eq(position);
               $cells.show();
