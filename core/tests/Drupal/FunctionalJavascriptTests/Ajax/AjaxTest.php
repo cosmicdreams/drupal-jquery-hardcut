@@ -224,6 +224,12 @@ JS;
     $this->drupalGet('ajax_forms_test_ajax_commands_form');
     $session = $this->getSession();
     $session->executeScript(<<<'JS'
+      const jqueryAjax = jQuery.ajax;
+      window.jqueryAjaxCalls = 0;
+      jQuery.ajax = function (...args) {
+        window.jqueryAjaxCalls++;
+        return jqueryAjax.apply(this, args);
+      };
       window.runRequestLane = (lane) => {
         document.getElementById('request-lane')?.remove();
         const fixture = document.createElement('div');
@@ -366,6 +372,167 @@ JS;
         }
       }
     }
+    // Core requests use the native transport even with the adapter present.
+    $this->assertSame(0, $session->evaluateScript('window.jqueryAjaxCalls'));
+  }
+
+  /**
+   * Tests the request paths without the jQuery adapter.
+   *
+   * Core requests use the native request path. The jQuery adapter is detached
+   * for each request, so callbacks receive the form element, no jQuery Form
+   * plugin events fire, and jQuery.ajax() is never called.
+   */
+  public function testNativeRequestEntryLanes(): void {
+    $this->drupalLogin($this->drupalCreateUser(['access content']));
+    $this->drupalGet('ajax_forms_test_ajax_commands_form');
+    $session = $this->getSession();
+    $session->executeScript(<<<'JS'
+      const jqueryAjax = jQuery.ajax;
+      window.jqueryAjaxCalls = 0;
+      jQuery.ajax = function (...args) {
+        window.jqueryAjaxCalls++;
+        return jqueryAjax.apply(this, args);
+      };
+      window.runNativeLane = (lane) => {
+        document.getElementById('request-lane')?.remove();
+        const fixture = document.createElement('div');
+        fixture.id = 'request-lane';
+        fixture.innerHTML = `
+          <div id="request-lane-echo"></div>
+          <button type="button">Outside the form</button>
+          <form>
+            <input name="tags[]" value="a b">
+            <input name="tags[]" value="+&amp;">
+            <input name="disabled" value="omit" disabled>
+            <button name="op" value="clicked">Inside the form</button>
+          </form>
+        `;
+        document.body.append(fixture);
+        const form = fixture.querySelector('form');
+        if (lane === 'multipart') {
+          form.enctype = 'multipart/form-data';
+          const input = form.appendChild(document.createElement('input'));
+          input.type = 'file';
+          input.name = 'upload';
+          const transfer = new DataTransfer();
+          transfer.items.add(new File(['test\0upload'], 'payload.txt', { type: 'text/plain' }));
+          input.files = transfer.files;
+        }
+        const button = fixture.querySelector(lane === 'outside' ? 'button' : 'form button');
+        const ajax = Drupal.ajax({
+          element: button,
+          url: Drupal.url('ajax-test/echo-request'),
+          httpMethod: lane === 'outside' ? 'GET' : 'POST',
+          event: 'request-lane',
+          setClick: true,
+          progress: false,
+          submit: { extra: ['a b', '+&'] },
+        });
+        const describe = (element) => {
+          if (element === form) {
+            return 'form';
+          }
+          return element === button ? 'button' : typeof element;
+        };
+        const trace = window.requestLaneTrace = [];
+        jQuery(form).on('form-pre-serialize form-submit-validate form-submit-notify', (event) => {
+          trace.push(event.type);
+        });
+        const { beforeSerialize, beforeSend, beforeSubmit } = ajax;
+        ajax.beforeSerialize = function (element, options) {
+          trace.push(['serialize', describe(element), options === ajax.options]);
+          return beforeSerialize.call(this, element, options);
+        };
+        ajax.beforeSubmit = function (values, element, options) {
+          trace.push(['submit', describe(element)]);
+          return beforeSubmit.call(this, values, element, options);
+        };
+        ajax.beforeSend = function (xhr, options) {
+          trace.push(['send', xhr instanceof XMLHttpRequest]);
+          return beforeSend.call(this, xhr, options);
+        };
+        ajax.options.context = button;
+        const { success, complete } = ajax.options;
+        ajax.options.success = function (data, status, xhr, element) {
+          trace.push(['success', this === button, xhr instanceof XMLHttpRequest, describe(element)]);
+          return success.apply(this, arguments);
+        };
+        ajax.options.complete = function (xhr, status, element) {
+          trace.push(['complete', this === button, status, describe(element)]);
+          return complete.apply(this, arguments);
+        };
+        const adapter = Drupal.ajax.compatibility;
+        Drupal.ajax.compatibility = null;
+        try {
+          const result = lane === 'execute'
+            ? ajax.execute()
+            : button.dispatchEvent(new Event('request-lane', { bubbles: true, cancelable: true }));
+          window.requestLaneResult = lane === 'execute'
+            ? [typeof result.network.then, typeof result.commands.then, typeof result.abort]
+            : result;
+          if (lane === 'execute') {
+            result.commands.then(() => {
+              window.requestLaneCommands = ajax.ajaxing;
+            });
+          }
+        }
+        finally {
+          Drupal.ajax.compatibility = adapter;
+        }
+      };
+      JS);
+
+    $direct_trace = [
+      ['serialize', 'button', TRUE],
+      ['send', TRUE],
+      ['success', TRUE, TRUE, 'undefined'],
+      ['complete', TRUE, 'success', 'undefined'],
+    ];
+    $form_trace = [
+      ['serialize', 'form', FALSE],
+      ['submit', 'form'],
+      ['send', TRUE],
+      ['success', TRUE, TRUE, 'form'],
+      ['complete', TRUE, 'success', 'form'],
+    ];
+    foreach (['execute', 'outside', 'form', 'multipart'] as $lane) {
+      $session->executeScript("window.runNativeLane('$lane')");
+      $expected_result = $lane === 'execute' ? ['function', 'function', 'function'] : FALSE;
+      $this->assertSame($expected_result, $session->evaluateScript('window.requestLaneResult'));
+      $this->assertTrue($session->wait(10000, "document.getElementById('request-lane-echo').textContent.length > 0"));
+      $request = json_decode($session->evaluateScript("document.getElementById('request-lane-echo').textContent"), TRUE, flags: JSON_THROW_ON_ERROR);
+      $this->assertSame('XMLHttpRequest', $request['requestedWith']);
+      $this->assertSame($lane === 'outside' ? 'GET' : 'POST', $request['method']);
+      $expected_trace = in_array($lane, ['form', 'multipart'], TRUE) ? $form_trace : $direct_trace;
+      $this->assertTrue($session->wait(10000, 'window.requestLaneTrace.length === ' . count($expected_trace)));
+      $this->assertSame($expected_trace, $session->evaluateScript('window.requestLaneTrace'));
+      if ($lane === 'execute') {
+        $this->assertTrue($session->wait(10000, 'window.requestLaneCommands === false'));
+      }
+      if ($lane === 'outside') {
+        $this->assertSame('', $request['body']);
+        $this->assertStringContainsString('extra%5B%5D=a%20b&extra%5B%5D=%2B%26', $request['query']);
+        $this->assertStringContainsString('_drupal_ajax=1', $request['query']);
+      }
+      elseif ($lane === 'multipart') {
+        $this->assertStringStartsWith('multipart/form-data; boundary=', $request['contentType']);
+        $this->assertSame(['a b', '+&'], $request['fields']['tags']);
+        $this->assertSame(['a b', '+&'], $request['fields']['extra']);
+        $this->assertSame('clicked', $request['fields']['op']);
+        $this->assertArrayNotHasKey('disabled', $request['fields']);
+        $this->assertSame(['payload.txt', 11, hash('sha256', "test\0upload")], $request['upload']);
+      }
+      else {
+        $this->assertStringContainsString('extra%5B%5D=a+b&extra%5B%5D=%2B%26', $request['body']);
+        $this->assertStringContainsString('_drupal_ajax=1', $request['body']);
+        $this->assertStringNotContainsString('disabled=', $request['body']);
+        if ($lane === 'form') {
+          $this->assertStringStartsWith('tags%5B%5D=a+b&tags%5B%5D=%2B%26&op=clicked&', $request['body']);
+        }
+      }
+    }
+    $this->assertSame(0, $session->evaluateScript('window.jqueryAjaxCalls'));
   }
 
   /**
