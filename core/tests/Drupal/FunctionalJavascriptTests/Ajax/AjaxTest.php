@@ -216,6 +216,158 @@ JS;
   }
 
   /**
+   * Tests the distinct request paths into Drupal Ajax.
+   */
+  public function testRequestEntryLanes(): void {
+    $this->drupalLogin($this->drupalCreateUser(['access content']));
+    $this->drupalGet('ajax_forms_test_ajax_commands_form');
+    $session = $this->getSession();
+    $session->executeScript(<<<'JS'
+      window.runRequestLane = (lane) => {
+        document.getElementById('request-lane')?.remove();
+        const fixture = document.createElement('div');
+        fixture.id = 'request-lane';
+        fixture.innerHTML = `
+          <div id="request-lane-echo"></div>
+          <button type="button">Outside the form</button>
+          <form>
+            <input name="tags[]" value="a b">
+            <input name="tags[]" value="+&amp;">
+            <input name="disabled" value="omit" disabled>
+            <button name="op" value="clicked">Inside the form</button>
+          </form>
+        `;
+        document.body.append(fixture);
+        const form = fixture.querySelector('form');
+        if (lane === 'multipart') {
+          form.enctype = 'multipart/form-data';
+          const input = form.appendChild(document.createElement('input'));
+          input.type = 'file';
+          input.name = 'upload';
+          const transfer = new DataTransfer();
+          transfer.items.add(new File(['test\0upload'], 'payload.txt', { type: 'text/plain' }));
+          input.files = transfer.files;
+        }
+        const button = fixture.querySelector(lane === 'outside' ? 'button' : 'form button');
+        const ajax = Drupal.ajax({
+          element: button,
+          url: Drupal.url('ajax-test/echo-request'),
+          httpMethod: lane === 'outside' ? 'GET' : 'POST',
+          event: 'request-lane',
+          setClick: true,
+          progress: false,
+          submit: { extra: ['a b', '+&'] },
+        });
+        const trace = window.requestLaneTrace = [];
+        jQuery(form).on('form-pre-serialize form-submit-validate form-submit-notify', (event) => {
+          trace.push(event.type);
+        });
+        const { beforeSerialize, beforeSend, beforeSubmit } = ajax;
+        ajax.beforeSerialize = function (element, options) {
+          trace.push(['serialize', element === button ? 'button' : 'form', options === ajax.options]);
+          beforeSerialize.call(this, element, options);
+          return lane !== 'execute' && lane !== 'veto';
+        };
+        ajax.beforeSubmit = function (values, element, options) {
+          trace.push(['submit', element[0] === form, options === ajax.options]);
+          return beforeSubmit.call(this, values, element, options);
+        };
+        ajax.beforeSend = function (xhr, options) {
+          trace.push('send');
+          if (lane === 'multipart') {
+            window.requestLaneParts = Array.from(options.data, ([name, value]) =>
+              [name, value instanceof File ? [value.name, value.size] : value],
+            );
+          }
+          return beforeSend.call(this, xhr, options);
+        };
+        ajax.options.context = button;
+        const { success, complete } = ajax.options;
+        ajax.options.success = function (data, status, xhr, element) {
+          trace.push(['success', this === button, element?.[0] === form]);
+          return success.apply(this, arguments);
+        };
+        ajax.options.complete = function (xhr, status, element) {
+          trace.push(['complete', this === button, element?.[0] === form]);
+          return complete.apply(this, arguments);
+        };
+        const event = new Event('request-lane', { bubbles: true, cancelable: true });
+        window.requestLaneResult = lane === 'execute'
+          ? !!ajax.execute()
+          : button.dispatchEvent(event);
+      };
+      JS);
+
+    $direct_trace = [
+      ['serialize', 'button', TRUE],
+      'send',
+      ['success', TRUE, FALSE],
+      ['complete', TRUE, FALSE],
+    ];
+    foreach (['execute', 'outside', 'form', 'multipart', 'veto'] as $lane) {
+      $session->executeScript("window.runRequestLane('$lane')");
+      $this->assertSame($lane === 'execute', $session->evaluateScript('window.requestLaneResult'));
+      if ($lane === 'veto') {
+        $this->assertSame([
+          'form-pre-serialize',
+          ['serialize', 'form', FALSE],
+        ], $session->evaluateScript('window.requestLaneTrace'));
+        $this->assertSession()->elementTextEquals('css', '#request-lane-echo', '');
+        continue;
+      }
+
+      $this->assertTrue($session->wait(10000, "document.getElementById('request-lane-echo').textContent.length > 0 && jQuery.active === 0"));
+      $request = json_decode($session->evaluateScript("document.getElementById('request-lane-echo').textContent"), TRUE, flags: JSON_THROW_ON_ERROR);
+      $this->assertSame('XMLHttpRequest', $request['requestedWith']);
+      $this->assertSame($lane === 'outside' ? 'GET' : 'POST', $request['method']);
+      $this->assertSame(in_array($lane, ['form', 'multipart'], TRUE) ? [
+        'form-pre-serialize',
+        ['serialize', 'form', FALSE],
+        ['submit', TRUE, FALSE],
+        'form-submit-validate',
+        'send',
+        'form-submit-notify',
+        ['success', TRUE, TRUE],
+        ['complete', TRUE, TRUE],
+      ] : $direct_trace, $session->evaluateScript('window.requestLaneTrace'));
+      if ($lane === 'outside') {
+        $this->assertSame('', $request['body']);
+        $this->assertStringContainsString('extra%5B%5D=a%20b&extra%5B%5D=%2B%26', $request['query']);
+        $this->assertStringContainsString('_drupal_ajax=1', $request['query']);
+      }
+      elseif ($lane === 'multipart') {
+        $this->assertStringStartsWith('multipart/form-data; boundary=', $request['contentType']);
+        $this->assertSame([
+          ['tags[]', 'a b'],
+          ['tags[]', '+&'],
+          ['op', 'clicked'],
+          ['upload', ['payload.txt', 11]],
+          ['extra[]', 'a b'],
+          ['extra[]', '+&'],
+          ['_drupal_ajax', '1'],
+        ], array_slice($session->evaluateScript('window.requestLaneParts'), 0, 7));
+        $this->assertSame(['a b', '+&'], $request['fields']['tags']);
+        $this->assertSame(['a b', '+&'], $request['fields']['extra']);
+        $this->assertSame('clicked', $request['fields']['op']);
+        $this->assertArrayNotHasKey('disabled', $request['fields']);
+        $this->assertSame(['payload.txt', 11, hash('sha256', "test\0upload")], $request['upload']);
+      }
+      else {
+        $this->assertStringContainsString('extra%5B%5D=a+b&extra%5B%5D=%2B%26', $request['body']);
+        $this->assertStringContainsString('_drupal_ajax=1', $request['body']);
+        $this->assertStringNotContainsString('disabled=', $request['body']);
+        if ($lane === 'form') {
+          $this->assertStringStartsWith('tags%5B%5D=a+b&tags%5B%5D=%2B%26&op=clicked&', $request['body']);
+        }
+        else {
+          $this->assertStringNotContainsString('tags%5B%5D=', $request['body']);
+          $this->assertStringNotContainsString('op=', $request['body']);
+        }
+      }
+    }
+  }
+
+  /**
    * Tests header mutation and abort in a global Ajax send handler.
    */
   public function testAjaxSendHeaderAndAbort(): void {

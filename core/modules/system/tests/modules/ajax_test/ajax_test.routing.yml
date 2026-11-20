@@ -130,6 +130,13 @@ ajax_test.echo_header:
   requirements:
     _access: 'TRUE'
 
+ajax_test.echo_request:
+  path: '/ajax-test/echo-request'
+  defaults:
+    _controller: '\Drupal\ajax_test\Controller\AjaxTestController::echoRequest'
+  requirements:
+    _access: 'TRUE'
+
 ajax_test.exception_link:
   path: '/ajax-test/exception-link'
   defaults:

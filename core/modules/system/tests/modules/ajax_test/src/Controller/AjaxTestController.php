@@ -10,6 +10,7 @@ use Drupal\Core\Ajax\AlertCommand;
 use Drupal\Core\Ajax\CloseDialogCommand;
 use Drupal\Core\Ajax\HtmlCommand;
 use Drupal\Core\Url;
+use Symfony\Component\HttpFoundation\File\UploadedFile;
 use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\Response;
@@ -430,6 +431,30 @@ class AjaxTestController {
     $response = new AjaxResponse();
     $response->addCommand(new HtmlCommand('#test_global_events_log', [
       '#plain_text' => $request->headers->get('X-Test-Ajax-Send', 'missing'),
+    ]));
+    return $response;
+  }
+
+  /**
+   * Returns the request method and encoded payload in an Ajax command.
+   */
+  public function echoRequest(Request $request): AjaxResponse {
+    $upload = $request->files->get('upload');
+    $response = new AjaxResponse();
+    $response->addCommand(new HtmlCommand('#request-lane-echo', [
+      '#plain_text' => json_encode([
+        'method' => $request->getMethod(),
+        'query' => $request->server->get('QUERY_STRING'),
+        'body' => $request->getContent(),
+        'requestedWith' => $request->headers->get('X-Requested-With'),
+        'contentType' => $request->headers->get('Content-Type'),
+        'fields' => $request->request->all(),
+        'upload' => $upload instanceof UploadedFile ? [
+          $upload->getClientOriginalName(),
+          $upload->getSize(),
+          hash_file('sha256', $upload->getPathname()),
+        ] : NULL,
+      ], JSON_THROW_ON_ERROR),
     ]));
     return $response;
   }
