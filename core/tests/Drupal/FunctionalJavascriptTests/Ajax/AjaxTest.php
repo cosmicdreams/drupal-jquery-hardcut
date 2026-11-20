@@ -9,6 +9,7 @@ use Drupal\FunctionalJavascriptTests\WebDriverTestBase;
 use PHPUnit\Framework\Attributes\Group;
 use PHPUnit\Framework\Attributes\RunTestsInSeparateProcesses;
 
+// cspell:ignore prefilter prefilters
 /**
  * Tests AJAX responses.
  */
@@ -523,6 +524,83 @@ JS);
     $this->assertSame(['abort'], $session->evaluateScript('window.ajaxSendResult.complete'));
     $this->assertSame('rejected', $session->evaluateScript('window.ajaxSendResult.state'));
     $this->assertSame(0, $session->evaluateScript('window.ajaxSendResult.active'));
+  }
+
+  /**
+   * Tests the order of Ajax settings, prefilters, and a custom transport.
+   */
+  public function testAjaxSettingsAndTransport(): void {
+    $this->drupalGet('ajax-test/global-events');
+    $session = $this->getSession();
+    $session->executeScript(<<<'JS'
+      const trace = [];
+      window.ajaxSettingsTrace = trace;
+      let facade;
+      jQuery.ajaxSetup({
+        headers: {
+          'X-Test-Ajax-Send': 'site-default',
+          'X-Test-Default': 'inherited',
+        },
+      });
+      jQuery.ajaxPrefilter('json', (settings, original, request) => {
+        trace.push(['ordinary', request === facade, settings.headers['X-Test-Ajax-Send']]);
+      });
+      jQuery.ajaxPrefilter('+json', (settings, original, request) => {
+        facade = request;
+        trace.push([
+          'priority',
+          settings.headers['X-Test-Ajax-Send'],
+          settings.headers['X-Test-Default'],
+          Object.hasOwn(original.headers, 'X-Test-Default'),
+          request.readyState,
+        ]);
+        settings.headers['X-Test-Ajax-Send'] = 'from-prefilter';
+      });
+      jQuery.ajaxTransport('+json', (settings, original, request) => {
+        trace.push(['selected', request === facade, original.headers['X-Test-Ajax-Send']]);
+        let xhr;
+        return {
+          send(headers, complete) {
+            trace.push(['send', headers['X-Test-Ajax-Send'], headers['X-Test-Default']]);
+            xhr = new XMLHttpRequest();
+            xhr.open(settings.type, settings.url);
+            Object.entries(headers).forEach(([name, value]) => xhr.setRequestHeader(name, value));
+            xhr.onload = () => complete(xhr.status, xhr.statusText, { text: xhr.responseText }, xhr.getAllResponseHeaders());
+            xhr.onerror = () => complete(0, 'error');
+            xhr.send(settings.hasContent ? settings.data : null);
+          },
+          abort() {
+            xhr?.abort();
+          },
+        };
+      });
+      jQuery(document)
+        .on('ajaxSend.characterization', (event, request, settings) => {
+          trace.push(['ajaxSend', request === facade, request.readyState, jQuery.active, settings.headers['X-Test-Ajax-Send']]);
+          request.setRequestHeader('X-Test-Ajax-Send', 'from-ajax-send');
+        })
+        .on('ajaxComplete.characterization', (event, request) => {
+          trace.push(['ajaxComplete', request === facade, jQuery.active]);
+        })
+        .on('ajaxStop.characterization', () => trace.push(['ajaxStop', jQuery.active]));
+      const ajax = Drupal.ajax({ url: Drupal.url('ajax-test/echo-header') });
+      ajax.options.headers = { 'X-Test-Ajax-Send': 'per-request' };
+      const handle = ajax.execute();
+      handle.done((data, status, request) => {
+        trace.push(['done', request === facade, request === handle, request.status]);
+      });
+      JS);
+    $this->assertTrue($session->wait(10000, "document.querySelector('#test_global_events_log').textContent.startsWith('from-ajax-send') && jQuery.active === 0"));
+    $this->assertSame([
+      ['priority', 'per-request', 'inherited', FALSE, 0],
+      ['ordinary', TRUE, 'from-prefilter'],
+      ['selected', TRUE, 'per-request'],
+      ['ajaxSend', TRUE, 1, 1, 'from-prefilter'],
+      ['send', 'from-ajax-send', 'inherited'],
+      ['done', TRUE, TRUE, 200],
+      ['ajaxComplete', TRUE, 1],
+      ['ajaxStop', 0],
+    ], $session->evaluateScript('window.ajaxSettingsTrace'));
   }
 
   /**
