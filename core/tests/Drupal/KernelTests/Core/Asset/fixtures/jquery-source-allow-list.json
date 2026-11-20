@@ -64,17 +64,21 @@
       "owner": "U",
       "references": 1
     },
-    "misc/jquery.drupal-bc.js": {
-      "owner": "B",
+    "misc/jquery.drupal-ajax-bc.js": {
+      "owner": "A",
       "references": 1
     },
-    "misc/jquery.no-conflict.js": {
+    "misc/jquery.drupal-bc.js": {
       "owner": "B",
       "references": 1
     },
     "misc/jquery.form.js": {
       "owner": "A",
       "references": 4
+    },
+    "misc/jquery.no-conflict.js": {
+      "owner": "B",
+      "references": 1
     },
     "misc/machine-name.js": {
       "owner": "U",

@@ -95,6 +95,7 @@ class AttachedAssetsTest extends KernelTestBase {
       'core/assets/vendor/jquery/jquery.min.js',
       'core/misc/jquery.no-conflict.js',
       'core/misc/jquery.drupal-bc.js',
+      'core/misc/jquery.drupal-ajax-bc.js',
     ], $legacy_paths($resolve($build)));
   }
 

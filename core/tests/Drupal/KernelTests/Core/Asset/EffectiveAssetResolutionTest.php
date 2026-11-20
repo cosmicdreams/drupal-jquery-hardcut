@@ -143,6 +143,7 @@ class EffectiveAssetResolutionTest extends KernelTestBase {
     $this->assertSame($legacy, isset($footer['core/assets/vendor/jquery/jquery.min.js']));
     $this->assertSame($legacy, isset($footer['core/misc/jquery.no-conflict.js']));
     $this->assertSame($legacy, isset($footer['core/misc/jquery.drupal-bc.js']));
+    $this->assertSame($legacy, isset($footer['core/misc/jquery.drupal-ajax-bc.js']));
     $this->assertSame($legacy, isset($footer['core/misc/jquery.form.js']));
 
     $optimized_css = $resolver->getCssAssets($assets, TRUE);
@@ -171,6 +172,7 @@ class EffectiveAssetResolutionTest extends KernelTestBase {
       array_splice($expected_groups['js'], $jquery_group + 1, 0, [
         ['core/misc/jquery.no-conflict.js'],
         ['core/misc/jquery.drupal-bc.js'],
+        ['core/misc/jquery.drupal-ajax-bc.js'],
       ]);
     }
     $this->assertAggregates('js', array_filter($footer, $files_only), $optimized_footer, $expected_groups['js']);
