@@ -624,6 +624,13 @@ drupal.vertical-tabs:
   before:
     - core/drupal.collapse
 
+drupal.xhr:
+  version: VERSION
+  js:
+    misc/xhr.js: {}
+  dependencies:
+    - core/drupal
+
 font:
   remote: https://github.com/rsms/inter
   version: "4.0"
