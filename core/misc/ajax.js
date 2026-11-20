@@ -430,6 +430,7 @@
       headers.set(name, value);
     });
 
+    const requestMethod = settings.type;
     const request = Drupal.ajaxRequest(
       {
         url,
@@ -440,6 +441,23 @@
         headers,
         body: () => (settings.hasContent && settings.data) || null,
         beforeSend(xhr) {
+          if (
+            settings.beforeSend &&
+            settings.beforeSend.call(context, xhr, settings) === false
+          ) {
+            return false;
+          }
+          // As jQuery opened the request after beforeSend, use its changes.
+          const method = `${settings.type}`.toUpperCase();
+          if (settings.url !== url || method !== requestMethod) {
+            xhr.open(
+              method,
+              new URL(settings.url, document.baseURI).href,
+              settings.async !== false,
+              settings.username ?? null,
+              settings.password ?? null,
+            );
+          }
           // A synchronous request cannot have a timeout.
           if (settings.async !== false && settings.timeout > 0) {
             xhr.timeout = settings.timeout;
@@ -450,12 +468,6 @@
           if (settings.mimeType) {
             xhr.overrideMimeType(settings.mimeType);
           }
-          if (
-            settings.beforeSend &&
-            settings.beforeSend.call(context, xhr, settings) === false
-          ) {
-            return false;
-          }
         },
       },
       ({ status, response, error, xhr }) => {
@@ -464,22 +476,29 @@
           return;
         }
         let results = [];
-        try {
-          if (['success', 'notmodified', 'nocontent'].includes(status)) {
-            results = callAll(settings.success, context, [
-              response,
-              status,
-              xhr,
-            ]);
-          } else {
-            callAll(settings.error, context, [xhr, status, error]);
+        let failure;
+        // Run the complete callbacks even if an earlier callback throws.
+        const attempt = (callback) => {
+          try {
+            return callback();
+          } catch (e) {
+            failure = failure || { error: e };
           }
-          callAll(settings.complete, context, [xhr, status]);
-        } catch (e) {
+          return [];
+        };
+        if (['success', 'notmodified', 'nocontent'].includes(status)) {
+          results = attempt(() =>
+            callAll(settings.success, context, [response, status, xhr]),
+          );
+        } else {
+          attempt(() => callAll(settings.error, context, [xhr, status, error]));
+        }
+        attempt(() => callAll(settings.complete, context, [xhr, status]));
+        if (failure) {
           // Report callback errors, such as Drupal.AjaxError, as uncaught
           // errors, as when they were thrown from the request's load handler.
-          window.reportError(e);
-          throw e;
+          window.reportError(failure.error);
+          throw failure.error;
         }
         // Wait for every success callback, including the command queue.
         return Promise.all(results.flat(Infinity));
@@ -541,8 +560,6 @@
     if (ajax.progress.object) {
       ajax.progress.object.stopMonitoring();
     }
-    // Undo hide.
-    $(ajax.wrapper).show();
     // Re-enable the element.
     $(ajax.element).prop('disabled', false);
     // Reattach behaviors, if they were detached in beforeSerialize(), and the
@@ -551,6 +568,31 @@
       const settings = ajax.settings || drupalSettings;
       Drupal.attachBehaviors(ajax.form, settings);
     }
+  }
+
+  /**
+   * Restores the element if its request is cancelled before it is sent.
+   *
+   * A cancellation runs no callbacks: a beforeSend veto or abort(), or an
+   * abort from an adapter request filter.
+   *
+   * @param {Drupal.Ajax} ajax
+   *   The Ajax object.
+   * @param {object|undefined} request
+   *   The request handle.
+   * @param {function} [undo]
+   *   Undoes other changes made for the attempt.
+   */
+  function restoreOnCancel(ajax, request, undo) {
+    request?.network?.then(
+      ({ status }) => {
+        if (status === 'canceled') {
+          undo?.();
+          restoreElement(ajax);
+        }
+      },
+      () => {},
+    );
   }
 
   /**
@@ -583,7 +625,6 @@
       options,
     );
 
-    const traditional = settings.traditional ?? adapter?.defaults().traditional;
     const veto = {};
     adapter?.trigger(form, 'form-pre-serialize', [
       formArgument,
@@ -594,6 +635,8 @@
       onVeto(false);
       return;
     }
+    // Read after the pre-serialize listeners, which may change it.
+    const traditional = settings.traditional ?? adapter?.defaults().traditional;
     if (
       settings.beforeSerialize &&
       settings.beforeSerialize(formArgument, settings) === false
@@ -704,8 +747,9 @@
       const { beforeSend } = upload;
       upload.beforeSend = function (xhr, requestSettings) {
         requestSettings.data = settings.formData || body;
+        // Unlike the jQuery Form plugin, honor a veto from beforeSend.
         if (beforeSend) {
-          beforeSend.call(this, xhr, requestSettings);
+          return beforeSend.call(this, xhr, requestSettings);
         }
       };
       request = sendRequest(upload);
@@ -1259,12 +1303,7 @@
       },
       beforeSend(xmlhttprequest, options) {
         ajax.ajaxing = true;
-        const result = ajax.beforeSend(nativeRequest(xmlhttprequest), options);
-        if (result === false) {
-          // The request will not be sent.
-          restoreElement(ajax);
-        }
-        return result;
+        return ajax.beforeSend(nativeRequest(xmlhttprequest), options);
       },
       success(response, status, xmlhttprequest) {
         return ajax.receiveResponse(
@@ -1289,7 +1328,8 @@
         if (status === 'error' || status === 'parsererror') {
           return ajax.error(nativeRequest(xmlhttprequest), ajax.url);
         }
-        if (status === 'abort' || status === 'timeout') {
+        // An abort, with any status text, or a timeout.
+        if (!['success', 'notmodified', 'nocontent'].includes(status)) {
           restoreElement(ajax);
         }
       },
@@ -1389,8 +1429,10 @@
 
     try {
       this.beforeSerialize(this.element, this.options);
+      const request = sendRequest(this.options);
+      restoreOnCancel(this, request);
       // Return the request handle so that external code can observe it.
-      return sendRequest(this.options);
+      return request;
     } catch (e) {
       // Unset the ajax.ajaxing flag here because it won't be unset during
       // the complete response.
@@ -1479,16 +1521,21 @@
           element.form.clk = element;
         }
 
-        submitForm(ajax.form, ajax.options, (serialized) => {
-          // A veto undoes what this attempt changed, so it can be retried.
+        // A veto or cancellation undoes what this attempt changed, so it can
+        // be retried.
+        const unclick = () => {
           if (ajax.setClick) {
             element.form.clk = null;
           }
+        };
+        const request = submitForm(ajax.form, ajax.options, (serialized) => {
+          unclick();
           restoreElement(ajax, serialized);
         });
+        restoreOnCancel(ajax, request, unclick);
       } else {
         ajax.beforeSerialize(ajax.element, ajax.options);
-        sendRequest(ajax.options);
+        restoreOnCancel(ajax, sendRequest(ajax.options));
       }
     } catch (e) {
       // Unset the ajax.ajaxing flag here because it won't be unset during
@@ -1766,7 +1813,15 @@
 
     // A contributed success override may return a value or a promise. The
     // request is finished when it settles, even if a command failed.
-    return Promise.resolve(this.success(response, status)).then(
+    let result;
+    try {
+      result = this.success(response, status);
+    } catch (error) {
+      this.ajaxing = false;
+      onComplete?.(error);
+      throw error;
+    }
+    return Promise.resolve(result).then(
       () => {
         this.ajaxing = false;
         onComplete?.();
@@ -1850,8 +1905,21 @@
       );
     });
 
+    const logError = (error) =>
+      // eslint-disable-next-line no-console
+      console.error(
+        Drupal.t(
+          'An error occurred during the execution of the Ajax response: !error',
+          {
+            '!error': error,
+          },
+        ),
+      );
+
     return (
       this.commandExecutionQueue(response, status)
+        // A failed command is logged, and the cleanup below still runs.
+        .catch(logError)
         // If the focus hasn't been changed by the AJAX commands, try to refocus
         // the triggering element or one of its parents if that element does not
         // exist anymore.
@@ -1897,17 +1965,7 @@
           // next call by mistake.
           this.settings = null;
         })
-        .catch((error) =>
-          // eslint-disable-next-line no-console
-          console.error(
-            Drupal.t(
-              'An error occurred during the execution of the Ajax response: !error',
-              {
-                '!error': error,
-              },
-            ),
-          ),
-        )
+        .catch(logError)
     );
   };
 
@@ -1959,6 +2017,8 @@
    */
   Drupal.Ajax.prototype.error = function (xmlhttprequest, uri, customMessage) {
     restoreElement(this);
+    // Undo hide.
+    $(this.wrapper).show();
     throw new Drupal.AjaxError(xmlhttprequest, uri, customMessage);
   };
 

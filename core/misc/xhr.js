@@ -28,7 +28,7 @@
    * @param {function(XMLHttpRequest, Headers): (boolean|undefined)} [options.beforeSend]
    *   Configures the opened request, attaches listeners, or changes the
    *   headers. A header set on the request here replaces the prepared value.
-   *   Return false to cancel sending it.
+   *   Return false, or call abort() on the request, to cancel sending it.
    * @param {XMLHttpRequest} [options.request]
    *   An unsent request to use instead of a new one.
    *
@@ -60,13 +60,19 @@
     request.setRequestHeader = (name, value) => {
       requestHeaders.set(name, value);
     };
+    // An abort before sending cancels the request, as with jQuery.
+    let aborted = false;
+    request.abort = () => {
+      aborted = true;
+    };
     let proceed;
     try {
       proceed = beforeSend?.(request, requestHeaders);
     } finally {
       delete request.setRequestHeader;
+      delete request.abort;
     }
-    if (proceed === false) {
+    if (proceed === false || aborted) {
       return request;
     }
     requestHeaders.forEach((value, name) => {
@@ -133,7 +139,18 @@
             settle(status, undefined, status === 'error' ? '' : status),
           );
         });
-        if (options.beforeSend?.(xhr, headers) === false) {
+        const prepared = xhr.abort;
+        let aborted = false;
+        xhr.abort = () => {
+          aborted = true;
+        };
+        let proceed;
+        try {
+          proceed = options.beforeSend?.(xhr, headers);
+        } finally {
+          xhr.abort = prepared;
+        }
+        if (proceed === false || aborted) {
           settle('canceled');
           return false;
         }

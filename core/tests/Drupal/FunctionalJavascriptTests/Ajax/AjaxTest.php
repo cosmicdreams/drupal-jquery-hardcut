@@ -9,7 +9,7 @@ use Drupal\FunctionalJavascriptTests\WebDriverTestBase;
 use PHPUnit\Framework\Attributes\Group;
 use PHPUnit\Framework\Attributes\RunTestsInSeparateProcesses;
 
-// cspell:ignore Completeajax handleajax prefilter prefilters Successajax
+// cspell:ignore Completeajax handleajax jqxhr prefilter prefilters Successajax
 /**
  * Tests AJAX responses.
  */
@@ -1118,6 +1118,265 @@ JS);
     $this->assertSame('ajaxStop', end($trace));
     $this->assertSame(1, count(array_keys($trace, 'ajaxStart', TRUE)));
     $this->assertSame(1, count(array_keys($trace, 'ajaxStop', TRUE)));
+  }
+
+  /**
+   * Tests request options and cancellation on the native request path.
+   */
+  public function testNativeRequestOptions(): void {
+    $this->drupalLogin($this->drupalCreateUser(['access content']));
+    $this->drupalGet('ajax_forms_test_ajax_commands_form');
+    $session = $this->getSession();
+    $session->executeScript(<<<'JS'
+      Drupal.ajax.compatibility = null;
+      document.body.insertAdjacentHTML('beforeend', '<div id="request-lane-echo"></div>');
+      window.nativeResults = {};
+      window.runNativeCase = (name, configure) => {
+        const echo = document.getElementById('request-lane-echo');
+        echo.textContent = '';
+        const ajax = Drupal.ajax({ url: Drupal.url('ajax-test/echo-request'), progress: false, submit: { a: [1, 2] } });
+        configure(ajax);
+        ajax.execute().commands.then(() => {
+          window.nativeResults[name] = JSON.parse(echo.textContent);
+        });
+      };
+      JS);
+    $request = function (string $name, string $configure) use ($session): array {
+      $session->executeScript("window.runNativeCase('$name', $configure)");
+      $this->assertTrue($session->wait(10000, "Boolean(window.nativeResults['$name'])"));
+      return $session->evaluateScript("window.nativeResults['$name']");
+    };
+
+    $result = $request('traditional', '(ajax) => { ajax.options.traditional = true; }');
+    $this->assertStringContainsString('a=1&a=2', $result['body']);
+
+    // Header writes in beforeSend replace the prepared value, and the request
+    // honors a changed URL and the XHR fields.
+    $result = $request('beforeSend', <<<'JS'
+      (ajax) => {
+        const { beforeSend } = ajax.options;
+        ajax.options.xhrFields = { withCredentials: true };
+        ajax.options.beforeSend = function (xhr, settings) {
+          xhr.setRequestHeader('X-Requested-With', 'Custom');
+          settings.url += '&moved=1';
+          const { complete } = settings;
+          settings.complete = function (request, ...args) {
+            window.nativeWithCredentials = request.withCredentials;
+            return complete.call(this, request, ...args);
+          };
+          return beforeSend.call(this, xhr, settings);
+        };
+      }
+      JS);
+    $this->assertSame('Custom', $result['requestedWith']);
+    $this->assertStringContainsString('moved=1', $result['query']);
+    $this->assertTrue($session->evaluateScript('window.nativeWithCredentials'));
+
+    // Uncached requests sent together get distinct cache-busting values.
+    $this->assertTrue($session->evaluateScript(<<<'JS'
+      (() => {
+        const open = XMLHttpRequest.prototype.open;
+        const urls = [];
+        XMLHttpRequest.prototype.open = function (method, url, ...args) {
+          urls.push(url);
+          return open.call(this, method, url, ...args);
+        };
+        try {
+          [1, 2].forEach(() => {
+            const ajax = Drupal.ajax({ url: Drupal.url('ajax-test/echo-request'), progress: false, httpMethod: 'GET' });
+            ajax.options.cache = false;
+            ajax.execute();
+          });
+        }
+        finally {
+          XMLHttpRequest.prototype.open = open;
+        }
+        const values = urls.map((url) => new URL(url).searchParams.get('_'));
+        return values.length === 2 && Boolean(values[0]) && values[0] !== values[1];
+      })()
+      JS));
+    $this->assertTrue($session->wait(10000, 'Drupal.ajax.instances.every((instance) => !instance?.ajaxing)'));
+
+    // An aborted request and a request aborted in beforeSend both restore the
+    // element.
+    $session->executeScript(<<<'JS'
+      const button = document.body.appendChild(document.createElement('button'));
+      button.id = 'native-abort';
+      const ajax = Drupal.ajax({ element: button, url: Drupal.url('ajax-test/echo-request'), event: 'native-abort' });
+      const handle = ajax.execute();
+      window.nativeAbortSent = [button.disabled, Boolean(button.nextElementSibling?.classList.contains('ajax-progress'))];
+      handle.abort();
+      handle.network.then(({ status }) => {
+        window.nativeAbort = [status, ajax.ajaxing, button.disabled, Boolean(button.nextElementSibling?.classList.contains('ajax-progress'))];
+      });
+      const cancelled = Drupal.ajax({ element: button, url: Drupal.url('ajax-test/echo-request'), event: 'native-cancel' });
+      cancelled.beforeSend = (xhr) => xhr.abort();
+      cancelled.execute().network.then(({ status }) => {
+        window.nativeCancel = [status, cancelled.ajaxing, button.disabled];
+      });
+      JS);
+    $this->assertSame([TRUE, TRUE], $session->evaluateScript('window.nativeAbortSent'));
+    $this->assertTrue($session->wait(10000, 'Boolean(window.nativeAbort && window.nativeCancel)'));
+    $this->assertSame(['abort', FALSE, FALSE, FALSE], $session->evaluateScript('window.nativeAbort'));
+    $this->assertSame(['canceled', FALSE, FALSE], $session->evaluateScript('window.nativeCancel'));
+
+    // A file input associated from outside the form is uploaded.
+    $session->executeScript(<<<'JS'
+      const echo = document.getElementById('request-lane-echo');
+      echo.textContent = '';
+      document.body.insertAdjacentHTML('beforeend', `
+        <form id="external-file-form"><button name="op" value="clicked">Upload</button></form>
+        <input type="file" name="upload" form="external-file-form">
+      `);
+      const form = document.getElementById('external-file-form');
+      const input = document.querySelector('input[form="external-file-form"]');
+      const transfer = new DataTransfer();
+      transfer.items.add(new File(['external'], 'external.txt', { type: 'text/plain' }));
+      input.files = transfer.files;
+      const button = form.querySelector('button');
+      Drupal.ajax({ element: button, url: Drupal.url('ajax-test/echo-request'), event: 'external-file', setClick: true, progress: false });
+      button.dispatchEvent(new Event('external-file', { bubbles: true, cancelable: true }));
+      JS);
+    $this->assertTrue($session->wait(10000, "document.getElementById('request-lane-echo').textContent.length > 0"));
+    $result = json_decode($session->evaluateScript("document.getElementById('request-lane-echo').textContent"), TRUE, flags: JSON_THROW_ON_ERROR);
+    $this->assertStringStartsWith('multipart/form-data; boundary=', $result['contentType']);
+    $this->assertSame(['external.txt', 8, hash('sha256', 'external')], $result['upload']);
+  }
+
+  /**
+   * Tests cancellation, notification and command failure through the adapter.
+   */
+  public function testAdapterCancellation(): void {
+    // The observer and command errors are part of this test.
+    $this->failOnJavascriptConsoleErrors = FALSE;
+    $this->drupalLogin($this->drupalCreateUser(['access content']));
+    $this->drupalGet('ajax_forms_test_ajax_commands_form');
+    $session = $this->getSession();
+    $session->executeScript(<<<'JS'
+      window.alert = () => {};
+      const send = XMLHttpRequest.prototype.send;
+      window.adapterSends = 0;
+      XMLHttpRequest.prototype.send = function (...args) {
+        window.adapterSends++;
+        return send.apply(this, args);
+      };
+      document.body.insertAdjacentHTML('beforeend', '<div id="request-lane-echo"></div>');
+      window.buildForm = (id, multipart) => {
+        document.body.insertAdjacentHTML('beforeend', `<form id="${id}"><button name="op" value="clicked">Go</button></form>`);
+        const form = document.getElementById(id);
+        if (multipart) {
+          const input = form.appendChild(document.createElement('input'));
+          input.type = 'file';
+          input.name = 'upload';
+          const transfer = new DataTransfer();
+          transfer.items.add(new File(['upload'], 'upload.txt', { type: 'text/plain' }));
+          input.files = transfer.files;
+        }
+        const button = form.querySelector('button');
+        const ajax = Drupal.ajax({ element: button, url: Drupal.url('ajax-test/echo-request'), event: id, setClick: true, submit: { a: [1, 2] } });
+        const trigger = () => button.dispatchEvent(new Event(id, { bubbles: true, cancelable: true }));
+        return { form, button, ajax, trigger };
+      };
+      window.restored = ({ form, button, ajax }) => !ajax.ajaxing && !button.disabled && !form.clk && !form.querySelector('.ajax-progress');
+      JS);
+
+    // A beforeSend veto on a multipart form does not send, and can be retried.
+    $session->executeScript(<<<'JS'
+      const fixture = window.multipartFixture = window.buildForm('multipart-veto', true);
+      let vetoes = 1;
+      const { beforeSend } = fixture.ajax;
+      fixture.ajax.beforeSend = function (...args) {
+        beforeSend.apply(this, args);
+        return vetoes-- > 0 ? false : undefined;
+      };
+      window.adapterSends = 0;
+      fixture.trigger();
+      window.multipartSends = window.adapterSends;
+      JS);
+    $this->assertSame(0, $session->evaluateScript('window.multipartSends'));
+    $this->assertTrue($session->wait(10000, 'window.restored(window.multipartFixture)'));
+    $session->executeScript("document.getElementById('request-lane-echo').textContent = ''; window.multipartFixture.trigger();");
+    $this->assertTrue($session->wait(10000, "document.getElementById('request-lane-echo').textContent.length > 0 && jQuery.active === 0"));
+    $result = json_decode($session->evaluateScript("document.getElementById('request-lane-echo').textContent"), TRUE, flags: JSON_THROW_ON_ERROR);
+    $this->assertSame('upload.txt', $result['upload'][0]);
+
+    // A prefilter abort on a form submission restores the form, which then
+    // sends with traditional encoding from the site defaults and stores its
+    // request before notifying.
+    $session->executeScript(<<<'JS'
+      const fixture = window.prefilterFixture = window.buildForm('prefilter-abort', false);
+      let abortNext = true;
+      jQuery.ajaxPrefilter((settings, original, request) => {
+        if (abortNext) {
+          abortNext = false;
+          request.abort();
+        }
+      });
+      jQuery(fixture.form).on('form-submit-notify', () => {
+        window.notifiedRequest = typeof jQuery(fixture.form).data('jqxhr')?.abort;
+      });
+      fixture.trigger();
+      JS);
+    $this->assertTrue($session->wait(10000, 'window.restored(window.prefilterFixture)'));
+    $session->executeScript(<<<'JS'
+      document.getElementById('request-lane-echo').textContent = '';
+      window.notifiedRequest = null;
+      jQuery.ajaxSetup({ traditional: true });
+      window.prefilterFixture.trigger();
+      jQuery.ajaxSetup({ traditional: false });
+      JS);
+    $this->assertTrue($session->wait(10000, "document.getElementById('request-lane-echo').textContent.length > 0 && jQuery.active === 0"));
+    $result = json_decode($session->evaluateScript("document.getElementById('request-lane-echo').textContent"), TRUE, flags: JSON_THROW_ON_ERROR);
+    $this->assertStringContainsString('a=1&a=2', $result['body']);
+    $this->assertSame('function', $session->evaluateScript('window.notifiedRequest'));
+
+    // An abort in beforeSend, a throwing send observer and an abort with a
+    // custom status all leave the element usable and nothing counted.
+    $session->executeScript(<<<'JS'
+      const button = document.body.appendChild(document.createElement('button'));
+      const make = (event) => Drupal.ajax({ element: button, url: Drupal.url('ajax-test/echo-request'), event });
+      window.adapterSends = 0;
+      const cancelled = make('adapter-cancel');
+      cancelled.beforeSend = (xhr) => xhr.abort();
+      const handle = cancelled.execute();
+      window.cancelState = [window.adapterSends, handle.state()];
+
+      jQuery(document).one('ajaxSend', () => {
+        throw new Error('observer');
+      });
+      const observed = make('adapter-observer');
+      observed.execute();
+      window.observerState = [window.adapterSends, observed.ajaxing, button.disabled, jQuery.active];
+
+      const custom = make('adapter-custom');
+      custom.execute().abort('cancelled');
+      window.customState = [custom.ajaxing, button.disabled, Boolean(button.nextElementSibling?.classList.contains('ajax-progress')), jQuery.active];
+      window.cancelButton = button;
+      window.cancelInstance = cancelled;
+      JS);
+    $this->assertSame([0, 'rejected'], $session->evaluateScript('window.cancelState'));
+    $this->assertSame([0, FALSE, FALSE, 0], $session->evaluateScript('window.observerState'));
+    $this->assertSame([FALSE, FALSE, FALSE, 0], $session->evaluateScript('window.customState'));
+    $this->assertTrue($session->wait(10000, '!window.cancelInstance.ajaxing && !window.cancelButton.disabled'));
+
+    // A failed command still restores focus and behaviors, and finishes.
+    $session->executeScript(<<<'JS'
+      const fixture = window.buildForm('command-failure', false);
+      fixture.ajax.commands.insert = () => Promise.reject(new Error('command'));
+      const attach = Drupal.attachBehaviors;
+      let attached = 0;
+      Drupal.attachBehaviors = function (context, ...args) {
+        if (context === fixture.form) {
+          attached++;
+        }
+        return attach.call(this, context, ...args);
+      };
+      fixture.ajax.execute().commands.then(() => {
+        window.commandFailure = [attached, fixture.ajax.ajaxing, jQuery.active];
+      });
+      JS);
+    $this->assertTrue($session->wait(10000, 'Boolean(window.commandFailure)'));
+    $this->assertSame([1, FALSE, 0], $session->evaluateScript('window.commandFailure'));
   }
 
   /**

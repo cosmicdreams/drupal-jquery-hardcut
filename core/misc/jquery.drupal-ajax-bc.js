@@ -93,8 +93,9 @@
       native: true,
       send(headers, complete) {
         const request = nativeRequests.get(jqXHR);
-        // Header writes during beforeSend went to the facade; send them now.
+        // Header writes and aborts during beforeSend went to the facade.
         delete request?.setRequestHeader;
+        delete request?.abort;
         window.Drupal.xhr({
           request,
           url: s.url,
@@ -569,6 +570,17 @@
       responseHeadersString = headers || '';
       jqXHR.readyState = status > 0 ? 4 : 0;
       let isSuccess = (status >= 200 && status < 300) || status === 304;
+      // Callbacks, filters and observers may throw, as Drupal's error handling
+      // does. Finish the request's bookkeeping first, then rethrow the first
+      // error.
+      let failure;
+      const attempt = (callback) => {
+        try {
+          callback();
+        } catch (e) {
+          failure = failure || { error: e };
+        }
+      };
       let response;
       if (responses) {
         response = handleResponses(s, jqXHR, responses);
@@ -580,7 +592,13 @@
       ) {
         s.converters['text script'] = () => {};
       }
-      response = convert(s, response, jqXHR, isSuccess);
+      try {
+        response = convert(s, response, jqXHR, isSuccess);
+      } catch (e) {
+        // A throwing dataFilter, or a converter with the throws option.
+        failure = { error: e };
+        response = { state: 'parsererror', error: e };
+      }
       if (isSuccess) {
         if (s.ifModified) {
           let modified = jqXHR.getResponseHeader('Last-Modified');
@@ -621,16 +639,6 @@
         xhr: jqXHR,
       });
 
-      // Callbacks and observers may throw, as Drupal's error handling does.
-      // Finish the request's bookkeeping first, then rethrow the first error.
-      let failure;
-      const attempt = (callback) => {
-        try {
-          callback();
-        } catch (e) {
-          failure = failure || { error: e };
-        }
-      };
       attempt(() => {
         if (isSuccess) {
           deferred.resolveWith(callbackContext, [success, statusText, jqXHR]);
@@ -764,10 +772,13 @@
       jqXHR.setRequestHeader(name, s.headers[name]);
     });
     // Core's own callbacks receive the native request. Until it is sent, its
-    // header writes go through the facade, as the jqXHR's would.
+    // header writes and abort go through the facade, as the jqXHR's would.
     const request = new XMLHttpRequest();
     request.setRequestHeader = (name, value) => {
       jqXHR.setRequestHeader(name, value);
+    };
+    request.abort = () => {
+      jqXHR.abort();
     };
     nativeRequests.set(jqXHR, request);
     if (
@@ -791,7 +802,13 @@
     } else {
       jqXHR.readyState = 1;
       if (fireGlobals) {
-        globalEventContext.trigger('ajaxSend', [jqXHR, s]);
+        try {
+          globalEventContext.trigger('ajaxSend', [jqXHR, s]);
+        } catch (e) {
+          // Do not send, and finish the request before reporting the error.
+          jqXHR.abort();
+          throw e;
+        }
       }
       if (completed) {
         return jqXHR;
