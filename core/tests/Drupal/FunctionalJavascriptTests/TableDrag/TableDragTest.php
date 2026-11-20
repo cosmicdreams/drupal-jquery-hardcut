@@ -63,6 +63,51 @@ class TableDragTest extends WebDriverTestBase {
   }
 
   /**
+   * Tests revealing a responsive column after a non-header cell.
+   */
+  public function testResponsiveColumnToggle(): void {
+    $this->drupalGet('tabledrag_test');
+    $session = $this->getSession();
+    $session->executeScript(<<<'JS'
+      const fixture = document.createElement('section');
+      fixture.id = 'responsive-fixture';
+      fixture.classList.add('compact');
+      fixture.innerHTML = `
+        <style>
+          #responsive-fixture.compact .priority-low { display: none; }
+        </style>
+        <table class="responsive-enabled">
+          <thead><tr><th>Name</th><td></td><th class="priority-low">Detail</th></tr></thead>
+          <tbody><tr><td>A</td><td class="priority-low">B</td></tr></tbody>
+        </table>
+      `;
+      document.body.append(fixture);
+      Drupal.behaviors.tableResponsive.attach(fixture);
+      Drupal.behaviors.tableResponsive.attach(fixture);
+      JS);
+
+    $assert = $this->assertSession();
+    $assert->elementsCount('css', '#responsive-fixture .tableresponsive-toggle', 1);
+    $toggle = $assert->elementExists('css', '#responsive-fixture .tableresponsive-toggle');
+    $cell = $assert->elementExists('css', '#responsive-fixture tbody .priority-low');
+    $this->assertFalse($cell->isVisible());
+
+    $toggle->click();
+    $this->assertTrue($cell->isVisible());
+    $this->assertSame('Hide lower priority columns', $toggle->getText());
+
+    $toggle->click();
+    $this->assertFalse($cell->isVisible());
+
+    $session->executeScript(<<<'JS'
+      document.getElementById('responsive-fixture').classList.remove('compact');
+      jQuery(window).trigger('resize.tableresponsive');
+      JS);
+    $this->assertTrue($cell->isVisible());
+    $this->assertFalse($toggle->isVisible());
+  }
+
+  /**
    * Tests row weight switch.
    */
   public function testRowWeightSwitch(): void {
