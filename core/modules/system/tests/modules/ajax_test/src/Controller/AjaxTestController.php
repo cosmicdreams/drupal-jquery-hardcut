@@ -402,6 +402,7 @@ class AjaxTestController {
       '#attached' => [
         'library' => [
           'ajax_test/global_events',
+          'core/drupal.xhr',
         ],
       ],
       '#markup' => implode('', [

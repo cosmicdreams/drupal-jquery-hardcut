@@ -3,6 +3,7 @@
  * Shared native XMLHttpRequest transport.
  */
 
+// cspell:ignore nocontent notmodified
 ((Drupal) => {
   /**
    * Sends a prepared request.
@@ -53,5 +54,73 @@
     });
     request.send(body);
     return request;
+  };
+
+  /**
+   * Runs a prepared request for an Ajax command response.
+   *
+   * @param {object} options
+   *   Transport options passed to Drupal.xhr.
+   * @param {function} receive
+   *   Handles the network result and returns any pending command work.
+   *
+   * @return {{network: Promise, commands: Promise, abort: function}}
+   *   The network result, completion of the response handler, and cancellation
+   *   of an in-flight request.
+   *
+   * @internal
+   */
+  Drupal.ajaxRequest = function (options, receive) {
+    let finish;
+    const network = new Promise((resolve) => {
+      finish = resolve;
+    });
+    const request = Drupal.xhr({
+      ...options,
+      beforeSend(xhr, headers) {
+        const settle = (status, response, error) =>
+          finish({ status, response, error, xhr });
+        xhr.addEventListener('load', () => {
+          if (xhr.status === 304) {
+            settle('notmodified');
+          } else if (xhr.status < 200 || xhr.status >= 300) {
+            settle('error', undefined, xhr.statusText);
+          } else if (
+            xhr.status === 204 ||
+            options.method?.toUpperCase() === 'HEAD'
+          ) {
+            settle('nocontent');
+          } else {
+            let response;
+            try {
+              response = JSON.parse(xhr.responseText);
+            } catch (error) {
+              settle('parsererror', undefined, error);
+              return;
+            }
+            settle('success', response);
+          }
+        });
+        ['error', 'timeout', 'abort'].forEach((status) => {
+          xhr.addEventListener(status, () => settle(status));
+        });
+        if (options.beforeSend?.(xhr, headers) === false) {
+          settle('canceled');
+          return false;
+        }
+      },
+    });
+    return {
+      network,
+      commands: network.then(receive),
+      abort() {
+        if (
+          request.readyState > XMLHttpRequest.UNSENT &&
+          request.readyState < XMLHttpRequest.DONE
+        ) {
+          request.abort();
+        }
+      },
+    };
   };
 })(Drupal);

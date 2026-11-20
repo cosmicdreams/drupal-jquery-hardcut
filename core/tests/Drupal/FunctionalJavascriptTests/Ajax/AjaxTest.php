@@ -476,6 +476,59 @@ JS;
   }
 
   /**
+   * Tests native request completion separately from the Ajax command queue.
+   */
+  public function testNativeCommandRequest(): void {
+    $this->drupalGet('ajax-test/global-events');
+    $session = $this->getSession();
+    $session->executeScript(<<<'JS'
+      const url = Drupal.url('ajax-test/echo-header');
+      const ajax = Drupal.ajax({ url });
+      const gate = new Promise((resolve) => {
+        window.releaseNativeCommand = resolve;
+      });
+      const insert = ajax.commands.insert;
+      ajax.commands.insert = function (...args) {
+        return gate.then(() => insert.apply(this, args));
+      };
+
+      const request = Drupal.ajaxRequest({
+        url,
+        headers: { 'X-Test-Ajax-Send': 'native command' },
+        beforeSend() {
+          ajax.ajaxing = true;
+        },
+      }, ({ status, response, xhr }) => ajax.receiveResponse(response, status, xhr));
+      window.nativeNetwork = request.network.then(({ status, xhr }) => [
+        status, xhr.status, ajax.ajaxing,
+      ]);
+      request.commands.then(() => {
+        window.nativeCommands = [ajax.ajaxing, document.getElementById('test_global_events_log').textContent];
+      });
+      JS);
+    $this->assertSame(['success', 200, TRUE], $session->evaluateScript('window.nativeNetwork'));
+    $this->assertNull($session->evaluateScript('window.nativeCommands'));
+    $session->executeScript('window.releaseNativeCommand();');
+    $this->assertTrue($session->wait(10000, 'Boolean(window.nativeCommands)'));
+    $this->assertSame([FALSE, 'native command'], $session->evaluateScript('window.nativeCommands'));
+
+    $session->executeScript(<<<'JS'
+      const url = Drupal.url('ajax-test/native-request');
+      const aborted = Drupal.ajaxRequest({ url }, ({ status }) => status);
+      aborted.abort();
+      Promise.all([
+        aborted.commands,
+        Drupal.ajaxRequest({ url, beforeSend: () => false }, ({ status }) => status).commands,
+        Drupal.ajaxRequest({ url }, ({ status }) => status).commands,
+      ]).then((statuses) => {
+        window.nativeFailureStatuses = statuses;
+      });
+      JS);
+    $this->assertTrue($session->wait(10000, 'Boolean(window.nativeFailureStatuses)'));
+    $this->assertSame(['abort', 'canceled', 'parsererror'], $session->evaluateScript('window.nativeFailureStatuses'));
+  }
+
+  /**
    * Tests header mutation and abort in a global Ajax send handler.
    */
   public function testAjaxSendHeaderAndAbort(): void {

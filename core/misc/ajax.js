@@ -556,60 +556,14 @@
         return ajax.beforeSend(xmlhttprequest, options);
       },
       success(response, status, xmlhttprequest) {
-        ajax.preCommandsFocusedElementSelector =
-          document.activeElement.getAttribute('data-drupal-selector');
-
-        // Sanity check for browser support (object expected).
-        // When using iFrame uploads, responses must be returned as a string.
-        if (typeof response === 'string') {
-          response = JSON.parse(response);
-        }
-
-        // Prior to invoking the response's commands, verify that they can be
-        // trusted by checking for a response header. See
-        // \Drupal\Core\EventSubscriber\AjaxResponseSubscriber for details.
-        // - Empty responses are harmless so can bypass verification. This
-        //   avoids an alert message for server-generated no-op responses that
-        //   skip Ajax rendering.
-        // - Ajax objects with trusted URLs (e.g., ones defined server-side via
-        //   #ajax) can bypass header verification. This is especially useful
-        //   for Ajax with multipart forms. Because IFRAME transport is used,
-        //   the response headers cannot be accessed for verification.
-        if (
-          response !== null &&
-          !drupalSettings.ajaxTrustedUrl.hasOwnProperty(ajax.url)
-        ) {
-          if (xmlhttprequest.getResponseHeader('X-Drupal-Ajax-Token') !== '1') {
-            const customMessage = Drupal.t(
-              'The response failed verification so will not be processed.',
-            );
-            return ajax.error(xmlhttprequest, ajax.url, customMessage);
+        return ajax.receiveResponse(response, status, xmlhttprequest, () => {
+          // The global completion events follow the command queue.
+          $(document).trigger('ajaxSuccess', [xmlhttprequest, this]);
+          $(document).trigger('ajaxComplete', [xmlhttprequest, this]);
+          if (--$.active === 0) {
+            $(document).trigger('ajaxStop');
           }
-        }
-
-        return (
-          // Ensure that the return of the success callback is a Promise.
-          // When the return is a Promise, using resolve will unwrap it, and
-          // when the return is not a Promise we make sure it can be used as
-          // one. This is useful for code that overrides the success method.
-          Promise.resolve(ajax.success(response, status))
-            // Ajaxing status is back to false when all the AJAX commands have
-            // finished executing.
-            .then(() => {
-              ajax.ajaxing = false;
-              // jQuery normally triggers the ajaxSuccess, ajaxComplete, and
-              // ajaxStop events after the "success" function passed to $.ajax()
-              // returns, but we prevented that via
-              // $.event.special[EVENT_NAME].trigger in order to wait for the
-              // commands to finish executing. Now that they have, re-trigger
-              // those events.
-              $(document).trigger('ajaxSuccess', [xmlhttprequest, this]);
-              $(document).trigger('ajaxComplete', [xmlhttprequest, this]);
-              if (--$.active === 0) {
-                $(document).trigger('ajaxStop');
-              }
-            })
-        );
+        });
       },
       error(xmlhttprequest, status, error) {
         ajax.ajaxing = false;
@@ -1029,6 +983,67 @@
   Drupal.Ajax.prototype.setProgressIndicatorFullscreen = function () {
     this.progress.element = $(Drupal.theme('ajaxProgressIndicatorFullscreen'));
     $('body').append(this.progress.element);
+  };
+
+  /**
+   * Verifies an Ajax response and waits for its commands to complete.
+   *
+   * @param {Array|string|null} response
+   *   The response data.
+   * @param {string} status
+   *   The request outcome.
+   * @param {XMLHttpRequest|object} xmlhttprequest
+   *   The request or its compatibility facade.
+   * @param {function} [onComplete]
+   *   A notification to run after the commands have completed.
+   *
+   * @return {Promise|undefined}
+   *   Completion of the response commands, if the response passed verification.
+   *
+   * @internal
+   */
+  Drupal.Ajax.prototype.receiveResponse = function (
+    response,
+    status,
+    xmlhttprequest,
+    onComplete,
+  ) {
+    this.preCommandsFocusedElementSelector =
+      document.activeElement.getAttribute('data-drupal-selector');
+
+    // Sanity check for browser support (object expected).
+    // When using iFrame uploads, responses must be returned as a string.
+    if (typeof response === 'string') {
+      response = JSON.parse(response);
+    }
+
+    // Prior to invoking the response's commands, verify that they can be
+    // trusted by checking for a response header. See
+    // \Drupal\Core\EventSubscriber\AjaxResponseSubscriber for details.
+    // - Empty responses are harmless so can bypass verification. This
+    //   avoids an alert message for server-generated no-op responses that
+    //   skip Ajax rendering.
+    // - Ajax objects with trusted URLs (e.g., ones defined server-side via
+    //   #ajax) can bypass header verification. This is especially useful
+    //   for Ajax with multipart forms. Because IFRAME transport is used,
+    //   the response headers cannot be accessed for verification.
+    if (
+      response !== null &&
+      !drupalSettings.ajaxTrustedUrl.hasOwnProperty(this.url)
+    ) {
+      if (xmlhttprequest.getResponseHeader('X-Drupal-Ajax-Token') !== '1') {
+        const customMessage = Drupal.t(
+          'The response failed verification so will not be processed.',
+        );
+        return this.error(xmlhttprequest, this.url, customMessage);
+      }
+    }
+
+    // A contributed success override may return a value or a promise.
+    return Promise.resolve(this.success(response, status)).then(() => {
+      this.ajaxing = false;
+      onComplete?.();
+    });
   };
 
   /**
