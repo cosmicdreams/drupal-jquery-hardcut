@@ -150,9 +150,14 @@
         try {
           proceed = options.beforeSend?.(xhr, headers);
         } catch (error) {
-          // The request is not sent; let the caller undo its preparations.
+          // The request is not sent; let the caller undo its preparations,
+          // keeping this error if that throws too.
           settle('canceled');
-          options.canceled?.();
+          try {
+            options.canceled?.();
+          } catch (secondary) {
+            window.reportError(secondary);
+          }
           throw error;
         } finally {
           xhr.abort = prepared;

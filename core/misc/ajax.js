@@ -563,6 +563,11 @@
     return { network: failed, commands: failed, abort() {} };
   }
 
+  // Ajax objects whose element beforeSend prepared for the current attempt,
+  // and requests whose default success callback ran.
+  const preparedRequests = new WeakSet();
+  const receivedRequests = new WeakSet();
+
   /**
    * Undoes the state an Ajax request attempt changed on its element.
    *
@@ -573,6 +578,7 @@
    */
   function restoreElement(ajax, reattach = true) {
     ajax.ajaxing = false;
+    const prepared = preparedRequests.delete(ajax);
     // Remove the progress element.
     if (ajax.progress.element) {
       $(ajax.progress.element).remove();
@@ -580,8 +586,10 @@
     if (ajax.progress.object) {
       ajax.progress.object.stopMonitoring();
     }
-    // Re-enable the element.
-    $(ajax.element).prop('disabled', false);
+    // Re-enable the element, if beforeSend disabled it for this attempt.
+    if (prepared) {
+      $(ajax.element).prop('disabled', false);
+    }
     // Reattach behaviors, if they were detached in beforeSerialize(), and the
     // form is still part of the document.
     if (reattach && ajax.form && document.body.contains(ajax.form)) {
@@ -1298,9 +1306,11 @@
       },
       beforeSend(xmlhttprequest, options) {
         ajax.ajaxing = true;
+        preparedRequests.add(ajax);
         return ajax.beforeSend(nativeRequest(xmlhttprequest), options);
       },
       success(response, status, xmlhttprequest) {
+        receivedRequests.add(xmlhttprequest);
         return ajax.receiveResponse(
           response,
           status,
@@ -1323,10 +1333,12 @@
         if (status === 'error' || status === 'parsererror') {
           return ajax.error(nativeRequest(xmlhttprequest), ajax.url);
         }
-        // An abort, with any status text, or a timeout.
+        // An abort, with any status text, a timeout, or a success whose
+        // default callback did not run because an earlier one threw.
         if (
           !['success', 'notmodified', 'nocontent'].includes(status) ||
-          !xmlhttprequest.status
+          !xmlhttprequest.status ||
+          !receivedRequests.has(xmlhttprequest)
         ) {
           restoreElement(ajax);
         }
@@ -1425,6 +1437,7 @@
       return;
     }
 
+    preparedRequests.delete(this);
     try {
       this.beforeSerialize(this.element, this.options);
       const request = sendRequest(this.options, () => restoreElement(this));
@@ -1506,6 +1519,7 @@
       return;
     }
 
+    preparedRequests.delete(ajax);
     try {
       if (ajax.form) {
         // If setClick is set, we must set this to ensure that the button's

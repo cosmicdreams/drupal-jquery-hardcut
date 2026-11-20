@@ -197,7 +197,16 @@
     return {
       send(headers, complete) {
         script = document.createElement('script');
+        // As jQuery's attr(): skip undefined, and leave out null and false
+        // except on ARIA attributes.
         Object.entries(s.scriptAttrs || {}).forEach(([name, value]) => {
+          if (
+            value === undefined ||
+            value === null ||
+            (value === false && !name.toLowerCase().startsWith('aria-'))
+          ) {
+            return;
+          }
           script.setAttribute(name, value);
         });
         if (s.scriptCharset) {
@@ -476,13 +485,15 @@
   const pendingCompletion = new WeakMap();
   const commandWaiters = new WeakMap();
   const successData = new WeakMap();
+  // Requests sent by this adapter, which delays their events itself.
+  const facades = new WeakSet();
 
   // A raw $.ajax() call can still carry Drupal Ajax settings, so keep delaying
   // its global completion events until the commands have run.
   jQuery.extend(true, jQuery.event.special, {
     ajaxSuccess: {
       trigger(event, xhr, settings, data) {
-        if (commandsPending(xhr, settings)) {
+        if (!facades.has(xhr) && commandsPending(xhr, settings)) {
           successData.set(xhr, data);
           return false;
         }
@@ -490,7 +501,7 @@
     },
     ajaxComplete: {
       trigger(event, xhr, settings) {
-        if (commandsPending(xhr, settings)) {
+        if (!facades.has(xhr) && commandsPending(xhr, settings)) {
           // Keep the request counted while its commands run.
           jQuery.active++;
           pendingCompletion.set(xhr, {
@@ -600,6 +611,7 @@
       },
     };
     deferred.promise(jqXHR);
+    facades.add(jqXHR);
     // The native request handle members, so core sees the same handle type.
     let settleNetwork;
     let settleCommands;

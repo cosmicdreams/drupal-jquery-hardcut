@@ -963,6 +963,20 @@ JS);
     $this->assertSame(['parsererror', 'filter', FALSE], $results['filter']);
     $this->assertSame(['success', 'AjaxError', FALSE], $results['string']);
 
+    // A success callback that throws before Drupal's leaves nothing waiting.
+    $session->executeScript(<<<'JS'
+      const button = document.body.appendChild(document.createElement('button'));
+      const ajax = Drupal.ajax({ element: button, url: Drupal.url('ajax-test/echo-header'), event: 'success-list' });
+      ajax.options.success = [() => {
+        throw new Error('first');
+      }, ajax.options.success];
+      ajax.execute().commands.catch((error) => {
+        window.successList = [error.message, ajax.ajaxing, button.disabled, Boolean(button.nextElementSibling?.classList.contains('ajax-progress'))];
+      });
+      JS);
+    $this->assertTrue($session->wait(10000, 'Boolean(window.successList) && jQuery.active === 0'));
+    $this->assertSame(['first', FALSE, FALSE, FALSE], $session->evaluateScript('window.successList'));
+
     // A throwing start observer does not leave the request counted.
     $this->assertSame([0, FALSE, 'rejected'], $session->evaluateScript(<<<'JS'
       (() => {
@@ -1148,24 +1162,25 @@ JS);
       window.scriptTags = [];
       const observer = new MutationObserver((records) => {
         records.forEach(({ addedNodes }) => addedNodes.forEach((node) => {
-          if (node.nodeName === 'SCRIPT' && node.src.includes('ajax-script-transport')) {
-            window.scriptTags.push(node.nonce || node.getAttribute('nonce'));
+          if (node.nodeName === 'SCRIPT' && node.src.includes('scriptTransportRan')) {
+            window.scriptTags.push([node.nonce || node.getAttribute('nonce'), node.hasAttribute('nomodule')]);
           }
         }));
       });
       observer.observe(document.head, { childList: true });
       Drupal.ajax.compatibility.send({
-        url: `${Drupal.url('ajax-test/echo-header')}?ajax-script-transport`,
+        url: 'data:text/javascript,window.scriptTransportRan=true',
         type: 'POST',
+        cache: true,
         dataType: 'script',
-        scriptAttrs: { nonce: 'test-nonce' },
+        scriptAttrs: { nonce: 'test-nonce', nomodule: false },
         global: false,
-      }).always((data, status, xhr) => {
-        window.scriptResult = [status, window.scriptTags];
+      }).always((data, status) => {
+        window.scriptResult = [status, window.scriptTags, window.scriptTransportRan === true];
       });
       JS);
     $this->assertTrue($session->wait(10000, 'Boolean(window.scriptResult)'));
-    $this->assertSame([['test-nonce']], array_slice($session->evaluateScript('window.scriptResult'), 1));
+    $this->assertSame(['success', [['test-nonce', FALSE]], TRUE], $session->evaluateScript('window.scriptResult'));
 
     // A raw jQuery request and a Drupal request share one start and stop.
     $session->executeScript(<<<'JS'
@@ -1541,6 +1556,23 @@ JS);
       window.cancelInstance = cancelled;
       JS);
     $this->assertSame([0, 'rejected'], $session->evaluateScript('window.cancelState'));
+
+    // An early cancellation leaves a control that started disabled alone.
+    $this->assertTrue($session->evaluateScript(<<<'JS'
+      (() => {
+        const disabled = document.body.appendChild(document.createElement('button'));
+        disabled.disabled = true;
+        let abortNext = true;
+        jQuery.ajaxPrefilter((settings, original, request) => {
+          if (abortNext) {
+            abortNext = false;
+            request.abort();
+          }
+        });
+        Drupal.ajax({ element: disabled, url: Drupal.url('ajax-test/echo-request'), event: 'disabled-cancel' }).execute();
+        return disabled.disabled;
+      })()
+      JS));
     $this->assertSame([0, FALSE, FALSE, 0], $session->evaluateScript('window.observerState'));
     $this->assertSame([FALSE, FALSE, FALSE, 0], $session->evaluateScript('window.customState'));
     $this->assertSame([0, FALSE, FALSE, FALSE, 0], $session->evaluateScript('window.throwState'));
