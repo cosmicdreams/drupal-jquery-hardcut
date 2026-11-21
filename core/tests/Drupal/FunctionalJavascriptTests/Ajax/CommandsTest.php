@@ -151,18 +151,18 @@ class CommandsTest extends WebDriverTestBase {
         document.body.append(parent);
         const node = parent.firstElementChild;
         let calls = 0;
-        jQuery(node).data('dialog-type', 'modal').on('probe', () => ++calls);
-        const value = Drupal.ajax.elementData.get(node, 'dialog-type');
+        jQuery(node).data({ dialogType: 'modal', dialogTitle: 'Settings' }).on('probe', () => ++calls);
+        const values = ['dialog-type', 'dialog-title'].map((key) => Drupal.ajax.elementData.get(node, key));
         const ajax = Drupal.ajax({ url: location.href });
         await ajax.commandExecutionQueue([
           { command: 'insert', selector: '#native-removal-parent', method: 'html', data: '' },
         ]);
         parent.append(node);
         jQuery(node).trigger('probe');
-        return [value, jQuery.hasData(node), calls];
+        return [values, jQuery.hasData(node), calls];
       })()
       JS);
-    $this->assertSame(['modal', FALSE, 0], $result);
+    $this->assertSame([['modal', 'Settings'], FALSE, 0], $result);
   }
 
   /**

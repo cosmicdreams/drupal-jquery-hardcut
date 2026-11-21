@@ -117,7 +117,7 @@
 
     getData(element, key) {
       if (
-        /^(?:dialog(?:Type|Options|Renderer)|ajaxHttpMethod|refocusBlur|disableRefocus)$/.test(
+        /^(?:dialog[A-Z].*|ajaxHttpMethod|refocusBlur|disableRefocus)$/.test(
           key,
         )
       ) {
