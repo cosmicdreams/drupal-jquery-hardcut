@@ -634,10 +634,8 @@
     ajax.ajaxing = false;
     const prepared = preparedRequests.delete(ajax);
     // Remove the progress element.
-    if (ajax.progress.element) {
-      nativeElement(ajax.progress.element)?.remove();
-    }
-    if (ajax.progress.object) {
+    ajax.progress?.elementNode?.remove();
+    if (ajax.progress?.object) {
       ajax.progress.object.stopMonitoring();
     }
     // Re-enable the element. A cancelled attempt only re-enables it if
@@ -1289,6 +1287,10 @@
           this[name] = value;
         }
       }
+    }
+
+    if (this.progress) {
+      Drupal.ajax.compatibility?.bridgeAjaxProgress(this.progress);
     }
 
     /**
@@ -1949,8 +1951,9 @@
       );
     }
     const adapter = Drupal.ajax.compatibility;
+    const theme = Drupal.theme.ajaxProgressBar;
     const legacyTheme =
-      adapter && Drupal.theme.ajaxProgressBar !== wrapProgressBar;
+      adapter && theme !== wrapProgressBar && !nativeCallbacks.has(theme);
     if (legacyTheme) {
       adapter.warnLegacy?.(
         'Drupal.theme.ajaxProgressBar() with a jQuery collection',
@@ -1958,14 +1961,14 @@
       );
     }
     const argument = legacyTheme
-      ? adapter.wrap(progressBar.element)
-      : progressBar.element;
-    this.progress.element = progressElement(
+      ? adapter.wrap(progressBar.elementNode)
+      : progressBar.elementNode;
+    this.progress.elementNode = progressElement(
       Drupal.theme('ajaxProgressBar', argument),
     );
     this.progress.object = progressBar;
     if (this.element) {
-      this.element.after(this.progress.element);
+      this.element.after(this.progress.elementNode);
     }
   };
 
@@ -1976,22 +1979,31 @@
     if (!this.element) {
       return;
     }
-    this.progress.element = progressElement(
+    this.progress.elementNode = progressElement(
       Drupal.theme('ajaxProgressThrobber', this.progress.message),
     );
     const container = this.element.closest('[data-drupal-ajax-container]');
-    (container ?? this.element).after(this.progress.element);
+    (container ?? this.element).after(this.progress.elementNode);
   };
 
   /**
    * Sets the fullscreen progress indicator.
    */
   Drupal.Ajax.prototype.setProgressIndicatorFullscreen = function () {
-    this.progress.element = progressElement(
+    this.progress.elementNode = progressElement(
       Drupal.theme('ajaxProgressIndicatorFullscreen'),
     );
-    document.body.append(this.progress.element);
+    document.body.append(this.progress.elementNode);
   };
+
+  /**
+   * Optional callback called with the response and status after the successful
+   * command queue. Return a promise to delay drupal:ajax-complete until it
+   * settles.
+   *
+   * @type {function(Array, string): (void|Promise)}
+   */
+  Drupal.Ajax.prototype.afterSuccess = null;
 
   /**
    * Verifies an Ajax response and waits for its commands to complete.
@@ -2121,10 +2133,8 @@
    */
   Drupal.Ajax.prototype.success = function (response, status) {
     // Remove the progress element.
-    if (this.progress.element) {
-      nativeElement(this.progress.element)?.remove();
-    }
-    if (this.progress.object) {
+    this.progress?.elementNode?.remove();
+    if (this.progress?.object) {
       this.progress.object.stopMonitoring();
     }
     if (this.element) {

@@ -985,6 +985,80 @@ JS;
   }
 
   /**
+   * Tests legacy form selection and the old Views UI submission contract.
+   */
+  #[IgnoreDeprecations]
+  public function testCouncilLegacyViewsForm(): void {
+    $this->expectUserDeprecationMessage('core/internal.jquery.form is deprecated in drupal:12.0.0 and is removed from drupal:13.0.0. Use Drupal AJAX with native form options, or supply your own form plugin. See https://www.drupal.org/node/CHANGE_RECORD.');
+    $this->expectUserDeprecationMessage('Javascript Deprecation: Drupal.Ajax#$form is deprecated in drupal:12.0.0 and is removed from drupal:13.0.0. Use Drupal.Ajax#form. See https://www.drupal.org/node/CHANGE_RECORD.');
+    $this->expectUserDeprecationMessage('Javascript Deprecation: Submitting Drupal Ajax forms through the jQuery Form plugin is deprecated in drupal:12.0.0 and is removed from drupal:13.0.0. Use Drupal AJAX with native form options, or supply your own form plugin. See https://www.drupal.org/node/CHANGE_RECORD.');
+    $this->expectUserDeprecationMessage('Javascript Deprecation: Drupal.views.ajaxView#$view is deprecated in drupal:12.0.0 and is removed from drupal:13.0.0. Use the native views property. See https://www.drupal.org/node/CHANGE_RECORD.');
+    $this->expectUserDeprecationMessage('Javascript Deprecation: Drupal.views.ajaxView#$exposed_form is deprecated in drupal:12.0.0 and is removed from drupal:13.0.0. Use the native exposedForms property. See https://www.drupal.org/node/CHANGE_RECORD.');
+    $this->drupalGet('ajax-test/global-events', ['query' => ['legacy_overrides' => 1, 'legacy_plugin' => 1]]);
+    $session = $this->getSession();
+    $session->executeScript(<<<'JS'
+      const form = document.createElement('form');
+      document.body.append(form);
+      form.innerHTML = '<input name="value" value="default"><input type="submit" name="op" value="Apply">';
+      const $form = jQuery(form);
+      const submit = form.querySelector('[type="submit"]');
+      const input = form.querySelector('[name="value"]');
+      const ajax = Drupal.ajax({
+        url: Drupal.url('ajax-test/echo-request'),
+        event: 'submit',
+        element: form,
+      });
+      ajax.$form = $form;
+      jQuery(submit).on('mousedown', () => { form.clk = submit; });
+      $form.on('form-pre-serialize', (event, collection, settings) => {
+        settings.resetForm = true;
+      });
+      input.value = 'changed';
+      jQuery(submit).trigger('mousedown');
+      $form.trigger('submit');
+      window.councilViewsForm = { ajax, form, input };
+      JS);
+    $this->assertSession()->assertExpectedAjaxRequest(1);
+    $result = json_decode($this->assertSession()->elementExists('css', '#request-lane-echo')->getText(), TRUE, flags: JSON_THROW_ON_ERROR);
+    $this->assertSame('Apply', $result['fields']['op']);
+    $this->assertSame('changed', $result['fields']['value']);
+    $this->assertSame(['default', NULL], $session->evaluateScript('[councilViewsForm.input.value, councilViewsForm.form.clk]'));
+    // Load Views after jQuery to exercise the late bridge registration.
+    $this->assertSame([TRUE, TRUE, TRUE, TRUE], $session->evaluateScript(<<<'JS'
+      (async () => {
+        await new Promise((success, error) => loadjs(Drupal.url('core/modules/views/js/ajax_view.js'), { success, error }));
+        const view = Object.create(Drupal.views.ajaxView.prototype);
+        const row = document.createElement('div');
+        view.views = [row];
+        view.exposedForms = [councilViewsForm.form];
+        const exposed = jQuery(document.createElement('form'));
+        const result = [view.$view instanceof jQuery, view.$exposed_form[0] === view.exposedForms[0]];
+        view.$exposed_form = exposed;
+        return [...result, view.$exposed_form === exposed, view.exposedForms[0] === exposed[0]];
+      })()
+      JS));
+
+    // Views UI itself must track a button that was activated by script.
+    $session->evaluateScript(<<<'JS'
+      (async () => {
+        await new Promise((success, error) => loadjs(Drupal.url('core/modules/views_ui/js/ajax.js'), { success, error }));
+        const wrapper = document.body.appendChild(document.createElement('div'));
+        wrapper.className = 'js-views-ui-dialog';
+        wrapper.innerHTML = '<form><input class="js-form-submit" type="submit" name="op" value="Preview"></form>';
+        const form = window.councilNativeViewsForm = wrapper.firstElementChild;
+        Drupal.AjaxCommands.prototype.viewsSetForm(null, { url: Drupal.url('ajax-test/echo-request') });
+        jQuery(form.querySelector('input')).trigger('mousedown');
+        jQuery(form).trigger('submit');
+      })()
+      JS);
+    $this->assertSession()->assertExpectedAjaxRequest(2);
+    $result = json_decode($this->assertSession()->elementExists('css', '#request-lane-echo')->getText(), TRUE, flags: JSON_THROW_ON_ERROR);
+    $this->assertSame('Preview', $result['fields']['op']);
+    $this->assertNull($session->evaluateScript('window.councilNativeViewsForm.clk'));
+
+  }
+
+  /**
    * Tests diagnostics for explicit legacy options on a jQuery-free page.
    */
   public function testCouncilLegacyFormMissing(): void {

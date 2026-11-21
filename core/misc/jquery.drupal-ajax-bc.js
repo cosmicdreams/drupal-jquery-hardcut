@@ -1115,6 +1115,107 @@
     }
   };
 
+  // These libraries can be attached before or after core/jquery.
+  function installCollectionAccessor(
+    prototype,
+    legacy,
+    native,
+    contract,
+    single = false,
+  ) {
+    if (!prototype) {
+      return;
+    }
+    const collections = new WeakMap();
+    Object.defineProperty(prototype, legacy, {
+      configurable: true,
+      get() {
+        warnLegacy(contract, `Use the native ${native} property.`);
+        const value = this[native];
+        if (single && !value) {
+          return undefined;
+        }
+        const cached = collections.get(this);
+        if (cached && cached.value === value) {
+          return cached.collection;
+        }
+        const collection = jQuery(value);
+        collections.set(this, { value, collection });
+        return collection;
+      },
+      set(input) {
+        warnLegacy(contract, `Use the native ${native} property.`);
+        const collection = jQuery(input);
+        const value = single ? collection[0] : collection.toArray();
+        this[native] = value;
+        collections.set(this, {
+          value,
+          collection: input?.jquery ? input : collection,
+        });
+      },
+    });
+  }
+
+  const ajaxProgressObjects = new WeakSet();
+  function bridgeAjaxProgress(progress) {
+    if (typeof progress === 'object' && !ajaxProgressObjects.has(progress)) {
+      const initial = Object.getOwnPropertyDescriptor(
+        progress,
+        'element',
+      )?.value;
+      if (initial && !progress.elementNode) {
+        [progress.elementNode] = jQuery(initial);
+      }
+      installCollectionAccessor(
+        progress,
+        'element',
+        'elementNode',
+        'Drupal.Ajax#progress.element',
+        true,
+      );
+      ajaxProgressObjects.add(progress);
+    }
+  }
+
+  function installProgressAccessor() {
+    const progress = window.Drupal?.ProgressBar;
+    if (progress) {
+      progress.request = send;
+    }
+    installCollectionAccessor(
+      window.Drupal?.ProgressBar?.prototype,
+      'element',
+      'elementNode',
+      'Drupal.ProgressBar#element',
+      true,
+    );
+  }
+
+  function installViewsAccessors() {
+    const prototype = window.Drupal?.views?.ajaxView?.prototype;
+    installCollectionAccessor(
+      prototype,
+      '$view',
+      'views',
+      'Drupal.views.ajaxView#$view',
+    );
+    installCollectionAccessor(
+      prototype,
+      '$exposed_form',
+      'exposedForms',
+      'Drupal.views.ajaxView#$exposed_form',
+    );
+  }
+
+  installProgressAccessor();
+  installViewsAccessors();
+  document.addEventListener('drupal:progress-ready', installProgressAccessor, {
+    once: true,
+  });
+  document.addEventListener('drupal:views-ajax-ready', installViewsAccessors, {
+    once: true,
+  });
+
   const wrappedForms = new WeakMap();
 
   /**
@@ -1227,6 +1328,7 @@
       },
       cleanData: (nodes) => jQuery.cleanData(nodes),
       wrapMultipleRoots: (nodes) => jQuery('<div></div>').append(nodes),
+      bridgeAjaxProgress,
       warnLegacy,
       send,
       commandsComplete,
@@ -1267,6 +1369,11 @@
         jQuery(form).trigger('form-submit-notify', args);
       },
     };
+    Drupal.ajax.instances.forEach((ajax) => {
+      if (ajax?.progress) {
+        bridgeAjaxProgress(ajax.progress);
+      }
+    });
     // The jQuery form member is an accessor over the native form.
     Object.defineProperty(Drupal.Ajax.prototype, '$form', {
       configurable: true,

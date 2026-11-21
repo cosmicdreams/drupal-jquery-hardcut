@@ -165,6 +165,49 @@ class CommandsTest extends WebDriverTestBase {
   }
 
   /**
+   * Tests the type passed to overridden themes without the command adapter.
+   */
+  #[IgnoreDeprecations]
+  public function testCouncilThemeOverrides(): void {
+    foreach (['ajaxWrapperNewContent', 'ajaxWrapperMultipleRootElements'] as $hook) {
+      $this->expectUserDeprecationMessage("Javascript Deprecation: Drupal.theme.$hook() with a jQuery collection is deprecated in drupal:12.0.0 and is removed from drupal:13.0.0. Use an array of native nodes. See https://www.drupal.org/node/CHANGE_RECORD.");
+    }
+    $this->expectUserDeprecationMessage('Javascript Deprecation: Drupal.Ajax#progress.element is deprecated in drupal:12.0.0 and is removed from drupal:13.0.0. Use the native elementNode property. See https://www.drupal.org/node/CHANGE_RECORD.');
+    $this->expectUserDeprecationMessage('Javascript Deprecation: Drupal.theme.ajaxProgressBar() with a jQuery collection is deprecated in drupal:12.0.0 and is removed from drupal:13.0.0. Use the native progress bar element. See https://www.drupal.org/node/CHANGE_RECORD.');
+    $this->drupalGet('ajax-test/global-events');
+    $result = $this->getSession()->evaluateScript(<<<'JS'
+      (async () => {
+        const trace = [typeof Drupal.ajax.commandCompatibility];
+        const target = document.createElement('div');
+        target.id = 'theme-target';
+        document.body.append(target);
+        const ajax = Drupal.ajax({ url: location.href, element: target });
+        const hooks = ['ajaxWrapperNewContent', 'ajaxWrapperMultipleRootElements', 'ajaxProgressBar'];
+        const originals = Object.fromEntries(hooks.map((name) => [name, Drupal.theme[name]]));
+        const assign = (native) => hooks.forEach((name) => {
+          const override = (input, ...args) => {
+            trace.push(native ? (name === 'ajaxProgressBar' ? input instanceof HTMLElement : Array.isArray(input)) : input instanceof jQuery);
+            return originals[name](input, ...args);
+          };
+          Drupal.theme[name] = native ? (Drupal.ajax.useNativeCallback?.(override) ?? override) : override;
+        });
+        for (const native of [false, true]) {
+          assign(native);
+          await ajax.commandExecutionQueue([
+            { command: 'insert', selector: '#theme-target', method: 'html',
+              data: '<span>First</span><span>Second</span>', effect: 'fade', speed: 0 },
+          ]);
+          ajax.setProgressIndicatorBar();
+        }
+        const nodes = target.querySelectorAll('span');
+        return [trace, originals.ajaxWrapperMultipleRootElements(nodes)[0].children.length,
+          ajax.progress.element[0] === ajax.progress.elementNode];
+      })()
+      JS);
+    $this->assertSame([['undefined', TRUE, TRUE, TRUE, TRUE, TRUE, TRUE], 2, TRUE], $result);
+  }
+
+  /**
    * Tests that external scripts preserve their nonce and cross-origin settings.
    */
   public function testCouncilScriptNonce(): void {
