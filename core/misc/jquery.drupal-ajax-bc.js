@@ -1040,94 +1040,62 @@
     ].map((method) => [method, jQuery.fn[method]]),
   );
 
-  const legacyFormOptions = [
-    'iframe',
-    'iframeTarget',
-    'forceSync',
-    'closeKeepAlive',
-    'semantic',
-    'filtering',
-    'clearForm',
-    'includeHidden',
-    'target',
-    'replaceTarget',
-  ];
-
   /**
-   * Uses the explicit Form plug-in for contributed options it owns.
+   * Uses the explicit Form plugin after Drupal has run the form callbacks.
    */
-  function submitLegacyForm($form, options, onVeto, formArgument) {
+  function submitLegacyForm($form, options, prepared) {
     warnLegacy(
       'Submitting Drupal Ajax forms through the jQuery Form plugin',
       'Use Drupal AJAX with native form options, or supply your own form plugin.',
     );
-    if (typeof $form.ajaxSubmit !== 'function') {
-      throw new Error(
-        'Legacy Ajax form options require the core/internal.jquery.form library.',
-      );
-    }
-    let serialized = false;
+    const { beforeSend, error: onError, complete } = options;
+    let completed = false;
     let canceled = false;
-    const previous = $form.data('jqxhr');
+    let beforeSendError;
+    const cancel = () => {
+      if (!completed && !canceled) {
+        canceled = true;
+        prepared.cancel();
+        if (beforeSendError) {
+          window.alert(
+            `An error occurred while attempting to process ${options.url}: ${beforeSendError.message}`,
+          );
+        }
+      }
+    };
     const settings = {
       ...options,
-      beforeSerialize(collection, settings) {
-        serialized = true;
-        return options.beforeSerialize?.call(
-          this,
-          formArgument(options.beforeSerialize, settings),
-          settings,
-        );
-      },
-      beforeSubmit(values, collection, settings) {
-        return options.beforeSubmit?.call(
-          this,
-          values,
-          formArgument(options.beforeSubmit, settings),
-          settings,
-        );
-      },
-      beforeSend(xhr, settings) {
-        const proceed = options.beforeSend?.call(this, xhr, settings);
-        if (proceed === false) {
-          canceled = true;
-          onVeto(serialized);
+      beforeSend(xhr, requestSettings) {
+        try {
+          return beforeSend?.call(this, xhr, requestSettings);
+        } catch (error) {
+          beforeSendError = error;
+          return false;
         }
-        return proceed;
       },
-      success(data, status, xhr) {
-        [options.success].flat(Infinity).forEach((callback) => {
-          if (typeof callback === 'function') {
-            const argument = formArgument(callback);
-            callback.call(this, data, status, xhr || argument, argument);
-          }
-        });
+      error(...args) {
+        completed = true;
+        return onError?.apply(this, args);
       },
-      error(xhr, status, error) {
-        options.error?.call(
-          this,
-          xhr,
-          status,
-          error,
-          formArgument(options.error),
-        );
+      complete(...args) {
+        completed = true;
+        return complete?.apply(this, args);
       },
-      complete(xhr, status) {
-        options.complete?.call(
-          this,
-          xhr,
-          status,
-          formArgument(options.complete),
-        );
+      drupalAjaxPreparedForm: {
+        ...prepared,
+        cancel,
+        track(request) {
+          request.fail(cancel);
+        },
       },
     };
-    $form.ajaxSubmit(settings);
-    const request = $form.data('jqxhr');
-    if (!canceled && request === previous && !settings.closeKeepAlive) {
-      onVeto(serialized);
-      return;
+    try {
+      $form.ajaxSubmit(settings);
+      return $form.data('jqxhr');
+    } catch (error) {
+      cancel();
+      throw error;
     }
-    return request;
   }
 
   const wrappedForms = new WeakMap();
@@ -1203,8 +1171,17 @@
       warnLegacy,
       send,
       commandsComplete,
-      needsLegacyForm: (options) =>
-        legacyFormOptions.some((key) => options[key]),
+      serializeLegacyForm($form, settings) {
+        if (typeof $form.formToArray === 'function') {
+          const elements = [];
+          const values = $form.formToArray(
+            settings.semantic,
+            elements,
+            settings.filtering,
+          );
+          return { values, elements };
+        }
+      },
       submitLegacyForm,
       rejected(error) {
         const handle = jQuery.Deferred().reject();

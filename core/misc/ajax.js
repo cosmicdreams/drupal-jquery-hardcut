@@ -587,6 +587,9 @@
    * Publishes completion after the response queue or request cleanup.
    */
   function finishRequest(ajax) {
+    if (ajax.form?.clk) {
+      ajax.form.clk = null;
+    }
     if (startedRequests.delete(ajax)) {
       document.dispatchEvent(
         new CustomEvent('drupal:ajax-complete', {
@@ -632,6 +635,21 @@
     finishRequest(ajax);
   }
 
+  const legacyFormOptions = [
+    'iframe',
+    'iframeTarget',
+    'forceSync',
+    'closeKeepAlive',
+    'semantic',
+    'filtering',
+    'clearForm',
+    'includeHidden',
+    'resetForm',
+    'target',
+    'replaceTarget',
+    'uploadProgress',
+  ];
+
   /**
    * Submits a form with the jQuery Form plugin's sequence of callbacks.
    *
@@ -659,14 +677,6 @@
       }
       return nativeFormCallbacks.has(callback) ? form : legacyForm();
     };
-    if (adapter?.needsLegacyForm(options)) {
-      return adapter.submitLegacyForm(
-        legacyForm(),
-        options,
-        onVeto,
-        formArgument,
-      );
-    }
     const method =
       options.method || options.type || form.getAttribute('method');
     const action = options.url || form.getAttribute('action');
@@ -702,7 +712,10 @@
     // Read after the serialize listeners and callback, which may change it.
     const traditional = settings.traditional ?? adapter?.defaults().traditional;
 
-    const values = formToArray(form);
+    const legacy =
+      (settings.semantic || settings.filtering) &&
+      adapter?.serializeLegacyForm(legacyForm(), settings);
+    const values = legacy ? legacy.values : formToArray(form);
     let extraQuery;
     if (settings.data) {
       const data =
@@ -732,17 +745,6 @@
     if (veto.veto) {
       onVeto(true);
       return;
-    }
-
-    let query = param(values, traditional);
-    if (extraQuery) {
-      query = query ? `${query}&${extraQuery}` : extraQuery;
-    }
-    if (settings.type.toUpperCase() === 'GET') {
-      settings.url += (settings.url.includes('?') ? '&' : '?') + query;
-      settings.data = null;
-    } else {
-      settings.data = query;
     }
 
     const { success, error, complete } = settings;
@@ -779,6 +781,32 @@
           formArgument(complete),
         ]);
       };
+    }
+
+    if (legacyFormOptions.some((key) => settings[key])) {
+      if (!adapter || typeof legacyForm().ajaxSubmit !== 'function') {
+        onVeto(true);
+        throw new Error(
+          'Legacy Ajax form options require the core/internal.jquery.form library.',
+        );
+      }
+      return adapter.submitLegacyForm(legacyForm(), settings, {
+        values,
+        extraQuery,
+        elements: legacy?.elements ?? [],
+        cancel: () => onVeto(true),
+      });
+    }
+
+    let query = param(values, traditional);
+    if (extraQuery) {
+      query = query ? `${query}&${extraQuery}` : extraQuery;
+    }
+    if (settings.type.toUpperCase() === 'GET') {
+      settings.url += (settings.url.includes('?') ? '&' : '?') + query;
+      settings.data = null;
+    } else {
+      settings.data = query;
     }
 
     // Include file inputs associated with the form from outside it.
@@ -1674,12 +1702,9 @@
 
         // A veto or cancellation undoes what this attempt changed, so it can
         // be retried.
-        submitForm(ajax.form, ajax.options, (serialized) => {
-          if (ajax.setClick || submitter) {
-            ajax.form.clk = null;
-          }
-          restoreElement(ajax, serialized, true);
-        });
+        submitForm(ajax.form, ajax.options, (serialized) =>
+          restoreElement(ajax, serialized, true),
+        );
       } else {
         ajax.beforeSerialize(ajax.element, ajax.options);
         sendRequest(ajax.options, () => restoreElement(ajax, true, true));

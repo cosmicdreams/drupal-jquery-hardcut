@@ -40,7 +40,17 @@
     response,
     status,
   ) {
-    once('views-ajax-submit', '.js-views-ui-dialog form').forEach((form) => {
+    // Keep the submitter for scripts that activate a button and then submit.
+    const $forms = $('.js-views-ui-dialog form');
+    $(
+      once(
+        'views-ajax-submit',
+        $forms.find('input[type=submit].js-form-submit, button.js-form-submit'),
+      ),
+    ).on('click mousedown', function () {
+      this.form.clk = this;
+    });
+    once('views-ajax-submit', $forms).forEach((form) => {
       Drupal.ajax({
         url: response.url,
         event: 'submit',

@@ -176,54 +176,58 @@
 			iframeSrc : iframeSrc
 		}, options);
 
-		// hook for manipulating the form data before it is extracted;
-		// convenient for use with rich editors like tinyMCE or FCKEditor
-		var veto = {};
+		var prepared = options.drupalAjaxPreparedForm;
+		var traditional;
+		var elements = prepared ? prepared.elements.slice() : [];
+		var qx, a;
+		if (prepared) {
+			traditional = options.traditional === undefined ? $.ajaxSettings.traditional : options.traditional;
+			a = prepared.values;
+			qx = prepared.extraQuery;
+		} else {
+			// hook for manipulating the form data before it is extracted;
+			// convenient for use with rich editors like tinyMCE or FCKEditor
+			var veto = {};
 
-		this.trigger('form-pre-serialize', [this, options, veto]);
+			this.trigger('form-pre-serialize', [this, options, veto]);
 
-		if (veto.veto) {
-			log('ajaxSubmit: submit vetoed via form-pre-serialize trigger');
+			if (veto.veto) {
+				log('ajaxSubmit: submit vetoed via form-pre-serialize trigger');
 
-			return this;
-		}
+				return this;
+			}
 
-		// provide opportunity to alter form data before it is serialized
-		if (options.beforeSerialize && options.beforeSerialize(this, options) === false) {
-			log('ajaxSubmit: submit aborted via beforeSerialize callback');
+			// provide opportunity to alter form data before it is serialized
+			if (options.beforeSerialize && options.beforeSerialize(this, options) === false) {
+				log('ajaxSubmit: submit aborted via beforeSerialize callback');
 
-			return this;
-		}
+				return this;
+			}
 
-		var traditional = options.traditional;
+			traditional = options.traditional === undefined ? $.ajaxSettings.traditional : options.traditional;
+			a = this.formToArray(options.semantic, elements, options.filtering);
 
-		if (typeof traditional === 'undefined') {
-			traditional = $.ajaxSettings.traditional;
-		}
+			if (options.data) {
+				var optionsData = typeof(options.data) === "function" ? options.data(a) : options.data;
 
-		var elements = [];
-		var qx, a = this.formToArray(options.semantic, elements, options.filtering);
+				options.extraData = optionsData;
+				qx = $.param(optionsData, traditional);
+			}
 
-		if (options.data) {
-			var optionsData = typeof(options.data) === "function" ? options.data(a) : options.data;
+			// give pre-submit callback an opportunity to abort the submit
+			if (options.beforeSubmit && options.beforeSubmit(a, this, options) === false) {
+				log('ajaxSubmit: submit aborted via beforeSubmit callback');
 
-			options.extraData = optionsData;
-			qx = $.param(optionsData, traditional);
-		}
+				return this;
+			}
 
-		// give pre-submit callback an opportunity to abort the submit
-		if (options.beforeSubmit && options.beforeSubmit(a, this, options) === false) {
-			log('ajaxSubmit: submit aborted via beforeSubmit callback');
+			// fire vetoable 'validate' event
+			this.trigger('form-submit-validate', [a, this, options, veto]);
+			if (veto.veto) {
+				log('ajaxSubmit: submit vetoed via form-submit-validate trigger');
 
-			return this;
-		}
-
-		// fire vetoable 'validate' event
-		this.trigger('form-submit-validate', [a, this, options, veto]);
-		if (veto.veto) {
-			log('ajaxSubmit: submit vetoed via form-submit-validate trigger');
-
-			return this;
+				return this;
+			}
 		}
 
 		var q = $.param(a, traditional);
@@ -240,6 +244,12 @@
 		}
 
 		var callbacks = [];
+
+		if (options.resetForm) {
+			callbacks.push(function() {
+				HTMLFormElement.prototype.reset.call($form[0]);
+			});
+		}
 
 		if (options.clearForm) {
 			callbacks.push(function() {
@@ -315,13 +325,21 @@
 
 		// options.iframe allows user to force iframe mode
 		// 06-NOV-09: now defaulting to iframe mode if file input is detected
-		if (options.iframe !== false && (options.iframe || shouldUseFrame)) {
+		var useFrame = options.iframe !== false && (options.iframe || shouldUseFrame);
+		if (useFrame) {
 			// hack to fix Safari hang (thanks to Tim Molendijk for this)
 			// see: http://groups.google.com/group/jquery-dev/browse_thread/thread/36395b7ab510dd5d
 			if (options.closeKeepAlive) {
-				$.get(options.closeKeepAlive, function() {
+				var keepAlive = $.get(options.closeKeepAlive, function() {
 					jqxhr = fileUploadIframe(a);
+					if (prepared) {
+						$form.data('jqxhr', jqxhr);
+						prepared.track(jqxhr);
+					}
 				});
+				if (prepared) {
+					jqxhr = keepAlive.fail(prepared.cancel);
+				}
 
 			} else {
 				jqxhr = fileUploadIframe(a);
@@ -336,8 +354,12 @@
 
 		$form.removeData('jqxhr').data('jqxhr', jqxhr);
 
-		// clear element array
-		for (var k = 0; k < elements.length; k++) {
+		if (prepared && jqxhr && !(useFrame && options.closeKeepAlive)) {
+			prepared.track(jqxhr);
+		}
+
+		// A deferred iframe submission still needs these inputs.
+		for (var k = 0; k < elements.length && !(useFrame && options.closeKeepAlive); k++) {
 			elements[k] = null;
 		}
 
@@ -427,7 +449,7 @@
 				}
 
 				if (beforeSend) {
-					beforeSend.call(this, xhr, o);
+					return beforeSend.call(this, xhr, o);
 				}
 			};
 
@@ -525,8 +547,8 @@
 			}
 
 			if (s.beforeSend && s.beforeSend.call(s.context, xhr, s) === false) {
-				if (s.global) {
-					$.active--;
+				if (g && !--$.active) {
+					$.event.trigger('ajaxStop');
 				}
 				deferred.reject();
 

@@ -860,6 +860,121 @@ JS;
   }
 
   /**
+   * Tests that late legacy form options are honored and cancellation cleans up.
+   */
+  #[IgnoreDeprecations]
+  public function testCouncilLegacyFormCancellation(): void {
+    $this->expectUserDeprecationMessage('core/internal.jquery.form is deprecated in drupal:12.0.0 and is removed from drupal:13.0.0. Use Drupal AJAX with native form options, or supply your own form plugin. See https://www.drupal.org/node/CHANGE_RECORD.');
+    $this->expectUserDeprecationMessage('Javascript Deprecation: Drupal.Ajax#$form is deprecated in drupal:12.0.0 and is removed from drupal:13.0.0. Use Drupal.Ajax#form. See https://www.drupal.org/node/CHANGE_RECORD.');
+    $this->expectUserDeprecationMessage('Javascript Deprecation: Submitting Drupal Ajax forms through the jQuery Form plugin is deprecated in drupal:12.0.0 and is removed from drupal:13.0.0. Use Drupal AJAX with native form options, or supply your own form plugin. See https://www.drupal.org/node/CHANGE_RECORD.');
+    $this->drupalGet('ajax-test/global-events', ['query' => ['legacy_overrides' => 1, 'legacy_plugin' => 1]]);
+    $session = $this->getSession();
+    $result = $session->evaluateScript(<<<'JS'
+      (async () => {
+        const { ajax, $form } = legacyAjaxOverrides;
+        const form = $form[0];
+        const button = form.querySelector('button');
+        form.querySelector('select').value = 'enabled';
+        let attempt;
+        let trace = [];
+        const alerts = [];
+        window.alert = (message) => alerts.push(message);
+        Drupal.behaviors.councilForm = {
+          attach(context) { if (context === form) trace.push('attach'); },
+          detach(context, settings, trigger) {
+            if (context === form && trigger === 'serialize') trace.push('detach');
+          },
+        };
+        $form.on('form-pre-serialize', (event, collection, options) => {
+          trace.push('serialize');
+          if (attempt === 'prefilter') options.clearForm = true;
+        });
+        jQuery.ajaxPrefilter((options, original, xhr) => {
+          if (attempt === 'prefilter' && options.clearForm) {
+            trace.push('prefilter');
+            xhr.abort();
+          }
+        });
+        const { beforeSubmit } = ajax.options;
+        ajax.options.beforeSubmit = function (values, element, options) {
+          trace.push('submit');
+          if (attempt === 'multipart') options.uploadProgress = () => {};
+          if (attempt === 'iframe') {
+            options.iframe = true;
+            options.closeKeepAlive = Drupal.url('ajax-test/echo-native-request');
+          }
+          return beforeSubmit.call(this, values, element, options);
+        };
+        const { beforeSend } = ajax.options;
+        ajax.options.beforeSend = function (xhr, settings) {
+          beforeSend.call(this, xhr, settings);
+          if (attempt === 'throw') throw new Error('beforeSend failed');
+          return false;
+        };
+        for (const event of ['drupal:ajax-before-send', 'drupal:ajax-complete']) {
+          document.addEventListener(event, (e) => {
+            if (e.detail.ajax === ajax) trace.push(event);
+          });
+        }
+        const requests = window.drupalCumulativeXhrCount;
+        const run = (method, name) => {
+          attempt = method;
+          trace = [];
+          form.enctype = method === 'multipart' ? 'multipart/form-data' : 'application/x-www-form-urlencoded';
+          ajax.options.clearForm = method === 'throw';
+          jQuery(button).trigger('mousedown.legacyOverrides');
+          return [name, trace, ajax.ajaxing, form.clk, button.disabled, jQuery.active];
+        };
+        const prefilter = run('prefilter', 'prefilter');
+        const multipart = run('multipart', 'multipart');
+        const thrown = run('throw', 'throw');
+        const iframe = await new Promise((resolve) => {
+          document.addEventListener('drupal:ajax-complete', () => {
+            setTimeout(() => resolve(['iframe', trace, ajax.ajaxing, form.clk, button.disabled, jQuery.active]), 0);
+          }, { once: true });
+          run('iframe', 'iframe');
+          setTimeout(() => resolve(['iframe timeout', trace, ajax.ajaxing]), 1500);
+        });
+        return [prefilter, multipart, thrown, iframe, alerts.some((alert) => alert.endsWith('beforeSend failed')), window.drupalCumulativeXhrCount - requests];
+      })()
+      JS);
+    $attempt = ['serialize', 'detach', 'submit', 'drupal:ajax-before-send', 'attach', 'drupal:ajax-complete'];
+    $this->assertSame([
+      ['prefilter', ['serialize', 'detach', 'submit', 'prefilter', 'attach'], FALSE, NULL, FALSE, 0],
+      ['multipart', $attempt, FALSE, NULL, FALSE, 0],
+      ['throw', $attempt, FALSE, NULL, FALSE, 0],
+      ['iframe', $attempt, FALSE, NULL, FALSE, 0],
+      TRUE,
+      1,
+    ], $result);
+  }
+
+  /**
+   * Tests diagnostics for explicit legacy options on a jQuery-free page.
+   */
+  public function testCouncilLegacyFormMissing(): void {
+    $this->drupalGet('ajax-test/native-request', ['query' => ['commands' => 1]]);
+    $result = $this->getSession()->evaluateScript(<<<'JS'
+      (() => {
+        const form = document.body.appendChild(document.createElement('form'));
+        const button = form.appendChild(document.createElement('button'));
+        const ajax = Drupal.ajax({ element: form, event: 'submit', url: location.href });
+        ajax.form = form;
+        let message = '';
+        window.alert = (value) => { message = value; };
+        const { beforeSubmit } = ajax.options;
+        ajax.options.beforeSubmit = function (values, element, settings) {
+          settings.resetForm = true;
+          return beforeSubmit.apply(this, arguments);
+        };
+        form.requestSubmit(button);
+        return [message.endsWith('Legacy Ajax form options require the core/internal.jquery.form library.'), ajax.ajaxing, form.clk, window.drupalCumulativeXhrCount];
+      })()
+      JS);
+    $this->assertSame([TRUE, FALSE, NULL, 0], $result);
+  }
+
+  /**
    * Tests the opted-in request factory and cross-origin settings.
    */
   #[IgnoreDeprecations]
