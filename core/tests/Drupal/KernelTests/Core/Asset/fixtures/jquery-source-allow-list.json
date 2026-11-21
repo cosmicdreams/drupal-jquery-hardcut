@@ -4,10 +4,6 @@
       "owner": "Z",
       "references": 1
     },
-    "misc/ajax.js": {
-      "owner": "A",
-      "references": 1
-    },
     "misc/autocomplete.js": {
       "owner": "C",
       "references": 1
@@ -90,10 +86,6 @@
     },
     "misc/position.js": {
       "owner": "D",
-      "references": 1
-    },
-    "misc/progress.js": {
-      "owner": "U",
       "references": 1
     },
     "misc/states.js": {

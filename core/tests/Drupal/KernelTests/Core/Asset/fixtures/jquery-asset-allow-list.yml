@@ -32,7 +32,6 @@
 - core/assets/vendor/jquery/jquery.min.js
 - core/assets/vendor/sortable/Sortable.min.js
 - core/lib/Drupal/Core/Render/Element/RenderElementBase.php
-- core/misc/ajax.js
 - core/misc/autocomplete.js
 - core/misc/batch.js
 - core/misc/details-aria.js
@@ -54,7 +53,6 @@
 - core/misc/jquery.no-conflict.js
 - core/misc/machine-name.js
 - core/misc/position.js
-- core/misc/progress.js
 - core/misc/states.js
 - core/misc/tabbingmanager.js
 - core/misc/tabledrag.js
