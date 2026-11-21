@@ -41,7 +41,14 @@
         const { target, type, namespace, selector, listener } = binding;
         if (
           subscriptions.has(binding) ||
-          window.Drupal.ajax?.compatibility?.ownsLegacyEvents?.(jquery, binding)
+          window.Drupal.ajax?.compatibility?.ownsLegacyEvents?.(
+            jquery,
+            binding,
+          ) ||
+          window.Drupal.states?.compatibility?.ownsLegacyEvents?.(
+            jquery,
+            binding,
+          )
         ) {
           return;
         }
@@ -61,6 +68,7 @@
             (type === 'submit' && target instanceof HTMLFormElement));
         const forwardsSynthetic =
           binding.ajax ||
+          binding.states ||
           type === 'compatibility:probe' ||
           directActivation ||
           selectChange;
@@ -117,6 +125,15 @@
               value: () => event.stopImmediatePropagation(),
             },
           });
+          if (binding.states && !projected.detail) {
+            Object.defineProperty(projected, 'detail', {
+              value: {
+                value: event.value,
+                oldValue: event.oldValue,
+                trigger: event.trigger,
+              },
+            });
+          }
           return listener.call(this, projected, ...args);
         }
 
