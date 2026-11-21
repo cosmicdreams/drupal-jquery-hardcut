@@ -1723,7 +1723,7 @@
       event.stopPropagation();
       const [name] = eventNames(ajax.elementSettings.event);
       const adapter = Drupal.ajax.compatibility;
-      if (name?.includes('.') && adapter) {
+      if (name && adapter) {
         adapter.trigger(element, name);
       } else if (name) {
         element.dispatchEvent(
