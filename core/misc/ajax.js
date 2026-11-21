@@ -13,16 +13,11 @@
 
 // cspell:ignore nocontent notmodified
 
-(function (
-  $,
-  window,
-  Drupal,
-  drupalSettings,
-  loadjs,
-  { isFocusable, tabbable },
-) {
+(function (window, Drupal, drupalSettings, loadjs, { isFocusable, tabbable }) {
   const rCRLF = /\r?\n/g;
   const rBracket = /\[\]$/;
+  const eventNames = (names) =>
+    typeof names === 'string' ? (names.match(/[^\x20\t\r\n\f]+/g) ?? []) : [];
   const multipartType = 'multipart/form-data';
   const builtinTypes = {
     '[object Boolean]': 'boolean',
@@ -583,7 +578,7 @@
     const prepared = preparedRequests.delete(ajax);
     // Remove the progress element.
     if (ajax.progress.element) {
-      $(ajax.progress.element).remove();
+      nativeElement(ajax.progress.element)?.remove();
     }
     if (ajax.progress.object) {
       ajax.progress.object.stopMonitoring();
@@ -591,7 +586,9 @@
     // Re-enable the element. A cancelled attempt only re-enables it if
     // beforeSend disabled it.
     if (!cancelled || prepared) {
-      $(ajax.element).prop('disabled', false);
+      if (ajax.element) {
+        ajax.element.disabled = false;
+      }
     }
     // Reattach behaviors, if they were detached in beforeSerialize(), and the
     // form is still part of the document.
@@ -787,9 +784,12 @@
         if (typeof elementSettings.selector === 'undefined') {
           elementSettings.selector = `#${base}`;
         }
-        // Use jQuery selector instead of a native selector for
-        // backwards compatibility.
-        once('drupal-ajax', $(elementSettings.selector)).forEach((el) => {
+        const { selector } = elementSettings;
+        const targets =
+          !isNativeSelector(selector) && Drupal.ajax.compatibility
+            ? Drupal.ajax.compatibility.select(selector)
+            : commandTargets(selector);
+        once('drupal-ajax', targets).forEach((el) => {
           elementSettings.element = el;
           elementSettings.base = base;
           Drupal.ajax(elementSettings);
@@ -806,7 +806,7 @@
         const elementSettings = {
           // Ajax submits specified in this manner automatically submit to the
           // normal form action.
-          url: $(el.form).attr('action'),
+          url: el.form?.getAttribute('action') ?? undefined,
           // Form submit button clicks need to tell the form what was clicked so
           // it gets passed in the POST request.
           setClick: true,
@@ -828,6 +828,7 @@
         Drupal.ajax.expired().forEach((instance) => {
           // Set this to null and allow garbage collection to reclaim
           // the memory.
+          instance.removeEventBindings?.();
           Drupal.ajax.instances[instance.instanceIndex] = null;
         });
       }
@@ -960,14 +961,14 @@
    *       // If the old version of Drupal.ajax() needs to be used those
    *       // properties can be added
    *       base: 'myBase',
-   *       element: $(context).find('.someElement')
+   *       element: context.querySelector('.someElement')
    *     };
    *
    *     var myAjaxObject = Drupal.ajax(ajaxSettings);
    *
    *     // Declare a new Ajax command specifically for this Ajax object.
    *     myAjaxObject.commands.insert = function (ajax, response, status) {
-   *       $('#my-wrapper').append(response.data);
+   *       document.querySelector('#my-wrapper').insertAdjacentHTML('beforeend', response.data);
    *       alert('New content was appended to #my-wrapper');
    *     };
    *
@@ -1053,18 +1054,19 @@
   Drupal.ajax.bindAjaxLinks = (element) => {
     // Bind Ajax behaviors to all items showing the class.
     once('ajax', '.use-ajax', element).forEach((ajaxLink) => {
-      const $linkElement = $(ajaxLink);
-
       const elementSettings = {
         // Clicked links look better with the throbber than the progress bar.
         progress: { type: 'throbber' },
-        dialogType: $linkElement.data('dialog-type'),
-        dialog: $linkElement.data('dialog-options'),
-        dialogRenderer: $linkElement.data('dialog-renderer'),
-        base: $linkElement.attr('id'),
+        dialogType: Drupal.ajax.elementData.get(ajaxLink, 'dialog-type'),
+        dialog: Drupal.ajax.elementData.get(ajaxLink, 'dialog-options'),
+        dialogRenderer: Drupal.ajax.elementData.get(
+          ajaxLink,
+          'dialog-renderer',
+        ),
+        base: ajaxLink.getAttribute('id') ?? undefined,
         element: ajaxLink,
       };
-      const href = $linkElement.attr('href');
+      const href = ajaxLink.getAttribute('href');
       /**
        * For anchor tags, these will go to the target of the anchor rather than
        * the usual location.
@@ -1073,7 +1075,10 @@
         elementSettings.url = href;
         elementSettings.event = 'click';
       }
-      const httpMethod = $linkElement.data('ajax-http-method');
+      const httpMethod = Drupal.ajax.elementData.get(
+        ajaxLink,
+        'ajax-http-method',
+      );
       /**
        * In case of setting custom ajax http method for link we rewrite ajax.httpMethod.
        */
@@ -1223,9 +1228,8 @@
 
     // If no Ajax callback URL was given, use the link href or form action.
     if (!this.url) {
-      const $element = $(this.element);
-      if (this.element.tagName === 'A') {
-        this.url = $element.attr('href');
+      if (this.element?.tagName === 'A') {
+        this.url = this.element.getAttribute('href') ?? undefined;
       } else if (this.element && element.form) {
         this.url = this.form.getAttribute('action') ?? undefined;
       }
@@ -1377,35 +1381,55 @@
     }
     ajax.options.url += `${Drupal.ajax.WRAPPER_FORMAT}=${wrapper}`;
 
-    // Bind the ajaxSubmit function to the element event.
-    $(ajax.element).on(elementSettings.event, function (event) {
-      if (
-        !drupalSettings.ajaxTrustedUrl.hasOwnProperty(ajax.url) &&
-        !Drupal.url.isLocal(ajax.url)
-      ) {
-        throw new Error(
-          Drupal.t('The callback URL is not local and not trusted: !url', {
-            '!url': ajax.url,
-          }),
+    const removers = [];
+    const bind = (names, operation) => {
+      eventNames(names).forEach((name) => {
+        const [type, ...namespaces] = name.split('.');
+        if (!type) {
+          return;
+        }
+        const target = ajax.element;
+        const listener = (event) => operation(target, event);
+        target.addEventListener(type, listener);
+        const unregister = Drupal.eventBindings.register({
+          target,
+          type,
+          namespace: namespaces.sort().join('.'),
+          listener,
+          ajax: true,
+        });
+        removers.push(() => {
+          unregister();
+          target.removeEventListener(type, listener);
+        });
+      });
+    };
+    if (ajax.element) {
+      bind(elementSettings.event, (target, event) => {
+        if (
+          !Object.hasOwn(drupalSettings.ajaxTrustedUrl, ajax.url) &&
+          !Drupal.url.isLocal(ajax.url)
+        ) {
+          throw new Error(
+            Drupal.t('The callback URL is not local and not trusted: !url', {
+              '!url': ajax.url,
+            }),
+          );
+        }
+        return ajax.eventResponse(target, event);
+      });
+      if (elementSettings.keypress) {
+        bind('keypress', (target, event) =>
+          ajax.keypressResponse(target, event),
         );
       }
-      return ajax.eventResponse(this, event);
-    });
-
-    // If necessary, enable keyboard submission so that Ajax behaviors
-    // can be triggered through keyboard input as well as e.g. a mousedown
-    // action.
-    if (elementSettings.keypress) {
-      $(ajax.element).on('keypress', function (event) {
-        return ajax.keypressResponse(this, event);
+      bind(elementSettings.prevent, (target, event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        return false;
       });
-    }
-
-    // If necessary, prevent the browser default action of an additional event.
-    // For example, prevent the browser default action of a click, even if the
-    // Ajax behavior binds to mousedown.
-    if (elementSettings.prevent) {
-      $(ajax.element).on(elementSettings.prevent, false);
+      ajax.removeEventBindings = () =>
+        removers.splice(0).forEach((remove) => remove());
     }
   };
 
@@ -1481,7 +1505,7 @@
    *
    * @param {HTMLElement} element
    *   Element the event was triggered on.
-   * @param {jQuery.Event} event
+   * @param {Event} event
    *   Triggered event.
    */
   Drupal.Ajax.prototype.keypressResponse = function (element, event) {
@@ -1493,9 +1517,12 @@
     // where the space bar activation causes inappropriate activation if
     // #ajax['keypress'] is TRUE. On a text-type widget a space should always
     // be a space.
+    const key =
+      event.key ||
+      (event.which === 13 ? 'Enter' : event.which === 32 ? ' ' : '');
     if (
-      event.which === 13 ||
-      (event.which === 32 &&
+      key === 'Enter' ||
+      (key === ' ' &&
         element.type !== 'text' &&
         element.type !== 'textarea' &&
         element.type !== 'tel' &&
@@ -1503,7 +1530,15 @@
     ) {
       event.preventDefault();
       event.stopPropagation();
-      $(element).trigger(ajax.elementSettings.event);
+      const [name] = eventNames(ajax.elementSettings.event);
+      if (name) {
+        element.dispatchEvent(
+          new Event(name.split('.')[0], {
+            bubbles: true,
+            cancelable: true,
+          }),
+        );
+      }
     }
   };
 
@@ -1517,7 +1552,7 @@
    *
    * @param {HTMLElement} element
    *   Element the event was triggered on.
-   * @param {jQuery.Event} event
+   * @param {Event} event
    *   Triggered event.
    */
   Drupal.Ajax.prototype.eventResponse = function (element, event) {
@@ -1659,7 +1694,9 @@
     // interaction while the Ajax request is in progress. ajax.ajaxing prevents
     // the element from triggering a new request, but does not prevent the user
     // from changing its value.
-    $(this.element).prop('disabled', true);
+    if (this.element) {
+      this.element.disabled = true;
+    }
 
     if (!this.progress || !this.progress.type) {
       return;
@@ -1719,13 +1756,28 @@
   /**
    * Provide a wrapper for the AJAX progress bar element.
    *
-   * @param {jQuery} $element
+   * @param {HTMLElement} element
    *   Progress bar element.
-   * @return {string}
-   *   The HTML markup for the progress bar.
+   * @return {HTMLElement}
+   *   The progress bar wrapper.
    */
-  Drupal.theme.ajaxProgressBar = ($element) =>
-    $('<div class="ajax-progress ajax-progress-bar"></div>').append($element);
+  const wrapProgressBar = (element) => {
+    const wrapper = document.createElement('div');
+    wrapper.className = 'ajax-progress ajax-progress-bar';
+    wrapper.append(element);
+    return wrapper;
+  };
+
+  Drupal.theme.ajaxProgressBar = wrapProgressBar;
+
+  function progressElement(content) {
+    if (typeof content !== 'string') {
+      return nativeElement(content);
+    }
+    const template = document.createElement('template');
+    template.innerHTML = content;
+    return template.content.firstElementChild;
+  }
 
   /**
    * Sets the progress bar progress indicator.
@@ -1733,9 +1785,8 @@
   Drupal.Ajax.prototype.setProgressIndicatorBar = function () {
     const progressBar = new Drupal.ProgressBar(
       `ajax-progress-${this.element.id}`,
-      $.noop,
+      undefined,
       this.progress.method,
-      $.noop,
     );
     if (this.progress.message) {
       progressBar.setProgress(-1, this.progress.message);
@@ -1746,35 +1797,37 @@
         this.progress.interval || 1500,
       );
     }
-    this.progress.element = $(
-      Drupal.theme('ajaxProgressBar', progressBar.element),
+    const adapter = Drupal.ajax.compatibility;
+    const argument =
+      adapter && Drupal.theme.ajaxProgressBar !== wrapProgressBar
+        ? adapter.wrap(progressBar.element)
+        : progressBar.element;
+    this.progress.element = progressElement(
+      Drupal.theme('ajaxProgressBar', argument),
     );
     this.progress.object = progressBar;
-    $(this.element).after(this.progress.element);
+    this.element.after(this.progress.element);
   };
 
   /**
    * Sets the throbber progress indicator.
    */
   Drupal.Ajax.prototype.setProgressIndicatorThrobber = function () {
-    this.progress.element = $(
+    this.progress.element = progressElement(
       Drupal.theme('ajaxProgressThrobber', this.progress.message),
     );
-    if ($(this.element).closest('[data-drupal-ajax-container]').length) {
-      $(this.element)
-        .closest('[data-drupal-ajax-container]')
-        .after(this.progress.element);
-    } else {
-      $(this.element).after(this.progress.element);
-    }
+    const container = this.element.closest('[data-drupal-ajax-container]');
+    (container ?? this.element).after(this.progress.element);
   };
 
   /**
    * Sets the fullscreen progress indicator.
    */
   Drupal.Ajax.prototype.setProgressIndicatorFullscreen = function () {
-    this.progress.element = $(Drupal.theme('ajaxProgressIndicatorFullscreen'));
-    $('body').append(this.progress.element);
+    this.progress.element = progressElement(
+      Drupal.theme('ajaxProgressIndicatorFullscreen'),
+    );
+    document.body.append(this.progress.element);
   };
 
   /**
@@ -1902,21 +1955,29 @@
   Drupal.Ajax.prototype.success = function (response, status) {
     // Remove the progress element.
     if (this.progress.element) {
-      $(this.progress.element).remove();
+      nativeElement(this.progress.element)?.remove();
     }
     if (this.progress.object) {
       this.progress.object.stopMonitoring();
     }
-    $(this.element).prop('disabled', false);
+    if (this.element) {
+      this.element.disabled = false;
+    }
 
-    // Save element's ancestors tree so if the element is removed from the dom
-    // we can try to refocus one of its parents. Using addBack reverse the
-    // result array, meaning that index 0 is the highest parent in the hierarchy
-    // in this situation it is usually a <form> element.
-    const elementParents = $(this.element)
-      .parents('[data-drupal-selector]')
-      .addBack()
-      .toArray();
+    // Save the element and its ancestors, starting with the nearest target.
+    const elementParents = [];
+    if (this.element) {
+      elementParents.push(this.element);
+      for (
+        let parent = this.element.parentElement;
+        parent;
+        parent = parent.parentElement
+      ) {
+        if (parent.hasAttribute('data-drupal-selector')) {
+          elementParents.push(parent);
+        }
+      }
+    }
 
     // Track if any command is altering the focus so we can avoid changing the
     // focus set by the Ajax command.
@@ -1953,29 +2014,28 @@
             let target = false;
             if (this.element) {
               if (
-                $(this.element).data('refocus-blur') &&
+                Drupal.ajax.elementData.get(this.element, 'refocus-blur') &&
                 this.preCommandsFocusedElementSelector
               ) {
                 target = document.querySelector(
-                  `[data-drupal-selector="${this.preCommandsFocusedElementSelector}"]`,
+                  `[data-drupal-selector="${CSS.escape(this.preCommandsFocusedElementSelector)}"]`,
                 );
               }
-              if (!target && !$(this.element).data('disable-refocus')) {
-                for (
-                  let n = elementParents.length - 1;
-                  !target && n >= 0;
-                  n--
-                ) {
+              if (
+                !target &&
+                !Drupal.ajax.elementData.get(this.element, 'disable-refocus')
+              ) {
+                for (let n = 0; !target && n < elementParents.length; n += 1) {
                   target = document.querySelector(
-                    `[data-drupal-selector="${elementParents[n].getAttribute(
-                      'data-drupal-selector',
+                    `[data-drupal-selector="${CSS.escape(
+                      elementParents[n].getAttribute('data-drupal-selector'),
                     )}"]`,
                   );
                 }
               }
             }
             if (target) {
-              $(target).trigger('focus');
+              target.focus();
             }
           }
           // Reattach behaviors, if they were detached in beforeSerialize(). The
@@ -2043,7 +2103,7 @@
   Drupal.Ajax.prototype.error = function (xmlhttprequest, uri, customMessage) {
     restoreElement(this);
     // Undo hide.
-    $(this.wrapper).show();
+    commandTargets(this.wrapper).forEach(showInsertedElement);
     throw new Drupal.AjaxError(xmlhttprequest, uri, customMessage);
   };
 
@@ -3022,4 +3082,4 @@
   Drupal.ajax.compatibility = Drupal.ajax.compatibility ?? null;
 
   document.dispatchEvent(new CustomEvent('drupal:ajax-ready'));
-})(jQuery, window, Drupal, drupalSettings, loadjs, window.tabbable);
+})(window, Drupal, drupalSettings, loadjs, window.tabbable);

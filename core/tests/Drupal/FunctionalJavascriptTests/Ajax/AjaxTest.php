@@ -734,6 +734,41 @@ JS;
   }
 
   /**
+   * Tests the Ajax behavior and command queue without a compatibility library.
+   */
+  public function testAjaxPageWithoutJquery(): void {
+    $this->drupalGet('ajax-test/native-request', ['query' => ['commands' => 1]]);
+    $session = $this->getSession();
+    $this->assertSame('undefined', $session->evaluateScript('typeof jQuery'));
+    $this->clickLink('Send native Ajax request');
+    $this->assertSession()->assertExpectedAjaxRequest(1);
+    $result = json_decode($this->assertSession()->elementExists('css', '#request-lane-echo')->getText(), TRUE, flags: JSON_THROW_ON_ERROR);
+    $this->assertSame('XMLHttpRequest', $result['requestedWith']);
+    $this->assertSame('POST', $result['method']);
+    $this->assertSame('undefined', $session->evaluateScript('typeof jQuery'));
+  }
+
+  /**
+   * Tests native progress polling and stopping from the update callback.
+   */
+  public function testNativeProgressBar(): void {
+    $this->drupalGet('ajax-test/native-request', ['query' => ['commands' => 1]]);
+    $this->getSession()->executeScript(<<<'JS'
+      const progress = new Drupal.ProgressBar('native-progress', (percentage, message, bar) => {
+        if (percentage === 100) {
+          bar.stopMonitoring();
+        }
+      }, 'POST');
+      document.body.append(progress.element);
+      progress.startMonitoring(Drupal.url('ajax-test/echo-native-request?progress=1'), 10);
+      JS);
+    $this->assertSession()->assertExpectedAjaxRequest(1);
+    $this->assertSession()->elementTextEquals('css', '#native-progress .progress__label', 'Finished');
+    $this->assertSession()->elementTextEquals('css', '#native-progress .progress__description', 'POST XMLHttpRequest');
+    $this->assertSession()->elementTextEquals('css', '#native-progress .progress__percentage', '100%');
+  }
+
+  /**
    * Tests native request completion separately from the Ajax command queue.
    */
   public function testNativeCommandRequest(): void {

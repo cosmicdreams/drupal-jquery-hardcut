@@ -439,7 +439,19 @@ class AjaxTestController {
   /**
    * Loads the shared transport for a test page.
    */
-  public function nativeRequest(): array {
+  public function nativeRequest(Request $request): array {
+    if ($request->query->getBoolean('commands')) {
+      return [
+        'link' => [
+          '#type' => 'link',
+          '#title' => 'Send native Ajax request',
+          '#url' => Url::fromRoute('ajax_test.echo_request'),
+          '#attributes' => ['class' => ['use-ajax']],
+        ],
+        'output' => ['#markup' => '<div id="request-lane-echo"></div>'],
+        '#attached' => ['library' => ['core/drupal.ajax']],
+      ];
+    }
     return [
       '#markup' => 'Native request test',
       '#attached' => ['library' => ['core/drupal.xhr']],
@@ -461,7 +473,16 @@ class AjaxTestController {
    * Returns the request method and payload as JSON.
    */
   public function echoNativeRequest(Request $request): JsonResponse {
-    return new JsonResponse($this->getRequestData($request));
+    $data = $this->getRequestData($request);
+    if ($request->query->getBoolean('progress')) {
+      $data += [
+        'status' => 1,
+        'percentage' => 100,
+        'message' => $data['method'] . ' ' . $data['requestedWith'],
+        'label' => 'Finished',
+      ];
+    }
+    return new JsonResponse($data);
   }
 
   /**

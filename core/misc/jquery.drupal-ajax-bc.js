@@ -1021,6 +1021,34 @@
     if (!Drupal?.Ajax || Drupal.ajax.compatibility) {
       return;
     }
+    const subscriptions = new Map();
+    Drupal.eventBindings.observe({
+      add(binding) {
+        const { ajax, target, type, namespace, listener } = binding;
+        // The shared event adapter already covers these bindings.
+        if (
+          !ajax ||
+          (type === 'change' && target instanceof HTMLSelectElement) ||
+          (type === 'click' && target instanceof HTMLAnchorElement) ||
+          (type === 'submit' && target instanceof HTMLFormElement)
+        ) {
+          return;
+        }
+        const name = namespace ? `${type}.${namespace}` : type;
+        const deliver = (event) => {
+          if (event.isTrigger && !event.originalEvent) {
+            return listener(event);
+          }
+        };
+        const element = jQuery(target);
+        element.on(name, deliver);
+        subscriptions.set(binding, () => element.off(name, deliver));
+      },
+      remove(binding) {
+        subscriptions.get(binding)?.();
+        subscriptions.delete(binding);
+      },
+    });
     Drupal.ajax.compatibility = {
       send,
       commandsComplete,
@@ -1039,6 +1067,7 @@
       hasDomMethodOverride: (method) =>
         originalDomMethods.get(method) !== jQuery.fn[method],
       wrap: (form) => jQuery(form),
+      select: (selector) => jQuery(selector).toArray(),
       trigger(form, type, args) {
         jQuery(form).trigger(type, args);
       },
