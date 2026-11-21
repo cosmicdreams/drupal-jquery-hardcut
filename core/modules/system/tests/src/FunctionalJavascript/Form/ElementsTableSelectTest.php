@@ -45,21 +45,22 @@ class ElementsTableSelectTest extends WebDriverTestBase {
       }
     }
 
-    // Test radios (#multiple == FALSE).
+    // Test radios (#multiple == FALSE). A rebuild can assign new element IDs.
     $this->drupalGet('form_test/tableselect/multiple-false');
+    $assert = $this->assertSession();
     for ($i = 1; $i <= 3; $i++) {
-      $row = 'edit-tableselect-row' . $i;
-      $this->assertTrue($page->hasUncheckedField($row));
-      $this->click('input[value="row' . $i . '"]');
-      $this->assertSession()->assertWaitOnAjaxRequest();
-      $this->assertTrue($page->hasCheckedField($row));
-      // Check other rows are not checked.
+      $row = 'input[type="radio"][value="row' . $i . '"]';
+      $this->assertFalse($assert->elementExists('css', $row)->isChecked());
+      $this->click($row);
+      $assert->assertWaitOnAjaxRequest();
+      $this->assertTrue($assert->elementExists('css', $row)->isChecked());
+      // Check other rows are unchecked.
       for ($j = 1; $j <= 3; $j++) {
-        if ($j == $i) {
+        if ($j === $i) {
           continue;
         }
-        $other_row = 'edit-tableselect-row' . $j;
-        $this->assertTrue($page->hasUncheckedField($other_row));
+        $other_row = 'input[type="radio"][value="row' . $j . '"]';
+        $this->assertFalse($assert->elementExists('css', $other_row)->isChecked());
       }
     }
   }

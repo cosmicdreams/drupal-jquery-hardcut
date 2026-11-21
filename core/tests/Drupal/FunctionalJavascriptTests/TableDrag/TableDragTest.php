@@ -445,9 +445,9 @@ class TableDragTest extends WebDriverTestBase {
         jQuery(document).triggerHandler(event('touchmove', x - amount));
         const indented = drag.rowObject.indents === 1 && drag.dragObject.indentPointerPos.x === x - amount;
         jQuery(document).triggerHandler(event('touchmove', x));
-        const outdented = drag.rowObject.indents === 0;
+        const returnedToRoot = drag.rowObject.indents === 0;
         jQuery(document).triggerHandler(event('touchend', x));
-        return [started, indented, outdented, drag.dragObject === null && drag.rowObject === null];
+        return [started, indented, returnedToRoot, drag.dragObject === null && drag.rowObject === null];
       })()
       JS));
   }
