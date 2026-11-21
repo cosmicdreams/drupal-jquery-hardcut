@@ -1115,17 +1115,20 @@ class TableDragTest extends WebDriverTestBase {
         const order = [];
         const prototype = Drupal.TableResponsive.prototype;
         const original = prototype.eventhandlerEvaluateColumnVisibility;
-        prototype.eventhandlerEvaluateColumnVisibility = function (event) {
+        const evaluate = function (event) {
           order.push(this.table.id);
           return original.call(this, event);
         };
+        evaluate.nativeTableEvent = true;
+        prototype.eventhandlerEvaluateColumnVisibility = evaluate;
         direct.id = 'direct';
         new Drupal.TableResponsive(direct);
         Drupal.attachBehaviors(fixture, drupalSettings);
         const evaluatedDirect = order.includes('direct');
         order.length = 0;
         const removed = fixture.querySelector('table');
-        const replacement = removed.cloneNode();
+        const replacement = document.createElement('table');
+        replacement.className = removed.className;
         replacement.id = 'replacement';
         Drupal.detachBehaviors(removed, drupalSettings, 'unload');
         removed.replaceWith(replacement);
@@ -1159,10 +1162,6 @@ class TableDragTest extends WebDriverTestBase {
     $session = $this->getSession();
     $session->executeScript(<<<'JS'
       const drag = Drupal.tableDrag['tabledrag-test-table'];
-      const dragDialog = document.createElement('dialog');
-      document.body.append(dragDialog);
-      dragDialog.append(drag.table);
-      dragDialog.show();
       const handle = drag.table.querySelector('.tabledrag-handle');
       const initialSpan = drag.table.tHead.rows[0].cells[0].colSpan;
       const toggle = drag.toggleWeightButton;
@@ -1195,6 +1194,10 @@ class TableDragTest extends WebDriverTestBase {
         const completed = drops === 1 && drag.dragObject === null &&
           rows[0] === second && rows[1] === first &&
           weights.every((weight, index) => index === 0 || weight > weights[index - 1]);
+        const dragDialog = document.createElement('dialog');
+        document.body.append(dragDialog);
+        dragDialog.append(drag.table);
+        dragDialog.show();
         dragDialog.close();
         Drupal.detachBehaviors(dragDialog, drupalSettings, 'unload');
         dragDialog.showModal();
