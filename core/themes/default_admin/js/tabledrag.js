@@ -88,11 +88,14 @@
         }
         const { themeContent } = tableDragConstructor;
         const items = themeContent(Drupal.theme('tableDragCellItemsWrapper'));
+        const wrapper =
+          items instanceof Element ? items : items?.firstElementChild;
+        if (!wrapper) {
+          return;
+        }
         const content = themeContent(
           Drupal.theme('tableDragCellContentWrapper'),
         );
-        const wrapper =
-          items instanceof Element ? items : items.firstElementChild;
         const labels =
           content instanceof Element ? content : content.firstElementChild;
         wrapper.classList.add('js-tabledrag-cell-content');

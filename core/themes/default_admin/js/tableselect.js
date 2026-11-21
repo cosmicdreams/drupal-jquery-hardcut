@@ -37,20 +37,16 @@
       const { form } = this;
       const releaseListeners = [];
       this.checkboxes.forEach((checkbox) => {
-        const change = (event) => this.rowCheckboxHandler(event);
-        checkbox.addEventListener('change', change);
         releaseListeners.push(
-          tableInteraction.own(form, checkbox, () =>
-            checkbox.removeEventListener('change', change),
+          tableInteraction.listen(form, checkbox, 'change', (event) =>
+            this.rowCheckboxHandler(event),
           ),
         );
       });
       this.selectAll.forEach((checkbox) => {
-        const change = (event) => this.selectAllHandler(event);
-        checkbox.addEventListener('change', change);
         releaseListeners.push(
-          tableInteraction.own(form, checkbox, () =>
-            checkbox.removeEventListener('change', change),
+          tableInteraction.listen(form, checkbox, 'change', (event) =>
+            this.selectAllHandler(event),
           ),
         );
       });
