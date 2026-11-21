@@ -16,6 +16,10 @@
 
   const warned = new Set();
   const legacyEvents = new WeakMap();
+  const nativeDeliveries = new WeakMap();
+  const bindingChecks = new WeakMap();
+  // Maps each connected instance to the function that removes its adapter.
+  const adapters = new Map();
 
   /**
    * Reports the first explicit use of a deprecated contract.
@@ -98,32 +102,87 @@
   }
 
   /**
-   * Installs lazy legacy bindings and preserves registration order when mixed.
+   * Lets each connected instance decide whether it delivers a native event.
    */
-  function install() {
+  function trackBinding(binding, handles) {
+    let checks = bindingChecks.get(binding);
+    if (!checks) {
+      checks = new Set();
+      bindingChecks.set(binding, checks);
+      binding.handlesNativeEvent = (event) =>
+        Array.from(checks).some((check) => check(event));
+    }
+    checks.add(handles);
+  }
+
+  /**
+   * Removes one instance's native delivery decision for a binding.
+   */
+  function untrackBinding(binding, handles) {
+    const checks = bindingChecks.get(binding);
+    if (checks?.delete(handles) && !checks.size) {
+      bindingChecks.delete(binding);
+      delete binding.handlesNativeEvent;
+    }
+  }
+
+  /**
+   * Records one delivery of a native event, whichever instance dispatches it.
+   */
+  function claimNativeDelivery(event, binding) {
+    let delivered = nativeDeliveries.get(event);
+    if (!delivered) {
+      delivered = new WeakSet();
+      nativeDeliveries.set(event, delivered);
+    }
+    if (delivered.has(binding)) {
+      return false;
+    }
+    delivered.add(binding);
+    return true;
+  }
+
+  /**
+   * Installs lazy legacy bindings for one instance and keeps owned order.
+   *
+   * @param {Function} jquery
+   *   The connected instance.
+   * @return {function(): void}
+   *   Removes this instance's bindings and hooks.
+   */
+  function install(jquery) {
     const { Drupal } = window;
     const entries = new Map();
     const byTarget = new WeakMap();
     const handlers = new Map();
-    const observed = new Set();
+    const observed = new Map();
     const triggerFrames = [];
+    // Bindings attached for synthetic triggers, released by the outermost one.
+    const tempAttached = new Set();
     let internalDepth = 0;
-
-    // Report the bindings this adapter delivers so jquery.drupal-bc.js
-    // reserves no second slot for them.
-    const previousOwner = Drupal.eventBindings.ownsLegacyEvents;
-    Drupal.eventBindings.ownsLegacyEvents = (instance, binding) =>
-      (instance === jquery && isFormBinding(binding)) ||
-      Boolean(previousOwner?.(instance, binding));
+    // jQuery exposes its internal returnTrue only on a prevented event.
+    const probe = jquery.Event('drupal:form-probe');
+    probe.preventDefault();
+    const returnTrue = probe.isDefaultPrevented;
 
     function getBindType(type, selector) {
       const special = jquery.event.special[type];
       return (selector ? special?.delegateType : special?.bindType) || type;
     }
 
+    // The leverageNative controller and its trigger stub are jQuery's own.
+    function isInternalHandler(handleObj) {
+      return handleObj.namespace === false || handleObj.handler === returnTrue;
+    }
+
     function hasExternalHandler(target, bindType) {
       const list = jquery._data(target, 'events')?.[bindType];
-      return Boolean(list?.some(({ guid }) => !handlers.has(guid)));
+      return Boolean(
+        list?.some(
+          (handleObj) =>
+            !handlers.has(handleObj.guid) && !isInternalHandler(handleObj),
+        ),
+      );
     }
 
     function isSyntheticDefaultAction(event) {
@@ -156,11 +215,12 @@
       if (observed.has(type)) {
         return;
       }
-      observed.add(type);
-      const special =
-        jquery.event.special[type] || (jquery.event.special[type] = {});
+      const specials = jquery.event.special;
+      const existing = specials[type];
+      const special = existing || (specials[type] = {});
+      const hadRemove = Object.hasOwn(special, 'remove');
       const remove = special.remove;
-      special.remove = function (handle) {
+      const hook = function (handle) {
         try {
           remove?.call(this, handle);
         } finally {
@@ -174,14 +234,35 @@
           }
         }
       };
+      special.remove = hook;
+      observed.set(type, () => {
+        if (special.remove !== hook) {
+          return;
+        }
+        if (hadRemove) {
+          special.remove = remove;
+        } else {
+          delete special.remove;
+        }
+        if (
+          !existing &&
+          specials[type] === special &&
+          !Reflect.ownKeys(special).length
+        ) {
+          delete specials[type];
+        }
+      });
     }
 
     function attachEntry(entry) {
       if (entry.attached) {
         return;
       }
-      const { binding, name, deliver } = entry;
+      const { binding, name, deliver, bindType } = entry;
       const { target, selector } = binding;
+      // A new jQuery handler list runs after every native listener already on
+      // the target, so core keeps its native position for real events.
+      entry.nativeOrder = !hasExternalHandler(target, bindType);
       internalDepth += 1;
       try {
         const slot = Drupal.eventBindings.claimLegacyEvent?.(
@@ -202,11 +283,24 @@
       }
     }
 
+    // Removes jQuery's own leftovers so the element has no jQuery listener.
+    function releaseInternalHandlers(target, bindType) {
+      const list = jquery._data(target, 'events')?.[bindType];
+      if (list?.length && list.every(isInternalHandler)) {
+        internalDepth += 1;
+        try {
+          jquery.event.remove(target, bindType);
+        } finally {
+          internalDepth -= 1;
+        }
+      }
+    }
+
     function detachEntry(entry) {
       if (!entry.attached) {
         return;
       }
-      const { binding, name, handler, slot } = entry;
+      const { binding, name, handler, slot, bindType } = entry;
       const { target, selector } = binding;
       entry.attached = false;
       entry.slot = undefined;
@@ -222,6 +316,7 @@
       } finally {
         internalDepth -= 1;
       }
+      releaseInternalHandlers(target, bindType);
     }
 
     function syncTargetType(target, bindType) {
@@ -233,6 +328,35 @@
           detachEntry(entry);
         }
       });
+    }
+
+    /**
+     * Moves a handler ahead of handlers that predate the adapters.
+     *
+     * Synthetic triggers then reach core before contrib handlers that were
+     * bound after core's native listener, as with the pinned registration.
+     */
+    function placeBeforeEarlierHandlers(entry, floor) {
+      const list = jquery._data(entry.binding.target, 'events')?.[
+        entry.bindType
+      ];
+      const index =
+        list?.findIndex(({ guid }) => guid === entry.handler.guid) ?? -1;
+      if (index < 0) {
+        return;
+      }
+      const start = entry.binding.selector ? 0 : list.delegateCount;
+      for (let position = start; position < index; position += 1) {
+        const handleObj = list[position];
+        if (
+          !handlers.has(handleObj.guid) &&
+          !isInternalHandler(handleObj) &&
+          handleObj.guid < floor
+        ) {
+          list.splice(position, 0, ...list.splice(index, 1));
+          return;
+        }
+      }
     }
 
     function materialize(target, types, selector) {
@@ -273,16 +397,17 @@
     }
 
     const originalAdd = jquery.event.add;
-    jquery.event.add = function (elem, types, handler, data, selector) {
+    const add = function (elem, types, handler, data, selector) {
       if (internalDepth === 0 && elem) {
         materialize(elem, types, selector);
       }
       return originalAdd.apply(this, arguments);
     };
+    jquery.event.add = add;
 
     let removeDepth = 0;
     const originalRemove = jquery.event.remove;
-    jquery.event.remove = function (elem, types, handler, selector) {
+    const remove = function (elem, types, handler, selector) {
       if (internalDepth === 0 && removeDepth === 0 && elem) {
         materialize(elem, types, selector);
       }
@@ -302,14 +427,14 @@
         }
       }
     };
+    jquery.event.remove = remove;
 
     const originalTrigger = jquery.event.trigger;
-    jquery.event.trigger = function (event, data, elem, onlyHandlers) {
+    const trigger = function (event, data, elem, onlyHandlers) {
       const rawType = (typeof event === 'string' ? event : event.type).split(
         '.',
       )[0];
       const target = elem || document;
-      const tempAttached = [];
       if (internalDepth === 0 && rawType) {
         const special = jquery.event.special[rawType];
         const directTypes = new Set([
@@ -344,7 +469,7 @@
               (typeSet.has(entry.bindType) || typeSet.has(entry.binding.type))
             ) {
               attachEntry(entry);
-              tempAttached.push(entry);
+              tempAttached.add(entry);
             }
           });
         });
@@ -355,7 +480,9 @@
       } finally {
         triggerFrames.pop();
         if (!triggerFrames.length) {
-          tempAttached.forEach((entry) => {
+          const attached = Array.from(tempAttached);
+          tempAttached.clear();
+          attached.forEach((entry) => {
             if (
               entry.attached &&
               !hasExternalHandler(entry.binding.target, entry.bindType)
@@ -366,9 +493,11 @@
         }
       }
     };
+    jquery.event.trigger = trigger;
 
     let replaying = true;
-    Drupal.eventBindings.observe({
+    const replayed = [];
+    const stopObserving = Drupal.eventBindings.observe({
       add(binding) {
         if (!isFormBinding(binding) || entries.has(binding)) {
           return;
@@ -381,13 +510,25 @@
           observeRemoval(bindType);
         }
         const name = namespace ? `${type}.${namespace}` : type;
-        const deliver = function (event, fragmentTarget) {
+        const entry = {
+          binding,
+          bindType,
+          name,
+          attached: false,
+          nativeOrder: false,
+          slot: undefined,
+          handler: undefined,
+        };
+        entry.deliver = function (event, fragmentTarget) {
           if (!event.isTrigger) {
             if (
+              entry.nativeOrder ||
               Drupal.eventBindings.isForeignDefaultAction?.(
                 event.originalEvent,
               ) ||
-              !hasExternalHandler(target, bindType)
+              !hasExternalHandler(target, bindType) ||
+              (event.originalEvent &&
+                !claimNativeDelivery(event.originalEvent, binding))
             ) {
               return undefined;
             }
@@ -459,16 +600,20 @@
           }
           return result;
         };
-
-        const entry = {
-          binding,
-          bindType,
-          name,
-          deliver,
-          attached: false,
-          slot: undefined,
-          handler: undefined,
+        entry.handles = (event) => {
+          if (isSyntheticDefaultAction(event)) {
+            return true;
+          }
+          if (
+            !entry.attached ||
+            entry.nativeOrder ||
+            !hasExternalHandler(target, bindType)
+          ) {
+            return false;
+          }
+          return bindType === event.type || event.isTrusted;
         };
+
         entries.set(binding, entry);
         let targetEntries = byTarget.get(target);
         if (!targetEntries) {
@@ -476,29 +621,17 @@
           byTarget.set(target, targetEntries);
         }
         targetEntries.add(entry);
-
-        binding.handlesNativeEvent = (event) => {
-          if (isSyntheticDefaultAction(event)) {
-            return true;
-          }
-          if (!entry.attached || !hasExternalHandler(target, bindType)) {
-            return false;
-          }
-          if (bindType !== event.type && !event.isTrusted) {
-            return false;
-          }
-          return true;
-        };
+        trackBinding(binding, entry.handles);
 
         if (replaying) {
-          // Claim any slot reserved in registration order by jquery.drupal-bc.js,
-          // or attach if an external jQuery handler is already on the target.
+          // Claim any slot reserved in registration order by
+          // jquery.drupal-bc.js; settle the replayed entries below.
           internalDepth += 1;
           try {
             const slot = Drupal.eventBindings.claimLegacyEvent?.(
               jquery,
               binding,
-              deliver,
+              entry.deliver,
             );
             if (slot) {
               entry.slot = slot;
@@ -509,9 +642,7 @@
           } finally {
             internalDepth -= 1;
           }
-          if (!entry.attached && hasExternalHandler(target, bindType)) {
-            attachEntry(entry);
-          }
+          replayed.push(entry);
         } else if (hasExternalHandler(target, bindType)) {
           attachEntry(entry);
         }
@@ -523,19 +654,154 @@
         }
         entries.delete(binding);
         byTarget.get(binding.target)?.delete(entry);
+        tempAttached.delete(entry);
         detachEntry(entry);
-        delete binding.handlesNativeEvent;
+        untrackBinding(binding, entry.handles);
       },
     });
     replaying = false;
 
-    // Release any reserved slots whose target/type has no external jQuery
-    // subscribers so unmixed targets stay on pure native DOM delivery.
-    entries.forEach((entry) => {
-      if (entry.attached) {
-        syncTargetType(entry.binding.target, entry.bindType);
+    // Handlers created before the reserved slots predate the adapters.
+    const floor = replayed.reduce(
+      (lowest, entry) => Math.min(lowest, entry.slot?.handler.guid ?? lowest),
+      Infinity,
+    );
+    replayed.forEach((entry) => {
+      const { target } = entry.binding;
+      if (!hasExternalHandler(target, entry.bindType)) {
+        // Unmixed targets stay on pure native DOM delivery.
+        detachEntry(entry);
+        return;
       }
+      // The registration order of handlers bound before the adapters loaded is
+      // unknown. Core's native listener keeps its place for real events.
+      attachEntry(entry);
+      entry.nativeOrder = true;
+      placeBeforeEarlierHandlers(entry, floor);
     });
+
+    const stopPublications = installPublications(jquery);
+
+    return () => {
+      stopObserving();
+      stopPublications();
+      if (jquery.event.add === add) {
+        jquery.event.add = originalAdd;
+      }
+      if (jquery.event.remove === remove) {
+        jquery.event.remove = originalRemove;
+      }
+      if (jquery.event.trigger === trigger) {
+        jquery.event.trigger = originalTrigger;
+      }
+      observed.forEach((restore) => restore());
+      observed.clear();
+    };
+  }
+
+  /**
+   * Supplies the positional arguments of existing form and tabbing events.
+   *
+   * @param {Function} jquery
+   *   The connected instance.
+   * @return {function(): void}
+   *   Stops supplying the arguments.
+   */
+  function installPublications(jquery) {
+    const publications = new WeakMap();
+    const legacyTypes = [...tabbingEvents, fragmentEvent, valueCopyEvent];
+    const stop = window.Drupal.eventBindings.observePublications((event) => {
+      if (legacyTypes.includes(event.type)) {
+        publications.set(event, [
+          event.type === fragmentEvent ? jquery(event.detail) : event.detail,
+        ]);
+        return () => publications.delete(event);
+      }
+      return undefined;
+    });
+    const restores = legacyTypes.map((type) => {
+      const specials = jquery.event.special;
+      const existing = specials[type];
+      const special = existing || (specials[type] = {});
+      const hadHandle = Object.hasOwn(special, 'handle');
+      const previous = special.handle;
+      const handle = function (event, ...args) {
+        const positional =
+          !event.isTrigger && publications.get(event.originalEvent);
+        return (previous || event.handleObj.handler).call(
+          this,
+          event,
+          ...(positional || args),
+        );
+      };
+      special.handle = handle;
+      return () => {
+        if (special.handle !== handle) {
+          return;
+        }
+        if (hadHandle) {
+          special.handle = previous;
+        } else {
+          delete special.handle;
+        }
+        if (
+          !existing &&
+          specials[type] === special &&
+          !Reflect.ownKeys(special).length
+        ) {
+          delete specials[type];
+        }
+      };
+    });
+    return () => {
+      stop();
+      restores.forEach((restore) => restore());
+    };
+  }
+
+  /**
+   * Gives explicitly connected instances the same form compatibility.
+   */
+  function connectInstances() {
+    const registry = window.Drupal.eventBindings;
+    // Report the bindings an installed adapter delivers so
+    // jquery.drupal-bc.js reserves no second slot for them.
+    const previousOwner = registry.ownsLegacyEvents;
+    registry.ownsLegacyEvents = (instance, binding) =>
+      (adapters.has(instance) && isFormBinding(binding)) ||
+      Boolean(previousOwner?.(instance, binding));
+    adapters.set(jquery, install(jquery));
+
+    const connect = registry.connectLegacy;
+    if (typeof connect !== 'function') {
+      return;
+    }
+    const disconnects = new WeakMap();
+    registry.connectLegacy = function (instance) {
+      // The bridge reserves slots in registry order before the adapter
+      // claims them.
+      const disconnect = connect.call(this, instance);
+      if (typeof instance !== 'function' || instance === jquery) {
+        return disconnect;
+      }
+      let stop = disconnects.get(instance);
+      if (stop?.disconnect !== disconnect) {
+        if (!adapters.has(instance)) {
+          adapters.set(instance, install(instance));
+        }
+        stop = () => {
+          if (disconnects.get(instance) === stop) {
+            disconnects.delete(instance);
+            adapters.get(instance)?.();
+            adapters.delete(instance);
+            disconnect();
+          }
+        };
+        stop.disconnect = disconnect;
+        disconnects.set(instance, stop);
+      }
+      return stop;
+    };
   }
 
   /**
@@ -586,37 +852,6 @@
     if (method) {
       behavior.showMachineName = method;
     }
-  }
-
-  /**
-   * Supplies the positional arguments of existing form and tabbing events.
-   */
-  function installPublications() {
-    const publications = new WeakMap();
-    const legacyTypes = [...tabbingEvents, fragmentEvent, valueCopyEvent];
-    window.Drupal.eventBindings.observePublications((event) => {
-      if (legacyTypes.includes(event.type)) {
-        publications.set(event, [
-          event.type === fragmentEvent ? jquery(event.detail) : event.detail,
-        ]);
-        return () => publications.delete(event);
-      }
-      return undefined;
-    });
-    legacyTypes.forEach((type) => {
-      const special =
-        jquery.event.special[type] || (jquery.event.special[type] = {});
-      const previous = special.handle;
-      special.handle = function (event, ...args) {
-        const positional =
-          !event.isTrigger && publications.get(event.originalEvent);
-        return (previous || event.handleObj.handler).call(
-          this,
-          event,
-          ...(positional || args),
-        );
-      };
-    });
   }
 
   /**
@@ -886,6 +1121,12 @@
       if (!settings.detailsElement) {
         const { details, ...remaining } = settings;
         warn('The jQuery input to Drupal.verticalTab', migration);
+        settings = { ...remaining, detailsElement: jquery(details)[0] };
+      } else if (
+        Object.getOwnPropertyDescriptor(settings, 'details')?.enumerable
+      ) {
+        // An override passed a copy with a replaced details collection.
+        const { details, ...remaining } = settings;
         settings = { ...remaining, detailsElement: jquery(details)[0] };
       }
       if (new.target) {
@@ -1164,17 +1405,11 @@
   }
 
   if (window.Drupal?.eventBindings) {
-    install();
-    installPublications();
+    connectInstances();
   } else {
-    document.addEventListener(
-      'drupal:event-bindings-ready',
-      () => {
-        install();
-        installPublications();
-      },
-      { once: true },
-    );
+    document.addEventListener('drupal:event-bindings-ready', connectInstances, {
+      once: true,
+    });
   }
   if (window.Drupal?.behaviors?.machineName) {
     installMachineNameMethods();

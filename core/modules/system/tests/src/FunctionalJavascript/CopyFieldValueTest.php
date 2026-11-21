@@ -58,4 +58,51 @@ class CopyFieldValueTest extends WebDriverTestBase {
     $this->assertEquals($target_field->getValue(), $random_string);
   }
 
+  /**
+   * Tests that a synthetic blur leaves later native blurs to core.
+   */
+  public function testSyntheticBlurReleasesJquery(): void {
+    $this->drupalGet('/system-test/copy-field-value-test-form');
+    $session = $this->getSession();
+    $this->assertSame('undefined', $session->evaluateScript('typeof window.jQuery'));
+    $scripts = json_encode(array_column(
+      \Drupal::service('library.discovery')->getLibraryByName('core', 'jquery')['js'],
+      'data',
+    ));
+    $session->executeScript(<<<JS
+      (async () => {
+        for (const path of $scripts) {
+          await new Promise((resolve, reject) => {
+            const script = document.createElement('script');
+            script.src = drupalSettings.path.baseUrl + path;
+            script.onload = resolve;
+            script.onerror = reject;
+            document.head.append(script);
+          });
+        }
+        const source = document.getElementById('edit-source-field');
+        const target = document.getElementById('edit-target-field');
+        jQuery(source).val('synthetic').trigger('blur');
+        const synthetic = target.value;
+        target.value = '';
+        source.value = 'native';
+        const dispatch = jQuery.event.dispatch;
+        let calls = 0;
+        jQuery.event.dispatch = function (...args) {
+          calls += 1;
+          return dispatch.apply(this, args);
+        };
+        try {
+          source.dispatchEvent(new FocusEvent('blur'));
+        }
+        finally {
+          jQuery.event.dispatch = dispatch;
+        }
+        window.syntheticBlurResult = [synthetic, target.value, calls];
+      })();
+      JS);
+    $this->assertJsCondition('Array.isArray(window.syntheticBlurResult)');
+    $this->assertSame(['synthetic', 'native', 0], $session->evaluateScript('window.syntheticBlurResult'));
+  }
+
 }
