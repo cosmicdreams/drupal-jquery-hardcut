@@ -477,6 +477,9 @@ class AjaxTestController {
    * Returns the request method and payload as an Ajax command.
    */
   public function echoRequest(Request $request): Response {
+    if ($request->query->getBoolean('failure_test')) {
+      return new Response('Ajax form failure', 500);
+    }
     $response = new AjaxResponse();
     $response->addCommand(new HtmlCommand('#request-lane-echo', [
       '#plain_text' => json_encode($this->getRequestData($request), JSON_THROW_ON_ERROR),

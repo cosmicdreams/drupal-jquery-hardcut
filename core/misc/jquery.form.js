@@ -1,6 +1,9 @@
 /*!
  * jQuery Form Plugin
- * version: 4.3.0
+ * version: 4.3.0 (modified by Drupal)
+ * Drupal maintains jQuery 4 compatibility and builds extra iframe fields
+ * with DOM APIs. The plugin accepts Drupal's prepared forms, honors upload
+ * vetoes and aborts, restores resetForm, and tracks deferred iframe requests.
  * Requires jQuery v1.7.2 or later
  * Project repository: https://github.com/jquery-form/form
 
@@ -510,10 +513,15 @@
 				getResponseHeader     : function() {},
 				setRequestHeader      : function() {},
 				abort                 : function(status) {
+					if (this.aborted || deferred.state() !== 'pending') {
+						return;
+					}
 					var e = (status === 'timeout' ? 'timeout' : 'aborted');
 
 					log('aborting upload... ' + e);
 					this.aborted = 1;
+					clearTimeout(timeoutHandle);
+					removeLoadListener();
 
 					try { // #214, #257
 						if (io.contentWindow.document.execCommand) {
@@ -521,18 +529,33 @@
 						}
 					} catch (ignore) {}
 
-					$io.attr('src', s.iframeSrc); // abort op in progress
+					if (s.iframeTarget) {
+						$io.attr('src', s.iframeSrc);
+					} else {
+						$io.remove();
+					}
 					xhr.error = e;
-					if (s.error) {
-						s.error.call(s.context, xhr, e, status);
-					}
-
-					if (g) {
-						$.event.trigger('ajaxError', [xhr, s, e]);
-					}
-
-					if (s.complete) {
-						s.complete.call(s.context, xhr, e);
+					try {
+						if (s.error) {
+							s.error.call(s.context, xhr, e, status);
+						}
+						if (g) {
+							$.event.trigger('ajaxError', [xhr, s, e]);
+						}
+						if (s.complete) {
+							s.complete.call(s.context, xhr, e);
+						}
+					} finally {
+						try {
+							deferred.reject(xhr, status === 'server abort' ? 'error' : e, status);
+							if (g) {
+								$.event.trigger('ajaxComplete', [xhr, s]);
+							}
+						} finally {
+							if (g && !--$.active) {
+								$.event.trigger('ajaxStop');
+							}
+						}
 					}
 				}
 			};
@@ -547,7 +570,7 @@
 			}
 
 			if (s.beforeSend && s.beforeSend.call(s.context, xhr, s) === false) {
-				if (g && !--$.active) {
+				if (!xhr.aborted && g && !--$.active) {
 					$.event.trigger('ajaxStop');
 				}
 				deferred.reject();
@@ -624,6 +647,9 @@
 
 			// take a breath so that pending repaints get some cpu time before the upload starts
 			function doSubmit() {
+				if (xhr.aborted) {
+					return;
+				}
 				// make sure form attrs are set
 				var t = $form.attr2('target'),
 					a = $form.attr2('action'),
@@ -739,6 +765,14 @@
 
 			var data, doc, domCheckCount = 50, callbackProcessed;
 
+			function removeLoadListener() {
+				if (io && io.detachEvent) {
+					io.detachEvent('onload', cb);
+				} else if (io) {
+					io.removeEventListener('load', cb, false);
+				}
+			}
+
 			function cb(e) {
 				if (xhr.aborted || callbackProcessed) {
 					return;
@@ -751,14 +785,12 @@
 				}
 				if (e === CLIENT_TIMEOUT_ABORT && xhr) {
 					xhr.abort('timeout');
-					deferred.reject(xhr, 'timeout');
 
 					return;
 
 				}
 				if (e === SERVER_ABORT && xhr) {
 					xhr.abort('server abort');
-					deferred.reject(xhr, 'error', 'server abort');
 
 					return;
 				}
@@ -770,11 +802,7 @@
 					}
 				}
 
-				if (io.detachEvent) {
-					io.detachEvent('onload', cb);
-				} else {
-					io.removeEventListener('load', cb, false);
-				}
+				removeLoadListener();
 
 				var status = 'success', errMsg;
 

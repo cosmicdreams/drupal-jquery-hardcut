@@ -253,12 +253,15 @@
    * @param {HTMLFormElement} form
    *   The form, including its clicked control in `form.clk`.
    *
+   * @param {HTMLElement[]} elements
+   *   Receives the controls included in the submission.
+   *
    * @return {Array<{name: string, value: *, type: (string|undefined), required: (boolean|undefined)}>}
    *   The submitted entries.
    *
    * @internal
    */
-  function formToArray(form) {
+  function formToArray(form, elements) {
     const values = [];
     Array.from(form.elements).forEach((element) => {
       const { name } = element;
@@ -266,6 +269,12 @@
         return;
       }
       const value = fieldValue(element);
+      if (
+        element.type === 'file' ||
+        (Array.isArray(value) ? value.length : value != null)
+      ) {
+        elements.push(element);
+      }
       if (Array.isArray(value)) {
         value.forEach((item) => values.push({ name, value: item }));
       } else if (element.type === 'file') {
@@ -287,6 +296,7 @@
     });
     const { clk } = form;
     if (clk && clk.name && !clk.disabled && clk.type === 'image') {
+      elements.push(clk);
       values.push(
         { name: clk.name, value: clk.value },
         { name: `${clk.name}.x`, value: form.clk_x },
@@ -734,7 +744,8 @@
     const legacy =
       (settings.semantic || settings.filtering) &&
       adapter?.serializeLegacyForm(legacyForm(), settings);
-    const values = legacy ? legacy.values : formToArray(form);
+    const elements = legacy?.elements ?? [];
+    const values = legacy ? legacy.values : formToArray(form, elements);
     let extraQuery;
     if (settings.data) {
       const data =
@@ -812,7 +823,7 @@
       return adapter.submitLegacyForm(legacyForm(), settings, {
         values,
         extraQuery,
-        elements: legacy?.elements ?? [],
+        elements,
         cancel: () => onVeto(true),
       });
     }

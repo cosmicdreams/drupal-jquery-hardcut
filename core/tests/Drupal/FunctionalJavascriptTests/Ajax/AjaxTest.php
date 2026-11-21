@@ -1229,6 +1229,99 @@ JS;
   }
 
   /**
+   * Tests global completion after a failed non-iframe legacy form.
+   */
+  #[IgnoreDeprecations]
+  public function testLegacyFormHttpErrorCompletion(): void {
+    // The uncaught AjaxError is part of the failure contract.
+    $this->failOnJavascriptConsoleErrors = FALSE;
+    $this->expectUserDeprecationMessage('Javascript Deprecation: Drupal.Ajax#$form is deprecated in drupal:12.0.0 and is removed from drupal:13.0.0. Use Drupal.Ajax#form. See https://www.drupal.org/node/CHANGE_RECORD.');
+    $this->drupalGet('ajax-test/global-events', ['query' => ['legacy_overrides' => 1, 'legacy_plugin' => 1]]);
+    $session = $this->getSession();
+    $session->executeScript(<<<'JS'
+      drupalSettings.suppressDeprecationErrors = true;
+      const { ajax, $form } = window.legacyAjaxOverrides;
+      const trace = window.failedLegacyForm = [];
+      window.addEventListener('error', (event) => {
+        if (event.error instanceof Drupal.AjaxError) {
+          trace.push('AjaxError');
+          event.preventDefault();
+        }
+      });
+      jQuery(document).on('ajaxError ajaxComplete ajaxStop', (event) => trace.push(event.type));
+      ajax.options.url = Drupal.url('ajax-test/echo-request?failure_test=1');
+      ajax.options.clearForm = true;
+      $form.find('select').val('enabled');
+      $form.find('button').trigger('mousedown.legacyOverrides');
+      JS);
+    $this->assertJsCondition('window.failedLegacyForm.includes("AjaxError")');
+    $this->assertSame([FALSE, 0, ['ajaxError', 'ajaxComplete', 'ajaxStop', 'AjaxError']], $session->evaluateScript('[legacyAjaxOverrides.ajax.ajaxing, jQuery.active, window.failedLegacyForm]'));
+  }
+
+  /**
+   * Tests aborting the scheduled iframe upload from form-submit-notify.
+   */
+  #[IgnoreDeprecations]
+  public function testLegacyDeferredIframeAbort(): void {
+    $this->expectUserDeprecationMessage('Javascript Deprecation: Drupal.Ajax#$form is deprecated in drupal:12.0.0 and is removed from drupal:13.0.0. Use Drupal.Ajax#form. See https://www.drupal.org/node/CHANGE_RECORD.');
+    $this->drupalGet('ajax-test/global-events', ['query' => ['legacy_overrides' => 1, 'legacy_plugin' => 1]]);
+    $result = $this->getSession()->evaluateScript(<<<'JS'
+      (async () => {
+        drupalSettings.suppressDeprecationErrors = true;
+        const { ajax, $form } = window.legacyAjaxOverrides;
+        const trace = [];
+        $form[0].submit = () => trace.push('submit');
+        ajax.options.url = Drupal.url('ajax-test/echo-request?iframe_test=1');
+        ajax.options.iframe = true;
+        const idle = new Promise((resolve) => {
+          jQuery(document).one('ajaxStop', () => trace.push('ajaxStop'));
+          $form.one('form-submit-notify', () => {
+            $form.data('jqxhr').abort();
+            setTimeout(resolve, 50);
+          });
+        });
+        $form.find('select').val('enabled');
+        $form.find('button').trigger('mousedown.legacyOverrides');
+        await idle;
+        return [trace, ajax.ajaxing, jQuery.active, $form.data('jqxhr').state()];
+      })()
+      JS);
+    $this->assertSame([['ajaxStop'], FALSE, 0, 'rejected'], $result);
+  }
+
+  /**
+   * Tests that an iframe enables the serialized controls for submission.
+   */
+  #[IgnoreDeprecations]
+  public function testLegacyIframeFields(): void {
+    $this->expectUserDeprecationMessage('Javascript Deprecation: Drupal.Ajax#$form is deprecated in drupal:12.0.0 and is removed from drupal:13.0.0. Use Drupal.Ajax#form. See https://www.drupal.org/node/CHANGE_RECORD.');
+    $this->drupalGet('ajax-test/global-events', ['query' => ['legacy_overrides' => 1, 'legacy_plugin' => 1]]);
+    $session = $this->getSession();
+    $session->executeScript(<<<'JS'
+      drupalSettings.suppressDeprecationErrors = true;
+      const { ajax, $form } = window.legacyAjaxOverrides;
+      const field = $form[0].appendChild(document.createElement('input'));
+      field.name = 'iframe_marker';
+      field.value = 'included';
+      $form[0].insertAdjacentHTML('beforeend', '<input name="excluded" value="no" disabled>');
+      const { beforeSubmit } = ajax.options;
+      ajax.options.beforeSubmit = function (values, collection, settings) {
+        field.disabled = true;
+        settings.iframe = true;
+        return beforeSubmit.call(this, values, collection, settings);
+      };
+      ajax.options.url = Drupal.url('ajax-test/echo-request?iframe_test=1');
+      drupalSettings.ajaxTrustedUrl[ajax.url] = true;
+      $form.find('select').val('enabled');
+      $form.find('button').trigger('mousedown.legacyOverrides');
+      JS);
+    $this->assertJsCondition("document.querySelector('#request-lane-echo').textContent !== '' && !legacyAjaxOverrides.ajax.ajaxing");
+    $result = json_decode($this->assertSession()->elementExists('css', '#request-lane-echo')->getText(), TRUE, flags: JSON_THROW_ON_ERROR);
+    $this->assertSame('included', $result['fields']['iframe_marker'] ?? NULL);
+    $this->assertArrayNotHasKey('excluded', $result['fields']);
+  }
+
+  /**
    * Tests native request completion separately from the Ajax command queue.
    */
   public function testNativeCommandRequest(): void {

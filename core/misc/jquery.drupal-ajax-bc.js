@@ -1081,7 +1081,12 @@
       },
       complete(...args) {
         completed = true;
-        return complete?.apply(this, args);
+        try {
+          return complete?.apply(this, args);
+        } catch (error) {
+          // Let the plugin and jQuery finish dispatching global events first.
+          window.Drupal.throwError(error);
+        }
       },
       drupalAjaxPreparedForm: {
         ...prepared,
