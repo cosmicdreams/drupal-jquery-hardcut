@@ -118,17 +118,26 @@ class AdminTableDragTest extends TableDragTest {
         }
         return original.call(this, event);
       };
-      override.legacyTableEvent = true;
       prototype.rowCheckboxHandler = override;
       class BulkActions extends Drupal.DefaultAdminBulkActions {
         focusHandler(event) {
-          window.bulkFocus = event instanceof jQuery.Event && event.currentTarget === document.activeElement;
+          window.bulkFocus = (window.bulkFocus ?? 0) +
+            Number(event instanceof jQuery.Event && event.currentTarget.id === 'bulk-row');
           return super.focusHandler(event);
         }
       }
-      BulkActions.prototype.focusHandler.legacyTableEvent = true;
+      const originalClass = Drupal.DefaultAdminBulkActions;
+      const Wrapped = function (...args) {
+        return Reflect.construct(BulkActions, args, new.target);
+      };
+      Wrapped.prototype = BulkActions.prototype;
       window.bulkChanges = [];
-      window.bulkInstance = new BulkActions(fixture.querySelector('[data-drupal-views-bulk-actions]'));
+      Drupal.DefaultAdminBulkActions = Wrapped;
+      try {
+        window.bulkInstance = new Wrapped(fixture.querySelector('[data-drupal-views-bulk-actions]'));
+      } finally {
+        Drupal.DefaultAdminBulkActions = originalClass;
+      }
       JS);
     $this->loadLateBridge();
     $this->assertSame([TRUE, TRUE, TRUE, TRUE, [TRUE, TRUE, FALSE]], $session->evaluateScript(<<<'JS'
@@ -140,7 +149,10 @@ class AdminTableDragTest extends TableDragTest {
         const emptyAlias = bulk.$tabbable.length === 0 && bulk.tabbable.length === 0;
         bulk.$tabbable = legacyTabbable;
         const row = document.getElementById('bulk-row');
-        row.focus();
+        jQuery(row).trigger('focus');
+        const singleFocus = window.bulkFocus === 1;
+        jQuery(bulk.$tabbable.filter('#bulk-row')).triggerHandler('focus');
+        const syntheticFocus = window.bulkFocus === 2;
         const selectAll = bulk.selectAll[0];
         selectAll.click();
         const selected = row.checked && bulk.bulkActions.dataset.drupalStickyVbo === 'true' &&
@@ -148,7 +160,7 @@ class AdminTableDragTest extends TableDragTest {
         selectAll.click();
         const cleared = !row.checked && bulk.bulkActions.dataset.drupalStickyVbo === 'false';
         row.click();
-        return [alias && emptyAlias, window.bulkFocus, selected, cleared, window.bulkChanges];
+        return [alias && emptyAlias, singleFocus && syntheticFocus, selected, cleared, window.bulkChanges];
       })()
       JS));
   }
