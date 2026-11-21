@@ -35,6 +35,10 @@ class DropButtonTest extends WebDriverTestBase {
     \Drupal::service('theme_installer')->install([$theme]);
     $this->config('system.theme')->set('default', $theme)->save();
     $this->drupalGet('form-test/dropbutton');
+    if ($theme === 'stark') {
+      $this->assertSame('undefined', $this->getSession()->evaluateScript('typeof window.jQuery'));
+    }
+
 
     $assert = $this->assertSession();
     $wrapper = $assert->elementExists('css', '.dropbutton-wrapper');

@@ -15,6 +15,7 @@
   }
 
   const warned = new Set();
+  const legacyEvents = new WeakMap();
 
   /**
    * Reports the first explicit use of a deprecated contract.
@@ -42,6 +43,8 @@
       event.isImmediatePropagationStopped = () => true;
       event.isPropagationStopped = () => true;
     };
+    const previous = legacyEvents.get(native);
+    legacyEvents.set(native, event);
     try {
       listener(native, matched);
       if (native.defaultPrevented) {
@@ -51,6 +54,11 @@
         event.stopPropagation();
       }
     } finally {
+      if (previous) {
+        legacyEvents.set(native, previous);
+      } else {
+        legacyEvents.delete(native);
+      }
       if (descriptor) {
         Object.defineProperty(native, 'stopImmediatePropagation', descriptor);
       } else {
@@ -105,6 +113,11 @@
               ? 'tabbing focus traps'
               : type;
         observeRemoval(type);
+        const special = jquery.event.special[type];
+        const mapped = selector ? special?.delegateType : special?.bindType;
+        if (mapped && mapped !== type) {
+          observeRemoval(mapped);
+        }
         const element = jquery(target);
         const name = namespace ? `${type}.${namespace}` : type;
         const deliver = function (event, fragmentTarget) {
@@ -129,6 +142,7 @@
                 key: { value: event.key },
                 shiftKey: { value: event.shiftKey },
                 keyCode: { value: event.keyCode },
+                button: { value: event.button },
               });
               if (event.isDefaultPrevented()) {
                 native.preventDefault();
@@ -331,6 +345,80 @@
   }
 
   /**
+   * Installs legacy DropButton collections and event overrides.
+   */
+  function installDropButton() {
+    const { Drupal } = window;
+    const NativeDropButton = Drupal.DropButton;
+    const prototype = NativeDropButton.prototype;
+    const migration = 'Use the native DropButton elements and event methods.';
+    for (const [legacyName, nativeName, list] of [
+      ['$dropbutton', 'wrapperElement', false],
+      ['$list', 'listElements', true],
+      ['$actions', 'actionElements', true],
+    ]) {
+      collectionAccessor(
+        prototype,
+        'Drupal.DropButton',
+        legacyName,
+        nativeName,
+        migration,
+        list,
+      );
+    }
+
+    ['focusIn', 'focusOut', 'hoverIn', 'hoverOut'].forEach((name) => {
+      const nativeName = `${name}Native`;
+      const native = prototype[nativeName];
+      const contract = `Drupal.DropButton#${name}`;
+      const callDefault = function (event) {
+        warn(contract, migration);
+        return native.call(this, event?.originalEvent || event);
+      };
+      Object.defineProperty(prototype, name, {
+        configurable: true,
+        get() {
+          return this[nativeName]?.legacyCallback || callDefault;
+        },
+        set(callback) {
+          if (!callback || callback === callDefault) {
+            if (this === prototype) {
+              prototype[nativeName] = native;
+            } else {
+              delete this[nativeName];
+            }
+            return;
+          }
+          warn(contract, migration);
+          const adapted = function (event) {
+            return callback.call(
+              this,
+              legacyEvents.get(event) ||
+                (event instanceof jquery.Event ? event : jquery.Event(event)),
+            );
+          };
+          adapted.legacyCallback = callback;
+          this[nativeName] = adapted;
+        },
+      });
+    });
+
+    Drupal.DropButton = function (element, options) {
+      if (element?.nodeType !== Node.ELEMENT_NODE) {
+        warn('The jQuery input to Drupal.DropButton', migration);
+        [element] = jquery(element);
+      }
+      return Reflect.construct(
+        NativeDropButton,
+        [element, options],
+        new.target || NativeDropButton,
+      );
+    };
+    Object.setPrototypeOf(Drupal.DropButton, NativeDropButton);
+    Drupal.DropButton.prototype = prototype;
+  }
+
+  /**
    * Keeps legacy tab collections, constructor inputs and theme overrides.
    */
   function installVerticalTabs() {
@@ -529,6 +617,13 @@
     installSummaryMethods();
   } else {
     document.addEventListener('drupal:form-ready', installSummaryMethods, {
+      once: true,
+    });
+  }
+  if (window.Drupal?.DropButton) {
+    installDropButton();
+  } else {
+    document.addEventListener('drupal:dropbutton-ready', installDropButton, {
       once: true,
     });
   }
