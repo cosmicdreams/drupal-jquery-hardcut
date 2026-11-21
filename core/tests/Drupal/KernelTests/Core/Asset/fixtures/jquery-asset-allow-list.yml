@@ -50,10 +50,11 @@
 - core/misc/jquery.drupal-bc.js
 - core/misc/jquery.form.js
 - core/misc/jquery.no-conflict.js
+- core/misc/jquery.states.bc.js
 - core/misc/jquery.tabledrag.bc.js
 - core/misc/machine-name.js
 - core/misc/position.js
-- core/misc/states.js
+- core/misc/states.jquery.js
 - core/misc/tabbingmanager.js
 - core/misc/timezone.js
 - core/misc/vertical-tabs.js

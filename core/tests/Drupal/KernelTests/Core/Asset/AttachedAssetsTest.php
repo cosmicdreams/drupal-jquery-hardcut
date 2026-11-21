@@ -78,9 +78,10 @@ class AttachedAssetsTest extends KernelTestBase {
    */
   public function testExplicitLegacyAttachment(): void {
     $build['#attached']['library'][] = 'common_test/files';
+    $build['#attached']['library'][] = 'core/drupal.states';
     $language = \Drupal::languageManager()->getCurrentLanguage();
     $legacy_paths = static fn (array $assets): array => array_values(preg_grep(
-      '#^core/(?:assets/vendor/jquery|misc/(?:jquery\.form|position|jquery\.drupal-(?:bc|ajax-(?:bc|commands))|jquery\.no-conflict|jquery\.tabledrag\.bc)\.js$)#',
+      '#^core/(?:assets/vendor/jquery|misc/(?:jquery\.form|position|jquery\.drupal-(?:bc|ajax-(?:bc|commands))|jquery\.no-conflict|jquery\.(?:states|tabledrag)\.bc|states\.jquery)\.js$)#',
       array_keys($assets),
     ));
     $resolve = function (array $build) use ($language): array {
@@ -91,13 +92,20 @@ class AttachedAssetsTest extends KernelTestBase {
     $this->assertSame([], $legacy_paths($resolve($build)));
 
     $build['#attached']['library'][] = 'core/jquery';
-    $this->assertSame([
+    $jquery_paths = [
       'core/assets/vendor/jquery/jquery.min.js',
       'core/misc/jquery.no-conflict.js',
       'core/misc/jquery.drupal-bc.js',
       'core/misc/jquery.drupal-ajax-bc.js',
       'core/misc/jquery.tabledrag.bc.js',
-    ], $legacy_paths($resolve($build)));
+      'core/misc/jquery.states.bc.js',
+    ];
+    $this->assertSame($jquery_paths, $legacy_paths($resolve($build)));
+
+    $states_library = 'core/drupal.states.jquery';
+    $this->expectUserDeprecationMessage($states_library . ' is deprecated in drupal:12.0.0 and is removed from drupal:13.0.0. Use a CSS selector and the native States callback arguments. See https://www.drupal.org/node/CHANGE_RECORD.');
+    $build['#attached']['library'][] = $states_library;
+    $this->assertSame([...$jquery_paths, 'core/misc/states.jquery.js'], $legacy_paths($resolve($build)));
   }
 
   /**

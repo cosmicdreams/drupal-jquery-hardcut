@@ -38,7 +38,7 @@ class JqueryFreePagesTest extends WebDriverTestBase {
    * Values name the owner and removal slice, in that order. Default Admin's
    * styling still loads jQuery. The shared dialog path loads jQuery UI, and
    * the node form also loads the autocomplete widget. Remove entries as
-   * their last paths disappear. The bootstrap and request and table adapters
+   * their last paths disappear. The bootstrap and compatibility adapters
    * are carried by the remaining core/jquery library edges.
    */
   private const EXPECTED = [
@@ -50,6 +50,7 @@ class JqueryFreePagesTest extends WebDriverTestBase {
       'library:jquery-bootstrap' => ['B', 'Z'],
       'library:jquery-bridge' => ['B', 'Z'],
       'library:jquery-position' => ['D', 'D'],
+      'library:jquery-states-bridge' => ['S', 'Z'],
       'library:jquery-tabledrag-bridge' => ['T', 'Z'],
       'library:jquery-ui-css' => ['D', 'D'],
       'library:jquery-ui-dialog' => ['D', 'D'],
@@ -63,6 +64,7 @@ class JqueryFreePagesTest extends WebDriverTestBase {
       'library:jquery-bootstrap' => ['B', 'Z'],
       'library:jquery-bridge' => ['B', 'Z'],
       'library:jquery-position' => ['D', 'D'],
+      'library:jquery-states-bridge' => ['S', 'Z'],
       'library:jquery-tabledrag-bridge' => ['T', 'Z'],
       'library:jquery-ui-css' => ['D', 'D'],
       'library:jquery-ui-dialog' => ['D', 'D'],
@@ -76,6 +78,7 @@ class JqueryFreePagesTest extends WebDriverTestBase {
       'library:jquery-bootstrap' => ['B', 'Z'],
       'library:jquery-bridge' => ['B', 'Z'],
       'library:jquery-position' => ['D', 'D'],
+      'library:jquery-states-bridge' => ['S', 'Z'],
       'library:jquery-tabledrag-bridge' => ['T', 'Z'],
       'library:jquery-ui-css' => ['D', 'D'],
       'library:jquery-ui-dialog' => ['D', 'D'],
@@ -89,6 +92,7 @@ class JqueryFreePagesTest extends WebDriverTestBase {
       'library:jquery-bootstrap' => ['B', 'Z'],
       'library:jquery-bridge' => ['B', 'Z'],
       'library:jquery-position' => ['D', 'D'],
+      'library:jquery-states-bridge' => ['S', 'Z'],
       'library:jquery-tabledrag-bridge' => ['T', 'Z'],
       'library:jquery-ui-css' => ['D', 'D'],
       'library:jquery-ui-dialog' => ['D', 'D'],
@@ -102,6 +106,7 @@ class JqueryFreePagesTest extends WebDriverTestBase {
       'library:jquery-bootstrap' => ['B', 'Z'],
       'library:jquery-bridge' => ['B', 'Z'],
       'library:jquery-position' => ['D', 'C'],
+      'library:jquery-states-bridge' => ['S', 'Z'],
       'library:jquery-tabledrag-bridge' => ['T', 'Z'],
       'library:jquery-ui-autocomplete' => ['C', 'C'],
       'library:jquery-ui-css' => ['D', 'C'],
@@ -116,6 +121,7 @@ class JqueryFreePagesTest extends WebDriverTestBase {
       'library:jquery-bootstrap' => ['B', 'Z'],
       'library:jquery-bridge' => ['B', 'Z'],
       'library:jquery-position' => ['D', 'D'],
+      'library:jquery-states-bridge' => ['S', 'Z'],
       'library:jquery-tabledrag-bridge' => ['T', 'Z'],
       'library:jquery-ui-css' => ['D', 'D'],
       'library:jquery-ui-dialog' => ['D', 'D'],
@@ -129,6 +135,7 @@ class JqueryFreePagesTest extends WebDriverTestBase {
       'library:jquery-bootstrap' => ['B', 'Z'],
       'library:jquery-bridge' => ['B', 'Z'],
       'library:jquery-position' => ['D', 'D'],
+      'library:jquery-states-bridge' => ['S', 'Z'],
       'library:jquery-tabledrag-bridge' => ['T', 'Z'],
       'library:jquery-ui-css' => ['D', 'D'],
       'library:jquery-ui-dialog' => ['D', 'D'],
@@ -142,6 +149,7 @@ class JqueryFreePagesTest extends WebDriverTestBase {
       'library:jquery-bootstrap' => ['B', 'Z'],
       'library:jquery-bridge' => ['B', 'Z'],
       'library:jquery-position' => ['D', 'D'],
+      'library:jquery-states-bridge' => ['S', 'Z'],
       'library:jquery-tabledrag-bridge' => ['T', 'Z'],
       'library:jquery-ui-css' => ['D', 'D'],
       'library:jquery-ui-dialog' => ['D', 'D'],
@@ -333,6 +341,8 @@ class JqueryFreePagesTest extends WebDriverTestBase {
           ['library:jquery-ajax-bridge', /\/misc\/jquery\.drupal-ajax-bc\.js$/],
           ['library:jquery-ajax-commands', /\/misc\/jquery\.drupal-ajax-commands\.js$/],
           ['library:jquery-tabledrag-bridge', /\/misc\/jquery\.tabledrag\.bc\.js$/],
+          ['library:jquery-states-bridge', /\/misc\/jquery\.states\.bc\.js$/],
+          ['library:jquery-states-selectors', /\/misc\/states\.jquery\.js$/],
         ];
         urls.forEach((url) => {
           const path = new URL(url).pathname;

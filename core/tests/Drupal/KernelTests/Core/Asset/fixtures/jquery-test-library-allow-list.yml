@@ -71,6 +71,13 @@
     stark: [core/drupal.jquery.position, core/internal.jquery_ui, core/jquery, jquery-ui-dialog]
     starterkit_theme: [core/drupal.jquery.position, core/internal.jquery_ui, core/jquery, jquery-ui-dialog]
     umami: [core/drupal.jquery.position, core/internal.jquery_ui, core/jquery, jquery-ui-dialog]
+- fixture: core/modules/system/tests/modules/states_test/states_test.libraries.yml:legacy_pseudo
+  removal: Z (Drupal 13)
+  themes:
+    default_admin: [core/drupal.states.jquery, core/jquery]
+    stark: [core/drupal.states.jquery, core/jquery]
+    starterkit_theme: [core/drupal.states.jquery, core/jquery]
+    umami: [core/drupal.states.jquery, core/jquery]
 - fixture: core/modules/system/tests/modules/tabledrag_test/tabledrag_test.libraries.yml:legacy
   removal: Z
   themes:
