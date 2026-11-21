@@ -1,0 +1,5 @@
+legacy_pseudo:
+  js:
+    js/legacy-pseudo.js: {}
+  dependencies:
+    - core/drupal.states.jquery

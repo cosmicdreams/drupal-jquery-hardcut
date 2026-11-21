@@ -526,10 +526,16 @@ drupal.states:
   js:
     misc/states.js: {}
   dependencies:
-    - core/jquery
     - core/drupal
-    - core/drupalSettings
-    - core/once
+
+drupal.states.jquery:
+  version: VERSION
+  deprecated: "%library_id% is deprecated in drupal:12.0.0 and is removed from drupal:13.0.0. Use a CSS selector and the native States callback arguments. See https://www.drupal.org/node/CHANGE_RECORD."
+  js:
+    misc/states.jquery.js: {}
+  dependencies:
+    - core/drupal.states
+    - core/jquery
 
 drupal.tabbingmanager:
   version: VERSION
@@ -704,6 +710,7 @@ jquery:
     misc/jquery.drupal-bc.js: { preprocess: false, minified: false }
     misc/jquery.drupal-ajax-bc.js: { preprocess: false, minified: false }
     misc/jquery.tabledrag.bc.js: { preprocess: false, minified: false }
+    misc/jquery.states.bc.js: { preprocess: false, minified: false }
 
 internal.jquery.form:
   # Drupal maintains this modified copy of jQuery Form.
