@@ -1297,6 +1297,28 @@ JS;
   }
 
   /**
+   * Tests native progress element reads and writes without the adapter.
+   */
+  public function testNativeAjaxProgressAlias(): void {
+    $this->drupalGet('ajax-test/native-request', ['query' => ['commands' => 1]]);
+    $result = $this->getSession()->evaluateScript(<<<'JS'
+      (() => {
+        const button = document.body.appendChild(document.createElement('button'));
+        const ajax = Drupal.ajax({ element: button, event: 'click', url: location.href });
+        ajax.setProgressIndicatorThrobber();
+        const inserted = button.nextElementSibling;
+        const initial = ajax.progress.element === inserted && ajax.progress.elementNode === inserted;
+        const replacement = document.createElement('span');
+        ajax.progress.element = replacement;
+        const legacyWrite = ajax.progress.elementNode === replacement;
+        ajax.progress.elementNode = inserted;
+        return [initial, legacyWrite, ajax.progress.element === inserted];
+      })()
+      JS);
+    $this->assertSame([TRUE, TRUE, TRUE], $result);
+  }
+
+  /**
    * Tests composing the CKEditor override with a legacy predecessor.
    */
   public function testEditorPreservesLegacyEventShape(): void {

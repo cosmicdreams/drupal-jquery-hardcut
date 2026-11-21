@@ -1300,8 +1300,25 @@
       }
     }
 
-    if (this.progress) {
-      Drupal.ajax.compatibility?.bridgeAjaxProgress(this.progress);
+    const { progress } = this;
+    if (progress && typeof progress === 'object') {
+      const adapter = Drupal.ajax.compatibility;
+      if (adapter) {
+        adapter.bridgeAjaxProgress(progress);
+      } else if (!Object.getOwnPropertyDescriptor(progress, 'element')?.get) {
+        if (progress.elementNode == null) {
+          progress.elementNode = progress.element;
+        }
+        Object.defineProperty(progress, 'element', {
+          configurable: true,
+          get() {
+            return this.elementNode;
+          },
+          set(element) {
+            this.elementNode = element;
+          },
+        });
+      }
     }
 
     /**
