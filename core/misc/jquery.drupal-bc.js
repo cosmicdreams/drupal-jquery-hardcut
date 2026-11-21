@@ -242,25 +242,27 @@
   }
 
   /**
-   * Projects States checked change dispatches as one synthetic jQuery event.
+   * Projects States publications as one synthetic jQuery event per instance.
    * @param {object} jquery
    *   The explicitly connected jQuery instance.
-   * @param {WeakMap} activeChecked
-   *   Maps active native change events to their shared synthetic jQuery event.
+   * @param {string} type
+   *   The unmapped event type.
+   * @param {WeakMap} activeSynthetic
+   *   Maps active native events to their projection record.
    * @return {function(): void}
-   *   Disconnects the change projection.
+   *   Disconnects the synthetic projection.
    * @internal
    */
-  function observeCheckedChanges(jquery, activeChecked) {
+  function observeSyntheticProjection(jquery, type, activeSynthetic) {
     const specials = jquery.event.special;
-    const existing = specials.change;
+    const existing = specials[type];
     const special = existing ?? {};
     const previousHandle = special.handle;
     const hadHandle = Object.hasOwn(special, 'handle');
     let connected = true;
 
     /**
-     * Delivers one synthetic change event without originalEvent across targets.
+     * Delivers one synthetic event without originalEvent across targets.
      * @param {object} event
      *   The active jQuery event.
      * @param {...unknown} args
@@ -270,12 +272,15 @@
      */
     function handle(event, ...args) {
       const original = event.originalEvent;
-      if (
-        !connected ||
-        !original ||
-        event.isTrigger ||
-        !activeChecked.has(original)
-      ) {
+      const record =
+        connected &&
+        original &&
+        !event.isTrigger &&
+        event.handleObj.origType === type &&
+        original.type === type
+          ? activeSynthetic.get(original)
+          : undefined;
+      if (!record) {
         return (previousHandle || event.handleObj.handler).call(
           this,
           event,
@@ -283,12 +288,14 @@
         );
       }
 
-      let shared = activeChecked.get(original);
+      let { shared } = record;
       if (!shared) {
-        shared = jquery.Event(event.type);
+        shared = record.properties
+          ? jquery.Event(event.type, record.properties)
+          : jquery.Event(event.type);
         shared.target = event.target;
         shared.isTrigger = 3;
-        activeChecked.set(original, shared);
+        record.shared = shared;
         projectedOriginals.set(shared, original);
       }
 
@@ -318,12 +325,23 @@
       if (result !== undefined) {
         shared.result = result;
       }
+      if (
+        record.syncState &&
+        original.detail &&
+        typeof original.detail === 'object'
+      ) {
+        for (const field of ['value', 'oldValue', 'trigger']) {
+          if (Object.hasOwn(shared, field)) {
+            original.detail[field] = shared[field];
+          }
+        }
+      }
       return result;
     }
 
     special.handle = handle;
     if (!existing) {
-      specials.change = special;
+      specials[type] = special;
     }
     return () => {
       connected = false;
@@ -337,10 +355,10 @@
       }
       if (
         !existing &&
-        specials.change === special &&
+        specials[type] === special &&
         !Reflect.ownKeys(special).length
       ) {
-        delete specials.change;
+        delete specials[type];
       }
     };
   }
@@ -356,27 +374,47 @@
    */
   function observeOwnedPublications(jquery, registry) {
     const payloads = new WeakMap();
-    const activeChecked = new WeakMap();
+    const activeSynthetic = new WeakMap();
     const projections = new Map();
     const stop = registry.observePublications((event) => {
       const { type, detail } = event;
-      const checkedChange =
-        type === 'change' &&
-        window.Drupal.states?.compatibility?.isCheckedChange?.(event);
-      if (checkedChange) {
-        if (activeChecked.has(event)) {
+      const state = type.startsWith('state:');
+      const statesSynthetic =
+        (type === 'change' &&
+          window.Drupal.states?.compatibility?.isCheckedChange?.(event)) ||
+        (state && window.Drupal.states?.compatibility?.isStateEvent?.(event));
+      if (statesSynthetic) {
+        if (activeSynthetic.has(event)) {
           return undefined;
         }
-        if (!projections.has('change')) {
+        let properties;
+        if (state) {
+          properties = {};
+          for (const field of ['value', 'oldValue', 'trigger']) {
+            const value =
+              detail && Object.hasOwn(detail, field)
+                ? detail[field]
+                : undefined;
+            // jQuery's event constructor skips undefined properties.
+            if (value !== undefined) {
+              properties[field] = value;
+            }
+          }
+        }
+        const key = `synthetic:${type}`;
+        if (!projections.has(key)) {
           projections.set(
-            'change',
-            observeCheckedChanges(jquery, activeChecked),
+            key,
+            observeSyntheticProjection(jquery, type, activeSynthetic),
           );
         }
-        activeChecked.set(event, null);
-        return () => activeChecked.delete(event);
+        activeSynthetic.set(event, {
+          properties,
+          syncState: state,
+          shared: null,
+        });
+        return () => activeSynthetic.delete(event);
       }
-      const state = type.startsWith('state:');
       if ((!state && type !== 'columnschange') || payloads.has(event)) {
         return undefined;
       }
@@ -397,8 +435,9 @@
         payload = { args: [Boolean(detail?.displayWeight)] };
       }
 
-      if (!projections.has(type)) {
-        projections.set(type, observeNativePayloads(jquery, type, payloads));
+      const key = `payload:${type}`;
+      if (!projections.has(key)) {
+        projections.set(key, observeNativePayloads(jquery, type, payloads));
       }
       payloads.set(event, payload);
       return () => payloads.delete(event);
@@ -406,7 +445,9 @@
 
     return () => {
       stop();
-      projections.forEach((disconnect) => disconnect());
+      Array.from(projections.values())
+        .reverse()
+        .forEach((disconnect) => disconnect());
       projections.clear();
     };
   }

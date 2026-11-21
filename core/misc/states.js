@@ -245,6 +245,9 @@
     };
   }
 
+  const stateEvents = new WeakSet();
+  states.compatibility.isStateEvent = (event) => stateEvents.has(event);
+
   /**
    * Publishes a state change on each original target.
    * @param {Iterable<Element>} elements
@@ -256,14 +259,13 @@
    */
   function publishState(elements, type, detail) {
     for (const element of elements) {
-      Drupal.eventBindings.publish(
-        element,
-        new CustomEvent(type, {
-          bubbles: true,
-          cancelable: true,
-          detail: { ...detail },
-        }),
-      );
+      const event = new CustomEvent(type, {
+        bubbles: true,
+        cancelable: true,
+        detail: { ...detail },
+      });
+      stateEvents.add(event);
+      Drupal.eventBindings.publish(element, event);
     }
   }
 

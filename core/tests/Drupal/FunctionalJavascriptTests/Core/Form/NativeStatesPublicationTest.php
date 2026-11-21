@@ -59,7 +59,7 @@ final class NativeStatesPublicationTest extends WebDriverTestBase {
         ]),
         legacy.map((event) => [
           event.type, event.target.name, event.value, event.oldValue ?? null,
-          event.trigger ?? null, native.includes(event.originalEvent),
+          event.trigger ?? null, event.originalEvent === undefined, event.isTrigger,
         ]),
       ];
       JS);
@@ -72,8 +72,8 @@ final class NativeStatesPublicationTest extends WebDriverTestBase {
         ['state:value', 'choice', 'show', 'hide', NULL],
       ],
       [
-        ['state:visible', 'dependent', TRUE, NULL, TRUE, TRUE],
-        ['state:value', 'choice', 'show', 'hide', NULL, TRUE],
+        ['state:visible', 'dependent', TRUE, NULL, TRUE, TRUE, 3],
+        ['state:value', 'choice', 'show', 'hide', NULL, TRUE, 3],
       ],
     ], $session->evaluateScript('window.statePublications'));
   }
@@ -1536,6 +1536,87 @@ final class NativeStatesPublicationTest extends WebDriverTestBase {
     ], $extra['undefSteps'], 'Undefined state:disabled toggles form-disabled class and leaves element.disabled untouched.');
     $this->assertFalse($extra['visibleAfterSecond'], 'Bare #id selector ignores duplicate second element.');
     $this->assertTrue($extra['visibleAfterFirst'], 'Bare #id selector matches only the first element via getElementById.');
+  }
+
+  /**
+   * Tests real state:* transitions deliver shared synthetic jQuery events.
+   */
+  #[IgnoreDeprecations]
+  public function testStateEventSyntheticProjection(): void {
+    $session = $this->getSession();
+    $assert = $this->assertSession();
+
+    $this->drupalGet('jquery-bc-test/events');
+    $session->executeScript(<<<'JS'
+      const vendor = Array.from(document.scripts).find(({ src }) => src.includes('/assets/vendor/jquery/jquery.min.js'));
+      const script = document.createElement('script');
+      script.src = vendor.src;
+      script.onload = () => {
+        window.r3SecondJquery = window.jQuery.noConflict(true);
+      };
+      document.head.append(script);
+      JS);
+    $this->assertJsCondition('typeof window.r3SecondJquery === "function"');
+
+    $session->executeScript(<<<'JS'
+      const primary = window.jQuery;
+      const second = window.r3SecondJquery;
+      window.r3StopSecond = Drupal.eventBindings.connectLegacy(second);
+
+      const form = document.createElement('form');
+      form.id = 'r3-state-form';
+      form.innerHTML = `
+        <input type="checkbox" id="r3-src" name="r3_src">
+        <div id="r3-dep" class="js-form-wrapper" data-drupal-states='{"visible":{"#r3-src":{"checked":true}}}'>R3 dep</div>
+      `;
+      document.body.append(form);
+      Drupal.attachBehaviors(form);
+
+      const dep = document.getElementById('r3-dep');
+      window.r3StateTrace = { primary: [], second: [], native: [] };
+      dep.addEventListener('state:visible', (event) => {
+        window.r3StateTrace.native.push([event instanceof CustomEvent, event.detail.value, !('isTrigger' in event)]);
+      });
+      for (const [instance, key] of [[primary, 'primary'], [second, 'second']]) {
+        let fieldEvent = null;
+        instance(dep).on('state:visible.r3proj', (event) => {
+          fieldEvent = event;
+          event.r3Note = `note-${key}`;
+          window.r3StateTrace[key].push([
+            'field',
+            event.isTrigger,
+            event.originalEvent === undefined,
+            event.value,
+            event.trigger,
+          ]);
+        });
+        instance(form).on('state:visible.r3proj', (event) => {
+          if (event.target === dep) {
+            window.r3StateTrace[key].push([
+              'form',
+              event === fieldEvent,
+              event.r3Note ?? null,
+              event.isTrigger,
+              event.originalEvent === undefined,
+              event.value,
+            ]);
+          }
+        });
+      }
+      JS);
+    $assert->elementExists('css', '#r3-src')->check();
+    $this->assertTrue($assert->elementExists('css', '#r3-dep')->isVisible());
+    $stateTrace = $session->evaluateScript('window.r3StateTrace');
+    $session->executeScript('window.r3StopSecond();');
+    $this->assertSame([
+      ['field', 3, TRUE, TRUE, TRUE],
+      ['form', TRUE, 'note-primary', 3, TRUE, TRUE],
+    ], $stateTrace['primary'], 'Primary jQuery receives one shared state:* event with isTrigger === 3, no originalEvent, and shared annotation across bubbling targets.');
+    $this->assertSame([
+      ['field', 3, TRUE, TRUE, TRUE],
+      ['form', TRUE, 'note-second', 3, TRUE, TRUE],
+    ], $stateTrace['second'], 'Second connected jQuery receives its own shared state:* event with isTrigger === 3, no originalEvent, and shared annotation across bubbling targets.');
+    $this->assertSame([[TRUE, TRUE, TRUE]], $stateTrace['native'], 'Native listener still receives native CustomEvent.');
   }
 
 }

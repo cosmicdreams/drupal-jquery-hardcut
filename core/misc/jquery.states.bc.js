@@ -155,115 +155,6 @@
   }
 
   /**
-   * Shares one jQuery.Event instance across bubbling targets for state events.
-   * @param {object} eventBindings
-   *   The Drupal event bindings registry.
-   */
-  function installSharedStateEvents(eventBindings) {
-    const activeEvents = new WeakMap();
-    const wrappedTypes = new Set();
-
-    /**
-     * Copies mutated legacy state fields back onto the native event detail.
-     * @param {CustomEvent} original
-     *   The native state event.
-     * @param {object} legacyEvent
-     *   The shared jQuery event.
-     */
-    function syncDetail(original, legacyEvent) {
-      if (!original.detail || typeof original.detail !== 'object') {
-        return;
-      }
-      for (const field of ['value', 'oldValue', 'trigger']) {
-        if (Object.hasOwn(legacyEvent, field)) {
-          original.detail[field] = legacyEvent[field];
-        }
-      }
-    }
-
-    /**
-     * Wraps a state event type's special handle hook once to share one event.
-     * @param {string} type
-     *   The full state event type.
-     */
-    function wrapType(type) {
-      if (wrappedTypes.has(type)) {
-        return;
-      }
-      wrappedTypes.add(type);
-      const specials = jquery.event.special;
-      const special = specials[type] ?? {};
-      const previousHandle = special.handle;
-      specials[type] = special;
-
-      special.handle = function (event, ...args) {
-        const original = event.originalEvent;
-        if (!original || event.isTrigger || !activeEvents.has(original)) {
-          return (previousHandle || event.handleObj.handler).call(
-            this,
-            event,
-            ...args,
-          );
-        }
-
-        let shared = activeEvents.get(original);
-        if (!shared) {
-          shared = event;
-          activeEvents.set(original, shared);
-        }
-
-        if (shared === event) {
-          const result = (previousHandle || event.handleObj.handler).call(
-            this,
-            event,
-            ...args,
-          );
-          syncDetail(original, event);
-          return result;
-        }
-
-        shared.currentTarget = event.currentTarget;
-        shared.delegateTarget = event.delegateTarget;
-        shared.handleObj = event.handleObj;
-        shared.data = event.data;
-        const result = (previousHandle || event.handleObj.handler).call(
-          this,
-          shared,
-          ...args,
-        );
-        if (result === false) {
-          shared.preventDefault();
-          shared.stopPropagation();
-        }
-        if (shared.isDefaultPrevented()) {
-          event.preventDefault();
-        }
-        if (shared.isImmediatePropagationStopped()) {
-          event.stopImmediatePropagation();
-        } else if (shared.isPropagationStopped()) {
-          event.stopPropagation();
-        }
-        if (result !== undefined) {
-          shared.result = result;
-        }
-        syncDetail(original, shared);
-        return result;
-      };
-    }
-
-    eventBindings.observePublications((event) => {
-      if (!event.type.startsWith('state:')) {
-        return undefined;
-      }
-      wrapType(event.type);
-      activeEvents.set(event, null);
-      return () => {
-        activeEvents.delete(event);
-      };
-    });
-  }
-
-  /**
    * Reads the registered jQuery handlers for a target and event type.
    * @param {EventTarget} target
    *   The event target.
@@ -287,7 +178,6 @@
     collectionAlias(states.Dependent, 'Drupal.states.Dependent');
     collectionAlias(states.Trigger, 'Drupal.states.Trigger');
     adaptCallbacks(states);
-    installSharedStateEvents(eventBindings);
 
     const warnSyntheticState = (type) => {
       warn(
