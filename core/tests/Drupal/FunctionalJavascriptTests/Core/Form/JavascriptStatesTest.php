@@ -8,6 +8,7 @@ use Drupal\filter\Entity\FilterFormat;
 use Drupal\FunctionalJavascriptTests\WebDriverTestBase;
 use PHPUnit\Framework\Attributes\Group;
 use PHPUnit\Framework\Attributes\RunTestsInSeparateProcesses;
+use WebDriver\Key;
 
 /**
  * Tests the state of elements based on another elements.
@@ -86,11 +87,18 @@ class JavascriptStatesTest extends WebDriverTestBase {
     $dependent = $this->assertSession()->elementExists('css', '#edit-item-visible-when-number-trigger-filled-by-spinner');
     $this->assertFalse($dependent->isVisible());
 
-    $this->getSession()->executeScript(<<<'JS'
+    $session = $this->getSession();
+    $session->executeScript(<<<'JS'
       const number = document.querySelector('input[name="number_trigger"]');
-      number.stepUp();
-      number.dispatchEvent(new Event('change', { bubbles: true }));
+      number.addEventListener('keyup', (event) => event.stopImmediatePropagation(), { capture: true });
+      number.addEventListener('change', (event) => {
+        window.statesSpinnerChange = event.isTrusted;
+      });
       JS);
+    $session->getDriver()->getWebDriverSession()
+      ->element('css selector', 'input[name="number_trigger"]')
+      ->postValue(['text' => Key::UP_ARROW . Key::TAB]);
+    $this->assertTrue($session->evaluateScript('window.statesSpinnerChange'));
     $this->assertTrue($dependent->isVisible());
   }
 

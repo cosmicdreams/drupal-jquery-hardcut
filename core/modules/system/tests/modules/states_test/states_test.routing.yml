@@ -1,0 +1,14 @@
+states_test.form:
+  path: '/states-test'
+  defaults:
+    _controller: '\Drupal\states_test\Controller\StatesTestController::form'
+    _title: 'States test'
+  requirements:
+    _access: 'TRUE'
+
+states_test.legacy:
+  path: '/states-test/legacy'
+  defaults:
+    _controller: '\Drupal\states_test\Controller\StatesTestController::legacy'
+  requirements:
+    _access: 'TRUE'
