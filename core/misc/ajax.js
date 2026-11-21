@@ -1809,7 +1809,7 @@
    */
   Drupal.Ajax.prototype.setProgressIndicatorBar = function () {
     const progressBar = new Drupal.ProgressBar(
-      `ajax-progress-${this.element.id}`,
+      `ajax-progress-${this.element?.id}`,
       undefined,
       this.progress.method,
     );
@@ -1831,13 +1831,18 @@
       Drupal.theme('ajaxProgressBar', argument),
     );
     this.progress.object = progressBar;
-    this.element.after(this.progress.element);
+    if (this.element) {
+      this.element.after(this.progress.element);
+    }
   };
 
   /**
    * Sets the throbber progress indicator.
    */
   Drupal.Ajax.prototype.setProgressIndicatorThrobber = function () {
+    if (!this.element) {
+      return;
+    }
     this.progress.element = progressElement(
       Drupal.theme('ajaxProgressThrobber', this.progress.message),
     );
