@@ -75,17 +75,19 @@ class FormHelper {
         $keys[$index] = $new_id;
       }
       elseif (is_string($id) && $fallback_search !== NULL && str_contains($id, $fallback_search)) {
-        $update_keys = TRUE;
-        if ($replace_is_attribute) {
-          $new_id = str_replace($fallback_search, $fallback_replace, $id);
+        $pattern = '/(?:^|(?<=[\s>+~,(]))((?:input|select|textarea|button|:is\([^)]+\))?)' . preg_quote($fallback_search, '/') . '/';
+        $escaped_replace = str_replace(['\\', '$'], ['\\\\', '\$'], $fallback_replace);
+        $replacement = $replace_is_attribute ? '${1}' . $escaped_replace : $escaped_replace;
+        $new_id = preg_replace($pattern, $replacement, $id);
+        if ($new_id !== $id) {
+          $update_keys = TRUE;
+          // Replace the key and keep the array in the same order.
+          $index = array_search($id, $keys, TRUE);
+          $keys[$index] = $new_id;
         }
-        else {
-          $pattern = '/(?:(?:input|select|textarea|button|:is\([^)]+\)))?' . preg_quote($fallback_search, '/') . '/';
-          $new_id = preg_replace($pattern, str_replace(['\\', '$'], ['\\\\', '\$'], $fallback_replace), $id);
+        elseif (is_array($values)) {
+          static::processStatesArray($conditions[$id], $search, $replace);
         }
-        // Replace the key and keep the array in the same order.
-        $index = array_search($id, $keys, TRUE);
-        $keys[$index] = $new_id;
       }
       elseif (is_array($values)) {
         static::processStatesArray($conditions[$id], $search, $replace);

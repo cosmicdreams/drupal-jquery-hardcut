@@ -162,6 +162,92 @@ class FormHelperTest extends UnitTestCase {
       ['[name="untouched"]' => ['checked' => TRUE]],
       $legacy_form['bare_input_noop']['#states']['visible'],
     );
+
+    // Token boundary: class/custom names ending in a tag name must not be
+    // rewritten by the :input fallback, while combinator-separated selectors
+    // still match.
+    $boundary_form = [
+      'class_suffix_full' => [
+        '#states' => [
+          'visible' => [
+            '.my-input[name="foo"]' => ['checked' => TRUE],
+          ],
+        ],
+      ],
+      'class_suffix_attr' => [
+        '#states' => [
+          'visible' => [
+            '.my-input[name="foo"]' => ['checked' => TRUE],
+          ],
+        ],
+      ],
+      'custom_tag_suffix' => [
+        '#states' => [
+          'visible' => [
+            'my-select[name="foo"]' => ['checked' => TRUE],
+          ],
+        ],
+      ],
+      'combinator_descendant' => [
+        '#states' => [
+          'visible' => [
+            'form .wrapper input[name="foo"]' => ['checked' => TRUE],
+          ],
+        ],
+      ],
+      'combinator_child_bare' => [
+        '#states' => [
+          'visible' => [
+            'div > [name="foo"]' => ['checked' => TRUE],
+          ],
+        ],
+      ],
+    ];
+    FormHelper::rewriteStatesSelector(
+      $boundary_form['class_suffix_full'],
+      ':input[name="foo"]',
+      'select[name="bar"]',
+    );
+    $this->assertSame(
+      ['.my-input[name="foo"]' => ['checked' => TRUE]],
+      $boundary_form['class_suffix_full']['#states']['visible'],
+    );
+    FormHelper::rewriteStatesSelector(
+      $boundary_form['class_suffix_attr'],
+      ':input[name="foo"]',
+      ':input[name="bar"]',
+    );
+    $this->assertSame(
+      ['.my-input[name="foo"]' => ['checked' => TRUE]],
+      $boundary_form['class_suffix_attr']['#states']['visible'],
+    );
+    FormHelper::rewriteStatesSelector(
+      $boundary_form['custom_tag_suffix'],
+      ':input[name="foo"]',
+      'select[name="bar"]',
+    );
+    $this->assertSame(
+      ['my-select[name="foo"]' => ['checked' => TRUE]],
+      $boundary_form['custom_tag_suffix']['#states']['visible'],
+    );
+    FormHelper::rewriteStatesSelector(
+      $boundary_form['combinator_descendant'],
+      ':input[name="foo"]',
+      'select[name="bar"]',
+    );
+    $this->assertSame(
+      ['form .wrapper select[name="bar"]' => ['checked' => TRUE]],
+      $boundary_form['combinator_descendant']['#states']['visible'],
+    );
+    FormHelper::rewriteStatesSelector(
+      $boundary_form['combinator_child_bare'],
+      ':input[name="foo"]',
+      ':input[name="bar"]',
+    );
+    $this->assertSame(
+      ['div > [name="bar"]' => ['checked' => TRUE]],
+      $boundary_form['combinator_child_bare']['#states']['visible'],
+    );
   }
 
   /**
