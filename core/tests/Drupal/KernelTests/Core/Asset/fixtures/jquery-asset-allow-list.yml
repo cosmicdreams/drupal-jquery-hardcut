@@ -31,7 +31,6 @@
 - core/assets/vendor/jquery.ui/ui/widgets/resizable-min.js
 - core/assets/vendor/jquery/jquery.min.js
 - core/assets/vendor/sortable/Sortable.min.js
-- core/lib/Drupal/Core/Render/Element/RenderElementBase.php
 - core/misc/autocomplete.js
 - core/misc/batch.js
 - core/misc/details-aria.js
