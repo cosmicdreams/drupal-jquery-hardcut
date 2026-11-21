@@ -288,7 +288,7 @@ JS;
           trace.push(['submit', element === form, options === ajax.options]);
           return beforeSubmit.call(this, values, element, options);
         });
-        ajax.beforeSend = function (xhr, options) {
+        ajax.beforeSend = Drupal.ajax.useNativeCallback(function (xhr, options) {
           trace.push(['send', xhr instanceof XMLHttpRequest]);
           if (lane === 'multipart') {
             window.requestLaneParts = Array.from(options.data, ([name, value]) =>
@@ -296,7 +296,7 @@ JS;
             );
           }
           return beforeSend.call(this, xhr, options);
-        };
+        });
         ajax.options.context = button;
         const { success, complete } = ajax.options;
         ajax.options.success = function (data, status, xhr, element) {
