@@ -92,6 +92,7 @@
 
   const events = new WeakMap();
   const nativeEvents = new WeakMap();
+  const nativeResizeSlots = new WeakSet();
   const eventConstructors = {
     blur: FocusEvent,
     focus: FocusEvent,
@@ -250,8 +251,10 @@
       const mixed = handlers.length !== bindings.length;
       // Keep both dispatch slots so later native listeners cannot overtake
       // table delivery when legacy subscribers arrive or leave.
+      // Without legacy subscribers, jQuery still dispatches the event and the
+      // bridge callback yields to the native listener.
       bindings.forEach((binding) => {
-        binding.nativeActive = !mixed;
+        binding.nativeActive = !mixed || nativeResizeSlots.has(binding);
       });
     }
 
@@ -336,6 +339,7 @@
    */
   function installGestures() {
     const subscriptions = new Map();
+    let replaying = true;
     window.Drupal.eventBindings.observe({
       add(binding) {
         const { target, type, listener } = binding;
@@ -344,7 +348,10 @@
         }
         const anchorClick =
           type === 'click' && target instanceof HTMLAnchorElement;
-        const shared = target === document && documentGestures.includes(type);
+        const windowResize = target === window && type === 'resize';
+        const shared =
+          windowResize ||
+          (target === document && documentGestures.includes(type));
         const element = jquery(target);
         const deliver = function (event) {
           const { originalEvent } = event;
@@ -371,6 +378,9 @@
           return listener.call(this, toNativeEvent(event));
         };
         if (shared) {
+          if (windowResize && replaying) {
+            nativeResizeSlots.add(binding);
+          }
           sharedHandlers.set(deliver, binding);
         }
         element.on(type, deliver);
@@ -381,6 +391,7 @@
         subscriptions.delete(binding);
       },
     });
+    replaying = false;
   }
 
   /**
@@ -468,6 +479,7 @@
       }
     };
 
+    let replaying = true;
     window.Drupal.eventBindings.observe({
       add(binding) {
         if (
@@ -495,6 +507,10 @@
           }
           return binding.listener(toNativeEvent(event));
         };
+        // A replayed binding's native listener precedes the bridge subscription.
+        if (replaying) {
+          nativeResizeSlots.add(binding);
+        }
         bindings.set(handler, binding);
         sharedHandlers.set(handler, binding);
         subscriptions.set(binding, handler);
@@ -509,6 +525,7 @@
         }
       },
     });
+    replaying = false;
   }
 
   /**
@@ -628,6 +645,8 @@
   function installEventAdapter() {
     const { tableInteraction } = window.Drupal;
     tableInteraction.invokeEventCallback = invoke;
+    tableInteraction.isSyntheticEvent = (event) =>
+      Object.hasOwn(events.get(event) ?? event ?? {}, 'isTrigger');
     // jQuery 4 retains its original synthetic event while stimulating native
     // checkbox activation and focus. Deliver the table operation only when
     // that synthetic event reaches its jQuery handler, with its modifiers intact.

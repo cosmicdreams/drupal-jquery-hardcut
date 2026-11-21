@@ -163,7 +163,7 @@ class AdminTableDragTest extends TableDragTest {
    */
   #[IgnoreDeprecations]
   public function testBuiltInBulkActionsIgnoreSyntheticChange(): void {
-    $this->drupalGet('tabledrag_test', ['query' => ['legacy' => 1]]);
+    $this->drupalGet('tabledrag_test', ['query' => ['legacy' => 1, 'tableselect' => 1]]);
     $this->assertSame([[TRUE, ['Initial', 'Initial'], FALSE], [TRUE, [NULL, NULL], FALSE], [2, 2]], $this->getSession()->evaluateScript(<<<'JS'
       (() => {
         const calls = [];
@@ -206,7 +206,7 @@ class AdminTableDragTest extends TableDragTest {
    */
   #[IgnoreDeprecations]
   public function testBulkActionsSyntheticWindowEvents(): void {
-    $this->drupalGet('tabledrag_test', ['query' => ['legacy' => 1]]);
+    $this->drupalGet('tabledrag_test', ['query' => ['legacy' => 1, 'tableselect' => 1]]);
     $session = $this->getSession();
     $session->executeScript(<<<'JS'
       const fixture = document.createElement('div');

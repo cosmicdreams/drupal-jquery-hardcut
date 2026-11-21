@@ -5,7 +5,8 @@
 
 ((Drupal, { tabbable }, once) => {
   const { tableInteraction } = Drupal;
-  const isSelectionChange = (event) =>
+  const isSyntheticChange = (event) =>
+    tableInteraction.isSyntheticEvent(event) ||
     tableInteraction.tableSelect?.isSelectionChange(event);
 
   /**
@@ -66,16 +67,16 @@
       const scrollResizeHandler = Drupal.debounce(() => {
         this.scrollResizeHandler();
       }, 10);
-      const load = (event) => this.rowCheckboxHandler(event);
-      window.addEventListener('scroll', scrollResizeHandler);
-      window.addEventListener('resize', scrollResizeHandler);
       // The browser can restore checkbox state when navigating back.
-      window.addEventListener('load', load);
+      releaseListeners.push(
+        tableInteraction.listen(form, window, 'scroll', scrollResizeHandler),
+        tableInteraction.listen(form, window, 'resize', scrollResizeHandler),
+        tableInteraction.listen(form, window, 'load', () =>
+          this.rowCheckboxHandler({}),
+        ),
+      );
       tableInteraction.own(form, bulkActions, () => {
         releaseListeners.forEach((release) => release());
-        window.removeEventListener('scroll', scrollResizeHandler);
-        window.removeEventListener('resize', scrollResizeHandler);
-        window.removeEventListener('load', load);
         clearTimeout(this.scrollingTimeout);
         this.spacerCss.remove();
         once.remove('DefaultAdminBulkActions', bulkActions);
@@ -282,7 +283,7 @@
      */
     selectAllHandler(event) {
       // The select-all handler accounts for its updates to the other inputs.
-      if (!isSelectionChange(event)) {
+      if (!isSyntheticChange(event)) {
         const itemsCheckedCount = event.target.checked
           ? this.checkboxes.length
           : 0;
@@ -299,7 +300,7 @@
      */
     rowCheckboxHandler(event) {
       // The select-all handler accounts for its updates to the other inputs.
-      if (!isSelectionChange(event)) {
+      if (!isSyntheticChange(event)) {
         this.updateStatus(
           Array.prototype.slice
             .call(this.checkboxes)

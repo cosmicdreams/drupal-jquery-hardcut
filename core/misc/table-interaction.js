@@ -71,6 +71,18 @@
     releaseDisconnected,
 
     /**
+     * Checks for events marked as synthetic by an event adapter.
+     *
+     * @param {Event|object} event
+     *   The event passed to a table handler.
+     * @return {boolean}
+     *   Whether the event is synthetic.
+     */
+    isSyntheticEvent(event) {
+      return Object.hasOwn(event ?? {}, 'isTrigger');
+    },
+
+    /**
      * Binds a native listener and registers its synthetic entry point.
      *
      * @param {HTMLElement} owner
