@@ -419,7 +419,6 @@ drupal.dropbutton:
     component:
       misc/dropbutton/dropbutton.css: {}
   dependencies:
-    - core/jquery
     - core/drupal
     - core/drupalSettings
     - core/once
