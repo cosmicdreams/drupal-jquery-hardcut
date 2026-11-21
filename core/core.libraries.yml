@@ -531,6 +531,13 @@ drupal.tabbingmanager:
     - core/drupal
     - core/tabbable
 
+drupal.table_interaction:
+  version: VERSION
+  js:
+    misc/table-interaction.js: {}
+  dependencies:
+    - core/drupal
+
 drupal.tabledrag:
   version: VERSION
   js:
@@ -543,6 +550,7 @@ drupal.tabledrag:
     - core/drupal
     - core/drupalSettings
     - core/once
+    - core/drupal.table_interaction
     - core/drupal.touchevents-test
 
 drupal.tabledrag.ajax:
@@ -566,6 +574,7 @@ drupal.tableresponsive:
   dependencies:
     - core/drupal
     - core/once
+    - core/drupal.table_interaction
 
 drupal.tableselect:
   version: VERSION
@@ -575,6 +584,7 @@ drupal.tableselect:
     - core/drupal
     - core/drupal.checkbox
     - core/once
+    - core/drupal.table_interaction
 
 drupal.tablesort:
   version: VERSION

@@ -141,6 +141,7 @@ admin.tabledrag:
     - core/drupal
     - core/drupalSettings
     - core/once
+    - core/drupal.table_interaction
     - core/drupal.touchevents-test
 
 drupal.dblog:
@@ -342,6 +343,7 @@ tableselect:
     - core/drupal.debounce
     - core/tabbable
     - core/once
+    - core/drupal.table_interaction
 
 # Init
 
