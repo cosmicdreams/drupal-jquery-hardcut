@@ -109,7 +109,11 @@ class ProgressBridgeTest extends WebDriverTestBase {
         }
       })()
       JS);
-    $this->assertSame(['undefined', [['POST', '?progress=1&value=a%20b%7e&_format=json'], NULL], [100, 'POST XMLHttpRequest']], $result);
+    $this->assertSame([
+      'undefined',
+      [['POST', '?progress=1&value=a%20b%7e&_format=json'], NULL],
+      [100, 'POST XMLHttpRequest'],
+    ], $result);
   }
 
   /**
