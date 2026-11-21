@@ -339,6 +339,7 @@ class TableDragTest extends WebDriverTestBase {
    */
   public function testMenuAndTaxonomyTables(): void {
     $this->container->get('module_installer')->install(['menu_ui', 'taxonomy']);
+    $this->rebuildContainer();
     Menu::create(['id' => 'drag_test', 'label' => 'Drag test menu'])->save();
     Vocabulary::create(['vid' => 'drag_test', 'name' => 'Drag test vocabulary'])->save();
     foreach ([0, 1] as $weight) {
@@ -361,7 +362,8 @@ class TableDragTest extends WebDriverTestBase {
     ] as $path => $label) {
       $this->drupalGet($path);
       $this->assertOrder(["Drag test $label 0", "Drag test $label 1"]);
-      $link = $this->assertSession()->linkExists("Drag test $label 1");
+      $link = $this->getSession()->getPage()->findLink("Drag test $label 1");
+      $this->assertNotNull($link);
       $row = $link->getParent();
       while ($row && $row->getTagName() !== 'tr') {
         $row = $row->getParent();
