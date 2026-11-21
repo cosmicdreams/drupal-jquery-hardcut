@@ -1037,11 +1037,12 @@ class TableDragTest extends WebDriverTestBase {
       const handle = drag.table.querySelector('.tabledrag-handle');
       const initialSpan = drag.table.tHead.rows[0].cells[0].colSpan;
       const toggle = drag.toggleWeightButton;
-      const rowWeights = () => [...drag.table.querySelectorAll('tbody tr')].map((row) =>
-        [row.id, row.querySelector('select')?.value]);
+      const [first, second] = drag.table.tBodies[0].rows;
       let drops = 0;
       drag.onDrop = () => { drops += 1; };
       handle.dispatchEvent(new MouseEvent('mousedown'));
+      drag.rowObject.direction = 'down';
+      drag.rowObject.swap('after', second);
       Drupal.detachBehaviors(drag.table, drupalSettings, 'unload');
 
       const dialog = document.createElement('dialog');
@@ -1059,10 +1060,12 @@ class TableDragTest extends WebDriverTestBase {
 
       window.checkRetainedTables = () => {
         const active = drag.dragObject !== null && document.body.classList.contains(drag.dragOrientation);
-        const expectedWeights = rowWeights();
         document.dispatchEvent(new MouseEvent('mouseup'));
+        const rows = [...drag.table.tBodies[0].rows];
+        const weights = rows.map((row) => Number(row.querySelector('select').value));
         const completed = drops === 1 && drag.dragObject === null &&
-          JSON.stringify(rowWeights()) === JSON.stringify(expectedWeights);
+          rows[0] === second && rows[1] === first &&
+          weights.every((weight, index) => index === 0 || weight > weights[index - 1]);
         dialog.showModal();
         responsive.link.click();
         dialog.close();
