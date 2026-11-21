@@ -873,7 +873,7 @@ JS;
       const linkAjax = Drupal.ajax.instances.find((instance) => instance?.element === link);
       const physical = document.createElement('button');
       document.body.append(physical);
-      const buttonAjax = Drupal.ajax({ element: physical, event: 'click.scope', url: location.href });
+      const buttonAjax = Drupal.ajax({ element: physical, event: 'click.scope', keypress: true, url: location.href });
       const trace = window.councilEventTrace = [];
       buttonAjax.eventResponse = (element, event) => trace.push(event instanceof jQuery.Event);
       physical.click();
