@@ -190,6 +190,8 @@
     const subscriptions = new Map();
     const handlerToBinding = new WeakMap();
     const targetSubscriptions = new WeakMap();
+    const typeSubscriptions = new Map();
+    const preExistingLegacy = new WeakMap();
     const removing = new WeakSet();
 
     /**
@@ -206,6 +208,30 @@
         ({ handler }) => !handlerToBinding.has(handler),
       );
     }
+
+    // Snapshot pre-existing external jQuery handlers before dispatch so a
+    // one-shot .one() handler registered before states.js loads still runs the
+    // States slot through the jQuery queue even after unbinding itself.
+    eventBindings.observePublications((event) => {
+      const subs = typeSubscriptions.get(event.type);
+      if (!subs) {
+        return undefined;
+      }
+      let matched;
+      subs.forEach((sub) => {
+        if (hasExternalLegacyHandler(sub.target, sub.type)) {
+          if (!matched) {
+            matched = new Set();
+          }
+          matched.add(sub);
+        }
+      });
+      if (!matched) {
+        return undefined;
+      }
+      preExistingLegacy.set(event, matched);
+      return () => preExistingLegacy.delete(event);
+    });
 
     // Track external jQuery(target).off(...) calls that remove a States slot.
     const originalRemove = jquery.event.remove;
@@ -247,7 +273,10 @@
         };
 
         const useLegacyForNative = (nativeEvt, fromNative) => {
-          if (sub.removedByLegacy) {
+          if (
+            sub.removedByLegacy ||
+            (nativeEvt && preExistingLegacy.get(nativeEvt)?.has(sub))
+          ) {
             return true;
           }
           if (nativeEvt) {
@@ -313,6 +342,12 @@
           targetSubscriptions.set(target, subs);
         }
         subs.add(sub);
+        let typeSubs = typeSubscriptions.get(type);
+        if (!typeSubs) {
+          typeSubs = new Set();
+          typeSubscriptions.set(type, typeSubs);
+        }
+        typeSubs.add(sub);
 
         binding.handlesNativeEvent = (event) => useLegacyForNative(event, true);
         subscriptions.set(binding, () => {
@@ -328,6 +363,10 @@
             subs.delete(sub);
             if (!subs.size) {
               targetSubscriptions.delete(target);
+            }
+            typeSubs.delete(sub);
+            if (!typeSubs.size) {
+              typeSubscriptions.delete(type);
             }
             delete binding.handlesNativeEvent;
           }

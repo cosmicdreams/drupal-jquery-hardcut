@@ -1831,4 +1831,60 @@ final class NativeStatesPublicationTest extends WebDriverTestBase {
     ], $r3Result);
   }
 
+  /**
+   * Tests a pre-states.js jQuery(document).one() handler cancels built-in States.
+   */
+  #[IgnoreDeprecations]
+  public function testPreStatesOneShotCancelsBuiltIn(): void {
+    $session = $this->getSession();
+    $assert = $this->assertSession();
+
+    $this->drupalGet('jquery-bc-test/bridge-events');
+    $session->executeScript(<<<'JS'
+      window.r3OneReady = false;
+      window.r3OneCalls = 0;
+      jQuery(document).one('state:visible', '#r3-one-dep.r3-armed', () => {
+        window.r3OneCalls += 1;
+        return false;
+      });
+      (async () => {
+        const load = (path) => new Promise((resolve, reject) => {
+          const script = document.createElement('script');
+          script.src = drupalSettings.path.baseUrl + path;
+          script.onload = resolve;
+          script.onerror = reject;
+          document.head.append(script);
+        });
+        if (typeof window.once !== 'function') {
+          await load('core/assets/vendor/once/once.min.js');
+        }
+        await load('core/misc/states.js');
+        const oneForm = document.createElement('form');
+        oneForm.id = 'r3-one-form';
+        oneForm.innerHTML = `
+          <input type="checkbox" id="r3-one-src" name="r3_one_src">
+          <div id="r3-one-dep" class="js-form-wrapper" data-drupal-states='{"visible":{"#r3-one-src":{"checked":true}}}'>One dep</div>
+        `;
+        document.body.append(oneForm);
+        Drupal.attachBehaviors(oneForm);
+        window.r3OneReady = true;
+      })();
+      JS);
+    $this->assertJsCondition('window.r3OneReady === true');
+    $oneDep = $assert->elementExists('css', '#r3-one-dep');
+    $oneSrc = $assert->elementExists('css', '#r3-one-src');
+    $this->assertFalse($oneDep->isVisible());
+    $this->assertSame(0, $session->evaluateScript('window.r3OneCalls'));
+
+    $session->executeScript("document.getElementById('r3-one-dep').classList.add('r3-armed');");
+    $oneSrc->check();
+    $this->assertSame(1, $session->evaluateScript('window.r3OneCalls'));
+    $this->assertFalse($oneDep->isVisible(), 'Pre-states.js jQuery(document).one("state:visible", sel, () => false) cancels the built-in States handler.');
+
+    $oneSrc->uncheck();
+    $oneSrc->check();
+    $this->assertTrue($oneDep->isVisible(), 'Built-in state:visible handler resumes after one-shot handler is consumed.');
+    $this->assertSame(1, $session->evaluateScript('window.r3OneCalls'));
+  }
+
 }
