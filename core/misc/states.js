@@ -1,15 +1,16 @@
 /**
  * @file
  * Drupal's states library.
+ * @param {object} Drupal
+ *   The Drupal namespace.
  */
 
-(function ($, Drupal) {
+(function (Drupal) {
   /**
    * The base States namespace.
    *
    * Having the local states variable allows us to use the States namespace
    * without having to always declare "Drupal.states".
-   *
    * @namespace Drupal.states
    */
   const states = {
@@ -20,6 +21,134 @@
   };
 
   Drupal.states = states;
+
+  const formPseudos = {
+    input: 'input, select, textarea, button',
+    radio: 'input[type="radio"]',
+    checkbox: 'input[type="checkbox"]',
+    text: 'input:not([type]), input[type="text"]',
+    password: 'input[type="password"]',
+    file: 'input[type="file"]',
+    submit:
+      'input[type="submit"], button[type="submit"], button:not([type="button"], [type="reset"], [command], [commandfor])',
+    button: 'button, input[type="button"]',
+    image: 'input[type="image"]',
+    reset: 'input[type="reset"], button[type="reset"]',
+  };
+  const nativePseudos = new Set([
+    'checked',
+    'disabled',
+    'enabled',
+    'empty',
+    'first-child',
+    'last-child',
+    'only-child',
+    'nth-child',
+    'nth-last-child',
+    'first-of-type',
+    'last-of-type',
+    'only-of-type',
+    'nth-of-type',
+    'nth-last-of-type',
+    'is',
+    'has',
+    'not',
+    'scope',
+    'where',
+  ]);
+
+  /**
+   * Normalizes the audited form pseudos in a States selector.
+   *
+   * Skip escapes, quoted strings and attributes as tokens. Inspect every
+   * selector in functional pseudos, including forgiving selector lists.
+   * @param {string} selector
+   *   A selector from the final States markup.
+   * @return {string|null}
+   *   A native selector, or null for selectors that need the legacy engine.
+   */
+  function nativeSelector(selector) {
+    const tokens =
+      /\\(?:[\da-f]{1,6}[\t\n\r\f ]?|[^\n\r\f])|\[(?:\\.|"(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*'|[^\]"'\\])*\]|"(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*'|:[\w-]*|\/\*/gis;
+    let eligible = true;
+    const normalized = selector.replace(tokens, (token, offset) => {
+      if (token === '/*') {
+        eligible = false;
+        return token;
+      }
+      if (token[0] !== ':') {
+        return token;
+      }
+      const name = token.slice(1).toLowerCase();
+      const next = selector[offset + token.length];
+      if (!name || next === '\\' || (next && next.charCodeAt(0) > 127)) {
+        eligible = false;
+        return token;
+      }
+      if (Object.hasOwn(formPseudos, name)) {
+        // Wrap the substitution so it can follow any simple selector.
+        return `:is(${formPseudos[name]})`;
+      }
+      eligible = eligible && nativePseudos.has(name);
+      return token;
+    });
+    return eligible ? normalized : null;
+  }
+
+  /**
+   * Resolves an audited selector against the document.
+   * @param {string} selector
+   *   The original selector from the States markup.
+   * @return {Element[]|null}
+   *   The matches, or null when a legacy selector has no attached adapter.
+   */
+  function select(selector) {
+    const normalized = nativeSelector(selector);
+    if (normalized !== null) {
+      try {
+        return Array.from(document.querySelectorAll(normalized));
+      } catch (error) {
+        if (error.name !== 'SyntaxError') {
+          throw error;
+        }
+      }
+    }
+    return states.compatibility.select?.(selector) ?? null;
+  }
+
+  /**
+   * Adapter hooks owned by the deprecated States bridge.
+   * @internal
+   */
+  states.compatibility = {};
+
+  /**
+   * Binds native States events and exposes the slot to the event bridge.
+   * @param {EventTarget} target
+   *   The event target.
+   * @param {string} type
+   *   The event name.
+   * @param {function(Event): void} listener
+   *   The native listener.
+   * @param {object} [data]
+   *   Binding data used by the legacy adapter.
+   * @return {function(): void}
+   *   Removes the binding.
+   */
+  function listen(target, type, listener, data) {
+    const binding = { target, type, listener, data, states: true };
+    const nativeListener = (event) => {
+      if (!binding.handlesNativeEvent?.(event)) {
+        return listener(event);
+      }
+    };
+    target.addEventListener(type, nativeListener);
+    const unregister = Drupal.eventBindings.register(binding);
+    return () => {
+      unregister();
+      target.removeEventListener(type, nativeListener);
+    };
+  }
 
   /**
    * Publishes a state change on each original target.
@@ -45,14 +174,11 @@
 
   /**
    * Inverts a (if it's not undefined) when invertState is true.
-   *
    * @function Drupal.states~invert
-   *
-   * @param {*} a
+   * @param {unknown} a
    *   The value to maybe invert.
    * @param {boolean} invertState
    *   Whether to invert state or not.
-   *
    * @return {boolean}
    *   The result.
    */
@@ -62,14 +188,11 @@
 
   /**
    * Compares two values while ignoring undefined values.
-   *
    * @function Drupal.states~compare
-   *
-   * @param {*} a
+   * @param {unknown} a
    *   Value a.
-   * @param {*} b
+   * @param {unknown} b
    *   Value b.
-   *
    * @return {boolean}
    *   The comparison result.
    */
@@ -83,14 +206,11 @@
 
   /**
    * Bitwise AND with a third undefined state.
-   *
    * @function Drupal.states~ternary
-   *
-   * @param {*} a
+   * @param {unknown} a
    *   Value a.
-   * @param {*} b
+   * @param {unknown} b
    *   Value b
-   *
    * @return {boolean}
    *   The result.
    */
@@ -105,48 +225,90 @@
     return a && b;
   }
 
+  const attached = new Map();
+
   /**
-   * Attaches the states.
-   *
-   * @type {Drupal~behavior}
-   *
-   * @prop {Drupal~behaviorAttach} attach
-   *   Attaches states behaviors.
+   * Finds state-bearing elements in the context, including the context itself.
+   * @param {Document|DocumentFragment|Element} context
+   *   The behavior context.
+   * @return {Element[]}
+   *   The state-bearing elements.
+   */
+  function stateElements(context) {
+    const selector = '[data-drupal-states]';
+    const elements = Array.from(context.querySelectorAll(selector));
+    if (context.matches?.(selector)) {
+      elements.unshift(context);
+    }
+    return elements;
+  }
+
+  /**
+   * Compares two ordered sets of matches.
+   * @param {Element[]} first
+   *   The first set of matches.
+   * @param {Element[]} second
+   *   The second set of matches.
+   * @return {boolean}
+   *   Whether both contain the same elements in the same order.
+   */
+  function sameElements(first, second) {
+    return (
+      first.length === second.length &&
+      first.every((element, index) => element === second[index])
+    );
+  }
+
+  /**
+   * Attaches and releases States dependencies.
    */
   Drupal.behaviors.states = {
-    attach(context, settings) {
-      // Uses once to avoid duplicates if attach is called multiple times.
-      const elements = once('states', '[data-drupal-states]', context);
-      const il = elements.length;
-      for (let i = 0; i < il; i++) {
-        const config = JSON.parse(
-          elements[i].getAttribute('data-drupal-states'),
-        );
-        Object.keys(config || {}).forEach((state) => {
-          new states.Dependent({
-            element: $(elements[i]),
-            state: states.State.sanitize(state),
-            constraints: config[state],
-          });
-        });
-      }
-
-      // Execute all postponed functions now.
+    attach(context) {
+      stateElements(context).forEach((element) => {
+        if (!attached.has(element)) {
+          const config = JSON.parse(element.getAttribute('data-drupal-states'));
+          attached.set(
+            element,
+            Object.entries(config || {}).map(
+              ([state, constraints]) =>
+                new states.Dependent({
+                  elements: [element],
+                  state: states.State.sanitize(state),
+                  constraints,
+                  defer: true,
+                }),
+            ),
+          );
+        }
+      });
+      // An insertion or an explicitly attached selector adapter can make a
+      // previously unavailable condition resolvable on an existing element.
+      attached.forEach((dependents) => {
+        dependents.forEach((dependent) => dependent.connect());
+      });
       while (states.postponed.length) {
         states.postponed.shift()();
       }
+    },
+
+    detach(context, settings, trigger) {
+      if (trigger !== 'unload') {
+        return;
+      }
+      stateElements(context).forEach((element) => {
+        attached.get(element)?.forEach((dependent) => dependent.disconnect());
+        attached.delete(element);
+      });
     },
   };
 
   /**
    * Object representing an element that depends on other elements.
-   *
-   * @constructor Drupal.states.Dependent
-   *
+   * @class Drupal.states.Dependent
    * @param {object} args
    *   Object with the following keys (all of which are required)
-   * @param {jQuery} args.element
-   *   A jQuery object of the dependent element
+   * @param {Element[]} args.elements
+   *   The dependent elements.
    * @param {Drupal.states.State} args.state
    *   A State object describing the state that is dependent
    * @param {object} args.constraints
@@ -155,25 +317,21 @@
    *   arbitrary AND and OR clauses.
    */
   states.Dependent = function (args) {
-    $.extend(this, { values: {}, oldValue: null }, args);
-
+    Object.assign(this, args);
+    this.values = Object.create(null);
+    this.oldValue = null;
+    this.disposers = [];
     this.dependees = this.getDependees();
-    Object.keys(this.dependees || {}).forEach((selector) => {
-      this.initializeDependee(selector, this.dependees[selector]);
-    });
+    if (!args.defer) {
+      this.connect();
+    }
   };
 
   /**
    * Comparison functions for comparing the value of an element with the
    * specification from the dependency settings. If the object type can't be
    * found in this list, the === operator is used by default.
-   *
    * @name Drupal.states.Dependent.comparisons
-   *
-   * @prop {function} RegExp
-   * @prop {function} Function
-   * @prop {function} Array
-   * @prop {function} Number
    */
   states.Dependent.comparisons = {
     RegExp(reference, value) {
@@ -197,7 +355,7 @@
       // reference as a string before applying the strict comparison in
       // compare().
       // Otherwise numeric keys in the form's #states array fail to match
-      // string values returned from jQuery's val().
+      // string values returned by form controls.
       return typeof value === 'string'
         ? compare(reference.toString(), value)
         : compare(reference, value);
@@ -206,55 +364,83 @@
 
   states.Dependent.prototype = {
     /**
-     * Initializes one of the elements this dependent depends on.
-     *
-     * @memberof Drupal.states.Dependent#
-     *
-     * @param {string} selector
-     *   The CSS selector describing the dependee.
-     * @param {object} dependeeStates
-     *   The list of states that have to be monitored for tracking the
-     *   dependee's compliance status.
+     * Connects resolved dependees and retries unresolved legacy selectors.
      */
-    initializeDependee(selector, dependeeStates) {
-      // Cache for the states of this dependee.
-      this.values[selector] = {};
-
-      Object.keys(dependeeStates).forEach((i) => {
-        let state = dependeeStates[i];
-        // Make sure we're not initializing this selector/state combination
-        // twice.
-        if ($.inArray(state, dependeeStates) === -1) {
+    connect() {
+      const matches = new Map();
+      for (const selector of Object.keys(this.dependees)) {
+        const elements = select(selector);
+        if (elements === null) {
           return;
         }
-
-        state = states.State.sanitize(state);
-
-        // Initialize the value of this state.
-        this.values[selector][state.name] = null;
-
-        // Monitor state changes of the specified state for this dependee.
-        $(selector).on(`state:${state}`, { selector, state }, (e) => {
-          this.update(e.data.selector, e.data.state, e.value);
-        });
-
-        // Make sure the event we just bound ourselves to is actually fired.
-        new states.Trigger({ selector, state });
+        matches.set(selector, elements);
+      }
+      if (
+        this.matches &&
+        Array.from(matches).every(([selector, elements]) =>
+          sameElements(elements, this.matches.get(selector)),
+        )
+      ) {
+        return;
+      }
+      this.disconnect();
+      this.matches = matches;
+      matches.forEach((elements, selector) => {
+        this.initializeDependee(selector, this.dependees[selector]);
       });
     },
 
     /**
+     * Releases the listeners and shared trigger subscriptions.
+     */
+    disconnect() {
+      this.disposers.forEach((dispose) => dispose());
+      this.disposers.length = 0;
+      this.matches = null;
+    },
+
+    /**
+     * Watches each unique selector and state combination.
+     * @param {string} selector
+     *   The selector describing the dependee.
+     * @param {string[]} dependeeStates
+     *   The states this dependent reads.
+     */
+    initializeDependee(selector, dependeeStates) {
+      const elements = this.matches.get(selector);
+      this.values[selector] = {};
+      for (const stateName of new Set(dependeeStates)) {
+        const state = states.State.sanitize(stateName);
+        this.values[selector][state.name] = null;
+
+        for (const element of elements) {
+          this.disposers.push(
+            listen(
+              element,
+              `state:${state}`,
+              (event) => this.update(selector, state, event.detail?.value),
+              { selector, state },
+            ),
+          );
+        }
+
+        this.disposers.push(
+          acquireTrigger(elements, selector, state, (value) => {
+            this.update(selector, state, value);
+          }),
+        );
+      }
+    },
+
+    /**
      * Compares a value with a reference value.
-     *
      * @memberof Drupal.states.Dependent#
-     *
      * @param {object} reference
      *   The value used for reference.
      * @param {string} selector
      *   CSS selector describing the dependee.
      * @param {Drupal.states.State} state
      *   A State object describing the dependee's updated state.
-     *
      * @return {boolean}
      *   true or false.
      */
@@ -274,9 +460,7 @@
 
     /**
      * Update the value of a dependee's state.
-     *
      * @memberof Drupal.states.Dependent#
-     *
      * @param {string} selector
      *   CSS selector describing the dependee.
      * @param {Drupal.states.state} state
@@ -294,7 +478,6 @@
 
     /**
      * Triggers change events in case a state changed.
-     *
      * @memberof Drupal.states.Dependent#
      */
     reevaluate() {
@@ -312,7 +495,7 @@
 
         // By adding "trigger: true", we ensure that state changes don't go into
         // infinite loops.
-        publishState(this.element, `state:${this.state}`, {
+        publishState(this.elements, `state:${this.state}`, {
           value,
           trigger: true,
         });
@@ -321,16 +504,13 @@
 
     /**
      * Evaluates child constraints to determine if a constraint is satisfied.
-     *
      * @memberof Drupal.states.Dependent#
-     *
      * @param {object|Array} constraints
      *   A constraint object or an array of constraints.
      * @param {string} selector
      *   The selector for these constraints. If undefined, there isn't yet a
      *   selector that these constraints apply to. In that case, the keys of the
      *   object are interpreted as the selector if encountered.
-     *
      * @return {boolean}
      *   true or false, depending on whether these constraints are satisfied.
      */
@@ -338,7 +518,7 @@
       let result;
       if (Array.isArray(constraints)) {
         // This constraint is an array (OR or XOR).
-        const hasXor = $.inArray('xor', constraints) === -1;
+        const isOr = !constraints.includes('xor');
         const len = constraints.length;
         for (let i = 0; i < len; i++) {
           if (constraints[i] !== 'xor') {
@@ -349,8 +529,8 @@
             );
             // Return if this is OR and we have a satisfied constraint or if
             // this is XOR and we have a second satisfied constraint.
-            if (constraint && (hasXor || result)) {
-              return hasXor;
+            if (constraint && (isOr || result)) {
+              return isOr;
             }
             result = result || constraint;
           }
@@ -359,17 +539,15 @@
       // Make sure we don't try to iterate over things other than objects. This
       // shouldn't normally occur, but in case the condition definition is
       // bogus, we don't want to end up with an infinite loop.
-      else if ($.isPlainObject(constraints)) {
-        // This constraint is an object (AND).
-        // eslint-disable-next-line no-restricted-syntax
-        for (const n in constraints) {
-          if (constraints.hasOwnProperty(n)) {
+      else if (constraints && typeof constraints === 'object') {
+        const prototype = Object.getPrototypeOf(constraints);
+        if (prototype === Object.prototype || prototype === null) {
+          // This constraint is an object (AND).
+          for (const [key, value] of Object.entries(constraints)) {
             result = ternary(
               result,
-              this.checkConstraints(constraints[n], selector, n),
+              this.checkConstraints(value, selector, key),
             );
-            // False and anything else will evaluate to false, so return when
-            // any false condition is found.
             if (result === false) {
               return false;
             }
@@ -381,9 +559,7 @@
 
     /**
      * Checks whether the value matches the requirements for this constraint.
-     *
      * @memberof Drupal.states.Dependent#
-     *
      * @param {string|Array|object} value
      *   Either the value of a state or an array/object of constraints. In the
      *   latter case, resolving the constraint continues.
@@ -397,7 +573,6 @@
      *   non-numeric strings, a lookup for the actual value of that selector's
      *   state is performed. This parameter is not a State object but a pristine
      *   state string.
-     *
      * @return {boolean}
      *   true or false, depending on whether this constraint is satisfied.
      */
@@ -424,14 +599,12 @@
 
     /**
      * Gathers information about all required triggers.
-     *
      * @memberof Drupal.states.Dependent#
-     *
      * @return {object}
      *   An object describing the required triggers.
      */
     getDependees() {
-      const cache = {};
+      const cache = Object.create(null);
       // Swivel the lookup function so that we can record all available
       // selector- state combinations for initialization.
       const _compare = this.compare;
@@ -455,23 +628,85 @@
     },
   };
 
+  const sharedTriggers = new WeakMap();
+
   /**
-   * @constructor Drupal.states.Trigger
+   * Shares a trigger among dependents with the same ordered scope and state.
+   * @param {Element[]} elements
+   *   The trigger's ordered scope.
+   * @param {string} selector
+   *   The selector describing the scope.
+   * @param {Drupal.states.State} state
+   *   The monitored state.
+   * @param {function(unknown): void} update
+   *   Receives the last value when an existing trigger is reused.
+   * @return {function(): void}
+   *   Releases this dependency's use of the trigger.
+   */
+  function acquireTrigger(elements, selector, state, update) {
+    if (!elements.length) {
+      return () => {};
+    }
+    let triggers = sharedTriggers.get(elements[0]);
+    if (!triggers) {
+      triggers = new Set();
+      sharedTriggers.set(elements[0], triggers);
+    }
+    let trigger = Array.from(triggers).find(
+      (candidate) =>
+        candidate.state.name === state.name &&
+        sameElements(candidate.elements, elements),
+    );
+    if (trigger) {
+      states.postponed.push(() => {
+        if (trigger.initialized) {
+          update(trigger.value);
+        }
+      });
+    } else {
+      trigger = new states.Trigger({ selector, state, elements });
+      triggers.add(trigger);
+    }
+    trigger.users = (trigger.users || 0) + 1;
+    return () => {
+      trigger.users -= 1;
+      if (!trigger.users) {
+        trigger.disconnect();
+        triggers.delete(trigger);
+      }
+    };
+  }
+
+  const registeredTriggers = new Map();
+
+  /**
+   * Registers native trigger callbacks for a state.
    *
+   * An initializer receives the array of matching DOM elements. A map of
+   * value callbacks uses that array as its receiver, with a native event
+   * when reevaluating after a change. The native registration takes precedence
+   * over assignments to the deprecated collection callback surface.
+   * @param {string} name
+   *   The normalized state name.
+   * @param {function(Element[]): (function()|undefined)|object} trigger
+   *   An initializer, or a map of event names to value callbacks.
+   */
+  states.registerTrigger = function (name, trigger) {
+    registeredTriggers.set(name, trigger);
+  };
+
+  /**
+   * @class Drupal.states.Trigger
    * @param {object} args
-   *   Trigger arguments.
+   *   Trigger arguments. If omitted, elements are selected from args.selector.
    */
   states.Trigger = function (args) {
-    $.extend(this, args);
-
-    if (this.state in states.Trigger.states) {
-      this.element = $(this.selector);
-
-      // Only call the trigger initializer when it wasn't yet attached to this
-      // element. Otherwise we'd end up with duplicate events.
-      if (!this.element.data(`trigger:${this.state}`)) {
-        this.initialize();
-      }
+    Object.assign(this, args);
+    this.elements = this.elements ?? select(this.selector) ?? [];
+    this.disposers = [];
+    this.active = true;
+    if (this.elements.length) {
+      this.initialize();
     }
   };
 
@@ -480,139 +715,151 @@
      * @memberof Drupal.states.Trigger#
      */
     initialize() {
-      const trigger = states.Trigger.states[this.state];
+      const name = this.state.name ?? String(this.state);
+      const trigger =
+        registeredTriggers.get(name) ??
+        (states.compatibility.trigger ?? ((key) => states.Trigger.states[key]))(
+          name,
+        );
 
       if (typeof trigger === 'function') {
-        // We have a custom trigger initialization function.
-        trigger.call(window, this.element);
+        const dispose = trigger.call(window, this.elements);
+        if (typeof dispose === 'function') {
+          this.disposers.push(dispose);
+        }
       } else {
-        Object.keys(trigger || {}).forEach((event) => {
-          this.defaultTrigger(event, trigger[event]);
+        Object.entries(trigger || {}).forEach(([event, value]) => {
+          this.defaultTrigger(event, value);
         });
       }
-
-      // Mark this trigger as initialized for this element.
-      this.element.data(`trigger:${this.state}`, true);
     },
 
     /**
      * @memberof Drupal.states.Trigger#
-     *
-     * @param {jQuery.Event} event
-     *   The event triggered.
-     * @param {function} valueFn
-     *   The function to call.
+     * @param {string} type
+     *   The event to monitor.
+     * @param {function(Event): unknown} valueFn
+     *   The callback reading the current state.
      */
-    defaultTrigger(event, valueFn) {
-      let oldValue = valueFn.call(this.element);
+    defaultTrigger(type, valueFn) {
+      let oldValue = valueFn.call(this.elements);
 
-      // Attach the event callback.
-      this.element.on(
-        event,
-        function (e) {
-          const value = valueFn.call(this.element, e);
-          // Only trigger the event if the value has actually changed.
-          if (oldValue !== value) {
-            publishState(this.element, `state:${this.state}`, {
-              value,
-              oldValue,
-            });
-            oldValue = value;
-          }
-        }.bind(this),
-      );
-
-      states.postponed.push(
-        function () {
-          // Trigger the event once for initialization purposes.
-          publishState(this.element, `state:${this.state}`, {
+      for (const element of this.elements) {
+        this.disposers.push(
+          listen(element, type, (event) => {
+            const value = valueFn.call(this.elements, event);
+            if (oldValue !== value) {
+              this.value = value;
+              publishState(this.elements, `state:${this.state}`, {
+                value,
+                oldValue,
+              });
+              oldValue = value;
+            }
+          }),
+        );
+      }
+      states.postponed.push(() => {
+        if (this.active) {
+          this.initialized = true;
+          this.value = oldValue;
+          publishState(this.elements, `state:${this.state}`, {
             value: oldValue,
             oldValue: null,
           });
-        }.bind(this),
-      );
+        }
+      });
+    },
+
+    /**
+     * Releases the event listeners when the last dependent unloads.
+     */
+    disconnect() {
+      this.active = false;
+      this.disposers.forEach((dispose) => dispose());
     },
   };
 
   /**
-   * This list of states contains functions that are used to monitor the state
-   * of an element. Whenever an element depends on the state of another element,
-   * one of these trigger functions is added to the dependee so that the
-   * dependent element can be updated.
-   *
+   * Reads a form control's value using the States comparison conventions.
+   * @param {Element} [element]
+   *   The element whose value to read.
+   * @return {unknown}
+   *   The control value.
+   */
+  function controlValue(element) {
+    if (element instanceof HTMLSelectElement) {
+      const values = Array.from(element.selectedOptions)
+        .filter(
+          (option) => !option.disabled && !option.closest('optgroup[disabled]'),
+        )
+        .map((option) => option.value);
+      return element.multiple ? values : (values[0] ?? null);
+    }
+    return element ? (element.value ?? '') : undefined;
+  }
+
+  /**
+   * Tests whether the first matched control is empty.
+   * @return {boolean}
+   *   Whether its value is an empty string.
+   */
+  function empty() {
+    return controlValue(this[0]) === '';
+  }
+
+  /**
+   * Reads the selected member of a group or the value of a single control.
+   * @return {unknown}
+   *   The current control value.
+   */
+  function value() {
+    if (this.length > 1) {
+      return (
+        controlValue(this.find((element) => element.matches(':checked'))) ||
+        false
+      );
+    }
+    return controlValue(this[0]);
+  }
+
+  /**
+   * Default triggers use native element arrays and events.
    * @name Drupal.states.Trigger.states
-   *
-   * @prop empty
-   * @prop checked
-   * @prop value
-   * @prop collapsed
    */
   states.Trigger.states = {
-    // 'empty' describes the state to be monitored.
     empty: {
-      // 'keyup' is the (native DOM) event that we watch for.
-      keyup() {
-        // The function associated with that trigger returns the new value for
-        // the state.
-        return this.val() === '';
-      },
-      // Listen to 'change' for number native "spinner" widgets.
-      change() {
-        return this.val() === '';
-      },
+      keyup: empty,
+      // Listen to change for number controls with native spinners.
+      change: empty,
     },
-
     checked: {
       change() {
-        // prop() and attr() only takes the first element into account. To
-        // support selectors matching multiple checkboxes, iterate over all and
-        // return whether any is checked.
-        let checked = false;
-        this.each(function () {
-          // Use prop() here as we want a boolean of the checkbox state.
-          // @see http://api.jquery.com/prop/
-          checked = $(this).prop('checked');
-          // Break the each() loop if this is checked.
-          return !checked;
-        });
-        return checked;
+        return this.some((element) => element.checked);
       },
     },
-
-    // For radio buttons, only return the value if the radio button is selected.
     value: {
-      keyup() {
-        // Radio buttons share the same :input[name="key"] selector.
-        if (this.length > 1) {
-          // Initial checked value of radios is undefined, so we return false.
-          return this.filter(':checked').val() || false;
-        }
-        return this.val();
-      },
-      change() {
-        // Radio buttons share the same :input[name="key"] selector.
-        if (this.length > 1) {
-          // Initial checked value of radios is undefined, so we return false.
-          return this.filter(':checked').val() || false;
-        }
-        return this.val();
-      },
+      keyup: value,
+      change: value,
     },
-
     collapsed: {
-      collapsed(e) {
-        return typeof e !== 'undefined' && 'value' in e
-          ? e.value
+      collapsed(event) {
+        return event?.detail && 'value' in event.detail
+          ? event.detail.value
           : !this[0].hasAttribute('open');
       },
     },
   };
 
+  // The bridge uses these identities to distinguish defaults from legacy
+  // assignments, including assignments made before the bridge attaches.
+  states.compatibility.defaults = Object.values(states.Trigger.states).flatMap(
+    (trigger) => Object.values(trigger),
+  );
+
   /**
    * A state object is used for describing the state and performing aliasing.
-   *
-   * @constructor Drupal.states.State
-   *
+   * @class Drupal.states.State
    * @param {string} state
    *   The name of the state.
    */
@@ -633,7 +880,7 @@
       }
 
       // Replace the state with its normalized name.
-      if (this.name in states.State.aliases) {
+      if (Object.hasOwn(states.State.aliases, this.name)) {
         this.name = states.State.aliases[this.name];
       } else {
         process = false;
@@ -643,12 +890,9 @@
 
   /**
    * Creates a new State object by sanitizing the passed value.
-   *
    * @name Drupal.states.State.sanitize
-   *
    * @param {string|Drupal.states.State} state
    *   A state object or the name of a state.
-   *
    * @return {Drupal.states.state}
    *   A state object.
    */
@@ -663,7 +907,6 @@
   /**
    * This list of aliases is used to normalize states and associates negated
    * names with their respective inverse state.
-   *
    * @name Drupal.states.State.aliases
    */
   states.State.aliases = {
@@ -689,9 +932,7 @@
 
     /**
      * Ensures that just using the state object returns the name.
-     *
      * @memberof Drupal.states.State#
-     *
      * @return {string}
      *   The name of the state.
      */
@@ -707,82 +948,120 @@
    * can override these state change handlers for particular parts of a page.
    */
 
-  const $document = $(document);
-  $document.on('state:disabled', (e) => {
-    // Only act when this change was triggered by a dependency and not by the
-    // element monitoring itself.
-    const tagsSupportDisable =
-      'button, fieldset, optgroup, option, select, textarea, input';
-    if (e.trigger) {
-      $(e.target)
-        .closest('.js-form-item, .js-form-submit, .js-form-wrapper')
-        .toggleClass('form-disabled', e.value)
-        .find(tagsSupportDisable)
-        .addBack(tagsSupportDisable)
-        .prop('disabled', e.value);
-    }
-  });
+  const wrapper = '.js-form-item, .js-form-submit, .js-form-wrapper';
+  const item = '.js-form-item, .js-form-wrapper';
+  const supportsDisabled =
+    'button, fieldset, optgroup, option, select, textarea, input';
+  const displays = new WeakMap();
 
-  $document.on('state:readonly', (e) => {
-    if (e.trigger) {
-      $(e.target)
-        .closest('.js-form-item, .js-form-submit, .js-form-wrapper')
-        .toggleClass('form-readonly', e.value)
-        .find('input, textarea')
-        .prop('readonly', e.value);
-    }
-  });
-
-  $document.on('state:required', (e) => {
-    if (e.trigger) {
-      if (e.value) {
-        const label = `label${e.target.id ? `[for=${e.target.id}]` : ''}`;
-        const $label = $(e.target)
-          .attr({ required: 'required' })
-          .closest('.js-form-item, .js-form-wrapper')
-          .find(label);
-        // Avoids duplicate required markers on initialization.
-        if (!$label.hasClass('js-form-required').length) {
-          $label.addClass('js-form-required form-required');
-        }
-      } else {
-        $(e.target)
-          .removeAttr('required')
-          .closest('.js-form-item, .js-form-wrapper')
-          .find('label.js-form-required')
-          .removeClass('js-form-required form-required');
+  /**
+   * Applies visibility without losing the element's inline display value.
+   * @param {HTMLElement} element
+   *   The element to change.
+   * @param {boolean} show
+   *   Whether the element should be visible.
+   */
+  function visible(element, show) {
+    const { style } = element;
+    if (!show) {
+      if (style.display !== 'none') {
+        displays.set(element, style.display);
+        style.display = 'none';
       }
+      return;
     }
-  });
-
-  $document.on('state:visible', (e) => {
-    if (e.trigger) {
-      let $element = $(e.target).closest(
-        '.js-form-item, .js-form-submit, .js-form-wrapper',
+    if (style.display === 'none') {
+      style.display = displays.get(element) ?? '';
+    }
+    if (style.display === '' && getComputedStyle(element).display === 'none') {
+      // Match the default display for elements initially hidden by a rule.
+      const sample = document.body.appendChild(
+        document.createElement(element.localName),
       );
-      // For links, update the state of itself instead of the wrapper.
-      if (e.target.tagName === 'A') {
-        $element = $(e.target);
-      }
-      $element.toggle(e.value);
+      const display = getComputedStyle(sample).display;
+      sample.remove();
+      style.display = display === 'none' ? 'block' : display;
     }
-  });
+  }
 
-  $document.on('state:checked', (e) => {
-    if (e.trigger) {
-      $(e.target)
-        .closest('.js-form-item, .js-form-wrapper')
-        .find('input')
-        .prop('checked', e.value)
-        .trigger('change');
-    }
-  });
-
-  $document.on('state:collapsed', (e) => {
-    if (e.trigger) {
-      if (e.target.hasAttribute('open') === e.value) {
-        $(e.target).find('> summary').trigger('click');
+  const handlers = {
+    disabled(target, value) {
+      const container = target.closest(wrapper);
+      if (container) {
+        container.classList.toggle('form-disabled', Boolean(value));
+        container.querySelectorAll(supportsDisabled).forEach((element) => {
+          element.disabled = value;
+        });
+        if (container.matches(supportsDisabled)) {
+          container.disabled = value;
+        }
       }
-    }
+    },
+
+    readonly(target, value) {
+      const container = target.closest(wrapper);
+      if (container) {
+        container.classList.toggle('form-readonly', Boolean(value));
+        container.querySelectorAll('input, textarea').forEach((element) => {
+          element.readOnly = value;
+        });
+      }
+    },
+
+    required(target, value) {
+      if (value) {
+        target.setAttribute('required', 'required');
+      } else {
+        target.removeAttribute('required');
+      }
+      const selector =
+        value && target.id ? `label[for="${CSS.escape(target.id)}"]` : 'label';
+      target
+        .closest(item)
+        ?.querySelectorAll(selector)
+        .forEach((label) => {
+          label.classList.toggle('js-form-required', Boolean(value));
+          label.classList.toggle('form-required', Boolean(value));
+        });
+    },
+
+    visible(target, value) {
+      const element = target.tagName === 'A' ? target : target.closest(wrapper);
+      if (element) {
+        visible(
+          element,
+          typeof value === 'boolean'
+            ? value
+            : getComputedStyle(element).display === 'none',
+        );
+      }
+    },
+
+    checked(target, value) {
+      const inputs = target.closest(item)?.querySelectorAll('input');
+      inputs?.forEach((input) => {
+        input.checked = value;
+      });
+      inputs?.forEach((input) => {
+        input.dispatchEvent(
+          new Event('change', { bubbles: true, cancelable: true }),
+        );
+      });
+    },
+
+    collapsed(target, value) {
+      if (target.hasAttribute('open') === value) {
+        target.querySelector(':scope > summary')?.click();
+      }
+    },
+  };
+
+  Object.entries(handlers).forEach(([state, handler]) => {
+    listen(document, `state:${state}`, (event) => {
+      if (event.detail?.trigger) {
+        handler(event.target, event.detail.value);
+      }
+    });
   });
-})(jQuery, Drupal);
+  document.dispatchEvent(new Event('drupal:states-ready'));
+})(Drupal);
