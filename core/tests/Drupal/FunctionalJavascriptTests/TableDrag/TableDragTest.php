@@ -1457,6 +1457,7 @@ class TableDragTest extends WebDriverTestBase {
    */
   public function testAjaxChangedWarning(): void {
     $this->drupalGet('tabledrag_test', ['query' => ['ajax' => 1]]);
+    $this->assertTrue($this->getSession()->evaluateScript("typeof jQuery === 'undefined'"));
     $assert = $this->assertSession();
     $this->assertSame(
       "Cannot read properties of undefined (reading 'id')",
