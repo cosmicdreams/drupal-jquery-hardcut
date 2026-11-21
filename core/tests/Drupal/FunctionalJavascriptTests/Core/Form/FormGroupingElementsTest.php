@@ -496,6 +496,62 @@ class FormGroupingElementsTest extends WebDriverTestBase {
   }
 
   /**
+   * Tests that an unload batch settles when its targets stay or move.
+   */
+  public function testUnloadBatchSettlesWhenTargetsStay(): void {
+    $this->drupalGet('form-test/group-details');
+    $session = $this->getSession();
+    $this->assertSame('undefined', $session->evaluateScript('typeof window.jQuery'));
+    $session->executeScript(<<<'JS'
+      (async () => {
+        const disconnect = MutationObserver.prototype.disconnect;
+        let disconnects = 0;
+        MutationObserver.prototype.disconnect = function () {
+          disconnects += 1;
+          return disconnect.call(this);
+        };
+        const received = [];
+        const kept = document.body.appendChild(document.createElement('div'));
+        kept.appendChild(document.createElement('span'));
+        const region = document.body.appendChild(document.createElement('div'));
+        const moved = region.appendChild(document.createElement('div'));
+        const destination = document.body.appendChild(document.createElement('div'));
+        const stopKept = Drupal.formEvents.listen(kept, 'testKept', undefined, () => received.push('kept'));
+        const stopMoved = Drupal.formEvents.listen(moved, 'testMoved', undefined, () => received.push('moved'));
+        try {
+          // The swap replaces the content of a target that stays.
+          Drupal.detachBehaviors(kept, drupalSettings, 'unload');
+          disconnects = 0;
+          kept.replaceChildren(document.createElement('p'));
+          await Promise.resolve();
+          const keptDisconnects = disconnects;
+
+          // The swap moves a target elsewhere in the document.
+          Drupal.detachBehaviors(region, drupalSettings, 'unload');
+          disconnects = 0;
+          destination.append(moved);
+          await Promise.resolve();
+          const movedDisconnects = disconnects;
+
+          kept.dispatchEvent(new Event('testKept'));
+          moved.dispatchEvent(new Event('testMoved'));
+          window.unloadKeptResult = [keptDisconnects, movedDisconnects, received];
+        }
+        finally {
+          MutationObserver.prototype.disconnect = disconnect;
+          stopKept();
+          stopMoved();
+          kept.remove();
+          region.remove();
+          destination.remove();
+        }
+      })();
+      JS);
+    $this->assertJsCondition('Array.isArray(window.unloadKeptResult)');
+    $this->assertSame([1, 1, ['kept', 'moved']], $session->evaluateScript('window.unloadKeptResult'));
+  }
+
+  /**
    * Tests a summary override assigned before the form adapter loads.
    */
   public function testPreAdapterSummaryOverride(): void {

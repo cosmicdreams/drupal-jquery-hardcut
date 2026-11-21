@@ -23,12 +23,40 @@
     disconnectIfIdle();
   }
 
-  // Settle a batch once the unload removes one of its targets. Unrelated
-  // insertions, such as an Ajax throbber before a delayed swap, keep it.
-  const removalObserver = new MutationObserver(() => {
+  /**
+   * Checks whether a mutation record removed part of an unloaded batch.
+   *
+   * The record removes a node inside the unloaded context, or a node that
+   * holds the context or one of its targets, even if that node returns.
+   * @param {MutationRecord} record
+   *   A childList mutation record.
+   * @param {object} batch
+   *   A pending unload batch with its context and bindings.
+   * @return {boolean}
+   *   Whether the record removed part of the batch.
+   */
+  function removesFromBatch(record, batch) {
+    if (!record.removedNodes.length) {
+      return false;
+    }
+    if (batch.context.contains(record.target)) {
+      return true;
+    }
+    return Array.from(record.removedNodes).some(
+      (node) =>
+        node.contains(batch.context) ||
+        Array.from(batch.bindings).some(({ target }) => node.contains(target)),
+    );
+  }
+
+  // Settle a batch once the unload's update removes content from it, whether
+  // its targets leave, stay or move. Unrelated insertions, such as an Ajax
+  // throbber before a delayed swap, keep it.
+  const removalObserver = new MutationObserver((records) => {
     Array.from(pendingUnloads).forEach((batch) => {
       if (
-        Array.from(batch.bindings).some(({ target }) => !target.isConnected)
+        Array.from(batch.bindings).some(({ target }) => !target.isConnected) ||
+        records.some((record) => removesFromBatch(record, batch))
       ) {
         settleBatch(batch);
       }
