@@ -132,20 +132,8 @@
       "owner": "U",
       "references": 1
     },
-    "modules/language/js/language.admin.js": {
-      "owner": "U",
-      "references": 1
-    },
     "modules/layout_builder/js/layout-builder.js": {
       "owner": "M",
-      "references": 1
-    },
-    "modules/locale/js/locale.admin.js": {
-      "owner": "U",
-      "references": 1
-    },
-    "modules/locale/js/locale.bulk.js": {
-      "owner": "U",
       "references": 1
     },
     "modules/media/js/form.js": {
@@ -184,18 +172,6 @@
       "owner": "U",
       "references": 1
     },
-    "modules/system/js/system.date.js": {
-      "owner": "U",
-      "references": 1
-    },
-    "modules/system/js/system.js": {
-      "owner": "U",
-      "references": 1
-    },
-    "modules/system/js/system.modules.js": {
-      "owner": "U",
-      "references": 1
-    },
     "modules/system/tests/modules/ajax_test/js/global_events.js": {
       "owner": "A",
       "references": 1
@@ -214,14 +190,6 @@
     },
     "modules/system/tests/modules/jquery_bc_test/js/event-bridge-dependent.js": {
       "owner": "B",
-      "references": 1
-    },
-    "modules/taxonomy/js/taxonomy.js": {
-      "owner": "U",
-      "references": 1
-    },
-    "modules/text/js/text.js": {
-      "owner": "U",
       "references": 1
     },
     "modules/user/js/user.js": {

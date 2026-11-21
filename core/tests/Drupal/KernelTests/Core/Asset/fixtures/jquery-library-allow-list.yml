@@ -35,7 +35,6 @@
 - default_admin/file/drupal.file
 - default_admin/filter/drupal.filter
 - default_admin/filter/drupal.filter.admin
-- default_admin/language/drupal.language.admin
 - default_admin/layout_builder/drupal.layout_builder
 - default_admin/locale/drupal.locale.admin
 - default_admin/media/form
@@ -52,10 +51,7 @@
 - default_admin/node/drupal.node
 - default_admin/node/drupal.node.preview
 - default_admin/path/drupal.path
-- default_admin/system/drupal.system
 - default_admin/system/drupal.system.date
-- default_admin/system/drupal.system.modules
-- default_admin/taxonomy/drupal.taxonomy
 - default_admin/user/drupal.user
 - default_admin/user/drupal.user.permissions
 - default_admin/views/views.ajax
@@ -97,7 +93,6 @@
 - stark/file/drupal.file
 - stark/filter/drupal.filter
 - stark/filter/drupal.filter.admin
-- stark/language/drupal.language.admin
 - stark/layout_builder/drupal.layout_builder
 - stark/locale/drupal.locale.admin
 - stark/media/form
@@ -113,10 +108,7 @@
 - stark/node/drupal.node
 - stark/node/drupal.node.preview
 - stark/path/drupal.path
-- stark/system/drupal.system
 - stark/system/drupal.system.date
-- stark/system/drupal.system.modules
-- stark/taxonomy/drupal.taxonomy
 - stark/user/drupal.user
 - stark/user/drupal.user.permissions
 - stark/views/views.ajax
@@ -158,7 +150,6 @@
 - starterkit_theme/file/drupal.file
 - starterkit_theme/filter/drupal.filter
 - starterkit_theme/filter/drupal.filter.admin
-- starterkit_theme/language/drupal.language.admin
 - starterkit_theme/layout_builder/drupal.layout_builder
 - starterkit_theme/locale/drupal.locale.admin
 - starterkit_theme/media/form
@@ -174,10 +165,7 @@
 - starterkit_theme/node/drupal.node
 - starterkit_theme/node/drupal.node.preview
 - starterkit_theme/path/drupal.path
-- starterkit_theme/system/drupal.system
 - starterkit_theme/system/drupal.system.date
-- starterkit_theme/system/drupal.system.modules
-- starterkit_theme/taxonomy/drupal.taxonomy
 - starterkit_theme/user/drupal.user
 - starterkit_theme/user/drupal.user.permissions
 - starterkit_theme/views/views.ajax
@@ -219,7 +207,6 @@
 - umami/file/drupal.file
 - umami/filter/drupal.filter
 - umami/filter/drupal.filter.admin
-- umami/language/drupal.language.admin
 - umami/layout_builder/drupal.layout_builder
 - umami/locale/drupal.locale.admin
 - umami/media/form
@@ -235,10 +222,7 @@
 - umami/node/drupal.node
 - umami/node/drupal.node.preview
 - umami/path/drupal.path
-- umami/system/drupal.system
 - umami/system/drupal.system.date
-- umami/system/drupal.system.modules
-- umami/taxonomy/drupal.taxonomy
 - umami/user/drupal.user
 - umami/user/drupal.user.permissions
 - umami/views/views.ajax
