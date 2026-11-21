@@ -58,7 +58,6 @@ class JqueryFreePagesTest extends WebDriverTestBase {
       'library:jquery' => ['Z', 'Z'],
       'library:jquery-bootstrap' => ['B', 'Z'],
       'library:jquery-bridge' => ['B', 'Z'],
-      'library:jquery-form' => ['A', 'A'],
       'library:jquery-position' => ['D', 'D'],
       'library:jquery-ui-css' => ['D', 'D'],
       'library:jquery-ui-dialog' => ['D', 'D'],
@@ -81,7 +80,6 @@ class JqueryFreePagesTest extends WebDriverTestBase {
       'library:jquery' => ['Z', 'Z'],
       'library:jquery-bootstrap' => ['B', 'Z'],
       'library:jquery-bridge' => ['B', 'Z'],
-      'library:jquery-form' => ['A', 'A'],
       'library:jquery-position' => ['D', 'D'],
       'library:jquery-ui-css' => ['D', 'D'],
       'library:jquery-ui-dialog' => ['D', 'D'],
@@ -315,6 +313,9 @@ class JqueryFreePagesTest extends WebDriverTestBase {
           ['library:jquery-position', /\/misc\/position\.js$/],
           ['library:jquery-bootstrap', /\/misc\/jquery\.no-conflict\.js$/],
           ['library:jquery-bridge', /\/misc\/jquery\.drupal-bc\.js$/],
+          ['library:jquery-ajax-bridge', /\/misc\/jquery\.drupal-ajax-bc\.js$/],
+          ['library:jquery-ajax-commands', /\/misc\/jquery\.drupal-ajax-commands\.js$/],
+          ['library:jquery-tabledrag-bridge', /\/misc\/jquery\.tabledrag\.bc\.js$/],
         ];
         urls.forEach((url) => {
           const path = new URL(url).pathname;
