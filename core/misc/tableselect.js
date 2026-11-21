@@ -93,12 +93,14 @@
     const checkboxes = [
       ...table.querySelectorAll('td input[type="checkbox"]:enabled'),
     ];
-    const headers = table.querySelectorAll('th.select-all');
-    if (headers.length) {
+    const headers = [...table.querySelectorAll('th.select-all')];
+    const missing = headers.filter(
+      (header) => !header.querySelector('input[type="checkbox"]'),
+    );
+    if (missing.length) {
       tableInteraction.insertCheckboxes(
-        table,
-        headers,
-        Drupal.tableSelect.checkboxContent(),
+        missing,
+        tableSelect.checkboxContent(),
         strings.selectAll,
       );
     }
@@ -192,7 +194,9 @@
    *
    * @internal
    */
-  Drupal.tableSelect.isSelectionChange = (event) => selectionChanges.has(event);
-  Drupal.tableSelect.checkboxContent = () => Drupal.theme('checkbox');
+  const tableSelect = Drupal.tableSelect;
+  tableSelect.isSelectionChange = (event) => selectionChanges.has(event);
+  tableSelect.checkboxContent = () => Drupal.theme('checkbox');
+  tableInteraction.tableSelect = tableSelect;
   document.dispatchEvent(new Event('drupal:tableselect-ready'));
 })(Drupal, once);

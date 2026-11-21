@@ -120,29 +120,30 @@
     const checkboxes = [
       ...table.querySelectorAll('td input[type="checkbox"]:enabled'),
     ];
-    const headers = table.querySelectorAll('th.select-all');
-    if (
-      headers.length &&
-      !table.querySelector('th.select-all input[type="checkbox"]')
-    ) {
+    const headers = [...table.querySelectorAll('th.select-all')];
+    const missing = headers.filter(
+      (header) => !header.querySelector('input[type="checkbox"]'),
+    );
+    if (missing.length) {
       tableInteraction.insertCheckboxes(
-        table,
-        headers,
-        Drupal.tableSelect.checkboxContent(),
+        missing,
+        tableSelect.checkboxContent(),
         strings.selectAll,
       );
     }
     headers.forEach((header) => {
-      tableInteraction.listen(table, header, 'click', (event) => {
-        if (event.target.matches('input[type="checkbox"]')) {
-          checkboxes.forEach((checkbox) => {
-            setChecked(checkbox, event.target.checked);
-            checkbox
-              .closest('tr')
-              ?.classList.toggle('selected', checkbox.checked);
-          });
-          updateSelectAll(event.target.checked);
-        }
+      const selectAll = header.querySelector('input[type="checkbox"]');
+      if (!selectAll) {
+        return;
+      }
+      tableInteraction.listen(table, selectAll, 'click', () => {
+        checkboxes.forEach((checkbox) => {
+          setChecked(checkbox, selectAll.checked);
+          checkbox
+            .closest('tr')
+            ?.classList.toggle('selected', checkbox.checked);
+        });
+        updateSelectAll(selectAll.checked);
       });
     });
     tableInteraction.own(table, table, () =>
@@ -222,7 +223,9 @@
    *
    * @internal
    */
-  Drupal.tableSelect.isSelectionChange = (event) => selectionChanges.has(event);
-  Drupal.tableSelect.checkboxContent = () => Drupal.theme('checkbox');
+  const tableSelect = Drupal.tableSelect;
+  tableSelect.isSelectionChange = (event) => selectionChanges.has(event);
+  tableSelect.checkboxContent = () => Drupal.theme('checkbox');
+  tableInteraction.tableSelect = tableSelect;
   document.dispatchEvent(new Event('drupal:tableselect-ready'));
 })(Drupal, once);

@@ -22,16 +22,13 @@
         if (!listeners) {
           return;
         }
-        // Some cleanup removes nodes that own other bindings.
+        // A cleanup callback can release several owned listeners.
         const removed = [...listeners].filter(
           ({ target }) =>
             context.contains(owner) ||
             (target instanceof Node && context.contains(target)),
         );
-        removed.forEach((binding) => {
-          binding.stop();
-          listeners.delete(binding);
-        });
+        removed.forEach((binding) => binding.stop());
       });
     },
   };
@@ -45,16 +42,18 @@
     /**
      * Binds a native listener and registers its synthetic entry point.
      *
-     * @param {HTMLTableElement} table
-     *   The table that owns the listener.
+     * @param {HTMLElement} owner
+     *   The table or form that owns the listener.
      * @param {EventTarget} target
      *   The listener target.
      * @param {string} type
      *   The event type.
      * @param {Function} listener
      *   The native handler.
+     * @return {Function}
+     *   Releases the listener before its table or target unloads.
      */
-    listen(table, target, type, listener) {
+    listen(owner, target, type, listener) {
       const nativeListener = (event) => {
         if (this.allowNativeEvent(event)) {
           return listener.call(target, event);
@@ -67,7 +66,7 @@
         listener,
         tableInteraction: true,
       });
-      this.own(table, target, () => {
+      return this.own(owner, target, () => {
         unregister();
         target.removeEventListener(type, nativeListener);
       });
@@ -84,18 +83,16 @@
     },
 
     /**
-     * Inserts select-all markup and releases it with the owning header.
+     * Inserts select-all markup in headers that need a checkbox.
      *
-     * @param {HTMLTableElement} table
-     *   The table owning the headers.
-     * @param {NodeList} headers
+     * @param {HTMLElement[]} headers
      *   The headers receiving a checkbox.
      * @param {string|Node} markup
      *   The themed checkbox.
      * @param {string} title
      *   The checkbox label.
      */
-    insertCheckboxes(table, headers, markup, title) {
+    insertCheckboxes(headers, markup, title) {
       let content = markup;
       if (typeof markup === 'string') {
         const template = document.createElement('template');
@@ -108,34 +105,41 @@
       headers.forEach((header, index) => {
         const fragment =
           index === headers.length - 1 ? content : content.cloneNode(true);
-        const nodes =
-          fragment instanceof DocumentFragment
-            ? [...fragment.childNodes]
-            : [fragment];
         header.prepend(fragment);
         const checkbox = header.querySelector('input[type="checkbox"]');
         if (checkbox) {
           checkbox.title = title;
         }
-        this.own(table, header, () => nodes.forEach((node) => node.remove()));
       });
     },
 
     /**
      * Releases an owned listener when its table or target unloads.
      *
-     * @param {HTMLTableElement} table
-     *   The table that owns the listener.
+     * @param {HTMLElement} owner
+     *   The table or form that owns the listener.
      * @param {EventTarget} target
      *   The listener target.
      * @param {Function} stop
      *   Removes the listener and releases any associated state.
+     * @return {Function}
+     *   Releases the binding immediately.
      */
-    own(table, target, stop) {
-      if (!tableListeners.has(table)) {
-        tableListeners.set(table, new Set());
+    own(owner, target, stop) {
+      if (!tableListeners.has(owner)) {
+        tableListeners.set(owner, new Set());
       }
-      tableListeners.get(table).add({ target, stop });
+      const listeners = tableListeners.get(owner);
+      const binding = {
+        target,
+        stop() {
+          if (listeners.delete(binding)) {
+            stop();
+          }
+        },
+      };
+      listeners.add(binding);
+      return binding.stop;
     },
 
     /**

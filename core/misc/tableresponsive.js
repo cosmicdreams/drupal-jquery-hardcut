@@ -4,6 +4,8 @@
  */
 
 (function (Drupal, once, window) {
+  const retainedControls = new WeakMap();
+
   /**
    * The TableResponsive object optimizes table presentation for screen size.
    *
@@ -29,30 +31,38 @@
     this.showText = Drupal.t('Show all columns');
     this.hideText = Drupal.t('Hide lower priority columns');
     this.headers = [...table.querySelectorAll('th')];
-    this.revealedCells = [];
+    const retained = retainedControls.get(table);
+    this.revealedCells = retained?.revealedCells ?? [];
 
-    this.link = document.createElement('button');
-    this.link.type = 'button';
-    this.link.className = 'link tableresponsive-toggle';
-    this.link.title = Drupal.t(
-      'Show table cells that were hidden to make the table fit within a small screen.',
-    );
+    const wrapper = retained?.wrapper ?? document.createElement('div');
+    this.link = retained?.link ?? document.createElement('button');
+    if (!retained) {
+      this.link.type = 'button';
+      this.link.className = 'link tableresponsive-toggle';
+      this.link.title = Drupal.t(
+        'Show table cells that were hidden to make the table fit within a small screen.',
+      );
+      this.link.textContent = this.showText;
+      wrapper.className = 'tableresponsive-toggle-columns';
+      wrapper.append(this.link);
+      TableResponsive.pegged.set(this.link, undefined);
+    }
+    if (wrapper.parentNode !== table.parentNode) {
+      table.before(wrapper);
+    }
+    // Give the new control a visible default when its first resize is
+    // cancelled. The resize callback decides whether it should stay visible.
+    if (!retained && window.getComputedStyle(this.link).display === 'none') {
+      this.link.style.display = 'inline-block';
+    }
     const toggle = this.eventhandlerToggleColumns.bind(this);
     Drupal.tableInteraction.listen(table, this.link, 'click', toggle);
-    TableResponsive.pegged.set(this.link, undefined);
-
-    const wrapper = document.createElement('div');
-    wrapper.className = 'tableresponsive-toggle-columns';
-    wrapper.append(this.link);
-    table.before(wrapper);
 
     // Capture the current handler, as a later assignment should only affect
     // newly created tables.
     const evaluate = this.eventhandlerEvaluateColumnVisibility.bind(this);
     window.addEventListener('resize', evaluate);
     TableResponsive.resizeHandlers.set(this, evaluate);
-    // Initialize before the first refresh, which a legacy listener can cancel.
-    evaluateVisibility.call(this);
     const removeNativeListener = () =>
       window.removeEventListener('resize', evaluate);
     const stop = () => {
@@ -64,6 +74,7 @@
       target: window,
       type: 'resize',
       namespace: 'tableresponsive',
+      link: this.link,
       listener: evaluate,
       removeNativeListener,
       stop,
@@ -74,10 +85,11 @@
       if (index !== -1) {
         TableResponsive.tables.splice(index, 1);
       }
-      this.revealedCells.forEach((cell) =>
-        cell.style.removeProperty('display'),
-      );
-      wrapper.remove();
+      retainedControls.set(table, {
+        wrapper,
+        link: this.link,
+        revealedCells: this.revealedCells,
+      });
       once.remove('tableresponsive', table);
     });
   }

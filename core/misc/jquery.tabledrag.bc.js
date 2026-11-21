@@ -189,7 +189,9 @@
       warn(`The legacy event argument for ${method}`);
       if (!events.has(event)) {
         const legacyEvent = jquery.Event(event);
-        if (window.Drupal.tableSelect?.isSelectionChange?.(event)) {
+        if (
+          window.Drupal.tableInteraction.tableSelect?.isSelectionChange(event)
+        ) {
           legacyEvent.isTrigger = 3;
         }
         events.set(event, legacyEvent);
@@ -210,16 +212,15 @@
     window.Drupal.eventBindings.observe({
       add(binding) {
         const { target, type, listener } = binding;
-        // The general Drupal jQuery bridge already forwards anchor clicks.
-        if (
-          !binding.tableInteraction ||
-          (type === 'click' && target instanceof HTMLAnchorElement)
-        ) {
+        if (!binding.tableInteraction) {
           return;
         }
+        const anchorClick =
+          type === 'click' && target instanceof HTMLAnchorElement;
         const element = jquery(target);
         const deliver = function (event) {
-          if (!event.isTrigger) {
+          // The general Drupal bridge forwards direct anchor clicks.
+          if (!event.isTrigger || (anchorClick && event.target === target)) {
             return undefined;
           }
           warn(`The synthetic ${type} trigger for table interactions`);
@@ -284,6 +285,7 @@
     );
     adaptPeggedData(TableResponsive.pegged);
     const refreshes = new WeakSet();
+    const migratedPegged = new WeakSet();
     const subscriptions = new Map();
     const bindings = new WeakMap();
     const windowEvents = jquery(window);
@@ -338,6 +340,15 @@
         ) {
           return;
         }
+        const { link } = binding;
+        if (link && !migratedPegged.has(link)) {
+          migratedPegged.add(link);
+          const stored = jquery.data(link, 'pegged');
+          if (stored !== undefined) {
+            TableResponsive.pegged.set(link, stored);
+            jquery.removeData(link, 'pegged');
+          }
+        }
         binding.removeNativeListener();
         const handler = (event) => {
           if (event.isTrigger && !refreshes.has(event)) {
@@ -369,7 +380,7 @@
   function adaptPeggedData(pegged) {
     const { data, removeData } = jquery.fn;
     jquery.fn.data = function (key, value) {
-      if (key === 'pegged' && arguments.length === 1 && pegged.has(this[0])) {
+      if (key === 'pegged' && value === undefined && pegged.has(this[0])) {
         return pegged.get(this[0]);
       }
       if (key === undefined && pegged.has(this[0])) {
@@ -447,13 +458,13 @@
    */
   function installTableSelect() {
     installContext('tableSelect');
-    const select = window.Drupal.tableSelect;
-    const { checkboxContent } = select;
+    const select = window.Drupal.tableInteraction.tableSelect;
+    const { checkboxContent, isSelectionChange } = select;
     const change = jquery.event.special.change ?? {};
     const previousHandle = change.handle;
     jquery.event.special.change = change;
     change.handle = function (event, ...args) {
-      if (select.isSelectionChange(event.originalEvent)) {
+      if (isSelectionChange(event.originalEvent)) {
         event.isTrigger = 3;
       }
       return (previousHandle ?? event.handleObj.handler).call(

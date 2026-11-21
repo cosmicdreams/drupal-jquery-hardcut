@@ -4,6 +4,10 @@
  */
 
 ((Drupal, { tabbable }, once) => {
+  const { tableInteraction } = Drupal;
+  const isSelectionChange = (event) =>
+    tableInteraction.tableSelect?.isSelectionChange(event);
+
   /**
    * Adds sticky bulk actions.
    *
@@ -30,28 +34,34 @@
       this.scrollingTimeout = '';
       this.ignoreScrollEvent = false;
 
-      const { tableInteraction } = Drupal;
       const { form } = this;
+      const releaseListeners = [];
       this.checkboxes.forEach((checkbox) => {
         const change = (event) => this.rowCheckboxHandler(event);
         checkbox.addEventListener('change', change);
-        tableInteraction.own(form, checkbox, () =>
-          checkbox.removeEventListener('change', change),
+        releaseListeners.push(
+          tableInteraction.own(form, checkbox, () =>
+            checkbox.removeEventListener('change', change),
+          ),
         );
       });
       this.selectAll.forEach((checkbox) => {
         const change = (event) => this.selectAllHandler(event);
         checkbox.addEventListener('change', change);
-        tableInteraction.own(form, checkbox, () =>
-          checkbox.removeEventListener('change', change),
+        releaseListeners.push(
+          tableInteraction.own(form, checkbox, () =>
+            checkbox.removeEventListener('change', change),
+          ),
         );
       });
       this.tabbable.forEach((element) => {
-        tableInteraction.listen(form, element, 'focus', (event) =>
-          this.focusHandler(event),
-        );
-        tableInteraction.listen(form, element, 'blur', (event) =>
-          this.blurHandler(event),
+        releaseListeners.push(
+          tableInteraction.listen(form, element, 'focus', (event) =>
+            this.focusHandler(event),
+          ),
+          tableInteraction.listen(form, element, 'blur', (event) =>
+            this.blurHandler(event),
+          ),
         );
       });
 
@@ -66,6 +76,7 @@
       // The browser can restore checkbox state when navigating back.
       window.addEventListener('load', load);
       tableInteraction.own(form, bulkActions, () => {
+        releaseListeners.forEach((release) => release());
         window.removeEventListener('scroll', scrollResizeHandler);
         window.removeEventListener('resize', scrollResizeHandler);
         window.removeEventListener('load', load);
@@ -275,7 +286,7 @@
      */
     selectAllHandler(event) {
       // The select-all handler accounts for its updates to the other inputs.
-      if (!Drupal.tableSelect?.isSelectionChange?.(event)) {
+      if (!isSelectionChange(event)) {
         const itemsCheckedCount = event.target.checked
           ? this.checkboxes.length
           : 0;
@@ -292,7 +303,7 @@
      */
     rowCheckboxHandler(event) {
       // The select-all handler accounts for its updates to the other inputs.
-      if (!Drupal.tableSelect?.isSelectionChange?.(event)) {
+      if (!isSelectionChange(event)) {
         this.updateStatus(
           Array.prototype.slice
             .call(this.checkboxes)
