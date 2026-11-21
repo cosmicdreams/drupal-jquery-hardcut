@@ -403,16 +403,15 @@
             }
             return undefined;
           }
-          // The general Drupal bridge forwards direct clicks without a source event.
-          if (
-            !slot &&
-            anchorClick &&
-            event.target === target &&
-            !originalEvent
-          ) {
+          const directClick =
+            anchorClick && event.target === target && !originalEvent;
+          if (directClick && !slot) {
+            // The general bridge still owns direct clicks without a claim.
             return undefined;
           }
-          warn(`The synthetic ${type} trigger for table interactions`);
+          if (!directClick) {
+            warn(`The synthetic ${type} trigger for table interactions`);
+          }
           // A synthetic touch event can supply touch data without DOM methods.
           if (originalEvent && !(originalEvent instanceof Event)) {
             event.isSimulated = true;
