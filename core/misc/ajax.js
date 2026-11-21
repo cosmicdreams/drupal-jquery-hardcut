@@ -1426,7 +1426,6 @@
         // default callback did not run because an earlier one threw.
         if (
           !['success', 'notmodified', 'nocontent'].includes(status) ||
-          !xmlhttprequest.status ||
           !receivedRequests.has(xmlhttprequest)
         ) {
           restoreElement(ajax);
@@ -1474,7 +1473,12 @@
         }
         const target = ajax.element;
         const listener = (event) => operation(target, event);
-        target.addEventListener(type, listener);
+        const nativeListener = (event) => {
+          if (!Drupal.ajax.compatibility?.isSyntheticDefaultAction?.(event)) {
+            listener(event);
+          }
+        };
+        target.addEventListener(type, nativeListener);
         const unregister = Drupal.eventBindings.register({
           target,
           type,
@@ -1484,7 +1488,7 @@
         });
         removers.push(() => {
           unregister();
-          target.removeEventListener(type, listener);
+          target.removeEventListener(type, nativeListener);
         });
       });
     };

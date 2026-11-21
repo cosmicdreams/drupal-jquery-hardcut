@@ -247,7 +247,14 @@
 
     data(ajax, response, status) {
       warn("DataCommand's jQuery-data semantics", migrations.data);
-      $(response.selector).data(response.name, response.value);
+      const targets = $(response.selector);
+      targets.data(response.name, response.value);
+      if (typeof response.name === 'string' && response.value !== undefined) {
+        targets.each((index, element) => {
+          const key = response.name;
+          elementData.set(element, key, data(element, key));
+        });
+      }
     },
 
     invoke(ajax, response, status) {

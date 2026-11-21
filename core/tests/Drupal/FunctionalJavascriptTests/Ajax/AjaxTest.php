@@ -802,6 +802,64 @@ JS;
   }
 
   /**
+   * Tests the Ajax listener during jQuery synthetic and native dispatch.
+   */
+  public function testLegacySyntheticAjaxEvents(): void {
+    $this->drupalGet('ajax-test/global-events');
+    $result = $this->getSession()->evaluateScript(<<<'JS'
+      (() => {
+        const trace = [];
+        const bind = (element, event, name) => {
+          document.body.append(element);
+          const ajax = Drupal.ajax({
+            element,
+            event,
+            url: Drupal.url('ajax-test/echo-header'),
+          });
+          ajax.eventResponse = (target, event) => {
+            trace.push(name);
+            event.preventDefault();
+          };
+        };
+
+        const button = document.createElement('button');
+        bind(button, 'click.ajaxProbe', 'button');
+        jQuery(button).trigger('click.unrelated');
+        jQuery(button).triggerHandler('click.ajaxProbe');
+        button.click();
+
+        const checkbox = document.createElement('input');
+        checkbox.type = 'checkbox';
+        bind(checkbox, 'click.ajaxProbe', 'checkbox');
+        jQuery(checkbox).trigger('click.ajaxProbe');
+        const checked = checkbox.checked;
+
+        const radio = document.createElement('input');
+        radio.type = 'radio';
+        jQuery(radio).on('click.ajaxProbe', () => trace.push('first'));
+        bind(radio, 'click.ajaxProbe', 'radio');
+        jQuery(radio).trigger('click.ajaxProbe');
+
+        const input = document.createElement('input');
+        jQuery(input).on('blur.ajaxProbe', (event) => {
+          trace.push('stopped');
+          event.stopImmediatePropagation();
+        });
+        bind(input, 'blur.ajaxProbe', 'blur');
+        input.focus();
+        jQuery(input).trigger('blur.ajaxProbe');
+
+        return [trace, checked, radio.checked];
+      })()
+      JS);
+    $this->assertSame([
+      ['button', 'button', 'checkbox', 'first', 'radio', 'stopped'],
+      TRUE,
+      TRUE,
+    ], $result);
+  }
+
+  /**
    * Tests the opted-in request factory and cross-origin settings.
    */
   #[IgnoreDeprecations]
@@ -852,14 +910,29 @@ JS;
     $session = $this->getSession();
     $this->assertJsCondition('Boolean(window.legacyAjaxOverrides)');
     $session->executeScript(<<<'JS'
-      const { ajax, $form } = window.legacyAjaxOverrides;
+      const { ajax, $form, trace } = window.legacyAjaxOverrides;
+      const insert = ajax.commands.insert;
+      const gate = new Promise((resolve) => { window.releaseIframeCommands = resolve; });
+      ajax.commands.insert = function (...args) {
+        window.iframeCommandsPending = true;
+        return gate.then(() => insert.apply(this, args));
+      };
+      document.addEventListener('drupal:ajax-complete', ({ detail }) => {
+        if (detail.ajax === ajax) {
+          trace.push('nativeComplete');
+        }
+      });
       ajax.options.url = Drupal.url('ajax-test/echo-request?iframe_test=1');
       drupalSettings.ajaxTrustedUrl[ajax.url] = true;
       Object.assign(ajax.options, { iframe: true, forceSync: true, clearForm: true });
       $form.find('select').val('enabled');
       $form.find('button').trigger('mousedown.legacyOverrides');
       JS);
+    $this->assertJsCondition('window.iframeCommandsPending === true');
+    $this->assertSame([TRUE, 1, ['beforeSend']], $session->evaluateScript('[legacyAjaxOverrides.ajax.ajaxing, jQuery.active, legacyAjaxOverrides.trace]'));
+    $session->executeScript('window.releaseIframeCommands();');
     $this->assertJsCondition("document.querySelector('#request-lane-echo').textContent !== '' && !legacyAjaxOverrides.ajax.ajaxing");
+    $this->assertSame([0, ['beforeSend', 'success', 'nativeComplete', 'ajaxComplete']], $session->evaluateScript('[jQuery.active, legacyAjaxOverrides.trace]'));
     $data = json_decode($this->assertSession()->elementExists('css', '#request-lane-echo')->getText(), TRUE, flags: JSON_THROW_ON_ERROR);
     $this->assertSame('enabled', $data['fields']['override']);
     $this->assertNull($data['requestedWith']);

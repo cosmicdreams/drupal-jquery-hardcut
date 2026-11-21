@@ -491,8 +491,9 @@
    */
   function commandsPending(xhr, settings) {
     return (
-      // Only interfere with Drupal's Ajax responses.
-      xhr.getResponseHeader('X-Drupal-Ajax-Token') === '1' &&
+      // Trusted iframe responses can reach Drupal without a token header.
+      (received.has(xhr) ||
+        xhr.getResponseHeader('X-Drupal-Ajax-Token') === '1') &&
       // The isInProgress() function might not be defined if the Ajax request
       // was initiated without Drupal.ajax() or new Drupal.Ajax().
       typeof settings.isInProgress === 'function' &&
@@ -1140,6 +1141,7 @@
       return;
     }
     const subscriptions = new Map();
+    const delivering = new Set();
     Drupal.eventBindings.observe({
       add(binding) {
         const { ajax, target, type, namespace, listener } = binding;
@@ -1154,8 +1156,17 @@
         }
         const name = namespace ? `${type}.${namespace}` : type;
         const deliver = (event) => {
-          if (event.isTrigger && !event.originalEvent) {
-            return listener(event);
+          if (
+            event.isTrigger &&
+            !event.originalEvent &&
+            !delivering.has(event)
+          ) {
+            delivering.add(event);
+            try {
+              return listener(event);
+            } finally {
+              delivering.delete(event);
+            }
           }
         };
         const element = jQuery(target);
@@ -1168,6 +1179,27 @@
       },
     });
     Drupal.ajax.compatibility = {
+      isSyntheticDefaultAction(event) {
+        if (jQuery.event.triggered === event.type) {
+          return true;
+        }
+        if (
+          event.type !== 'click' &&
+          event.type !== 'focus' &&
+          event.type !== 'blur'
+        ) {
+          return false;
+        }
+        // The pinned jQuery leverageNative handler stores its synthetic
+        // arguments during the DOM method call, then replaces them with the
+        // result. Check both phases because our listener may run on either
+        // side of that handler. A new native dispatch from a legacy handler
+        // still reaches the native listener.
+        const phase = jQuery._data(event.target, event.type);
+        return Array.isArray(phase)
+          ? !delivering.has(phase[0])
+          : !!phase && Object.hasOwn(phase, 'value');
+      },
       warnLegacy,
       send,
       commandsComplete,

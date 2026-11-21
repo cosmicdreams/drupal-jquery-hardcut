@@ -162,6 +162,7 @@ class CommandsTest extends WebDriverTestBase {
     $this->assertSame('plugin', $target->getText());
     $this->assertSession()->elementsCount('css', '#legacy-commands .target', 1);
     $this->assertTrue($session->evaluateScript("jQuery.data(document.querySelector('#legacy-commands .target'), 'fixtureKey').stored"));
+    $this->assertSame(['stored' => TRUE], $session->evaluateScript("Drupal.ajax.elementData.get(document.querySelector('#legacy-commands .target'), 'fixture-key')"));
   }
 
   /**
