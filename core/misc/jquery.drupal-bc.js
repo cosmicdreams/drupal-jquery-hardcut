@@ -35,8 +35,10 @@
   function observeLegacyEvents(jquery, registry) {
     const subscriptions = legacySlots.get(jquery) || new Map();
     legacySlots.set(jquery, subscriptions);
+    const slotHandlers = new WeakSet();
+    let replaying = true;
 
-    return registry.observe({
+    const stop = registry.observe({
       add(binding) {
         const { target, type, namespace, selector, listener } = binding;
         if (
@@ -129,8 +131,22 @@
         }
 
         const element = jquery(target);
+        const special = jquery.event.special[type];
+        const bindType =
+          (selector ? special?.delegateType : special?.bindType) || type;
+        const list = jquery._data(target, 'events')?.[bindType];
         const slot = {
           deliver,
+          // Whether handlers ahead of this slot precede the binding in
+          // registration order. When core registers the binding, every
+          // existing handler does, and this instance dispatches before core's
+          // native listener. During a replay, only earlier slots do; the order
+          // of other existing handlers is unknown.
+          followsHandlers: Boolean(
+            list?.some(
+              (handleObj) => !replaying || slotHandlers.has(handleObj.handler),
+            ),
+          ),
           handler(...args) {
             return slot.deliver.apply(this, args);
           },
@@ -142,6 +158,7 @@
           },
         };
         element.on(name, selector, slot.handler);
+        slotHandlers.add(slot.handler);
         subscriptions.set(binding, slot);
       },
       remove(binding) {
@@ -151,6 +168,8 @@
         }
       },
     });
+    replaying = false;
+    return stop;
   }
 
   /**
@@ -333,6 +352,50 @@
   }
 
   const connections = new WeakMap();
+  // Connected instances in connection order, and their observers.
+  const connected = new Set();
+  const connectionObservers = new Set();
+
+  /**
+   * Runs one connection observer callback without interrupting the others.
+   * @param {object} observer
+   *   The connection observer.
+   * @param {string} method
+   *   The callback name, connect or disconnect.
+   * @param {object} jquery
+   *   The jQuery instance.
+   */
+  function notifyConnection(observer, method, jquery) {
+    try {
+      observer[method](jquery);
+    } catch (error) {
+      window.Drupal.throwError(error);
+    }
+  }
+
+  /**
+   * Observes connected jQuery instances and subsequent changes.
+   * @param {object} observer
+   *   An adapter with connect and disconnect methods for one instance.
+   * @return {function(): void}
+   *   Stops observing and disconnects the adapter from every instance.
+   * @internal
+   */
+  function observeLegacyConnections(observer) {
+    if (!connectionObservers.has(observer)) {
+      connectionObservers.add(observer);
+      connected.forEach((jquery) =>
+        notifyConnection(observer, 'connect', jquery),
+      );
+    }
+    return () => {
+      if (connectionObservers.delete(observer)) {
+        connected.forEach((jquery) =>
+          notifyConnection(observer, 'disconnect', jquery),
+        );
+      }
+    };
+  }
 
   /**
    * Connects one explicitly selected jQuery instance to owned events.
@@ -353,6 +416,11 @@
       const stopPublications = observeOwnedPublications(jquery, registry);
       const disconnect = () => {
         if (connections.get(jquery) === disconnect) {
+          // Observers release their claimed slots before the bridge stops.
+          connected.delete(jquery);
+          connectionObservers.forEach((observer) =>
+            notifyConnection(observer, 'disconnect', jquery),
+          );
           stopTriggers();
           stopBindings();
           stopPublications();
@@ -360,6 +428,11 @@
         }
       };
       connections.set(jquery, disconnect);
+      // Slots are reserved above, so observers claim them in registry order.
+      connected.add(jquery);
+      connectionObservers.forEach((observer) =>
+        notifyConnection(observer, 'connect', jquery),
+      );
     }
     return connections.get(jquery);
   }
@@ -371,6 +444,8 @@
     const registry = window.Drupal.eventBindings;
     registry.connectLegacy = registry.connectLegacy ?? connect;
     registry.claimLegacyEvent = registry.claimLegacyEvent ?? claimLegacyEvent;
+    registry.observeLegacyConnections =
+      registry.observeLegacyConnections ?? observeLegacyConnections;
     registry.isForeignDefaultAction =
       registry.isForeignDefaultAction || isForeignDefaultAction;
     registry.connectLegacy(instance);
