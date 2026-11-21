@@ -775,7 +775,9 @@ JS;
   /**
    * Tests legacy overrides against the production Ajax runtime.
    */
+  #[IgnoreDeprecations]
   public function testLegacyAjaxOverrides(): void {
+    $this->expectUserDeprecationMessage('Javascript Deprecation: Drupal.Ajax#$form is deprecated in drupal:12.0.0 and is removed from drupal:13.0.0. Use Drupal.Ajax#form. See https://www.drupal.org/node/CHANGE_RECORD.');
     $this->drupalGet('ajax-test/global-events', ['query' => ['legacy_overrides' => 1]]);
     $session = $this->getSession();
     $this->assertJsCondition('Boolean(window.legacyAjaxOverrides)');
@@ -802,7 +804,9 @@ JS;
   /**
    * Tests the opted-in request factory and cross-origin settings.
    */
+  #[IgnoreDeprecations]
   public function testLegacyXhrFactory(): void {
+    $this->expectUserDeprecationMessage('Javascript Deprecation: Using jQuery request options with Drupal Ajax is deprecated in drupal:12.0.0 and is removed from drupal:13.0.0. Use the native Ajax lifecycle, request handle, form element or request options. See https://www.drupal.org/node/CHANGE_RECORD.');
     $this->drupalGet('ajax-test/global-events');
     $session = $this->getSession();
     $session->executeScript(<<<'JS'
@@ -840,7 +844,10 @@ JS;
   /**
    * Tests a forced iframe submission using the explicitly attached plug-in.
    */
+  #[IgnoreDeprecations]
   public function testLegacyIframeSubmission(): void {
+    $this->expectUserDeprecationMessage('Javascript Deprecation: Drupal.Ajax#$form is deprecated in drupal:12.0.0 and is removed from drupal:13.0.0. Use Drupal.Ajax#form. See https://www.drupal.org/node/CHANGE_RECORD.');
+    $this->expectUserDeprecationMessage('Javascript Deprecation: Submitting Drupal Ajax forms through the jQuery Form plugin is deprecated in drupal:12.0.0 and is removed from drupal:13.0.0. Use Drupal AJAX with native form options, or supply your own form plugin. See https://www.drupal.org/node/CHANGE_RECORD.');
     $this->drupalGet('ajax-test/global-events', ['query' => ['legacy_overrides' => 1, 'legacy_plugin' => 1]]);
     $session = $this->getSession();
     $this->assertJsCondition('Boolean(window.legacyAjaxOverrides)');
@@ -1291,7 +1298,9 @@ JS);
   /**
    * Tests the adapter's form accessor, global option and overlapping requests.
    */
+  #[IgnoreDeprecations]
   public function testAdapterSurface(): void {
+    $this->expectUserDeprecationMessage('Javascript Deprecation: Drupal.Ajax#$form is deprecated in drupal:12.0.0 and is removed from drupal:13.0.0. Use Drupal.Ajax#form. See https://www.drupal.org/node/CHANGE_RECORD.');
     $this->drupalGet('ajax-test/global-events');
     $session = $this->getSession();
     $this->assertSame([TRUE, TRUE, TRUE, TRUE, TRUE], $session->evaluateScript(<<<'JS'

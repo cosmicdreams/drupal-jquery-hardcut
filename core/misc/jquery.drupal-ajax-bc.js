@@ -19,6 +19,20 @@
     return;
   }
 
+  const warned = new Set();
+
+  /**
+   * Reports explicit use of a deprecated request contract once.
+   */
+  function warnLegacy(contract, migration) {
+    if (!warned.has(contract)) {
+      warned.add(contract);
+      window.Drupal.deprecationError({
+        message: `${contract} is deprecated in drupal:12.0.0 and is removed from drupal:13.0.0. ${migration} See https://www.drupal.org/node/CHANGE_RECORD.`,
+      });
+    }
+  }
+
   const defaultXhr = jQuery.ajaxSettings.xhr;
   const rNotHtmlWhite = /[^\x20\t\r\n\f]+/g;
   const rHash = /#.*$/;
@@ -806,6 +820,12 @@
     s.dataTypes = (s.dataType || '*').toLowerCase().match(rNotHtmlWhite) || [
       '',
     ];
+    if (s.xhr !== defaultXhr || s.crossDomain != null) {
+      warnLegacy(
+        'Using jQuery request options with Drupal Ajax',
+        'Use the native Ajax lifecycle, request handle, form element or request options.',
+      );
+    }
     if (s.crossDomain == null) {
       try {
         s.crossDomain =
@@ -1036,6 +1056,10 @@
    * Uses the explicit Form plug-in for contributed options it owns.
    */
   function submitLegacyForm($form, options, onVeto, formArgument) {
+    warnLegacy(
+      'Submitting Drupal Ajax forms through the jQuery Form plugin',
+      'Use Drupal AJAX with native form options, or supply your own form plugin.',
+    );
     if (typeof $form.ajaxSubmit !== 'function') {
       throw new Error(
         'Legacy Ajax form options require the core/internal.jquery.form library.',
@@ -1144,6 +1168,7 @@
       },
     });
     Drupal.ajax.compatibility = {
+      warnLegacy,
       send,
       commandsComplete,
       needsLegacyForm: (options) =>
@@ -1178,6 +1203,7 @@
     Object.defineProperty(Drupal.Ajax.prototype, '$form', {
       configurable: true,
       get() {
+        warnLegacy('Drupal.Ajax#$form', 'Use Drupal.Ajax#form.');
         if (!this.form) {
           return undefined;
         }
@@ -1189,6 +1215,7 @@
         return wrapped;
       },
       set(value) {
+        warnLegacy('Drupal.Ajax#$form', 'Use Drupal.Ajax#form.');
         if (value && value.jquery) {
           [this.form] = value;
           wrappedForms.set(this, value);

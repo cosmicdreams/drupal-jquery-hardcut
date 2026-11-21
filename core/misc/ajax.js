@@ -1730,8 +1730,8 @@
    *
    * @param {Array.<object>} formValues
    *   Processed form values.
-   * @param {jQuery} element
-   *   The form node as a jQuery object.
+   * @param {HTMLFormElement} element
+   *   The form element.
    * @param {object} options
    *   jQuery.ajax options.
    */
@@ -1852,8 +1852,11 @@
   const wrapProgressBar = (element) => {
     const wrapper = document.createElement('div');
     wrapper.className = 'ajax-progress ajax-progress-bar';
-    wrapper.append(element);
-    return wrapper;
+    const node = nativeElement(element);
+    if (node) {
+      wrapper.append(node);
+    }
+    return node === element ? wrapper : Drupal.ajax.compatibility.wrap(wrapper);
   };
 
   Drupal.theme.ajaxProgressBar = wrapProgressBar;
@@ -1886,10 +1889,17 @@
       );
     }
     const adapter = Drupal.ajax.compatibility;
-    const argument =
-      adapter && Drupal.theme.ajaxProgressBar !== wrapProgressBar
-        ? adapter.wrap(progressBar.element)
-        : progressBar.element;
+    const legacyTheme =
+      adapter && Drupal.theme.ajaxProgressBar !== wrapProgressBar;
+    if (legacyTheme) {
+      adapter.warnLegacy?.(
+        'Drupal.theme.ajaxProgressBar() with a jQuery collection',
+        'Use the native progress bar element.',
+      );
+    }
+    const argument = legacyTheme
+      ? adapter.wrap(progressBar.element)
+      : progressBar.element;
     this.progress.element = progressElement(
       Drupal.theme('ajaxProgressBar', argument),
     );
@@ -2523,6 +2533,12 @@
                   wrapMultipleRoots ||
                 Drupal.ajax.commandCompatibility.overrides(method)))))
       ) {
+        if (Drupal.theme.ajaxWrapperNewContent !== wrapNewContent) {
+          Drupal.ajax.compatibility?.warnLegacy?.(
+            'Drupal.theme.ajaxWrapperNewContent() with a jQuery collection',
+            'Use an array of native nodes.',
+          );
+        }
         return legacyCommand('insert', ajax, response, status);
       }
 
