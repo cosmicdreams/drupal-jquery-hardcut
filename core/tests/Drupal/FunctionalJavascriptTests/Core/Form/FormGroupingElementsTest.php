@@ -332,6 +332,55 @@ class FormGroupingElementsTest extends WebDriverTestBase {
   }
 
   /**
+   * Tests that unloading a form region removes its owned event bindings.
+   */
+  public function testFormEventBindingsDetach(): void {
+    $this->drupalGet('form-test/group-details');
+    $actual = $this->getSession()->evaluateScript(<<<'JS'
+      (() => {
+        const region = document.body.appendChild(document.createElement('div'));
+        const details = region.appendChild(document.createElement('details'));
+        const sibling = document.body.appendChild(document.createElement('div'));
+        const targets = [region, details, sibling, window];
+        const received = [];
+        const stop = targets.map((target, index) =>
+          Drupal.formEvents.listen(target, 'testFormDetach', undefined, () => received.push(index))
+        );
+        const snapshots = [];
+        const snapshot = () => {
+          const present = [];
+          const unobserve = Drupal.eventBindings.observe({
+            add(binding) {
+              if (binding.type === 'testFormDetach') {
+                present.push(targets.indexOf(binding.target));
+              }
+            },
+            remove() {},
+          });
+          unobserve();
+          snapshots.push(present);
+        };
+
+        try {
+          Drupal.detachBehaviors(region, drupalSettings, 'serialize');
+          Drupal.detachBehaviors(region, drupalSettings, 'move');
+          snapshot();
+          Drupal.detachBehaviors(region, drupalSettings, 'unload');
+          region.remove();
+          snapshot();
+          targets.forEach((target) => target.dispatchEvent(new Event('testFormDetach')));
+          return [snapshots, received];
+        }
+        finally {
+          stop.forEach((unbind) => unbind());
+          sibling.remove();
+        }
+      })()
+      JS);
+    $this->assertSame([[[0, 1, 2, 3], [2, 3]], [2, 3]], $actual);
+  }
+
+  /**
    * Tests that fallback time zone detection completes during attachment.
    */
   public function testSynchronousTimezoneDetection(): void {

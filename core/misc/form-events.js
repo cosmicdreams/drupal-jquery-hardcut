@@ -4,6 +4,8 @@
  */
 
 ((Drupal) => {
+  const bindings = new Set();
+
   /**
    * Binds a form interaction with an optional delegation selector.
    *
@@ -19,6 +21,7 @@
       formInteraction: true,
       stop() {
         target.removeEventListener(type, handle);
+        bindings.delete(binding);
         unregister();
       },
     };
@@ -40,8 +43,29 @@
     };
     target.addEventListener(type, handle);
     const unregister = Drupal.eventBindings.register(binding);
+    bindings.add(binding);
     return binding.stop;
   }
+
+  /**
+   * Releases form listeners when Drupal removes their target elements.
+   */
+  Drupal.behaviors.formEventBindings = {
+    detach(context, settings, trigger) {
+      if (trigger !== 'unload') {
+        return;
+      }
+      bindings.forEach((binding) => {
+        const { target } = binding;
+        if (
+          target === context ||
+          (target instanceof Node && context.contains(target))
+        ) {
+          binding.stop();
+        }
+      });
+    },
+  };
 
   /**
    * Sends one bubbling form event from the original target.
