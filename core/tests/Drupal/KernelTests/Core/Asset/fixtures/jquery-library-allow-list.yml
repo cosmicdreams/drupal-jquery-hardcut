@@ -26,7 +26,6 @@
 - default_admin/core/drupal.machine-name
 - default_admin/core/drupal.states
 - default_admin/core/drupal.tabbingmanager
-- default_admin/core/drupal.tabledrag.ajax
 - default_admin/core/drupal.timezone
 - default_admin/core/drupal.vertical-tabs
 - default_admin/core/internal.jquery.form
@@ -100,7 +99,6 @@
 - stark/core/drupal.machine-name
 - stark/core/drupal.states
 - stark/core/drupal.tabbingmanager
-- stark/core/drupal.tabledrag.ajax
 - stark/core/drupal.timezone
 - stark/core/drupal.vertical-tabs
 - stark/core/internal.jquery.form
@@ -173,7 +171,6 @@
 - starterkit_theme/core/drupal.machine-name
 - starterkit_theme/core/drupal.states
 - starterkit_theme/core/drupal.tabbingmanager
-- starterkit_theme/core/drupal.tabledrag.ajax
 - starterkit_theme/core/drupal.timezone
 - starterkit_theme/core/drupal.vertical-tabs
 - starterkit_theme/core/internal.jquery.form
@@ -246,7 +243,6 @@
 - umami/core/drupal.machine-name
 - umami/core/drupal.states
 - umami/core/drupal.tabbingmanager
-- umami/core/drupal.tabledrag.ajax
 - umami/core/drupal.timezone
 - umami/core/drupal.vertical-tabs
 - umami/core/internal.jquery.form
