@@ -1,3 +1,9 @@
+deprecation_spy:
+  js:
+    js/deprecation-spy.js: {}
+  dependencies:
+    - core/drupal
+
 legacy_pseudo:
   js:
     js/legacy-pseudo.js: {}

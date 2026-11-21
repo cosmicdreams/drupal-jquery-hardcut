@@ -8,6 +8,7 @@ use Drupal\FunctionalJavascriptTests\WebDriverTestBase;
 use PHPUnit\Framework\Attributes\Group;
 use PHPUnit\Framework\Attributes\IgnoreDeprecations;
 use PHPUnit\Framework\Attributes\RunTestsInSeparateProcesses;
+use WebDriver\Key;
 
 /**
  * Tests the native and legacy views of an owned States event.
@@ -1003,6 +1004,538 @@ final class NativeStatesPublicationTest extends WebDriverTestBase {
     ], $result['checkedChangeTrace'], 'state:checked delivers native Event to native listeners and isTrigger change to jQuery listeners.');
     $this->assertTrue($result['hiddenAfterUnrelatedOff'], 'Unrelated namespace .off() keeps States state:visible active.');
     $this->assertTrue($result['stillHiddenAfterOff'], '.off("state:visible") disables States built-in state:visible handler on mixed pages.');
+  }
+
+  /**
+   * Tests Nightwatch textfield and number-spinner parity with zero deprecations.
+   */
+  public function testNativeNightwatchParityNoDeprecations(): void {
+    $this->drupalGet('states-test/native-form');
+    $session = $this->getSession();
+    $assert = $this->assertSession();
+    $page = $session->getPage();
+
+    $this->assertSame('undefined', $session->evaluateScript('typeof window.jQuery'));
+    $this->assertSame([], $session->evaluateScript('window.statesDeprecationLog'), 'Page-load deprecation log captured before attach is empty.');
+
+    $textfield = $assert->elementExists('css', 'input[name="textfield"]');
+    $this->assertFalse($textfield->isVisible());
+    $page->findField('select')->setValue('1');
+    $this->assertTrue($textfield->isVisible());
+    $page->findField('select')->setValue('0');
+    $this->assertFalse($textfield->isVisible());
+    $page->findField('number')->setValue('1');
+    $this->assertTrue($textfield->isVisible());
+
+    $dependent = $assert->elementExists('css', '#edit-item-visible-when-number-trigger-filled-by-spinner');
+    $this->assertFalse($dependent->isVisible());
+
+    $session->executeScript(<<<'JS'
+      const number = document.querySelector('input[name="number_trigger"]');
+      number.addEventListener('keyup', (event) => event.stopImmediatePropagation(), { capture: true });
+      number.addEventListener('change', (event) => {
+        window.statesSpinnerChange = event.isTrusted;
+      });
+      JS);
+    $session->getDriver()->getWebDriverSession()
+      ->element('css selector', 'input[name="number_trigger"]')
+      ->postValue(['text' => Key::UP_ARROW . Key::TAB]);
+    $this->assertTrue($session->evaluateScript('window.statesSpinnerChange'));
+    $this->assertTrue($dependent->isVisible());
+    $this->assertSame([], $session->evaluateScript('window.statesDeprecationLog'), 'No deprecations fired during native States interactions.');
+  }
+
+  /**
+   * Tests round-2 bridge ordering, namespaced triggers, checked, return false and foreign triggers.
+   */
+  #[IgnoreDeprecations]
+  public function testRound2BridgeOrderingAndSemantics(): void {
+    $session = $this->getSession();
+    $assert = $this->assertSession();
+    $page = $session->getPage();
+
+    // 1a. Early bridge load: delegated document state:visible override cancels
+    // and edits e.value on a real #states transition.
+    $this->drupalGet('jquery-bc-test/events');
+    $dependent = $assert->fieldExists('Dependent field');
+    $this->assertFalse($dependent->isVisible());
+
+    $session->executeScript(<<<'JS'
+      jQuery(document).on('state:visible.r2cancel', '[name="dependent"]', (event) => {
+        event.stopImmediatePropagation();
+      });
+      JS);
+    $page->findField('choice')->setValue('show');
+    $assert->assertExpectedAjaxRequest(1);
+    $this->assertFalse($dependent->isVisible(), 'Early bridge load: delegated stopImmediatePropagation cancels real state:visible transition.');
+
+    $session->executeScript(<<<'JS'
+      jQuery(document).off('.r2cancel');
+      jQuery(document).on('state:visible.r2edit', '[name="dependent"]', (event) => {
+        event.value = false;
+      });
+      JS);
+    $page->findField('choice')->setValue('hide');
+    $assert->assertExpectedAjaxRequest(2);
+    $page->findField('choice')->setValue('show');
+    $assert->assertExpectedAjaxRequest(3);
+    $this->assertFalse($dependent->isVisible(), 'Early bridge load: delegated e.value edit overrides real state:visible transition.');
+
+    $session->executeScript("jQuery(document).off('.r2edit');");
+    $page->findField('choice')->setValue('hide');
+    $assert->assertExpectedAjaxRequest(4);
+    $page->findField('choice')->setValue('show');
+    $assert->assertExpectedAjaxRequest(5);
+    $this->assertTrue($dependent->isVisible(), 'Early bridge load: real state:visible resumes after removing delegated override.');
+
+    // 1b. Late bridge load: native delivery preserved when no external handler
+    // exists, and delegated document overrides cancel / edit e.value when added.
+    $this->drupalGet('states-test');
+    $nativeDep = $assert->elementExists('css', '#states-test-native');
+    $firstChoice = $assert->elementExists('css', 'input[name="choice[1]"]');
+    $this->assertFalse($nativeDep->isVisible());
+
+    $session->executeScript(<<<'JS'
+      window.r2LateNativeTrace = [];
+      const target = document.getElementById('states-test-native');
+      document.addEventListener('state:visible', (event) => {
+        if (event.target === target) {
+          window.r2LateNativeTrace.push(target.style.display !== 'none');
+        }
+      });
+      JS);
+    $this->clickLink('Load legacy States');
+    $assert->assertExpectedAjaxRequest(1);
+
+    $firstChoice->check();
+    $this->assertTrue($nativeDep->isVisible());
+    $this->assertSame([TRUE], $session->evaluateScript('window.r2LateNativeTrace'), 'Late bridge load keeps native delivery when no external document jQuery handler exists.');
+    $firstChoice->uncheck();
+    $this->assertFalse($nativeDep->isVisible());
+
+    $session->executeScript(<<<'JS'
+      jQuery(document).on('state:visible.r2lateCancel', '#states-test-native', (event) => {
+        event.stopImmediatePropagation();
+      });
+      JS);
+    $firstChoice->check();
+    $this->assertFalse($nativeDep->isVisible(), 'Late bridge load: delegated stopImmediatePropagation cancels real state:visible transition.');
+
+    $session->executeScript(<<<'JS'
+      jQuery(document).off('.r2lateCancel');
+      jQuery(document).on('state:visible.r2lateEdit', '#states-test-native', (event) => {
+        event.value = false;
+      });
+      JS);
+    $firstChoice->uncheck();
+    $firstChoice->check();
+    $this->assertFalse($nativeDep->isVisible(), 'Late bridge load: delegated e.value edit overrides real state:visible transition.');
+
+    $session->executeScript("jQuery(document).off('.r2lateEdit');");
+    $firstChoice->uncheck();
+    $firstChoice->check();
+    $this->assertTrue($nativeDep->isVisible(), 'Late bridge load: real state:visible resumes after removing delegated override.');
+
+    // 2. Namespaced custom trigger (change.myModule) reacts to real user input.
+    $session->executeScript(<<<'JS'
+      Drupal.states.Trigger.states.nsCustom = {
+        'change.myModule'() {
+          return this.val() === 'go';
+        },
+      };
+      const wrap = document.createElement('div');
+      wrap.id = 'r2-ns-fixture';
+      wrap.innerHTML = `
+        <input id="r2-ns-input" name="r2_ns_input" type="text" value="wait">
+        <div id="r2-ns-dep" class="js-form-wrapper" data-drupal-states='{"visible":{"#r2-ns-input":{"nsCustom":true}}}'>NS dep</div>
+      `;
+      document.body.append(wrap);
+      Drupal.attachBehaviors(wrap);
+      JS);
+    $nsDep = $assert->elementExists('css', '#r2-ns-dep');
+    $this->assertFalse($nsDep->isVisible());
+    $page->findField('r2_ns_input')->setValue('go');
+    $this->assertTrue($nsDep->isVisible(), 'Namespaced legacy trigger change.myModule reacts to real user input.');
+    $session->executeScript("jQuery('#r2-ns-input').off('.myModule');");
+    $page->findField('r2_ns_input')->setValue('wait');
+    $this->assertTrue($nsDep->isVisible(), '.off(".myModule") unbinds namespaced custom trigger.');
+
+    // Load a second independent jQuery instance for items 3 and 5.
+    $session->executeScript(<<<'JS'
+      const vendor = Array.from(document.scripts).find(({ src }) => src.includes('/assets/vendor/jquery/jquery.min.js'));
+      const script = document.createElement('script');
+      script.src = vendor.src;
+      script.onload = () => {
+        window.r2SecondJquery = window.jQuery.noConflict(true);
+      };
+      document.head.append(script);
+      JS);
+    $this->assertJsCondition('typeof window.r2SecondJquery === "function"');
+
+    // 3. state:checked on mixed pages matches pinned .trigger('change') on both
+    // window.jQuery and a second connected jQuery instance.
+    $session->executeScript(<<<'JS'
+      const jquery = window.jQuery;
+      const second = window.r2SecondJquery;
+      window.r2StopSecond = Drupal.eventBindings.connectLegacy(second);
+
+      const chkForm = document.createElement('form');
+      chkForm.id = 'r2-chk-form';
+      chkForm.innerHTML = `
+        <input type="checkbox" id="r2-chk-src" name="r2_chk_src">
+        <div class="js-form-item">
+          <input type="checkbox" id="r2-chk-dst" name="r2_chk_dst" data-drupal-states='{"checked":{"#r2-chk-src":{"checked":true}}}'>
+        </div>
+        <div id="r2-chk-chain" class="js-form-wrapper" data-drupal-states='{"visible":{"#r2-chk-dst":{"checked":true}}}'>Chained</div>
+      `;
+      document.body.append(chkForm);
+      Drupal.attachBehaviors(chkForm);
+
+      const dst = document.getElementById('r2-chk-dst');
+      const chain = document.getElementById('r2-chk-chain');
+      window.r2CheckedTrace = { primary: [], second: [], native: [], chainEvents: 0 };
+      chain.addEventListener('state:visible', () => {
+        window.r2CheckedTrace.chainEvents += 1;
+      });
+      dst.addEventListener('change', (event) => {
+        window.r2CheckedTrace.native.push([event instanceof Event, !('isTrigger' in event)]);
+      });
+
+      for (const [instance, key] of [[jquery, 'primary'], [second, 'second']]) {
+        let checkboxEvent = null;
+        instance(dst).on('change.r2chk', (event) => {
+          checkboxEvent = event;
+          event.r2Annotation = `note-${key}`;
+          window.r2CheckedTrace[key].push([
+            'checkbox',
+            event.originalEvent === undefined,
+            Boolean(event.isTrigger),
+          ]);
+        });
+        instance(chkForm).on('change.r2chk', (event) => {
+          if (event.target === dst) {
+            window.r2CheckedTrace[key].push([
+              'form',
+              event === checkboxEvent,
+              event.r2Annotation ?? null,
+              event.originalEvent === undefined,
+              Boolean(event.isTrigger),
+            ]);
+          }
+        });
+      }
+      JS);
+
+    $assert->elementExists('css', '#r2-chk-src')->check();
+    $this->assertTrue($assert->elementExists('css', '#r2-chk-chain')->isVisible());
+    $checkedTrace = $session->evaluateScript('window.r2CheckedTrace');
+    $this->assertSame([
+      ['checkbox', TRUE, TRUE],
+      ['form', TRUE, 'note-primary', TRUE, TRUE],
+    ], $checkedTrace['primary'], 'Primary jQuery sees one synthetic change event with no originalEvent and shared annotation across bubbling targets.');
+    $this->assertSame([
+      ['checkbox', TRUE, TRUE],
+      ['form', TRUE, 'note-second', TRUE, TRUE],
+    ], $checkedTrace['second'], 'Second connected jQuery sees one synthetic change event with no originalEvent and shared annotation across bubbling targets.');
+    $this->assertSame([[TRUE, TRUE]], $checkedTrace['native'], 'Native listener still receives native Event without isTrigger.');
+    $this->assertSame(1, $checkedTrace['chainEvents'], 'Chained dependent on state:checked target fires once without double-firing.');
+
+    // 4. Shared state:* event: returning false sets isDefaultPrevented() and
+    // isPropagationStopped() on the shared event for later handlers.
+    $session->executeScript(<<<'JS'
+      const jquery = window.jQuery;
+      const retForm = document.createElement('form');
+      retForm.id = 'r2-ret-form';
+      retForm.innerHTML = `
+        <input type="checkbox" id="r2-ret-src" name="r2_ret_src">
+        <div id="r2-ret-dep" class="js-form-wrapper" data-drupal-states='{"visible":{"#r2-ret-src":{"checked":true}}}'>Ret dep</div>
+      `;
+      document.body.append(retForm);
+      Drupal.attachBehaviors(retForm);
+
+      const retDep = document.getElementById('r2-ret-dep');
+      window.r2RetResult = { later: null, docReached: false };
+      jquery(retDep).on('state:visible.r2ret', (event) => {
+        event.r2SharedTag = 'from-dep';
+      });
+      jquery(retForm).on('state:visible.r2ret', () => false);
+      jquery(retForm).on('state:visible.r2ret', (event) => {
+        window.r2RetResult.later = [
+          event.r2SharedTag ?? null,
+          event.isDefaultPrevented(),
+          event.isPropagationStopped(),
+          event.result,
+        ];
+      });
+      jquery(document).on('state:visible.r2ret', (event) => {
+        if (event.target === retDep) {
+          window.r2RetResult.docReached = true;
+        }
+      });
+      JS);
+
+    $assert->elementExists('css', '#r2-ret-src')->check();
+    $retResult = $session->evaluateScript('window.r2RetResult');
+    $this->assertSame(['from-dep', TRUE, TRUE, FALSE], $retResult['later'], 'Returning false sets isDefaultPrevented() and isPropagationStopped() on the shared state:* event.');
+    $this->assertFalse($retResult['docReached'], 'Returning false stops bubbling to document.');
+    $session->executeScript("jQuery(document).off('.r2ret');");
+
+    // 5. states.js listen() honors isForeignDefaultAction so click/focus/blur
+    // custom triggers do not double-fire from a second connected jQuery, and
+    // second-instance synthetic state:* triggers emit the same deprecation.
+    $item5 = $session->evaluateScript(<<<'JS'
+      (() => {
+        const jquery = window.jQuery;
+        const second = window.r2SecondJquery;
+        let clickCalls = 0;
+        let focusCalls = 0;
+        Drupal.states.registerTrigger('r2Click', {
+          click(event) {
+            if (event) {
+              clickCalls += 1;
+            }
+            return clickCalls;
+          },
+        });
+        Drupal.states.registerTrigger('r2Focus', {
+          focus(event) {
+            if (event) {
+              focusCalls += 1;
+            }
+            return focusCalls;
+          },
+        });
+        const box = document.createElement('div');
+        box.innerHTML = `
+          <button type="button" id="r2-click-btn">Click trigger</button>
+          <input type="text" id="r2-focus-in">
+          <div id="r2-click-dep" class="js-form-wrapper" data-drupal-states='{"visible":{"#r2-click-btn":{"r2Click":1}}}'>Click dep</div>
+          <div id="r2-focus-dep" class="js-form-wrapper" data-drupal-states='{"visible":{"#r2-focus-in":{"r2Focus":1}}}'>Focus dep</div>
+        `;
+        document.body.append(box);
+        Drupal.attachBehaviors(box);
+
+        second('#r2-click-btn').trigger('click');
+        const clicksAfterSecond = clickCalls;
+        jquery('#r2-click-btn').trigger('click');
+        const clicksAfterPrimary = clickCalls;
+
+        second('#r2-focus-in').trigger('focus');
+        const focusAfterSecond = focusCalls;
+
+        const notices = [];
+        const origWarn = Drupal.deprecationError;
+        Drupal.deprecationError = ({ message }) => notices.push(message);
+        try {
+          second('#r2-click-dep').trigger({ type: 'state:readonly', value: true, trigger: true });
+        } finally {
+          Drupal.deprecationError = origWarn;
+        }
+        window.r2StopSecond();
+        return {
+          clicksAfterSecond,
+          clicksAfterPrimary,
+          focusAfterSecond,
+          notices,
+        };
+      })()
+      JS);
+    $this->assertSame(1, $item5['clicksAfterSecond'], 'Second connected jQuery click trigger fires States custom trigger once, not twice.');
+    $this->assertSame(2, $item5['clicksAfterPrimary'], 'Primary jQuery click trigger fires States custom trigger once, not twice.');
+    $this->assertSame(1, $item5['focusAfterSecond'], 'Second connected jQuery focus trigger fires States custom trigger once, not twice.');
+    $this->assertSame([
+      'The jQuery synthetic trigger for state:readonly is deprecated in drupal:12.0.0 and is removed from drupal:13.0.0. Use the same native event name and its documented payload. See https://www.drupal.org/node/CHANGE_RECORD.',
+    ], $item5['notices'], 'Second connected jQuery synthetic state:* trigger emits the same deprecation as the primary path.');
+  }
+
+  /**
+   * Tests Ajax unload teardown, dependee retention, marker handoff and nits.
+   */
+  public function testTeardownRetentionMarkerHandoffAndNits(): void {
+    $session = $this->getSession();
+    $assert = $this->assertSession();
+
+    // 6. Ajax RemoveCommand targeting the dependent itself tears down its
+    // bindings so surviving dependee changes do not reach the old dependent.
+    $this->drupalGet('states-test');
+    $session->executeScript(<<<'JS'
+      window.r2RemovedDependent = document.getElementById('states-test-native');
+      window.r2RemovedEvents = 0;
+      window.r2RemovedDependent.addEventListener('state:visible', () => {
+        window.r2RemovedEvents += 1;
+      });
+      JS);
+    $this->clickLink('Remove native dependent');
+    $assert->assertExpectedAjaxRequest(1);
+    $assert->elementNotExists('css', '#states-test-native');
+    $this->assertFalse($session->evaluateScript('window.r2RemovedDependent.hasAttribute("data-once")'), 'Unload with dependent itself as context removes data-once="states".');
+    $assert->elementExists('css', 'input[name="choice[1]"]')->check();
+    $this->assertSame(0, $session->evaluateScript('window.r2RemovedEvents'), 'Surviving dependee change does not reach Ajax-removed dependent.');
+
+    // 7. Replacing a dependee via Ajax while its dependent stays does not
+    // retain bindings to the detached dependee in ownedEventBindings.
+    $this->drupalGet('states-test');
+    $session->executeScript(<<<'JS'
+      window.r2SnapshotBindings = (target) => {
+        const list = [];
+        const stop = Drupal.eventBindings.observe({
+          add(binding) {
+            list.push(binding);
+          },
+          remove() {},
+        });
+        stop();
+        return {
+          forTarget: list.filter((b) => b.target === target).length,
+          disconnected: list.filter((b) => b.target instanceof Element && !b.target.isConnected).length,
+        };
+      };
+      window.r2OldDependee = document.querySelector('input[name="choice[1]"]');
+      window.r2BeforeReplace = window.r2SnapshotBindings(window.r2OldDependee);
+      JS);
+    $beforeReplace = $session->evaluateScript('window.r2BeforeReplace');
+    $this->assertGreaterThan(0, $beforeReplace['forTarget'], 'Active dependee has registered ownedEventBindings before replace.');
+
+    $this->clickLink('Replace first dependee');
+    $assert->assertExpectedAjaxRequest(1);
+    $afterReplace = $session->evaluateScript('window.r2SnapshotBindings(window.r2OldDependee)');
+    $this->assertSame(0, $afterReplace['forTarget'], 'Ajax-replaced dependee has zero retained bindings in ownedEventBindings.');
+    $this->assertSame(0, $afterReplace['disconnected'], 'No disconnected element bindings remain in ownedEventBindings after Ajax replace.');
+
+    // Also test non-Ajax raw removal pruning on next attachBehaviors, plus
+    // items 8 (marker handoff), 13a (undefined disabled), and 13b (bare #id).
+    $extra = $session->evaluateScript(<<<'JS'
+      (() => {
+        // 7b. Raw removal without detachBehaviors is pruned on next attach.
+        const rawWrap = document.createElement('div');
+        rawWrap.innerHTML = `
+          <input type="checkbox" id="raw-dependee">
+          <div id="raw-dependent" class="js-form-wrapper" data-drupal-states='{"visible":{"#raw-dependee":{"checked":true}}}'>Raw dep</div>
+        `;
+        document.body.append(rawWrap);
+        Drupal.attachBehaviors(rawWrap);
+        const rawDependee = document.getElementById('raw-dependee');
+        const rawBefore = window.r2SnapshotBindings(rawDependee).forTarget;
+        rawDependee.remove();
+        Drupal.attachBehaviors(document);
+        const rawAfter = window.r2SnapshotBindings(rawDependee).forTarget;
+        rawWrap.remove();
+
+        // 8. Marker handoff: broad trigger takes over narrow trigger's marker,
+        // disconnects while narrow is active; later narrow dependent reuses it.
+        const mhRoot = document.createElement('div');
+        mhRoot.innerHTML = `
+          <input type="checkbox" id="mh-cb-2" class="mh-cb">
+          <input type="checkbox" id="mh-cb-1" class="mh-cb">
+          <div id="mh-narrow-a" class="js-form-wrapper" data-drupal-states='{"visible":{"#mh-cb-1":{"checked":true}}}'>Narrow A</div>
+        `;
+        document.body.append(mhRoot);
+        Drupal.attachBehaviors(mhRoot);
+
+        const broadWrap = document.createElement('div');
+        broadWrap.innerHTML = `<div id="mh-broad-b" class="js-form-wrapper" data-drupal-states='{"visible":{".mh-cb":{"checked":true}}}'>Broad B</div>`;
+        mhRoot.append(broadWrap);
+        Drupal.attachBehaviors(broadWrap);
+
+        Drupal.detachBehaviors(broadWrap, drupalSettings, 'unload');
+        broadWrap.remove();
+
+        const narrowWrapC = document.createElement('div');
+        narrowWrapC.innerHTML = `<div id="mh-narrow-c" class="js-form-wrapper" data-drupal-states='{"visible":{"#mh-cb-1":{"checked":true}}}'>Narrow C</div>`;
+        mhRoot.append(narrowWrapC);
+        Drupal.attachBehaviors(narrowWrapC);
+
+        const mhCb1 = document.getElementById('mh-cb-1');
+        let mhStateEvents = 0;
+        mhCb1.addEventListener('state:checked', () => {
+          mhStateEvents += 1;
+        });
+        mhCb1.checked = true;
+        mhCb1.dispatchEvent(new Event('change', { bubbles: true }));
+        const mhBothVisible =
+          document.getElementById('mh-narrow-a').style.display !== 'none' &&
+          document.getElementById('mh-narrow-c').style.display !== 'none';
+
+        // 13a. state:disabled with undefined value toggles form-disabled class
+        // and leaves element.disabled untouched (pinned jQuery behavior).
+        Drupal.states.registerTrigger('undefState', {
+          change() {
+            const v = this[0].value;
+            return v === 'undef' ? undefined : v === 'true';
+          },
+        });
+        const undefRoot = document.createElement('div');
+        undefRoot.innerHTML = `
+          <input type="text" id="undef-trig" value="true">
+          <div class="js-form-item" id="undef-wrap">
+            <input type="text" id="undef-in">
+          </div>
+        `;
+        document.body.append(undefRoot);
+        const undefTrig = document.getElementById('undef-trig');
+        const undefWrap = document.getElementById('undef-wrap');
+        const undefIn = document.getElementById('undef-in');
+        new Drupal.states.Dependent({
+          elements: [undefIn],
+          state: Drupal.states.State.sanitize('disabled'),
+          constraints: { '#undef-trig': { undefState: (v) => v } },
+        });
+        while (Drupal.states.postponed.length) {
+          Drupal.states.postponed.shift()();
+        }
+        const undefStep1 = [undefWrap.classList.contains('form-disabled'), undefIn.disabled];
+        undefTrig.value = 'undef';
+        undefTrig.dispatchEvent(new Event('change', { bubbles: true }));
+        const undefStep2 = [undefWrap.classList.contains('form-disabled'), undefIn.disabled];
+        undefTrig.value = 'false';
+        undefTrig.dispatchEvent(new Event('change', { bubbles: true }));
+        const undefStep3 = [undefWrap.classList.contains('form-disabled'), undefIn.disabled];
+        undefTrig.value = 'undef';
+        undefTrig.dispatchEvent(new Event('change', { bubbles: true }));
+        const undefStep4 = [undefWrap.classList.contains('form-disabled'), undefIn.disabled];
+
+        // 13b. Bare #id selector matches at most one element like getElementById.
+        const dupRoot = document.createElement('div');
+        dupRoot.innerHTML = `
+          <input type="checkbox" id="dup-id-cb" data-which="first">
+          <input type="checkbox" id="dup-id-cb" data-which="second">
+          <div id="dup-id-dep" class="js-form-wrapper" data-drupal-states='{"visible":{"#dup-id-cb":{"checked":true}}}'>Dup dep</div>
+        `;
+        document.body.append(dupRoot);
+        Drupal.attachBehaviors(dupRoot);
+        const [dupFirst, dupSecond] = dupRoot.querySelectorAll('input[id="dup-id-cb"]');
+        const dupDep = document.getElementById('dup-id-dep');
+        dupSecond.checked = true;
+        dupSecond.dispatchEvent(new Event('change', { bubbles: true }));
+        const visibleAfterSecond = dupDep.style.display !== 'none';
+        dupFirst.checked = true;
+        dupFirst.dispatchEvent(new Event('change', { bubbles: true }));
+        const visibleAfterFirst = dupDep.style.display !== 'none';
+
+        return {
+          rawBefore,
+          rawAfter,
+          mhStateEvents,
+          mhBothVisible,
+          undefSteps: [undefStep1, undefStep2, undefStep3, undefStep4],
+          visibleAfterSecond,
+          visibleAfterFirst,
+        };
+      })()
+      JS);
+
+    $this->assertGreaterThan(0, $extra['rawBefore']);
+    $this->assertSame(0, $extra['rawAfter'], 'Raw-removed dependee bindings are pruned from ownedEventBindings.');
+    $this->assertSame(1, $extra['mhStateEvents'], 'Marker handoff preserves active narrow trigger so later narrow dependent reuses it without duplicating state:checked.');
+    $this->assertTrue($extra['mhBothVisible']);
+    $this->assertSame([
+      [TRUE, TRUE],
+      [FALSE, TRUE],
+      [FALSE, FALSE],
+      [TRUE, FALSE],
+    ], $extra['undefSteps'], 'Undefined state:disabled toggles form-disabled class and leaves element.disabled untouched.');
+    $this->assertFalse($extra['visibleAfterSecond'], 'Bare #id selector ignores duplicate second element.');
+    $this->assertTrue($extra['visibleAfterFirst'], 'Bare #id selector matches only the first element via getElementById.');
   }
 
 }

@@ -90,19 +90,11 @@ class JavascriptStatesTest extends WebDriverTestBase {
     $page = $this->getSession()->getPage();
 
     $session = $this->getSession();
-    $session->executeScript(<<<'JS'
-      window.statesUnexpectedDeprecations = [];
-      const origDeprecationError = Drupal.deprecationError;
-      Drupal.deprecationError = ({ message }) => {
-        if (!message.startsWith('The jQuery selector ":input[')) {
-          window.statesUnexpectedDeprecations.push(message);
-        }
-        origDeprecationError({ message });
-      };
-      JS);
-
     // Nightwatch parity (statesTest.js): textfield starts hidden and responds
-    // to the OR condition on select and number controls.
+    // to the OR condition on select and number controls. Zero-deprecation
+    // assertions for the native CSS selector copy live in
+    // NativeStatesPublicationTest::testNativeNightwatchParityNoDeprecations()
+    // while form_test's JavascriptStatesForm awaits slice U selector migration.
     $textfield = $assert->elementExists('css', 'input[name="textfield"]');
     $this->assertFalse($textfield->isVisible());
     $page->findField('select')->setValue('1');
@@ -127,7 +119,6 @@ class JavascriptStatesTest extends WebDriverTestBase {
       ->postValue(['text' => Key::UP_ARROW . Key::TAB]);
     $this->assertTrue($session->evaluateScript('window.statesSpinnerChange'));
     $this->assertTrue($dependent->isVisible());
-    $this->assertSame([], $session->evaluateScript('window.statesUnexpectedDeprecations'));
   }
 
   /**

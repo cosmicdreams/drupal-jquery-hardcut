@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Drupal\FunctionalJavascriptTests;
 
 use PHPUnit\Framework\Attributes\Group;
+use PHPUnit\Framework\Attributes\IgnoreDeprecations;
 use PHPUnit\Framework\Attributes\RunTestsInSeparateProcesses;
 
 /**
@@ -902,6 +903,116 @@ final class JqueryEventBridgeTest extends WebDriverTestBase {
     ], $session->evaluateScript('window.foreignAdapterTrace'));
     $this->assertJsCondition("document.getElementById('jquery-bc-test-result').textContent === 'Link response'");
     $this->assertSession()->assertExpectedAjaxRequest(1);
+  }
+
+  /**
+   * Tests States mixed-handler forwarding and ownsLegacyEvents reconnect guard.
+   */
+  #[IgnoreDeprecations]
+  public function testStatesMixedHandlerRegression(): void {
+    $this->drupalGet('jquery-bc-test/events');
+    $session = $this->getSession();
+    $session->executeScript(<<<'JS'
+      const vendor = Array.from(document.scripts).find(({ src }) => src.includes('/assets/vendor/jquery/jquery.min.js'));
+      const script = document.createElement('script');
+      script.src = vendor.src;
+      script.onload = () => {
+        window.secondJquery = window.jQuery.noConflict(true);
+      };
+      document.head.append(script);
+      JS);
+    $this->assertJsCondition('typeof window.secondJquery === "function"');
+
+    $result = $session->evaluateScript(<<<'JS'
+      (() => {
+        const primary = window.jQuery;
+        const second = window.secondJquery;
+        const choice = document.querySelector('select[name="choice"]');
+        const dependent = document.querySelector('input[name="dependent"]');
+        const isVisible = () => dependent.closest('.js-form-item').style.display !== 'none';
+
+        const trace = [];
+        choice.addEventListener('change', () => trace.push('native-change'));
+        primary(choice).on('change.bridgeReg', () => trace.push('primary-change'));
+        second(choice).on('change.bridgeReg', () => trace.push('second-change'));
+        document.addEventListener('state:visible', (event) => {
+          if (event.target === dependent) {
+            trace.push(['native-state', event.detail.value]);
+          }
+        });
+        primary(document).on('state:visible.bridgeReg', (event) => {
+          if (event.target === dependent) {
+            trace.push(['primary-state', event.value]);
+          }
+        });
+        second(document).on('state:visible.bridgeReg', (event) => {
+          if (event.target === dependent) {
+            trace.push(['second-state', event.value]);
+          }
+        });
+
+        const stopSecond = Drupal.eventBindings.connectLegacy(second);
+
+        // 1. Second jQuery forwards synthetic change to States alongside native
+        // and window.jQuery listeners.
+        second(choice).val('show').trigger('change');
+        const visibleAfterSecondChange = isVisible();
+
+        // 2. Second jQuery forwards synthetic state:* with detail projection to
+        // States's built-in document handler.
+        second(dependent).trigger({ type: 'state:visible', value: false, trigger: true });
+        const hiddenAfterSecondState = !isVisible();
+
+        // 3. Disconnecting and reconnecting connectLegacy(window.jQuery) hits
+        // Drupal.states.compatibility.ownsLegacyEvents and avoids duplicate
+        // jQuery slots on window.jQuery.
+        let triggerInvocations = 0;
+        Drupal.states.registerTrigger('reconnectProbe', {
+          change(event) {
+            if (event) {
+              triggerInvocations += 1;
+            }
+            return this[0].value;
+          },
+        });
+        const probeWrap = document.createElement('div');
+        probeWrap.innerHTML = `
+          <input id="reconnect-probe-src" type="text" value="a">
+          <div id="reconnect-probe-dep" class="js-form-wrapper" data-drupal-states='{"visible":{"#reconnect-probe-src":{"reconnectProbe":"b"}}}'>Probe</div>
+        `;
+        document.body.append(probeWrap);
+        Drupal.attachBehaviors(probeWrap);
+
+        // Disconnect and reconnect primary jQuery while States owns its bindings.
+        Drupal.eventBindings.connectLegacy(primary)();
+        Drupal.eventBindings.connectLegacy(primary);
+
+        const probeSrc = document.getElementById('reconnect-probe-src');
+        probeSrc.value = 'b';
+        primary(probeSrc).trigger('change');
+
+        stopSecond();
+        primary(choice).off('.bridgeReg');
+        second(choice).off('.bridgeReg');
+        primary(document).off('.bridgeReg');
+        second(document).off('.bridgeReg');
+        return {
+          visibleAfterSecondChange,
+          hiddenAfterSecondState,
+          triggerInvocations,
+          trace,
+        };
+      })()
+      JS);
+
+    $this->assertTrue($result['visibleAfterSecondChange'], 'Second connected jQuery synthetic change updates States dependent.');
+    $this->assertTrue($result['hiddenAfterSecondState'], 'Second connected jQuery synthetic state:visible with detail hides States dependent.');
+    $this->assertSame(1, $result['triggerInvocations'], 'ownsLegacyEvents prevents duplicate window.jQuery slots after connectLegacy reconnect.');
+    $this->assertContains('second-change', $result['trace']);
+    $this->assertContains(['native-state', TRUE], $result['trace']);
+    $this->assertContains(['primary-state', TRUE], $result['trace']);
+    $this->assertContains(['second-state', TRUE], $result['trace']);
+    $this->assertContains(['second-state', FALSE], $result['trace']);
   }
 
   /**

@@ -6,6 +6,8 @@ namespace Drupal\states_test\Controller;
 
 use Drupal\Core\Ajax\AjaxResponse;
 use Drupal\Core\Ajax\AppendCommand;
+use Drupal\Core\Ajax\RemoveCommand;
+use Drupal\Core\Ajax\ReplaceCommand;
 use Drupal\Core\Url;
 
 /**
@@ -62,7 +64,47 @@ final class StatesTestController {
         '#url' => Url::fromRoute('states_test.legacy'),
         '#attributes' => ['class' => ['use-ajax']],
       ],
+      'remove_dependent' => [
+        '#type' => 'link',
+        '#title' => 'Remove native dependent',
+        '#url' => Url::fromRoute('states_test.remove_dependent'),
+        '#attributes' => ['class' => ['use-ajax']],
+      ],
+      'replace_dependee' => [
+        '#type' => 'link',
+        '#title' => 'Replace first dependee',
+        '#url' => Url::fromRoute('states_test.replace_dependee'),
+        '#attributes' => ['class' => ['use-ajax']],
+      ],
     ];
+  }
+
+  /**
+   * Removes the native dependent element itself via Ajax.
+   */
+  public function removeDependent(): AjaxResponse {
+    $response = new AjaxResponse();
+    $response->addCommand(new RemoveCommand('#states-test-native'));
+    return $response;
+  }
+
+  /**
+   * Replaces the first dependee checkbox while its dependent stays.
+   */
+  public function replaceDependee(): AjaxResponse {
+    $replacement = [
+      '#type' => 'html_tag',
+      '#tag' => 'input',
+      '#attributes' => [
+        'name' => 'choice[1]',
+        'type' => 'checkbox',
+        'class' => ['states-test-choice'],
+        'data-replaced' => 'yes',
+      ],
+    ];
+    $response = new AjaxResponse();
+    $response->addCommand(new ReplaceCommand('input[name="choice[1]"]', $replacement));
+    return $response;
   }
 
   /**
