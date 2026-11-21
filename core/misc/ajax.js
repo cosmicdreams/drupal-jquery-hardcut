@@ -1610,11 +1610,12 @@
   function callEventOverride(ajax, method, target, event) {
     const callback = ajax[method];
     const adapter = Drupal.ajax.compatibility;
-    const argument =
-      adapter && !nativeCallbacks.has(callback)
-        ? adapter.asEvent(event)
-        : (adapter?.nativeEvent(event) ?? event);
-    return callback.call(ajax, target, argument);
+    if (!adapter || !nativeCallbacks.has(callback)) {
+      return callback.call(ajax, target, adapter?.asEvent(event) ?? event);
+    }
+    return adapter.withNativeEvent(event, (argument) =>
+      callback.call(ajax, target, argument),
+    );
   }
 
   /**
@@ -1715,7 +1716,10 @@
       event.preventDefault();
       event.stopPropagation();
       const [name] = eventNames(ajax.elementSettings.event);
-      if (name) {
+      const adapter = Drupal.ajax.compatibility;
+      if (name?.includes('.') && adapter) {
+        adapter.trigger(element, name);
+      } else if (name) {
         element.dispatchEvent(
           new Event(name.split('.')[0], {
             bubbles: true,

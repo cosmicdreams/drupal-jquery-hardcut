@@ -1284,6 +1284,57 @@ JS;
   }
 
   /**
+   * Tests immediate cancellation from a native override in jQuery dispatch.
+   */
+  public function testNativeOverrideStopsImmediatePropagation(): void {
+    $this->drupalGet('ajax-test/global-events');
+    $result = $this->getSession()->evaluateScript(<<<'JS'
+      (() => {
+        const trace = [];
+        const parent = document.body.appendChild(document.createElement('div'));
+        const button = parent.appendChild(document.createElement('button'));
+        const click = new MouseEvent('click', { bubbles: true, cancelable: true });
+        const stop = click.stopImmediatePropagation;
+        jQuery(parent).on('click', () => trace.push('ancestor'));
+        jQuery(button).on('click', () => trace.push('first'));
+        const ajax = Drupal.ajax({ element: button, event: 'click', url: location.href });
+        ajax.eventResponse = Drupal.ajax.useNativeCallback((element, event) => {
+          trace.push(event === click && event instanceof MouseEvent);
+          event.stopImmediatePropagation();
+        });
+        jQuery(button).on('click', () => trace.push('late jQuery'));
+        button.addEventListener('click', () => trace.push('late native'));
+        button.dispatchEvent(click);
+        return [trace, click.stopImmediatePropagation === stop, Object.hasOwn(click, 'stopImmediatePropagation')];
+      })()
+      JS);
+    $this->assertSame([['first', TRUE], TRUE, FALSE], $result);
+  }
+
+  /**
+   * Tests that Enter and Space activate the configured event namespace.
+   */
+  public function testNamespacedKeyboardActivation(): void {
+    $this->drupalGet('ajax-test/global-events');
+    $result = $this->getSession()->evaluateScript(<<<'JS'
+      (() => {
+        const trace = [];
+        const button = document.body.appendChild(document.createElement('button'));
+        const ajax = Drupal.ajax({ element: button, event: 'click.scope', keypress: true, url: location.href });
+        ajax.eventResponse = (element, event) => trace.push(['ajax', event.namespace]);
+        jQuery(button).on('click.scope', () => trace.push('scope'));
+        jQuery(button).on('click.other', () => trace.push('other'));
+        jQuery(button).on('click', () => trace.push('unscoped'));
+        const events = ['Enter', ' '].map((key) =>
+          button.dispatchEvent(new KeyboardEvent('keypress', { key, bubbles: true, cancelable: true })),
+        );
+        return [events, trace];
+      })()
+      JS);
+    $this->assertSame([[FALSE, FALSE], [['ajax', 'scope'], 'scope', ['ajax', 'scope'], 'scope']], $result);
+  }
+
+  /**
    * Tests preserving the submitter through a legacy override.
    */
   public function testLegacyPhysicalSubmitter(): void {

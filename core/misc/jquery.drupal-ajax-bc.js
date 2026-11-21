@@ -1331,15 +1331,43 @@
       },
       asEvent: (event) =>
         event instanceof jQuery.Event ? event : jQuery.Event(event),
-      nativeEvent(event) {
+      withNativeEvent(event, invoke) {
         if (event instanceof Event) {
-          return event;
+          return invoke(event);
         }
-        if (
-          event.originalEvent instanceof Event &&
-          event.originalEvent.type === event.type
-        ) {
-          return event.originalEvent;
+        const original = event.originalEvent;
+        if (original instanceof Event && original.type === event.type) {
+          const method = 'stopImmediatePropagation';
+          const descriptor = Object.getOwnPropertyDescriptor(original, method);
+          if (
+            descriptor ? descriptor.configurable : Object.isExtensible(original)
+          ) {
+            const stop = original[method];
+            // Use jQuery's cancellation method so its dispatch loop also
+            // skips later handlers on this target. Keep the real DOM event.
+            Object.defineProperty(original, method, {
+              configurable: true,
+              writable: true,
+              value() {
+                if (
+                  this !== original ||
+                  event.isImmediatePropagationStopped()
+                ) {
+                  return stop.call(this);
+                }
+                return event.stopImmediatePropagation();
+              },
+            });
+            try {
+              return invoke(original);
+            } finally {
+              if (descriptor) {
+                Object.defineProperty(original, method, descriptor);
+              } else {
+                delete original[method];
+              }
+            }
+          }
         }
         // Project synthetic or mapped events without dispatching a second
         // event. Cancellation still applies to the active dispatch.
@@ -1359,7 +1387,7 @@
             value: () => event.stopImmediatePropagation(),
           },
         });
-        return native;
+        return invoke(native);
       },
       css(response) {
         warnLegacy(
@@ -1413,8 +1441,8 @@
         originalDomMethods.get(method) !== jQuery.fn[method],
       wrap: (form) => jQuery(form),
       select: (selector) => jQuery(selector).toArray(),
-      trigger(form, type, args) {
-        jQuery(form).trigger(type, args);
+      trigger(element, type, args) {
+        jQuery(element).trigger(type, args);
       },
       notify(form, args, request) {
         // The jQuery Form plugin stored the request before notifying.
