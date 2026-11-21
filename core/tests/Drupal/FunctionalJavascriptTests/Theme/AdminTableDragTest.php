@@ -141,7 +141,7 @@ class AdminTableDragTest extends TableDragTest {
   #[IgnoreDeprecations]
   public function testBulkActionsSyntheticChange(): void {
     $this->drupalGet('tabledrag_test', ['query' => ['legacy' => 1, 'tableselect' => 1]]);
-    $this->assertSame([['row', 2], ['all', 2]], $this->getSession()->evaluateScript(<<<'JS'
+    $this->assertSame([['row', 2], ['all', 2], ['row', 3], ['all', NULL]], $this->getSession()->evaluateScript(<<<'JS'
       (() => {
         const fixture = document.createElement('div');
         fixture.innerHTML = '<form><div data-drupal-views-bulk-actions></div>' +
@@ -149,12 +149,14 @@ class AdminTableDragTest extends TableDragTest {
           '<tr><td class="views-field views-field-node-bulk-form"><input type="checkbox"></td></tr>' +
           '</tbody></table></form>';
         document.body.append(fixture);
+        Drupal.behaviors.tableSelect.attach(fixture);
         const bulk = new Drupal.DefaultAdminBulkActions(fixture.querySelector('[data-drupal-views-bulk-actions]'));
         const calls = [];
         bulk.rowCheckboxHandler = (event) => calls.push(['row', event.isTrigger]);
         bulk.selectAllHandler = (event) => calls.push(['all', event.isTrigger]);
         jQuery(fixture.querySelector('td input')).triggerHandler('change');
         jQuery(fixture.querySelector('th input')).triggerHandler('change');
+        fixture.querySelector('th input').click();
         return calls;
       })()
       JS));
