@@ -179,6 +179,39 @@ class FormGroupingElementsTest extends WebDriverTestBase {
   }
 
   /**
+   * Tests that fallback time zone detection completes during attachment.
+   */
+  public function testSynchronousTimezoneDetection(): void {
+    $this->drupalGet('form-test/group-details', ['query' => ['timezone' => 1]]);
+
+    $result = $this->getSession()->evaluateScript(<<<'JS'
+      (() => {
+        const wrapper = document.body.appendChild(document.createElement('div'));
+        wrapper.innerHTML = '<select class="timezone-detect"><option value="Europe/Paris">Paris</option><option value="America/Chicago">Chicago</option></select>';
+        const select = wrapper.querySelector('select');
+        const resolvedOptions = Intl.DateTimeFormat.prototype.resolvedOptions;
+        const xhr = Drupal.xhr;
+        let request;
+        Intl.DateTimeFormat.prototype.resolvedOptions = () => ({ timeZone: 'Unsupported' });
+        Drupal.xhr = (options) => {
+          request = options;
+          return { status: 200, responseText: '"America/Chicago"' };
+        };
+        try {
+          Drupal.behaviors.setTimezone.attach(wrapper);
+          return [request?.async, request?.url.includes('/system/timezone/'), select.value];
+        } finally {
+          Intl.DateTimeFormat.prototype.resolvedOptions = resolvedOptions;
+          Drupal.xhr = xhr;
+          wrapper.remove();
+        }
+      })()
+      JS);
+
+    $this->assertSame([FALSE, TRUE, 'America/Chicago'], $result);
+  }
+
+  /**
    * Confirms tabs containing a field with a validation error are open.
    */
   public function testVerticalTabValidationVisibility(): void {

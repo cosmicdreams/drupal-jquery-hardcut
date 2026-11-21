@@ -3,14 +3,14 @@
  * Timezone detection.
  */
 
-(function ($, Drupal) {
+(function (Drupal) {
   /**
    * Set the client's system time zone as default values of form fields.
    *
    * @type {Drupal~behavior}
    */
   Drupal.behaviors.setTimezone = {
-    attach(context, settings) {
+    attach(context) {
       const timezone = once('timezone', '.timezone-detect', context);
       if (timezone.length) {
         const tz = new Intl.DateTimeFormat().resolvedOptions().timeZone;
@@ -70,19 +70,27 @@
         // avoid database errors associated with concurrent requests
         // during install.
         const path = `system/timezone/${abbreviation}/${offsetNow}/${isDaylightSavingTime}`;
-        $.ajax({
+        const request = Drupal.xhr({
           async: false,
           url: Drupal.url(path),
-          dataType: 'json',
-          success(data) {
-            if (data) {
-              document.querySelectorAll('.timezone-detect').forEach((item) => {
-                item.value = data;
-              });
-            }
-          },
+          headers: { Accept: 'application/json, text/javascript, */*; q=0.01' },
+          onSendError() {},
         });
+        if (request.status >= 200 && request.status < 300) {
+          let zone;
+          try {
+            zone = JSON.parse(request.responseText);
+          } catch {
+            // A response without a valid time zone leaves the fields alone.
+            return;
+          }
+          if (zone) {
+            document.querySelectorAll('.timezone-detect').forEach((item) => {
+              item.value = zone;
+            });
+          }
+        }
       }
     },
   };
-})(jQuery, Drupal);
+})(Drupal);
