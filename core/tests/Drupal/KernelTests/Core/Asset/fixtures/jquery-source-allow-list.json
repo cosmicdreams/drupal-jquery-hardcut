@@ -8,14 +8,6 @@
       "owner": "C",
       "references": 1
     },
-    "misc/batch.js": {
-      "owner": "U",
-      "references": 1
-    },
-    "misc/details-aria.js": {
-      "owner": "U",
-      "references": 1
-    },
     "misc/details-summarized-content.js": {
       "owner": "U",
       "references": 1
@@ -72,6 +64,10 @@
       "owner": "B",
       "references": 1
     },
+    "misc/jquery.drupal-form-bc.js": {
+      "owner": "U",
+      "references": 1
+    },
     "misc/jquery.form.js": {
       "owner": "A",
       "references": 4
@@ -94,14 +90,6 @@
     },
     "misc/states.js": {
       "owner": "S",
-      "references": 1
-    },
-    "misc/tabbingmanager.js": {
-      "owner": "U",
-      "references": 1
-    },
-    "misc/timezone.js": {
-      "owner": "U",
       "references": 1
     },
     "misc/vertical-tabs.js": {
@@ -280,10 +268,6 @@
       "owner": "B",
       "references": 1
     },
-    "modules/system/tests/modules/js_message_test/js/js_message_test.js": {
-      "owner": "U",
-      "references": 1
-    },
     "modules/taxonomy/js/taxonomy.js": {
       "owner": "U",
       "references": 1
@@ -330,10 +314,6 @@
     },
     "themes/default_admin/js/media-library.ui.js": {
       "owner": "M",
-      "references": 1
-    },
-    "themes/default_admin/js/nav-tabs.js": {
-      "owner": "U",
       "references": 1
     },
     "themes/default_admin/js/vertical-tabs.js": {

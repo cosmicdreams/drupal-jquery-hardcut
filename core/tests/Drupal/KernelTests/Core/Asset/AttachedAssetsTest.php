@@ -80,7 +80,7 @@ class AttachedAssetsTest extends KernelTestBase {
     $build['#attached']['library'][] = 'common_test/files';
     $language = \Drupal::languageManager()->getCurrentLanguage();
     $legacy_paths = static fn (array $assets): array => array_values(preg_grep(
-      '#^core/(?:assets/vendor/jquery|misc/(?:jquery\.form|position|jquery\.drupal-(?:bc|ajax-(?:bc|commands))|jquery\.no-conflict|jquery\.tabledrag\.bc)\.js$)#',
+      '#^core/(?:assets/vendor/jquery|misc/(?:jquery\.form|position|jquery\.drupal-(?:bc|ajax-(?:bc|commands)|form-bc)|jquery\.no-conflict|jquery\.tabledrag\.bc)\.js$)#',
       array_keys($assets),
     ));
     $resolve = function (array $build) use ($language): array {
@@ -97,6 +97,7 @@ class AttachedAssetsTest extends KernelTestBase {
       'core/misc/jquery.drupal-bc.js',
       'core/misc/jquery.drupal-ajax-bc.js',
       'core/misc/jquery.tabledrag.bc.js',
+      'core/misc/jquery.drupal-form-bc.js',
     ], $legacy_paths($resolve($build)));
   }
 

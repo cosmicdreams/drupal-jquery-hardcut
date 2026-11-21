@@ -13,6 +13,10 @@
   removal: Z (Drupal 13)
   literals:
     "core/internal.jquery.form": 1
+- path: core/modules/system/tests/modules/form_test/src/Form/FormTestGroupDetailsForm.php
+  removal: Z (Drupal 13)
+  literals:
+    "core/jquery": 1
 - path: core/modules/system/tests/modules/position_shim_test/src/Controller/PositionShimTestController.php
   removal: D
   literals:
@@ -21,6 +25,10 @@
   removal: D
   literals:
     "core/drupal.jquery.position": 1
+- path: core/modules/system/tests/modules/tabbingmanager_test/src/Controller/TabbingManagerTestController.php
+  removal: Z (Drupal 13)
+  literals:
+    "core/jquery": 1
 - path: core/modules/system/tests/modules/tabledrag_test/src/Form/TableDragTestForm.php
   removal: Z (Drupal 13)
   literals:
@@ -36,6 +44,7 @@
     "core/jquery": 1
     "core/misc/jquery.drupal-ajax-bc.js": 1
     "core/misc/jquery.drupal-bc.js": 1
+    "core/misc/jquery.drupal-form-bc.js": 1
     "core/misc/jquery.no-conflict.js": 1
     "core/misc/jquery.tabledrag.bc.js": 1
 - path: core/tests/Drupal/KernelTests/Core/Asset/CoreLibraryDiscoveryTrait.php
@@ -53,6 +62,7 @@
     "core/internal.jquery.form": 1
     "core/misc/jquery.drupal-ajax-bc.js": 2
     "core/misc/jquery.drupal-bc.js": 2
+    "core/misc/jquery.drupal-form-bc.js": 2
     "core/misc/jquery.form.js": 1
     "core/misc/jquery.no-conflict.js": 2
     "core/misc/jquery.tabledrag.bc.js": 2
@@ -62,6 +72,7 @@
     "core/assets/vendor/jquery/jquery.min.js": 1
     "core/misc/jquery.drupal-ajax-bc.js": 1
     "core/misc/jquery.drupal-bc.js": 1
+    "core/misc/jquery.drupal-form-bc.js": 1
     "core/misc/jquery.no-conflict.js": 1
     "core/misc/jquery.tabledrag.bc.js": 1
 - path: core/tests/Drupal/KernelTests/Core/Asset/JqueryFreeLibrariesTest.php

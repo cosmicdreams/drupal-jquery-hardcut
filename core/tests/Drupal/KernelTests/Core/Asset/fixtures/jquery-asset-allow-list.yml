@@ -32,8 +32,6 @@
 - core/assets/vendor/jquery/jquery.min.js
 - core/assets/vendor/sortable/Sortable.min.js
 - core/misc/autocomplete.js
-- core/misc/batch.js
-- core/misc/details-aria.js
 - core/misc/details-summarized-content.js
 - core/misc/details.js
 - core/misc/dialog/dialog.ajax.js
@@ -48,14 +46,13 @@
 - core/misc/jquery.drupal-ajax-bc.js
 - core/misc/jquery.drupal-ajax-commands.js
 - core/misc/jquery.drupal-bc.js
+- core/misc/jquery.drupal-form-bc.js
 - core/misc/jquery.form.js
 - core/misc/jquery.no-conflict.js
 - core/misc/jquery.tabledrag.bc.js
 - core/misc/machine-name.js
 - core/misc/position.js
 - core/misc/states.js
-- core/misc/tabbingmanager.js
-- core/misc/timezone.js
 - core/misc/vertical-tabs.js
 - core/modules/block/js/block.admin.js
 - core/modules/block/js/block.js
@@ -104,5 +101,4 @@
 - core/themes/default_admin/js/autocomplete.js
 - core/themes/default_admin/js/details.js
 - core/themes/default_admin/js/media-library.ui.js
-- core/themes/default_admin/js/nav-tabs.js
 - core/themes/default_admin/js/vertical-tabs.js

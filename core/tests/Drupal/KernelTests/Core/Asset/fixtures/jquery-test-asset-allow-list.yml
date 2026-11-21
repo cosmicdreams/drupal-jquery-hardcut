@@ -21,6 +21,3 @@
 - fixture: core/modules/system/tests/modules/jquery_bc_test/jquery_bc_test.libraries.yml:event_bridge_late
   removal: Z
   assets: [js/event-bridge-dependent.js]
-- fixture: core/modules/system/tests/modules/js_message_test/js_message_test.libraries.yml:show_message
-  removal: U
-  assets: [js/js_message_test.js]

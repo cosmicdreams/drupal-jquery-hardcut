@@ -131,7 +131,9 @@ class InstalledProfileAssetsTest extends KernelTestBase {
         $ajax_adapter['data'] = 'core/misc/jquery.drupal-ajax-bc.js';
         $tables_adapter = $bootstrap;
         $tables_adapter['data'] = 'core/misc/jquery.tabledrag.bc.js';
-        array_splice($expected['js'], $index + 1, 0, [$bootstrap, $adapter, $ajax_adapter, $tables_adapter]);
+        $forms_adapter = $bootstrap;
+        $forms_adapter['data'] = 'core/misc/jquery.drupal-form-bc.js';
+        array_splice($expected['js'], $index + 1, 0, [$bootstrap, $adapter, $ajax_adapter, $tables_adapter, $forms_adapter]);
         break;
       }
     }

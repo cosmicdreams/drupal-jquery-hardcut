@@ -57,13 +57,6 @@
     stark: [core/jquery]
     starterkit_theme: [core/jquery]
     umami: [core/jquery]
-- fixture: core/modules/system/tests/modules/js_message_test/js_message_test.libraries.yml:show_message
-  removal: U
-  themes:
-    default_admin: [core/jquery]
-    stark: [core/jquery]
-    starterkit_theme: [core/jquery]
-    umami: [core/jquery]
 - fixture: core/modules/system/tests/modules/off_canvas_test/off_canvas_test.libraries.yml:resize_helper
   removal: D
   themes:
