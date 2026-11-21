@@ -336,12 +336,13 @@ class FormGroupingElementsTest extends WebDriverTestBase {
    */
   public function testFormEventBindingsDetach(): void {
     $this->drupalGet('form-test/group-details');
-    $actual = $this->getSession()->evaluateScript(<<<'JS'
-      (() => {
+    $session = $this->getSession();
+    $session->executeScript(<<<'JS'
+      (async () => {
         const region = document.body.appendChild(document.createElement('div'));
         const details = region.appendChild(document.createElement('details'));
         const sibling = document.body.appendChild(document.createElement('div'));
-        const targets = [region, details, sibling, window];
+        const targets = [region, details, sibling, window, document.body, document];
         const received = [];
         const stop = targets.map((target, index) =>
           Drupal.formEvents.listen(target, 'testFormDetach', undefined, () => received.push(index))
@@ -365,19 +366,37 @@ class FormGroupingElementsTest extends WebDriverTestBase {
           Drupal.detachBehaviors(region, drupalSettings, 'serialize');
           Drupal.detachBehaviors(region, drupalSettings, 'move');
           snapshot();
+
+          // A missing Ajax wrapper falls back to the document.
+          Drupal.detachBehaviors(undefined, drupalSettings, 'unload');
+          await Promise.resolve();
+          snapshot();
+
+          // Replacing the contents removes the old child but keeps the wrapper.
+          Drupal.detachBehaviors(region, drupalSettings, 'unload');
+          region.replaceChildren();
+          await Promise.resolve();
+          snapshot();
+
           Drupal.detachBehaviors(region, drupalSettings, 'unload');
           region.remove();
+          await Promise.resolve();
           snapshot();
           targets.forEach((target) => target.dispatchEvent(new Event('testFormDetach')));
-          return [snapshots, received];
+          window.formEventDetachResult = [snapshots, received];
         }
         finally {
           stop.forEach((unbind) => unbind());
+          region.remove();
           sibling.remove();
         }
-      })()
+      })();
       JS);
-    $this->assertSame([[[0, 1, 2, 3], [2, 3]], [2, 3]], $actual);
+    $this->assertJsCondition('Boolean(window.formEventDetachResult)');
+    $this->assertSame([
+      [[0, 1, 2, 3, 4, 5], [0, 1, 2, 3, 4, 5], [0, 2, 3, 4, 5], [2, 3, 4, 5]],
+      [2, 3, 4, 5],
+    ], $session->evaluateScript('window.formEventDetachResult'));
   }
 
   /**

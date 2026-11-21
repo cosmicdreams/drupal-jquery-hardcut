@@ -52,18 +52,23 @@
    */
   Drupal.behaviors.formEventBindings = {
     detach(context, settings, trigger) {
-      if (trigger !== 'unload') {
+      if (trigger !== 'unload' || context.nodeType !== Node.ELEMENT_NODE) {
         return;
       }
-      bindings.forEach((binding) => {
-        const { target } = binding;
-        if (
-          target === context ||
-          (target instanceof Node && context.contains(target))
-        ) {
-          binding.stop();
-        }
-      });
+      const contained = Array.from(bindings).filter(
+        ({ target }) => target instanceof Node && context.contains(target),
+      );
+      if (contained.length) {
+        // Drupal detaches before updating the DOM. Check after an Ajax insert
+        // so a wrapper whose contents were replaced keeps its own listeners.
+        queueMicrotask(() => {
+          contained.forEach((binding) => {
+            if (!binding.target.isConnected) {
+              binding.stop();
+            }
+          });
+        });
+      }
     },
   };
 
