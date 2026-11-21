@@ -26,6 +26,11 @@ class AdminTableDragTest extends TableDragTest {
   /**
    * {@inheritdoc}
    */
+  protected bool $syntheticHeaderClick = TRUE;
+
+  /**
+   * {@inheritdoc}
+   */
   protected static $indentationXpathSelector = 'child::td[1]/div[contains(concat(" ", normalize-space(@class), " "), " js-tabledrag-cell-content ")]/div[contains(concat(" ", normalize-space(@class), " "), " js-indentation ")]';
 
   /**
@@ -168,6 +173,45 @@ class AdminTableDragTest extends TableDragTest {
         const cleared = !row.checked && bulk.bulkActions.dataset.drupalStickyVbo === 'false';
         row.click();
         return [alias && emptyAlias, singleFocus && syntheticFocus, window.bulkBlur, selected, cleared, window.bulkChanges];
+      })()
+      JS));
+  }
+
+  /**
+   * Tests selection and listener ownership when unloading just bulk actions.
+   */
+  #[IgnoreDeprecations]
+  public function testBulkActionsOwnership(): void {
+    $this->drupalGet('tabledrag_test', ['query' => ['legacy' => 1, 'tableselect' => 1]]);
+    $this->assertSame([1, [1, 1], [1, 1]], $this->getSession()->evaluateScript(<<<'JS'
+      (() => {
+        const fixture = document.createElement('div');
+        fixture.innerHTML = '<form><div data-drupal-views-bulk-actions><span data-drupal-views-bulk-actions-status></span></div>' +
+          '<table><thead><tr><th class="select-all"></th></tr></thead><tbody>' +
+          '<tr><td class="views-field views-field-node-bulk-form"><input type="checkbox"></td></tr>' +
+          '</tbody></table></form>';
+        document.body.append(fixture);
+        Drupal.behaviors.tableSelect.attach(fixture);
+        const actions = fixture.querySelector('[data-drupal-views-bulk-actions]');
+        const bulk = new Drupal.DefaultAdminBulkActions(actions);
+        const original = Drupal.tableSelect;
+        Drupal.tableSelect = function () { return original.call(this); };
+        let updates = 0;
+        let focus = 0;
+        let blur = 0;
+        bulk.updateStatus = () => { updates += 1; };
+        bulk.focusHandler = () => { focus += 1; };
+        bulk.blurHandler = () => { blur += 1; };
+        fixture.querySelector('th input').click();
+        const row = fixture.querySelector('tbody input');
+        const trigger = () => {
+          jQuery(row).triggerHandler('focus');
+          jQuery(row).triggerHandler('blur');
+          return [focus, blur];
+        };
+        const before = trigger();
+        Drupal.detachBehaviors(actions, drupalSettings, 'unload');
+        return [updates, before, trigger()];
       })()
       JS));
   }
