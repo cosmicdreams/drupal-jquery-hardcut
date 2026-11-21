@@ -1,6 +1,10 @@
 /**
  * @file
  * Drupal's states library.
+ * @param {object} Drupal
+ *   The global Drupal namespace.
+ * @param {function(string, string, Element=): Element[]} once
+ *   The once utility function.
  */
 
 (function (Drupal, once) {
@@ -178,9 +182,10 @@
     const normalized = nativeSelector(selector);
     if (normalized !== null) {
       try {
-        const matches = Array.from(
-          document.querySelectorAll(normalized.selector),
-        );
+        const simpleId = /^#([\w-]+)$/.exec(normalized.selector);
+        const matches = simpleId
+          ? [document.getElementById(simpleId[1])].filter(Boolean)
+          : Array.from(document.querySelectorAll(normalized.selector));
         if (normalized.translated) {
           deprecateSelector(selector);
         }
@@ -205,7 +210,7 @@
    * @param {EventTarget} target
    *   The event target.
    * @param {string} type
-   *   The event name.
+   *   The event name, optionally with jQuery-style namespaces.
    * @param {function(Event): void} listener
    *   The native listener.
    * @param {object} [data]
@@ -214,17 +219,29 @@
    *   Removes the binding.
    */
   function listen(target, type, listener, data) {
-    const binding = { target, type, listener, data, states: true };
+    const [baseType, ...namespaces] = type.split('.');
+    const namespace = namespaces.filter(Boolean).sort().join('.');
+    const binding = {
+      target,
+      type: baseType,
+      ...(namespace ? { namespace } : {}),
+      listener,
+      data,
+      states: true,
+    };
     const nativeListener = (event) => {
-      if (!binding.handlesNativeEvent?.(event)) {
+      const syntheticDefault =
+        Drupal.ajax?.compatibility?.isSyntheticDefaultAction?.(event) ??
+        Drupal.eventBindings.isForeignDefaultAction?.(event);
+      if (!syntheticDefault && !binding.handlesNativeEvent?.(event)) {
         return listener(event);
       }
     };
-    target.addEventListener(type, nativeListener);
+    target.addEventListener(baseType, nativeListener);
     const unregister = Drupal.eventBindings.register(binding);
     return () => {
       unregister();
-      target.removeEventListener(type, nativeListener);
+      target.removeEventListener(baseType, nativeListener);
     };
   }
 
@@ -305,12 +322,89 @@
 
   const attached = new WeakMap();
   const pending = new Set();
+  const elementCleanups = new WeakMap();
+  const trackedTargets = new Set();
+
+  /**
+   * Registers a cleanup callback to run if a dependee element unloads.
+   * @param {EventTarget} target
+   *   The element being observed.
+   * @param {function(): void} cleanup
+   *   The cleanup callback to invoke on unload or disconnect.
+   * @return {function(): void}
+   *   Stops tracking this cleanup callback.
+   */
+  function trackTargetCleanup(target, cleanup) {
+    if (!(target instanceof Element)) {
+      return () => {};
+    }
+    let entry = elementCleanups.get(target);
+    if (!entry) {
+      entry = {
+        target,
+        wasConnected: target.isConnected,
+        cleanups: new Set(),
+      };
+      elementCleanups.set(target, entry);
+      trackedTargets.add(entry);
+    }
+    entry.cleanups.add(cleanup);
+    return () => {
+      entry.cleanups.delete(cleanup);
+      if (!entry.cleanups.size) {
+        elementCleanups.delete(target);
+        trackedTargets.delete(entry);
+      }
+    };
+  }
+
+  /**
+   * Releases all States listeners and trigger references for a detached target.
+   * @param {object} entry
+   *   The tracked target record.
+   */
+  function unloadTarget(entry) {
+    trackedTargets.delete(entry);
+    elementCleanups.delete(entry.target);
+    const cleanups = Array.from(entry.cleanups);
+    entry.cleanups.clear();
+    cleanups.forEach((cleanup) => cleanup());
+  }
+
+  /**
+   * Prunes tracked dependee targets that were removed without detachBehaviors.
+   */
+  function pruneDisconnectedTargets() {
+    Array.from(trackedTargets).forEach((entry) => {
+      if (entry.wasConnected && !entry.target.isConnected) {
+        unloadTarget(entry);
+      }
+    });
+  }
+
+  /**
+   * Releases tracked dependee targets contained within an unloading context.
+   * @param {Document|Element} context
+   *   The unloading context.
+   */
+  function unloadTargetsInContext(context) {
+    Array.from(trackedTargets).forEach((entry) => {
+      if (
+        context === document ||
+        (context instanceof Node && context.contains(entry.target)) ||
+        (entry.wasConnected && !entry.target.isConnected)
+      ) {
+        unloadTarget(entry);
+      }
+    });
+  }
 
   /**
    * Attaches and releases States dependencies.
    */
   Drupal.behaviors.states = {
     attach(context) {
+      pruneDisconnectedTargets();
       once('states', '[data-drupal-states]', context).forEach((element) => {
         const config = JSON.parse(element.getAttribute('data-drupal-states'));
         const dependents = Object.entries(config || {}).map(
@@ -343,15 +437,21 @@
       if (trigger !== 'unload') {
         return;
       }
-      once
-        .remove('states', '[data-drupal-states]', context)
-        .forEach((element) => {
-          attached.get(element)?.forEach((dependent) => {
-            pending.delete(dependent);
-            dependent.disconnect();
-          });
-          attached.delete(element);
+      const elements = once.remove('states', '[data-drupal-states]', context);
+      if (
+        context instanceof Element &&
+        context.matches('[data-drupal-states]')
+      ) {
+        elements.push(...once.remove('states', context));
+      }
+      elements.forEach((element) => {
+        attached.get(element)?.forEach((dependent) => {
+          pending.delete(dependent);
+          dependent.disconnect();
         });
+        attached.delete(element);
+      });
+      unloadTargetsInContext(context);
     },
   };
 
@@ -373,7 +473,7 @@
     Object.assign(this, args);
     this.values = Object.create(null);
     this.oldValue = null;
-    this.disposers = [];
+    this.disposers = new Set();
     this.dependees = this.getDependees();
     if (!args.defer) {
       this.connect();
@@ -436,9 +536,8 @@
       }
       pending.delete(this);
       this.connected = true;
-      this.matches = matches;
       matches.forEach((elements, selector) => {
-        this.initializeDependee(selector, this.dependees[selector]);
+        this.initializeDependee(selector, this.dependees[selector], elements);
       });
     },
 
@@ -447,9 +546,9 @@
      */
     disconnect() {
       pending.delete(this);
-      this.disposers.forEach((dispose) => dispose());
-      this.disposers.length = 0;
-      this.matches = null;
+      const disposers = Array.from(this.disposers);
+      this.disposers.clear();
+      disposers.forEach((dispose) => dispose());
       this.connected = false;
     },
 
@@ -459,26 +558,39 @@
      *   The selector describing the dependee.
      * @param {string[]} dependeeStates
      *   The states this dependent reads.
+     * @param {Element[]} [elements]
+     *   The resolved dependee elements.
      */
-    initializeDependee(selector, dependeeStates) {
-      const elements = this.matches.get(selector);
+    initializeDependee(selector, dependeeStates, elements) {
+      const resolved = elements ?? select(selector) ?? [];
       this.values[selector] = {};
       for (const stateName of new Set(dependeeStates)) {
         const state = states.State.sanitize(stateName);
         this.values[selector][state.name] = null;
 
-        for (const element of elements) {
-          this.disposers.push(
-            listen(
-              element,
-              `state:${state}`,
-              (event) => this.update(selector, state, event.detail?.value),
-              { selector, state },
-            ),
+        for (const element of resolved) {
+          let untrack;
+          const removeListener = listen(
+            element,
+            `state:${state}`,
+            (event) => this.update(selector, state, event.detail?.value),
+            { selector, state },
           );
+          const dispose = () => {
+            this.disposers.delete(dispose);
+            untrack();
+            removeListener();
+          };
+          untrack = trackTargetCleanup(element, dispose);
+          this.disposers.add(dispose);
         }
 
-        this.disposers.push(acquireTrigger(elements, selector, state));
+        const releaseTrigger = acquireTrigger(resolved, selector, state);
+        const disposeTrigger = () => {
+          this.disposers.delete(disposeTrigger);
+          releaseTrigger();
+        };
+        this.disposers.add(disposeTrigger);
       }
     },
 
@@ -690,7 +802,8 @@
    *   The active trigger, if any.
    */
   function getElementTrigger(element, stateName) {
-    return elementTriggers.get(element)?.get(stateName);
+    const list = elementTriggers.get(element)?.get(stateName);
+    return list?.at(-1);
   }
 
   /**
@@ -709,7 +822,14 @@
         map = new Map();
         elementTriggers.set(element, map);
       }
-      map.set(stateName, trigger);
+      let list = map.get(stateName);
+      if (!list) {
+        list = [];
+        map.set(stateName, list);
+      }
+      if (!list.includes(trigger)) {
+        list.push(trigger);
+      }
     }
   }
 
@@ -725,8 +845,15 @@
   function clearElementTrigger(elements, stateName, trigger) {
     for (const element of elements) {
       const map = elementTriggers.get(element);
-      if (map?.get(stateName) === trigger) {
-        map.delete(stateName);
+      const list = map?.get(stateName);
+      if (list) {
+        const index = list.indexOf(trigger);
+        if (index !== -1) {
+          list.splice(index, 1);
+        }
+        if (!list.length) {
+          map.delete(stateName);
+        }
       }
     }
   }
@@ -803,7 +930,7 @@
       Object.hasOwn(states.Trigger.states, name)
     ) {
       this.elements = this.elements ?? select(this.selector) ?? [];
-      this.disposers = [];
+      this.disposers = new Set();
       this.active = true;
       if (this.elements.length && !getElementTrigger(this.elements[0], name)) {
         this.initialize();
@@ -826,7 +953,7 @@
       if (typeof trigger === 'function') {
         const dispose = trigger.call(window, this.elements);
         if (typeof dispose === 'function') {
-          this.disposers.push(dispose);
+          this.disposers.add(dispose);
         } else {
           this.permanent = true;
         }
@@ -850,24 +977,30 @@
       let oldValue = valueFn.call(this.elements);
 
       for (const element of this.elements) {
-        this.disposers.push(
-          listen(element, type, (event) => {
-            const value = valueFn.call(this.elements, event);
-            if (oldValue !== value) {
-              this.value = value;
-              publishState(this.elements, `state:${this.state}`, {
-                value,
-                oldValue,
-              });
-              oldValue = value;
-            }
-          }),
-        );
+        let untrack;
+        const removeListener = listen(element, type, (event) => {
+          const value = valueFn.call(this.elements, event);
+          if (oldValue !== value) {
+            publishState(this.elements, `state:${this.state}`, {
+              value,
+              oldValue,
+            });
+            oldValue = value;
+          }
+        });
+        const dispose = () => {
+          this.disposers.delete(dispose);
+          untrack();
+          removeListener();
+        };
+        untrack = trackTargetCleanup(element, () => {
+          dispose();
+          this.detachElement(element);
+        });
+        this.disposers.add(dispose);
       }
       states.postponed.push(() => {
         if (this.active) {
-          this.initialized = true;
-          this.value = oldValue;
           publishState(this.elements, `state:${this.state}`, {
             value: oldValue,
             oldValue: null,
@@ -877,15 +1010,34 @@
     },
 
     /**
+     * Detaches a single removed dependee element from this trigger.
+     * @param {Element} element
+     *   The unloading element.
+     */
+    detachElement(element) {
+      if (!this.elements || !this.elements.includes(element)) {
+        return;
+      }
+      const name = this.state?.name ?? String(this.state);
+      clearElementTrigger([element], name, this);
+      this.elements = this.elements.filter((item) => item !== element);
+      if (!this.elements.length) {
+        this.disconnect();
+      }
+    },
+
+    /**
      * Releases the event listeners when the last dependent unloads.
      */
     disconnect() {
       this.active = false;
-      this.disposers.forEach((dispose) => dispose());
-      this.disposers.length = 0;
+      const disposers = Array.from(this.disposers);
+      this.disposers.clear();
+      disposers.forEach((dispose) => dispose());
       if (!this.permanent && this.elements) {
         const name = this.state?.name ?? String(this.state);
         clearElementTrigger(this.elements, name, this);
+        this.elements = [];
       }
     },
   };
@@ -1128,12 +1280,16 @@
     disabled(target, value) {
       const container = target.closest(wrapper);
       if (container) {
-        container.classList.toggle('form-disabled', Boolean(value));
-        container.querySelectorAll(supportsDisabled).forEach((element) => {
-          element.disabled = value;
-        });
-        if (container.matches(supportsDisabled)) {
-          container.disabled = value;
+        if (value === undefined) {
+          container.classList.toggle('form-disabled');
+        } else {
+          container.classList.toggle('form-disabled', Boolean(value));
+          container.querySelectorAll(supportsDisabled).forEach((element) => {
+            element.disabled = Boolean(value);
+          });
+          if (container.matches(supportsDisabled)) {
+            container.disabled = Boolean(value);
+          }
         }
       }
     },
@@ -1141,10 +1297,14 @@
     readonly(target, value) {
       const container = target.closest(wrapper);
       if (container) {
-        container.classList.toggle('form-readonly', Boolean(value));
-        container.querySelectorAll('input, textarea').forEach((element) => {
-          element.readOnly = value;
-        });
+        if (value === undefined) {
+          container.classList.toggle('form-readonly');
+        } else {
+          container.classList.toggle('form-readonly', Boolean(value));
+          container.querySelectorAll('input, textarea').forEach((element) => {
+            element.readOnly = Boolean(value);
+          });
+        }
       }
     },
 
@@ -1191,7 +1351,7 @@
       inputs?.forEach((input) => {
         const event = new Event('change', { bubbles: true, cancelable: true });
         checkedChanges.add(event);
-        input.dispatchEvent(event);
+        Drupal.eventBindings.publish(input, event);
       });
     },
 
