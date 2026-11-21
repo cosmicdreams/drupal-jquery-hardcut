@@ -860,6 +860,40 @@ JS;
   }
 
   /**
+   * Tests physical event overrides and synthetic link bubbling.
+   */
+  public function testCouncilEventDispatch(): void {
+    $this->drupalGet('ajax-test/global-events');
+    $session = $this->getSession();
+    $session->executeScript(<<<'JS'
+      const link = document.querySelector('#test_global_events_drupal_ajax_link');
+      link.innerHTML = '<span>Drupal Ajax</span>';
+      const linkAjax = Drupal.ajax.instances.find((instance) => instance?.element === link);
+      const physical = document.createElement('button');
+      document.body.append(physical);
+      const buttonAjax = Drupal.ajax({ element: physical, event: 'click.scope', url: location.href });
+      const trace = window.councilEventTrace = [];
+      buttonAjax.eventResponse = (element, event) => trace.push(event instanceof jQuery.Event);
+      physical.click();
+      buttonAjax.eventResponse = Drupal.ajax.useNativeCallback((element, event) => trace.push(event instanceof MouseEvent));
+      physical.click();
+      const nested = document.createElement('button');
+      document.body.append(nested);
+      Drupal.ajax({ element: nested, event: 'click', url: location.href }).eventResponse = () => trace.push('nested');
+      physical.addEventListener('click', () => nested.click());
+      jQuery(physical).trigger('click.other');
+      const response = linkAjax.eventResponse;
+      linkAjax.eventResponse = function (...args) {
+        trace.push('descendant');
+        return response.apply(this, args);
+      };
+      jQuery(link.querySelector('span')).trigger('click');
+      JS);
+    $this->assertSame([TRUE, TRUE, 'nested', 'descendant'], $session->evaluateScript('window.councilEventTrace'));
+    $this->assertSession()->assertExpectedAjaxRequest(1);
+  }
+
+  /**
    * Tests that late legacy form options are honored and cancellation cleans up.
    */
   #[IgnoreDeprecations]

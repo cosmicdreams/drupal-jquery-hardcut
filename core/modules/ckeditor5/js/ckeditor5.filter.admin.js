@@ -71,4 +71,5 @@
 
     originalAjaxEventResponse.apply(this, args);
   };
+  Drupal.ajax.useNativeCallback(Drupal.Ajax.prototype.eventResponse);
 })(Drupal, once);

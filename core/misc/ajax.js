@@ -562,7 +562,7 @@
   // and requests whose default success callback ran.
   const preparedRequests = new WeakSet();
   const receivedRequests = new WeakSet();
-  const nativeFormCallbacks = new WeakSet();
+  const nativeCallbacks = new WeakSet();
   const submissionFormArguments = new WeakMap();
 
   /**
@@ -570,7 +570,7 @@
    */
   function formMethodArgument(element, method, options) {
     const elementOrForm = nativeElement(element);
-    if (nativeFormCallbacks.has(method)) {
+    if (nativeCallbacks.has(method)) {
       return elementOrForm;
     }
     const argument = submissionFormArguments.get(options);
@@ -582,6 +582,27 @@
   }
 
   const startedRequests = new WeakSet();
+
+  /**
+   * Fired on document before Drupal Ajax calls the beforeSend method.
+   *
+   * The event's detail.ajax is the Drupal.Ajax instance. The event is
+   * observational. A beforeSend callback can cancel the request.
+   *
+   * @event Drupal.Ajax#drupal:ajax-before-send
+   * @type {CustomEvent}
+   */
+
+  /**
+   * Fired on document after the command queue and afterSuccess have settled,
+   * or after request state is restored on failure or cancellation. Only
+   * attempts that fired drupal:ajax-before-send fire this event.
+   *
+   * @event Drupal.Ajax#drupal:ajax-complete
+   * @type {CustomEvent}
+   * @property {Drupal.Ajax} detail.ajax
+   *   The Ajax instance.
+   */
 
   /**
    * Publishes completion after the response queue or request cleanup.
@@ -675,7 +696,7 @@
       if (settings) {
         submissionFormArguments.set(settings, formArgument);
       }
-      return nativeFormCallbacks.has(callback) ? form : legacyForm();
+      return nativeCallbacks.has(callback) ? form : legacyForm();
     };
     const method =
       options.method || options.type || form.getAttribute('method');
@@ -1471,7 +1492,7 @@
       'error',
       'complete',
     ]) {
-      nativeFormCallbacks.add(ajax.options[name]);
+      nativeCallbacks.add(ajax.options[name]);
     }
 
     if (elementSettings.dialog) {
@@ -1532,11 +1553,11 @@
             }),
           );
         }
-        return ajax.eventResponse(target, event);
+        return callEventOverride(ajax, 'eventResponse', target, event);
       });
       if (elementSettings.keypress) {
         bind('keypress', (target, event) =>
-          ajax.keypressResponse(target, event),
+          callEventOverride(ajax, 'keypressResponse', target, event),
         );
       }
       bind(elementSettings.prevent, (target, event) => {
@@ -1548,6 +1569,16 @@
         removers.splice(0).forEach((remove) => remove());
     }
   };
+
+  function callEventOverride(ajax, method, target, event) {
+    const callback = ajax[method];
+    const adapter = Drupal.ajax.compatibility;
+    const argument =
+      adapter && !nativeCallbacks.has(callback)
+        ? adapter.asEvent(event)
+        : (adapter?.nativeEvent(event) ?? event);
+    return callback.call(ajax, target, argument);
+  }
 
   /**
    * URL query attribute to indicate the wrapper used to render a request.
@@ -3233,11 +3264,35 @@
    *   The same callback, for use in an assignment.
    */
   Drupal.ajax.useNativeForm = (callback) => {
-    nativeFormCallbacks.add(callback);
+    nativeCallbacks.add(callback);
     return callback;
   };
 
-  nativeFormCallbacks.add(Drupal.Ajax.prototype.beforeSerialize);
-  nativeFormCallbacks.add(Drupal.Ajax.prototype.beforeSubmit);
+  /**
+   * Registers a native Ajax event or theme override, returning that function.
+   *
+   * Use for eventResponse, keypressResponse, Drupal.theme.ajaxProgressBar,
+   * Drupal.theme.ajaxWrapperNewContent and
+   * Drupal.theme.ajaxWrapperMultipleRootElements.
+   * Existing assignments receive their legacy arguments when the jQuery
+   * adapter is loaded. Registered callbacks always receive native values.
+   *
+   * @example
+   * Drupal.theme.ajaxWrapperNewContent = Drupal.ajax.useNativeCallback(
+   *   (nodes, ajax, response) => nodes,
+   * );
+   *
+   * @param {Function} callback
+   *   The override to register.
+   *
+   * @return {Function}
+   *   The registered override.
+   */
+  Drupal.ajax.useNativeCallback = Drupal.ajax.useNativeForm;
+
+  nativeCallbacks.add(Drupal.Ajax.prototype.eventResponse);
+  nativeCallbacks.add(Drupal.Ajax.prototype.keypressResponse);
+  nativeCallbacks.add(Drupal.Ajax.prototype.beforeSerialize);
+  nativeCallbacks.add(Drupal.Ajax.prototype.beforeSubmit);
   document.dispatchEvent(new CustomEvent('drupal:ajax-ready'));
 })(window, Drupal, drupalSettings, loadjs, window.tabbable);

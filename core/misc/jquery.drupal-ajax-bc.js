@@ -1098,6 +1098,21 @@
     }
   }
 
+  const triggerFrames = [];
+  const trigger = jQuery.event.trigger;
+  jQuery.event.trigger = function (event, data, target) {
+    const type = typeof event === 'string' ? event : event.type;
+    triggerFrames.push({
+      target: target || document,
+      type: type.split('.')[0],
+    });
+    try {
+      return trigger.apply(this, arguments);
+    } finally {
+      triggerFrames.pop();
+    }
+  };
+
   const wrappedForms = new WeakMap();
 
   /**
@@ -1117,7 +1132,6 @@
         if (
           !ajax ||
           (type === 'change' && target instanceof HTMLSelectElement) ||
-          (type === 'click' && target instanceof HTMLAnchorElement) ||
           (type === 'submit' && target instanceof HTMLFormElement)
         ) {
           return;
@@ -1127,7 +1141,13 @@
           if (
             event.isTrigger &&
             !event.originalEvent &&
-            !delivering.has(event)
+            !delivering.has(event) &&
+            // The shared adapter handles synthetic clicks on the link itself.
+            !(
+              type === 'click' &&
+              target instanceof HTMLAnchorElement &&
+              event.target === target
+            )
           ) {
             delivering.add(event);
             try {
@@ -1148,8 +1168,14 @@
     });
     Drupal.ajax.compatibility = {
       isSyntheticDefaultAction(event) {
-        if (jQuery.event.triggered === event.type) {
-          return true;
+        const frame = triggerFrames.at(-1);
+        if (
+          frame?.type === event.type &&
+          frame.target === event.target &&
+          jQuery.event.triggered === event.type
+        ) {
+          frame.defaultEvent = frame.defaultEvent || event;
+          return frame.defaultEvent === event;
         }
         if (
           event.type !== 'click' &&
@@ -1167,6 +1193,35 @@
         return Array.isArray(phase)
           ? !delivering.has(phase[0])
           : !!phase && Object.hasOwn(phase, 'value');
+      },
+      asEvent: (event) =>
+        event instanceof jQuery.Event ? event : jQuery.Event(event),
+      nativeEvent(event) {
+        if (event instanceof Event) {
+          return event;
+        }
+        if (event.originalEvent instanceof Event) {
+          return event.originalEvent;
+        }
+        // A synthetic dispatch has no DOM event. Preserve cancellation of the
+        // active dispatch without dispatching another event.
+        const native = new Event(event.type, { cancelable: true });
+        Object.defineProperties(native, {
+          target: { value: event.target },
+          currentTarget: { value: event.currentTarget },
+          key: { value: event.key },
+          which: { value: event.which },
+          submitter: { value: event.submitter },
+          defaultPrevented: {
+            get: () => event.isDefaultPrevented?.() ?? event.defaultPrevented,
+          },
+          preventDefault: { value: () => event.preventDefault() },
+          stopPropagation: { value: () => event.stopPropagation() },
+          stopImmediatePropagation: {
+            value: () => event.stopImmediatePropagation(),
+          },
+        });
+        return native;
       },
       warnLegacy,
       send,
