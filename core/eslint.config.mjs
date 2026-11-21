@@ -28,7 +28,6 @@ export default defineConfig(
   {
     ignores: [
       'assets/vendor/**/*',
-      ...nightwatchPaths,
       'node_modules/**/*',
       '**/js_test_files/**/*',
       '**/build/**/*',
@@ -124,7 +123,7 @@ export default defineConfig(
   },
   {
     files: ['**/*.{js,mjs,cjs}'],
-    ignores: Object.keys(jqueryRatchet.sources),
+    ignores: [...nightwatchPaths, ...Object.keys(jqueryRatchet.sources)],
     plugins: { 'drupal-jquery': jqueryPlugin },
     rules: jqueryRules,
   },
