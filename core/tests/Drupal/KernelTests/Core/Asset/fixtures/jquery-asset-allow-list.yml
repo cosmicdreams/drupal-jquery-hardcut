@@ -99,7 +99,6 @@
 - core/modules/taxonomy/js/taxonomy.js
 - core/modules/user/js/user.js
 - core/modules/user/js/user.permissions.js
-- core/modules/views/js/ajax_view.js
 - core/modules/views/js/base.js
 - core/modules/views_ui/js/ajax.js
 - core/modules/views_ui/js/dialog.views.js

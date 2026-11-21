@@ -276,6 +276,10 @@
       "owner": "A",
       "references": 1
     },
+    "modules/system/tests/modules/ajax_test/js/legacy-overrides.js": {
+      "owner": "A",
+      "references": 1
+    },
     "modules/system/tests/modules/css_disable_transitions_test/js/disable_transitions.theme.js": {
       "owner": "U",
       "references": 2
@@ -310,10 +314,6 @@
     },
     "modules/user/js/user.permissions.js": {
       "owner": "U",
-      "references": 1
-    },
-    "modules/views/js/ajax_view.js": {
-      "owner": "A",
       "references": 1
     },
     "modules/views/js/base.js": {

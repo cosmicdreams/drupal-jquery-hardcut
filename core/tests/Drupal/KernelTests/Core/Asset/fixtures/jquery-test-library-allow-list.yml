@@ -21,6 +21,13 @@
     stark: [core/jquery]
     starterkit_theme: [core/jquery]
     umami: [core/jquery]
+- fixture: core/modules/system/tests/modules/ajax_test/ajax_test.libraries.yml:legacy_overrides
+  removal: Z (Drupal 13)
+  themes:
+    default_admin: [core/jquery]
+    stark: [core/jquery]
+    starterkit_theme: [core/jquery]
+    umami: [core/jquery]
 - fixture: core/modules/system/tests/modules/form_test/form_test.libraries.yml:form_test
   removal: U
   themes:

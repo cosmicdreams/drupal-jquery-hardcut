@@ -5,6 +5,9 @@
 - fixture: core/modules/system/tests/modules/ajax_test/ajax_test.libraries.yml:global_events
   removal: A
   assets: [js/global_events.js]
+- fixture: core/modules/system/tests/modules/ajax_test/ajax_test.libraries.yml:legacy_overrides
+  removal: Z (Drupal 13)
+  assets: [js/legacy-overrides.js]
 - fixture: core/modules/system/tests/modules/css_disable_transitions_test/css_disable_transitions_test.libraries.yml:testing.css_disable_transitions_test
   removal: U
   assets: [js/disable_transitions.theme.js]
