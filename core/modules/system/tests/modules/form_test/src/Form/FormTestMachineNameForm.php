@@ -47,9 +47,12 @@ class FormTestMachineNameForm extends FormBase {
       '#type' => 'machine_name',
       '#title' => 'Machine name 2',
       '#description' => 'Another machine name.',
+      '#maxlength' => 12,
       '#machine_name' => [
         'exists' => [$this, 'load'],
         'source' => ['machine_name_2_label'],
+        'replace_pattern' => '[^a-z0-9-]+',
+        'replace' => '-',
       ],
     ];
     $form['machine_name_3_label'] = [

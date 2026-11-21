@@ -44,6 +44,23 @@ class MachineNameTest extends WebDriverTestBase {
   }
 
   /**
+   * Tests configured replacements and truncation in the machine name preview.
+   */
+  public function testReplacementAndTruncation(): void {
+    $this->drupalGet('form-test/machine-name');
+    $assert = $this->assertSession();
+    $label = $assert->fieldExists('machine_name_2_label');
+    $preview = '#edit-machine-name-2-label-machine-name-suffix .machine-name-value';
+
+    $label->setValue('!Hi! There & 7?');
+    $assert->elementTextEquals('css', $preview, 'hi-there-7');
+
+    $label->setValue('ABCDEFGHIJKLMN');
+    $assert->elementTextEquals('css', $preview, 'abcdefghijkl');
+    $assert->fieldValueEquals('machine_name_2', 'abcdefghijkl');
+  }
+
+  /**
    * Tests that machine name field functions.
    *
    * Makes sure that the machine name field automatically provides a valid
