@@ -81,6 +81,7 @@
       namespace: 'tabs',
       selector: '[data-drupal-nav-tabs-trigger]',
       navTabs: true,
+      reservesLegacySlot: true,
       listener() {
         const expanded = target.classList.toggle('is-open');
         target.querySelectorAll('button').forEach((button) => {

@@ -45,7 +45,8 @@
             jquery,
             binding,
           ) ||
-          window.Drupal.formCompatibility?.ownsLegacyEvents?.(jquery, binding)
+          // A dedicated adapter reports the bindings it already delivers.
+          registry.ownsLegacyEvents?.(jquery, binding)
         ) {
           return;
         }
@@ -56,13 +57,9 @@
           binding.tableInteraction &&
           target instanceof Element &&
           !binding.handlesNativeEvent;
-        const formSlot =
-          jquery === instance &&
-          (binding.formInteraction ||
-            binding.detailsAria ||
-            binding.tabbingFocusTrap ||
-            binding.navTabs) &&
-          !binding.handlesNativeEvent;
+        // An owner marks a binding whose adapter claims the slot later, on
+        // every connected instance it supports.
+        const legacySlot = Boolean(binding.reservesLegacySlot);
         // A select has no native change() method for jQuery's trigger to invoke.
         const selectChange =
           !selector && type === 'change' && target instanceof HTMLSelectElement;
@@ -75,7 +72,7 @@
           type === 'compatibility:probe' ||
           directActivation ||
           selectChange;
-        if (!forwardsSynthetic && !tableSlot && !formSlot) {
+        if (!forwardsSynthetic && !tableSlot && !legacySlot) {
           return;
         }
 

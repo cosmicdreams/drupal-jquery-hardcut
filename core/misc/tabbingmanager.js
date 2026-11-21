@@ -446,6 +446,7 @@
       type: 'keydown',
       namespace: 'focus-trap',
       tabbingFocusTrap: true,
+      reservesLegacySlot: true,
       listener(event) {
         if (event.key === 'Tab' && event.shiftKey === reverse) {
           event.preventDefault();

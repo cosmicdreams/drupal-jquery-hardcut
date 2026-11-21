@@ -18,6 +18,7 @@
           namespace: 'detailsAria',
           selector: 'summary',
           detailsAria: true,
+          reservesLegacySlot: true,
           listener(summary) {
             summary.setAttribute(
               'aria-expanded',

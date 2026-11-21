@@ -54,6 +54,7 @@
       selector,
       listener,
       formInteraction: true,
+      reservesLegacySlot: true,
       stop() {
         target.removeEventListener(type, handle);
         bindings.delete(binding);

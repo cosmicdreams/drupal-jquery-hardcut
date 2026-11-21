@@ -109,11 +109,12 @@
     const triggerFrames = [];
     let internalDepth = 0;
 
-    Drupal.formCompatibility = {
-      ownsLegacyEvents(instance, binding) {
-        return instance === jquery && isFormBinding(binding);
-      },
-    };
+    // Report the bindings this adapter delivers so jquery.drupal-bc.js
+    // reserves no second slot for them.
+    const previousOwner = Drupal.eventBindings.ownsLegacyEvents;
+    Drupal.eventBindings.ownsLegacyEvents = (instance, binding) =>
+      (instance === jquery && isFormBinding(binding)) ||
+      Boolean(previousOwner?.(instance, binding));
 
     function getBindType(type, selector) {
       const special = jquery.event.special[type];
