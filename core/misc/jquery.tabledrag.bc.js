@@ -342,10 +342,18 @@
         const shared = target === document && documentGestures.includes(type);
         const element = jquery(target);
         const deliver = function (event) {
-          if (!event.isTrigger) {
+          const { originalEvent } = event;
+          // The selection bridge marks native changes for legacy observers.
+          // Leave their delivery to the native listeners.
+          if (
+            !event.isTrigger ||
+            (type === 'change' &&
+              window.Drupal.tableInteraction.tableSelect?.isSelectionChange(
+                originalEvent,
+              ))
+          ) {
             return shared ? deliverShared(binding, event) : undefined;
           }
-          const { originalEvent } = event;
           // The general Drupal bridge forwards direct clicks without a source event.
           if (anchorClick && event.target === target && !originalEvent) {
             return undefined;
