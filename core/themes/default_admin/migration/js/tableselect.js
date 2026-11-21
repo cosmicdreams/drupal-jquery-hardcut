@@ -213,6 +213,8 @@
     }
   };
 
+  const tableSelect = Drupal.tableSelect;
+
   /**
    * Identifies a change dispatched by table select while updating other inputs.
    *
@@ -223,7 +225,6 @@
    *
    * @internal
    */
-  const tableSelect = Drupal.tableSelect;
   tableSelect.isSelectionChange = (event) => selectionChanges.has(event);
   tableSelect.checkboxContent = () => Drupal.theme('checkbox');
   tableInteraction.tableSelect = tableSelect;

@@ -14,8 +14,8 @@
 
   const { tableInteraction } = Drupal;
   const weightColspans = new WeakMap();
-  const weightToggles = new WeakMap();
-  const rowHandles = new WeakMap();
+  const retainedWeightToggles = new WeakMap();
+  const retainedRowHandles = new WeakMap();
 
   /**
    * Updates the span of a cell when its weight column changes visibility.
@@ -315,7 +315,8 @@
     const toggleAnchor = wrapper?.matches('.table-scroll-wrapper')
       ? wrapper
       : table;
-    let toggle = weightToggles.get(table);
+    let toggle = retainedWeightToggles.get(table);
+    retainedWeightToggles.delete(table);
     if (
       !toggle ||
       !toggle.nodes.every((node) => node.parentNode === toggleAnchor.parentNode)
@@ -333,10 +334,8 @@
               : [markup],
         };
         toggleAnchor.before(markup);
-        weightToggles.set(table, toggle);
       } else {
         toggle = undefined;
-        weightToggles.delete(table);
       }
     }
     this.toggleWeightButton = toggle?.button ?? null;
@@ -405,6 +404,7 @@
       self.dragObject = null;
       self.rowObject = null;
       if (toggle) {
+        retainedWeightToggles.set(table, toggle);
         tableInteraction.removeOrphanedControls(table, toggle.nodes);
       }
       once.remove('tabledrag', table);
@@ -634,7 +634,8 @@
       link.classList.add('menu-item__link'),
     );
     const lastIndentation = descendants(firstCells, '.js-indentation').at(-1);
-    let handle = rowHandles.get(item);
+    let handle = retainedRowHandles.get(item);
+    retainedRowHandles.delete(item);
     if (!handle || !item.contains(handle)) {
       const handleContent = tableDrag.themeContent(
         Drupal.theme('tableDragHandle', this.dragOrientation),
@@ -651,7 +652,6 @@
       } else {
         item.querySelector('td')?.prepend(handleContent);
       }
-      rowHandles.set(item, handle);
     }
     if (lastIndentation) {
       // Update the total width of indentation in this entire table.
@@ -660,6 +660,10 @@
         self.indentCount,
       );
     }
+
+    tableInteraction.own(self.table, handle, () =>
+      retainedRowHandles.set(item, handle),
+    );
 
     ['mousedown', 'touchstart', 'pointerdown'].forEach((type) => {
       tableInteraction.listen(self.table, handle, type, (event) => {

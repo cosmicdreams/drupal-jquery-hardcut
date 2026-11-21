@@ -480,9 +480,11 @@ class TableDragTest extends WebDriverTestBase {
         const table = document.createElement('table');
         table.innerHTML = '<tbody><tr class="draggable"><td>Row</td></tr></tbody>';
         document.body.append(table);
+        const previous = table.previousSibling;
         const drag = new Drupal.tableDrag(table, {});
         table.querySelector('.tabledrag-handle').dispatchEvent(new MouseEvent('mousedown'));
-        const started = drag.dragObject !== null && drag.toggleWeightButton === null;
+        const started = drag.dragObject !== null && drag.toggleWeightButton === null &&
+          table.previousSibling === previous;
         document.dispatchEvent(new MouseEvent('mouseup'));
         return started;
       })
@@ -990,6 +992,9 @@ class TableDragTest extends WebDriverTestBase {
 
         Drupal.attachBehaviors(dragContainer, drupalSettings);
         const reattached = Drupal.tableDrag['tabledrag-test-table'];
+        let starts = 0;
+        reattached.dragStart = () => { starts += 1; };
+        handle.dispatchEvent(new MouseEvent('mousedown'));
         return [
           movements === 2 && active && drag.dragObject === null &&
             !document.body.classList.contains(drag.dragOrientation) && dragMarkupRetained,
@@ -997,7 +1002,8 @@ class TableDragTest extends WebDriverTestBase {
           released,
           fixture.querySelectorAll('.tableresponsive-toggle').length === 1 && responsive.link.isConnected &&
             table.querySelectorAll('th input').length === 1 && header === originalHeader && checkbox.checked,
-          reattached !== drag && reattached.toggleWeightButton === drag.toggleWeightButton && drag.table.contains(handle) &&
+          reattached !== drag && starts === 1 && drag.dragObject === null &&
+            reattached.toggleWeightButton === drag.toggleWeightButton && drag.table.contains(handle) &&
             drag.table.querySelectorAll('.tabledrag-handle').length === initialHandles &&
             drag.table.tHead.rows[0].cells[0].colSpan === initialSpan,
         ];

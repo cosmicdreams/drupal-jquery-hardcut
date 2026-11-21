@@ -100,7 +100,8 @@ class AdminTableDragTest extends TableDragTest {
           fixture.querySelectorAll('.tabledrag-changed-warning').length === 2,
           drags.every(({ table }) => !table.parentElement.matches('.table-scroll-wrapper') &&
             table.previousElementSibling.previousElementSibling.matches('.tabledrag-changed-warning')),
-          scroll.previousElementSibling.contains(wrapped.toggleWeightButton),
+          scroll.previousSibling === wrapped.toggleWeightButton.parentNode &&
+            !fixture.textContent.includes('[object Object]'),
         ];
       })()
       JS));
