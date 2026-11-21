@@ -1255,7 +1255,6 @@
           const binding = handlers.get(handle.guid);
           if (binding?.target === this) {
             handlers.delete(handle.guid);
-            subscriptions.delete(binding);
             binding.remove();
           }
         }
@@ -1302,20 +1301,36 @@
           }
         };
         const element = jQuery(target);
-        element.on(name, deliver);
-        handlers.set(deliver.guid, binding);
-        subscriptions.set(binding, { name, bindType, deliver, element });
+        const slot = Drupal.eventBindings.claimLegacyEvent?.(
+          jQuery,
+          binding,
+          deliver,
+        );
+        const handler = slot?.handler ?? deliver;
+        if (!slot) {
+          element.on(name, handler);
+        }
+        handlers.set(handler.guid, binding);
+        subscriptions.set(binding, { name, bindType, handler, element, slot });
       },
       remove(binding) {
         const subscription = subscriptions.get(binding);
         if (subscription) {
-          handlers.delete(subscription.deliver.guid);
+          const { name, handler, element, slot } = subscription;
+          const unbind = handlers.delete(handler.guid);
           subscriptions.delete(binding);
-          subscription.element.off(subscription.name, subscription.deliver);
+          if (slot) {
+            slot.remove(unbind);
+          } else if (unbind) {
+            element.off(name, handler);
+          }
         }
       },
     });
     adapter = {
+      ownsLegacyEvents(jquery, binding) {
+        return jquery === jQuery && (!binding || subscriptions.has(binding));
+      },
       hasEventBinding(target, type, event) {
         if (
           Drupal.ajax.compatibility !== adapter ||
@@ -1341,7 +1356,7 @@
         const handlers = jQuery._data(binding.target, 'events')?.[
           subscription.bindType
         ];
-        return handlers?.some(({ guid }) => guid === subscription.deliver.guid);
+        return handlers?.some(({ guid }) => guid === subscription.handler.guid);
       },
       isSyntheticDefaultAction(event) {
         if (Drupal.eventBindings.isForeignDefaultAction?.(event)) {

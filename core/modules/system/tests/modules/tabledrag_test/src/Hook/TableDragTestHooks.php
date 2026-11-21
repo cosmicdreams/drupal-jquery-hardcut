@@ -16,6 +16,9 @@ final class TableDragTestHooks {
    */
   #[Hook('library_info_alter')]
   public function libraryInfoAlter(array &$libraries, string $extension): void {
+    if ($extension === 'core' && \Drupal::state()->get('tabledrag_test.late_ajax_table_bridges')) {
+      $libraries['jquery']['js'] = [];
+    }
     if ($extension === 'core' && \Drupal::state()->get('tabledrag_test.late_bridge')) {
       unset($libraries['jquery']['js']['misc/jquery.tabledrag.bc.js']);
     }

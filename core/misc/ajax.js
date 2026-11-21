@@ -1565,8 +1565,11 @@
         };
         const nativeListener = (event) => {
           const adapter = Drupal.ajax.compatibility;
+          const syntheticDefault = adapter
+            ? adapter.isSyntheticDefaultAction(event)
+            : Drupal.eventBindings.isForeignDefaultAction?.(event);
           if (
-            !adapter?.isSyntheticDefaultAction(event) &&
+            !syntheticDefault &&
             !adapter?.handlesNativeEvent(binding, event) &&
             listener(event) === false
           ) {

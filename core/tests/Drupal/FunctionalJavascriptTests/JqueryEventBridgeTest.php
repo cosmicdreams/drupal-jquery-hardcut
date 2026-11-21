@@ -834,7 +834,7 @@ final class JqueryEventBridgeTest extends WebDriverTestBase {
    * Tests an explicit adapter load on a page with an independent vendor.
    */
   public function testStandaloneOptIn(): void {
-    $this->drupalGet('jquery-bc-test/native-events');
+    $this->drupalGet('jquery-bc-test/native-events', ['query' => ['ajax' => 1]]);
     $session = $this->getSession();
     $session->executeScript(<<<'JS'
       window.foreignAdapterTrace = null;
@@ -855,6 +855,21 @@ final class JqueryEventBridgeTest extends WebDriverTestBase {
         };
         target.addEventListener(type, listener);
         const unregister = Drupal.eventBindings.register({ target, type, listener });
+        const select = target.appendChild(document.createElement('select'));
+        select.add(new Option('Show', 'show'));
+        const result = target.appendChild(document.createElement('div'));
+        result.id = 'jquery-bc-test-result';
+        const ajax = Drupal.ajax({
+          element: select,
+          event: 'change',
+          url: Drupal.url('jquery-bc-test/link-response'),
+          progress: false,
+        });
+        const respond = ajax.eventResponse;
+        ajax.eventResponse = Drupal.ajax.useNativeCallback(function (element, event) {
+          trace.push(event instanceof Event ? 'native Ajax' : 'legacy Ajax');
+          return respond.call(this, element, event);
+        });
         const beforeVendor = typeof window.jQuery;
         await load('core/assets/vendor/jquery/jquery.min.js');
         const instance = window.jQuery;
@@ -868,12 +883,14 @@ final class JqueryEventBridgeTest extends WebDriverTestBase {
         unregister();
         collection.triggerHandler(type);
 
+        instance(select).trigger('change');
         window.foreignAdapterTrace = [
           beforeVendor,
           beforeOptIn ?? null,
           window.$ === instance,
           afterOptIn,
           trace,
+          Drupal.ajax.compatibility === null,
         ];
       })().catch((error) => {
         window.foreignAdapterTrace = String(error);
@@ -881,8 +898,10 @@ final class JqueryEventBridgeTest extends WebDriverTestBase {
       JS);
     $this->assertJsCondition('window.foreignAdapterTrace !== null');
     $this->assertSame([
-      'undefined', NULL, TRUE, 'handled', ['native', 'owned', 'dependent', 'dependent'],
+      'undefined', NULL, TRUE, 'handled', ['native', 'owned', 'dependent', 'dependent', 'native Ajax'], TRUE,
     ], $session->evaluateScript('window.foreignAdapterTrace'));
+    $this->assertJsCondition("document.getElementById('jquery-bc-test-result').textContent === 'Link response'");
+    $this->assertSession()->assertExpectedAjaxRequest(1);
   }
 
   /**

@@ -376,6 +376,7 @@
           }
           return false;
         };
+        let slot;
         const deliver = function (event) {
           const { originalEvent } = event;
           // The selection bridge marks native changes for legacy observers.
@@ -390,19 +391,24 @@
             if (shared) {
               return deliverShared(binding, event);
             }
-            if (
-              originalEvent instanceof Event &&
-              sharesAjaxDispatch(originalEvent)
-            ) {
-              if (!yielded.delete(originalEvent)) {
-                delivered.add(originalEvent);
+            if (originalEvent instanceof Event) {
+              if (yielded.delete(originalEvent)) {
+                return deliverShared(binding, event, false);
               }
-              return deliverShared(binding, event, false);
+              if (sharesAjaxDispatch(originalEvent)) {
+                delivered.add(originalEvent);
+                return deliverShared(binding, event, false);
+              }
             }
             return undefined;
           }
           // The general Drupal bridge forwards direct clicks without a source event.
-          if (anchorClick && event.target === target && !originalEvent) {
+          if (
+            !slot &&
+            anchorClick &&
+            event.target === target &&
+            !originalEvent
+          ) {
             return undefined;
           }
           warn(`The synthetic ${type} trigger for table interactions`);
@@ -418,8 +424,21 @@
           }
           sharedHandlers.set(deliver, binding);
         }
-        element.on(type, deliver);
-        subscriptions.set(binding, () => element.off(type, deliver));
+        slot = window.Drupal.eventBindings.claimLegacyEvent?.(
+          jquery,
+          binding,
+          deliver,
+        );
+        if (!slot) {
+          element.on(type, deliver);
+        }
+        subscriptions.set(binding, () => {
+          if (slot) {
+            slot.remove();
+          } else {
+            element.off(type, deliver);
+          }
+        });
       },
       remove(binding) {
         subscriptions.get(binding)?.();

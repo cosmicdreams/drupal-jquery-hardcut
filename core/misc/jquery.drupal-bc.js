@@ -7,6 +7,20 @@
 
 (function (instance) {
   const foreignTriggers = [];
+  const legacySlots = new WeakMap();
+
+  /**
+   * Gives a dedicated bridge the slot reserved in registry order.
+   */
+  function claimLegacyEvent(jquery, binding, deliver) {
+    const slot = legacySlots.get(jquery)?.get(binding);
+    if (slot && !slot.claimed) {
+      slot.claimed = true;
+      slot.deliver = deliver;
+      return slot;
+    }
+    return undefined;
+  }
 
   /**
    * Observes the owned bindings using one explicit jQuery instance.
@@ -19,17 +33,25 @@
    * @internal
    */
   function observeLegacyEvents(jquery, registry) {
-    const subscriptions = new Map();
+    const subscriptions = legacySlots.get(jquery) || new Map();
+    legacySlots.set(jquery, subscriptions);
 
     return registry.observe({
       add(binding) {
         const { target, type, namespace, selector, listener } = binding;
-        // The primary Ajax adapter owns its jQuery dispatch slots. Independent
-        // instances opt in to synthetic delivery through this bridge.
-        const foreignAjax = binding.ajax && jquery !== instance;
-        if (binding.ajax && !foreignAjax) {
+        if (
+          subscriptions.has(binding) ||
+          window.Drupal.ajax?.compatibility?.ownsLegacyEvents?.(jquery, binding)
+        ) {
           return;
         }
+        // Reserve element slots for the dedicated bridges together: observe()
+        // replays all bindings in registration order, regardless of owner.
+        const tableSlot =
+          jquery === instance &&
+          binding.tableInteraction &&
+          target instanceof Element &&
+          !binding.handlesNativeEvent;
         // A select has no native change() method for jQuery's trigger to invoke.
         const selectChange =
           !selector && type === 'change' && target instanceof HTMLSelectElement;
@@ -37,12 +59,12 @@
           !selector &&
           ((type === 'click' && target instanceof HTMLAnchorElement) ||
             (type === 'submit' && target instanceof HTMLFormElement));
-        if (
-          !foreignAjax &&
-          type !== 'compatibility:probe' &&
-          !directActivation &&
-          !selectChange
-        ) {
+        const forwardsSynthetic =
+          binding.ajax ||
+          type === 'compatibility:probe' ||
+          directActivation ||
+          selectChange;
+        if (!forwardsSynthetic && !tableSlot) {
           return;
         }
 
@@ -61,21 +83,32 @@
           // The pinned jQuery trigger sets isTrigger for both trigger variants.
           // A DOM event already reaches the owned listener directly.
           if (
+            !forwardsSynthetic ||
             !event.isTrigger ||
-            (!foreignAjax &&
+            (!binding.ajax &&
               (event.originalEvent ||
                 (directActivation && event.target !== target)))
           ) {
             return undefined;
           }
 
-          if (foreignAjax) {
+          if (binding.ajax && window.Drupal.ajax?.compatibility) {
             return listener.call(this, event, ...args);
           }
 
-          // Preserve jQuery's event metadata and forward cancellation to the
-          // current dispatch without firing another event.
-          const projected = Object.create(event, {
+          // Standalone Ajax bindings still receive a native event shape.
+          // Preserve the legacy metadata for other owned registrations.
+          const projected = binding.ajax
+            ? new Event(event.type, { cancelable: true })
+            : Object.create(event);
+          Object.defineProperties(projected, {
+            target: { value: event.target },
+            currentTarget: { value: event.currentTarget },
+            key: { value: event.key },
+            which: { value: event.which },
+            submitter: {
+              value: event.submitter ?? event.originalEvent?.submitter,
+            },
             isTrigger: { value: event.isTrigger },
             defaultPrevented: { get: () => event.isDefaultPrevented() },
             preventDefault: { value: () => event.preventDefault() },
@@ -88,12 +121,26 @@
         }
 
         const element = jquery(target);
-        element.on(name, selector, deliver);
-        subscriptions.set(binding, () => element.off(name, selector, deliver));
+        const slot = {
+          deliver,
+          handler(...args) {
+            return slot.deliver.apply(this, args);
+          },
+          remove(unbind = true) {
+            subscriptions.delete(binding);
+            if (unbind) {
+              element.off(name, selector, slot.handler);
+            }
+          },
+        };
+        element.on(name, selector, slot.handler);
+        subscriptions.set(binding, slot);
       },
       remove(binding) {
-        subscriptions.get(binding)?.();
-        subscriptions.delete(binding);
+        const slot = subscriptions.get(binding);
+        if (slot && !slot.claimed) {
+          slot.remove();
+        }
       },
     });
   }
@@ -259,6 +306,10 @@
       return false;
     }
     const { jquery } = frame;
+    // The dedicated request bridge tracks its own leveraged dispatch.
+    if (window.Drupal.ajax?.compatibility?.ownsLegacyEvents?.(jquery)) {
+      return false;
+    }
     const phase = ['click', 'focus', 'blur'].includes(event.type)
       ? jquery._data(event.target, event.type)
       : null;
@@ -289,15 +340,12 @@
 
     if (!connections.has(jquery)) {
       const registry = window.Drupal.eventBindings;
-      const stopTriggers =
-        jquery !== instance && observeForeignTriggers(jquery);
+      const stopTriggers = observeForeignTriggers(jquery);
       const stopBindings = observeLegacyEvents(jquery, registry);
       const stopPublications = observeOwnedPublications(jquery, registry);
       const disconnect = () => {
         if (connections.get(jquery) === disconnect) {
-          if (stopTriggers) {
-            stopTriggers();
-          }
+          stopTriggers();
           stopBindings();
           stopPublications();
           connections.delete(jquery);
@@ -314,6 +362,7 @@
   function initialize() {
     const registry = window.Drupal.eventBindings;
     registry.connectLegacy = registry.connectLegacy ?? connect;
+    registry.claimLegacyEvent = registry.claimLegacyEvent ?? claimLegacyEvent;
     registry.isForeignDefaultAction =
       registry.isForeignDefaultAction || isForeignDefaultAction;
     registry.connectLegacy(instance);

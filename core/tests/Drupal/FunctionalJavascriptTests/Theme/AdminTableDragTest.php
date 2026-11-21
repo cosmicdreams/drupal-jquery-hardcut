@@ -172,6 +172,75 @@ class AdminTableDragTest extends TableDragTest {
   }
 
   /**
+   * Tests registration order when the jQuery adapters load after the controls.
+   */
+  #[IgnoreDeprecations]
+  public function testLateBulkActionsAjaxHandlerOrder(): void {
+    $this->state->set('tabledrag_test.late_ajax_table_bridges', TRUE);
+    $this->container->get('library.discovery')->clear();
+    $this->drupalGet('tabledrag_test', ['query' => ['tableselect' => 1, 'ajax' => 1]]);
+    $result = $this->getSession()->evaluateScript(<<<'JS'
+      (async () => {
+        const withoutJQuery = typeof jQuery === 'undefined';
+        const cases = [[false, false], [true, false], [false, true], [true, true], [false, false, true]].map(([ajaxFirst, cancel, remove]) => {
+          const trace = [];
+          const fixture = document.body.appendChild(document.createElement('div'));
+          fixture.innerHTML = '<form><div data-drupal-views-bulk-actions></div>' +
+            '<table><thead><tr><th class="select-all"></th></tr></thead>' +
+            '<tbody><tr><td class="views-field-node-bulk-form"><input type="checkbox"></td></tr></tbody></table></form>';
+          const box = fixture.querySelector('td input');
+          const attachAjax = () => {
+            const ajax = Drupal.ajax({ element: box, event: 'change.lateFixture', url: location.href });
+            ajax.eventResponse = Drupal.ajax.useNativeCallback((element, event) => {
+              trace.push('ajax');
+              if (cancel) event.stopImmediatePropagation();
+            });
+          };
+          if (ajaxFirst) attachAjax();
+          const bulk = new Drupal.DefaultAdminBulkActions(fixture.querySelector('[data-drupal-views-bulk-actions]'));
+          bulk.rowCheckboxHandler = () => trace.push('table');
+          if (!ajaxFirst) attachAjax();
+          return { box, trace, remove };
+        });
+        const load = (path) => new Promise((resolve, reject) => {
+          const script = document.createElement('script');
+          script.src = Drupal.url(path);
+          script.onload = resolve;
+          script.onerror = reject;
+          document.head.append(script);
+        });
+        await load('core/assets/vendor/jquery/jquery.min.js');
+        for (const { box, trace, remove } of cases) {
+          if (remove) {
+            jQuery(box).on('change', () => {
+              trace.push('remove');
+              jQuery(box).off('.lateFixture');
+            });
+          }
+        }
+        for (const path of ['jquery.no-conflict.js', 'jquery.drupal-bc.js', 'jquery.drupal-ajax-bc.js', 'jquery.tabledrag.bc.js']) {
+          await load('core/misc/' + path);
+        }
+        for (const { box, trace } of cases) {
+          jQuery(box).on('change', () => trace.push('after'));
+          box.click();
+        }
+        return [withoutJQuery, cases.map(({ trace }) => trace)];
+      })()
+      JS);
+    $this->assertSame([
+      TRUE,
+      [
+        ['table', 'ajax', 'after'],
+        ['ajax', 'table', 'after'],
+        ['table', 'ajax'],
+        ['ajax'],
+        ['remove', 'table', 'ajax', 'after'],
+      ],
+    ], $result);
+  }
+
+  /**
    * Tests a theme that omits the outer cell-items wrapper.
    */
   public function testEmptyTableDragCellItemsWrapper(): void {
