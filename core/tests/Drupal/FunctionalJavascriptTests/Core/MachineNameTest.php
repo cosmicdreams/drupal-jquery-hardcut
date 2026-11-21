@@ -61,6 +61,46 @@ class MachineNameTest extends WebDriverTestBase {
   }
 
   /**
+   * Tests legacy overrides and namespaced events on an explicitly mixed page.
+   */
+  public function testLegacyMachineNameCallback(): void {
+    $this->drupalGet('form-test/machine-name', ['query' => ['legacy-machine-name' => 1]]);
+    $actual = $this->getSession()->evaluateScript(<<<'JS'
+      (() => {
+        const behavior = Drupal.behaviors.machineName;
+        const original = behavior.showMachineName;
+        const deprecation = Drupal.deprecationError;
+        const warnings = [];
+        Drupal.deprecationError = ({ message }) => warnings.push(message);
+        const source = jQuery('#edit-machine-name-2-label');
+        const target = document.getElementById('edit-machine-name-2');
+        const calls = [];
+        try {
+          behavior.showMachineName = function (value, data) {
+            calls.push([value, this === behavior && data.$target instanceof jQuery && data.$target[0] === target, data]);
+            original.call(this, value, data);
+          };
+          source.val('First value').trigger('change.machineName');
+          source.val('Second value').trigger('input.machineName');
+          const shared = calls[0][2] === calls[1][2];
+          source.off('.machineName');
+          source.val('Third value').trigger('change.machineName');
+          return [calls.map(([name, correct]) => [name, correct]), shared, target.value, warnings.length];
+        } finally {
+          behavior.showMachineName = original;
+          Drupal.deprecationError = deprecation;
+        }
+      })()
+      JS);
+    $this->assertSame([
+      [['first-value', TRUE], ['second-value', TRUE]],
+      TRUE,
+      'second-value',
+      3,
+    ], $actual);
+  }
+
+  /**
    * Tests that machine name field functions.
    *
    * Makes sure that the machine name field automatically provides a valid
@@ -124,7 +164,7 @@ class MachineNameTest extends WebDriverTestBase {
     $this->assertNotEmpty($machine_name_3_value, 'Machine name field 3 must be initialized');
 
     // Assert that a machine name based on a default value is initialized.
-    $this->assertJsCondition('jQuery("#edit-machine-name-3-label-machine-name-suffix .machine-name-value").html() == "yet_another_machine_name"');
+    $this->assertJsCondition('document.querySelector("#edit-machine-name-3-label-machine-name-suffix .machine-name-value").innerHTML === "yet_another_machine_name"');
 
     // Test each value for conversion to a machine name.
     foreach ($test_values as $test_info) {
@@ -132,7 +172,7 @@ class MachineNameTest extends WebDriverTestBase {
       $title_1->setValue($test_info['input']);
 
       // Wait the set timeout for fetching the machine name.
-      $this->assertJsCondition('jQuery("#edit-machine-name-1-label-machine-name-suffix .machine-name-value").html() == "' . $test_info['expected'] . '"');
+      $this->assertJsCondition('document.querySelector("#edit-machine-name-1-label-machine-name-suffix .machine-name-value").innerHTML === "' . $test_info['expected'] . '"');
 
       // Validate the generated machine name.
       $this->assertEquals($test_info['expected'], $machine_name_1_value->getHtml(), $test_info['message']);
@@ -168,7 +208,7 @@ class MachineNameTest extends WebDriverTestBase {
     $this->assertNotEmpty($machine_name_3_value, 'Machine name field 3 must be initialized');
 
     // Assert that a machine name based on a default value is initialized.
-    $this->assertJsCondition('jQuery("#edit-machine-name-3-label-machine-name-suffix .machine-name-value").html() == "yet_another_machine_name"');
+    $this->assertJsCondition('document.querySelector("#edit-machine-name-3-label-machine-name-suffix .machine-name-value").innerHTML === "yet_another_machine_name"');
 
     // Test each value for conversion to a machine name.
     foreach ($test_values as $test_info) {
@@ -176,7 +216,7 @@ class MachineNameTest extends WebDriverTestBase {
       $title_1->setValue($test_info['input']);
 
       // Wait the set timeout for fetching the machine name.
-      $this->assertJsCondition('jQuery("#edit-machine-name-1-label-machine-name-suffix .machine-name-value").html() == "' . $test_info['expected'] . '"');
+      $this->assertJsCondition('document.querySelector("#edit-machine-name-1-label-machine-name-suffix .machine-name-value").innerHTML === "' . $test_info['expected'] . '"');
 
       // Validate the generated machine name.
       $this->assertEquals($test_info['expected'], $machine_name_1_value->getHtml(), $test_info['message']);
@@ -216,7 +256,7 @@ class MachineNameTest extends WebDriverTestBase {
     $assert->fieldExists('Name')->setValue('test 1');
     $machine_name_value = $page->find('css', '#edit-name-machine-name-suffix .machine-name-value');
     $this->assertNotEmpty($machine_name_value, 'Machine name field must be initialized');
-    $this->assertJsCondition('jQuery("#edit-name-machine-name-suffix .machine-name-value").html() == "test_1"');
+    $this->assertJsCondition('document.querySelector("#edit-name-machine-name-suffix .machine-name-value").innerHTML === "test_1"');
 
     // Ensure that machine name generation still occurs after a non-HTML 5
     // validation failure.

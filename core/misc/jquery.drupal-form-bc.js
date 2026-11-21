@@ -29,6 +29,37 @@
   }
 
   /**
+   * Preserves cancellation in the legacy queue while core uses a native event.
+   */
+  function deliverFormInteraction(listener, native, event, matched) {
+    const stop = native.stopImmediatePropagation;
+    const descriptor = Object.getOwnPropertyDescriptor(
+      native,
+      'stopImmediatePropagation',
+    );
+    native.stopImmediatePropagation = function () {
+      stop.call(this);
+      event.isImmediatePropagationStopped = () => true;
+      event.isPropagationStopped = () => true;
+    };
+    try {
+      listener(native, matched);
+      if (native.defaultPrevented) {
+        event.preventDefault();
+      }
+      if (native.cancelBubble && !event.isPropagationStopped()) {
+        event.stopPropagation();
+      }
+    } finally {
+      if (descriptor) {
+        Object.defineProperty(native, 'stopImmediatePropagation', descriptor);
+      } else {
+        delete native.stopImmediatePropagation;
+      }
+    }
+  }
+
+  /**
    * Installs legacy bindings and removes native counterparts on legacy off().
    */
   function install() {
@@ -93,15 +124,16 @@
                     ? (jquery(fragmentTarget)[0] ?? null)
                     : undefined,
               });
-              Object.defineProperty(native, 'target', { value: event.target });
+              Object.defineProperties(native, {
+                target: { value: event.target },
+                key: { value: event.key },
+                shiftKey: { value: event.shiftKey },
+              });
               if (event.isDefaultPrevented()) {
                 native.preventDefault();
               }
             }
-            listener(native, this);
-            if (native.defaultPrevented) {
-              event.preventDefault();
-            }
+            deliverFormInteraction(listener, native, event, this);
           } else if (type === 'click') {
             listener(this);
           } else {
@@ -157,6 +189,56 @@
     'drupalTabbingContextDeactivated',
     'drupalTabbingContextReleased',
   ];
+
+  /**
+   * Installs the legacy machine-name callback argument and assignment hook.
+   */
+  function installMachineNameMethods() {
+    const behavior = window.Drupal.behaviors.machineName;
+    const original = behavior.showMachineNameNative;
+    const cache = new WeakMap();
+    const members = ['source', 'target', 'suffix', 'wrapper', 'preview'];
+    const contract = 'Drupal.behaviors.machineName.showMachineName';
+    const migration =
+      'Use showMachineNameNative(machine, data) with native elements.';
+    const callDefault = function (machine, data) {
+      warn(contract, migration);
+      const native = { options: data.options };
+      members.forEach((name) => {
+        [native[name]] = jquery(data[`$${name}`]);
+      });
+      return original.call(this, machine, native);
+    };
+    let method = behavior.showMachineName;
+    Object.defineProperty(behavior, 'showMachineName', {
+      configurable: true,
+      get() {
+        return method || callDefault;
+      },
+      set(callback) {
+        method = callback;
+        if (!callback || callback === callDefault) {
+          behavior.showMachineNameNative = original;
+          return;
+        }
+        warn(contract, migration);
+        behavior.showMachineNameNative = function (machine, data) {
+          let legacy = cache.get(data);
+          if (!legacy) {
+            legacy = { options: data.options };
+            members.forEach((name) => {
+              legacy[`$${name}`] = jquery(data[name]);
+            });
+            cache.set(data, legacy);
+          }
+          return callback.call(this, machine, legacy);
+        };
+      },
+    });
+    if (method) {
+      behavior.showMachineName = method;
+    }
+  }
 
   /**
    * Supplies the positional arguments of existing form and tabbing events.
@@ -351,6 +433,15 @@
         install();
         installPublications();
       },
+      { once: true },
+    );
+  }
+  if (window.Drupal?.behaviors?.machineName) {
+    installMachineNameMethods();
+  } else {
+    document.addEventListener(
+      'drupal:machine-name-ready',
+      installMachineNameMethods,
       { once: true },
     );
   }

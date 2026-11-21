@@ -26,6 +26,9 @@ class FormTestMachineNameForm extends FormBase {
    * {@inheritdoc}
    */
   public function buildForm(array $form, FormStateInterface $form_state) {
+    if ($this->getRequest()->query->getBoolean('legacy-machine-name')) {
+      $form['#attached']['library'][] = 'core/jquery';
+    }
     $form['machine_name_1_label'] = [
       '#type' => 'textfield',
       '#title' => 'Machine name 1 label',
