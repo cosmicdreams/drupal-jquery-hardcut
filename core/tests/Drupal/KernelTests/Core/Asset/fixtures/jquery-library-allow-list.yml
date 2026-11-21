@@ -1,5 +1,4 @@
 # Remove entries when their resolved closures stop reaching the jQuery family.
-- default_admin/block/drupal.block
 - default_admin/block/drupal.block.admin
 - default_admin/ckeditor5/internal.admin
 - default_admin/ckeditor5/internal.admin.image
@@ -8,7 +7,6 @@
 - default_admin/ckeditor5/internal.drupal.ckeditor5.filter.admin
 - default_admin/ckeditor5/internal.drupal.ckeditor5.link-entity-suggestions
 - default_admin/comment/drupal.comment
-- default_admin/content_translation/drupal.content_translation.admin
 - default_admin/contextual/drupal.contextual-links
 - default_admin/core/drupal.ajax.jquery
 - default_admin/core/drupal.autocomplete
@@ -33,7 +31,6 @@
 - default_admin/editor/drupal.editor.dialog
 - default_admin/field_ui/drupal.field_ui
 - default_admin/file/drupal.file
-- default_admin/filter/drupal.filter
 - default_admin/filter/drupal.filter.admin
 - default_admin/layout_builder/drupal.layout_builder
 - default_admin/locale/drupal.locale.admin
@@ -43,7 +40,6 @@
 - default_admin/media_library/view
 - default_admin/media_library/widget
 - default_admin/menu_ui/drupal.menu_ui
-- default_admin/menu_ui/drupal.menu_ui.admin
 - default_admin/navigation/internal.navigation
 - default_admin/navigation/internal.navigation-workspaces
 - default_admin/navigation/navigation.layout
@@ -52,12 +48,9 @@
 - default_admin/node/drupal.node.preview
 - default_admin/path/drupal.path
 - default_admin/system/drupal.system.date
-- default_admin/user/drupal.user
-- default_admin/user/drupal.user.permissions
 - default_admin/views/views.ajax
 - default_admin/views_ui/views_ui.admin
 - default_admin/views_ui/views_ui.listing
-- stark/block/drupal.block
 - stark/block/drupal.block.admin
 - stark/ckeditor5/internal.admin
 - stark/ckeditor5/internal.admin.image
@@ -66,7 +59,6 @@
 - stark/ckeditor5/internal.drupal.ckeditor5.filter.admin
 - stark/ckeditor5/internal.drupal.ckeditor5.link-entity-suggestions
 - stark/comment/drupal.comment
-- stark/content_translation/drupal.content_translation.admin
 - stark/contextual/drupal.contextual-links
 - stark/core/drupal.ajax.jquery
 - stark/core/drupal.autocomplete
@@ -91,7 +83,6 @@
 - stark/editor/drupal.editor.dialog
 - stark/field_ui/drupal.field_ui
 - stark/file/drupal.file
-- stark/filter/drupal.filter
 - stark/filter/drupal.filter.admin
 - stark/layout_builder/drupal.layout_builder
 - stark/locale/drupal.locale.admin
@@ -100,7 +91,6 @@
 - stark/media_library/ui
 - stark/media_library/widget
 - stark/menu_ui/drupal.menu_ui
-- stark/menu_ui/drupal.menu_ui.admin
 - stark/navigation/internal.navigation
 - stark/navigation/internal.navigation-workspaces
 - stark/navigation/navigation.layout
@@ -109,12 +99,9 @@
 - stark/node/drupal.node.preview
 - stark/path/drupal.path
 - stark/system/drupal.system.date
-- stark/user/drupal.user
-- stark/user/drupal.user.permissions
 - stark/views/views.ajax
 - stark/views_ui/views_ui.admin
 - stark/views_ui/views_ui.listing
-- starterkit_theme/block/drupal.block
 - starterkit_theme/block/drupal.block.admin
 - starterkit_theme/ckeditor5/internal.admin
 - starterkit_theme/ckeditor5/internal.admin.image
@@ -123,7 +110,6 @@
 - starterkit_theme/ckeditor5/internal.drupal.ckeditor5.filter.admin
 - starterkit_theme/ckeditor5/internal.drupal.ckeditor5.link-entity-suggestions
 - starterkit_theme/comment/drupal.comment
-- starterkit_theme/content_translation/drupal.content_translation.admin
 - starterkit_theme/contextual/drupal.contextual-links
 - starterkit_theme/core/drupal.ajax.jquery
 - starterkit_theme/core/drupal.autocomplete
@@ -148,7 +134,6 @@
 - starterkit_theme/editor/drupal.editor.dialog
 - starterkit_theme/field_ui/drupal.field_ui
 - starterkit_theme/file/drupal.file
-- starterkit_theme/filter/drupal.filter
 - starterkit_theme/filter/drupal.filter.admin
 - starterkit_theme/layout_builder/drupal.layout_builder
 - starterkit_theme/locale/drupal.locale.admin
@@ -157,7 +142,6 @@
 - starterkit_theme/media_library/ui
 - starterkit_theme/media_library/widget
 - starterkit_theme/menu_ui/drupal.menu_ui
-- starterkit_theme/menu_ui/drupal.menu_ui.admin
 - starterkit_theme/navigation/internal.navigation
 - starterkit_theme/navigation/internal.navigation-workspaces
 - starterkit_theme/navigation/navigation.layout
@@ -166,12 +150,9 @@
 - starterkit_theme/node/drupal.node.preview
 - starterkit_theme/path/drupal.path
 - starterkit_theme/system/drupal.system.date
-- starterkit_theme/user/drupal.user
-- starterkit_theme/user/drupal.user.permissions
 - starterkit_theme/views/views.ajax
 - starterkit_theme/views_ui/views_ui.admin
 - starterkit_theme/views_ui/views_ui.listing
-- umami/block/drupal.block
 - umami/block/drupal.block.admin
 - umami/ckeditor5/internal.admin
 - umami/ckeditor5/internal.admin.image
@@ -180,7 +161,6 @@
 - umami/ckeditor5/internal.drupal.ckeditor5.filter.admin
 - umami/ckeditor5/internal.drupal.ckeditor5.link-entity-suggestions
 - umami/comment/drupal.comment
-- umami/content_translation/drupal.content_translation.admin
 - umami/contextual/drupal.contextual-links
 - umami/core/drupal.ajax.jquery
 - umami/core/drupal.autocomplete
@@ -205,7 +185,6 @@
 - umami/editor/drupal.editor.dialog
 - umami/field_ui/drupal.field_ui
 - umami/file/drupal.file
-- umami/filter/drupal.filter
 - umami/filter/drupal.filter.admin
 - umami/layout_builder/drupal.layout_builder
 - umami/locale/drupal.locale.admin
@@ -214,7 +193,6 @@
 - umami/media_library/ui
 - umami/media_library/widget
 - umami/menu_ui/drupal.menu_ui
-- umami/menu_ui/drupal.menu_ui.admin
 - umami/navigation/internal.navigation
 - umami/navigation/internal.navigation-workspaces
 - umami/navigation/navigation.layout
@@ -223,8 +201,6 @@
 - umami/node/drupal.node.preview
 - umami/path/drupal.path
 - umami/system/drupal.system.date
-- umami/user/drupal.user
-- umami/user/drupal.user.permissions
 - umami/views/views.ajax
 - umami/views_ui/views_ui.admin
 - umami/views_ui/views_ui.listing

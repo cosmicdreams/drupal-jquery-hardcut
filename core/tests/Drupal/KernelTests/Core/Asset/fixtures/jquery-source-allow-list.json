@@ -68,14 +68,6 @@
       "owner": "S",
       "references": 1
     },
-    "modules/block/js/block.admin.js": {
-      "owner": "U",
-      "references": 1
-    },
-    "modules/block/js/block.js": {
-      "owner": "U",
-      "references": 1
-    },
     "modules/ckeditor5/js/build/drupalEntityLinkSuggestions.js": {
       "owner": "C",
       "references": 1
@@ -104,10 +96,6 @@
       "owner": "C",
       "references": 1
     },
-    "modules/content_translation/js/content_translation.admin.js": {
-      "owner": "U",
-      "references": 1
-    },
     "modules/contextual/js/contextual.js": {
       "owner": "M",
       "references": 1
@@ -126,10 +114,6 @@
     },
     "modules/file/js/file.js": {
       "owner": "M",
-      "references": 1
-    },
-    "modules/filter/js/filter.js": {
-      "owner": "U",
       "references": 1
     },
     "modules/layout_builder/js/layout-builder.js": {
@@ -160,18 +144,6 @@
       "owner": "M",
       "references": 1
     },
-    "modules/menu_ui/js/menu_ui.admin.js": {
-      "owner": "U",
-      "references": 1
-    },
-    "modules/menu_ui/js/menu_ui.js": {
-      "owner": "U",
-      "references": 1
-    },
-    "modules/node/js/node.preview.js": {
-      "owner": "U",
-      "references": 1
-    },
     "modules/system/tests/modules/ajax_test/js/global_events.js": {
       "owner": "A",
       "references": 1
@@ -190,14 +162,6 @@
     },
     "modules/system/tests/modules/jquery_bc_test/js/event-bridge-dependent.js": {
       "owner": "B",
-      "references": 1
-    },
-    "modules/user/js/user.js": {
-      "owner": "U",
-      "references": 1
-    },
-    "modules/user/js/user.permissions.js": {
-      "owner": "U",
       "references": 1
     },
     "modules/views/js/base.js": {
