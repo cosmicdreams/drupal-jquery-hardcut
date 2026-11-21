@@ -251,6 +251,101 @@ class FormHelperTest extends UnitTestCase {
   }
 
   /**
+   * Tests pinned search strings still rewrite the converted core keys.
+   *
+   * Each case uses a key exactly as a core form now emits it, with the search
+   * and replace strings an existing caller wrote against the pinned key.
+   */
+  #[DataProvider('providerConvertedStatesKeys')]
+  public function testRewriteConvertedStatesKeys(string $key, string $search, string $replace, string $expected): void {
+    $form = [
+      'element' => [
+        '#states' => [
+          'visible' => [
+            $key => ['checked' => TRUE],
+          ],
+        ],
+      ],
+    ];
+    FormHelper::rewriteStatesSelector($form, $search, $replace);
+    $this->assertSame([$expected => ['checked' => TRUE]], $form['element']['#states']['visible']);
+  }
+
+  /**
+   * Provides converted core keys with pinned search and replace strings.
+   */
+  public static function providerConvertedStatesKeys(): array {
+    return [
+      'Install Tasks: unquoted attribute' => [
+        '[name=driver]',
+        ':input[name=driver]',
+        ':input[name=database_driver]',
+        '[name=database_driver]',
+      ],
+      'ContentEntityForm: bare attribute' => [
+        '[name="revision"]',
+        ':input[name="revision"]',
+        ':input[name="wrapper[revision]"]',
+        '[name="wrapper[revision]"]',
+      ],
+      'CommentForm: input element' => [
+        'input[name="uid"]',
+        ':input[name="uid"]',
+        ':input[name="wrapper[uid]"]',
+        'input[name="wrapper[uid]"]',
+      ],
+      'ConfigSingleImportForm: select element' => [
+        'select[name="config_type"]',
+        ':input[name="config_type"]',
+        ':input[name="wrapper[config_type]"]',
+        'select[name="wrapper[config_type]"]',
+      ],
+      'StringFilter: exposed operator group' => [
+        ':is(select, input)[name="options[operator]"]',
+        ':input[name="options[operator]"]',
+        ':input[name="options[group_info][group_items][1][operator]"]',
+        ':is(select, input)[name="options[group_info][group_items][1][operator]"]',
+      ],
+      'ImageToolkitForm: radio pseudo' => [
+        'input[type="radio"][name="image_toolkit"]',
+        ':radio[name="image_toolkit"]',
+        ':radio[name="wrapper[image_toolkit]"]',
+        'input[type="radio"][name="wrapper[image_toolkit]"]',
+      ],
+      'ImageToolkitForm: radio pseudo to CSS' => [
+        'input[type="radio"][name="image_toolkit"]',
+        ':radio[name="image_toolkit"]',
+        'input[type="radio"][name="toolkit"]',
+        'input[type="radio"][name="toolkit"]',
+      ],
+      'ImageToolkitForm: radio pseudo to attribute' => [
+        'input[type="radio"][name="image_toolkit"]',
+        ':radio[name="image_toolkit"]',
+        '[name="toolkit"]',
+        'input[type="radio"][name="toolkit"]',
+      ],
+      'Radio pseudo leaves a checkbox key alone' => [
+        'input[type="checkbox"][name="image_toolkit"]',
+        ':radio[name="image_toolkit"]',
+        ':radio[name="toolkit"]',
+        'input[type="checkbox"][name="image_toolkit"]',
+      ],
+      'Radio pseudo leaves an untyped key alone' => [
+        '[name="image_toolkit"]',
+        ':radio[name="image_toolkit"]',
+        ':radio[name="toolkit"]',
+        '[name="image_toolkit"]',
+      ],
+      'Radio pseudo needs a token boundary' => [
+        '.my-input[type="radio"][name="image_toolkit"]',
+        ':radio[name="image_toolkit"]',
+        ':radio[name="toolkit"]',
+        '.my-input[type="radio"][name="image_toolkit"]',
+      ],
+    ];
+  }
+
+  /**
    * Tests process states.
    */
   #[DataProvider('providerElements')]

@@ -13,6 +13,19 @@ use Drupal\Core\Render\Element;
 class FormHelper {
 
   /**
+   * Pinned jQuery pseudo-classes and the CSS that replaced them in core keys.
+   *
+   * A search string starting with one of these pseudo-classes also matches a
+   * #states key that starts with the mapped pattern instead.
+   *
+   * @see self::processStatesArray()
+   */
+  protected const LEGACY_STATES_PSEUDOS = [
+    ':input' => '(?:input|select|textarea|button|:is\\([^)]+\\))?',
+    ':radio' => '(?:input)?\\[type=(?:"radio"|\'radio\'|radio)\\]',
+  ];
+
+  /**
    * Rewrites #states selectors in a render element.
    *
    * When a structure of elements is being altered, their HTML selectors may
@@ -59,12 +72,19 @@ class FormHelper {
     // order of an array.
     $keys = array_keys($conditions);
     $update_keys = FALSE;
-    $fallback_search = str_starts_with($search, ':input') && strlen($search) > strlen(':input')
-      ? substr($search, strlen(':input'))
-      : NULL;
-    $fallback_replace = $fallback_search !== NULL && str_starts_with($replace, ':input')
-      ? substr($replace, strlen(':input'))
-      : $replace;
+    $fallback_search = NULL;
+    $fallback_prefix = '';
+    $fallback_replace = $replace;
+    foreach (static::LEGACY_STATES_PSEUDOS as $pseudo => $prefix) {
+      if (str_starts_with($search, $pseudo) && strlen($search) > strlen($pseudo)) {
+        $fallback_search = substr($search, strlen($pseudo));
+        $fallback_prefix = $prefix;
+        if (str_starts_with($replace, $pseudo)) {
+          $fallback_replace = substr($replace, strlen($pseudo));
+        }
+        break;
+      }
+    }
     $replace_is_attribute = str_starts_with($fallback_replace, '[');
     foreach ($conditions as $id => $values) {
       if (is_string($id) && str_contains($id, $search)) {
@@ -75,7 +95,7 @@ class FormHelper {
         $keys[$index] = $new_id;
       }
       elseif (is_string($id) && $fallback_search !== NULL && str_contains($id, $fallback_search)) {
-        $pattern = '/(?:^|(?<=[\s>+~,(]))((?:input|select|textarea|button|:is\([^)]+\))?)' . preg_quote($fallback_search, '/') . '/';
+        $pattern = '/(?:^|(?<=[\s>+~,(]))(' . $fallback_prefix . ')' . preg_quote($fallback_search, '/') . '/';
         $escaped_replace = str_replace(['\\', '$'], ['\\\\', '\$'], $fallback_replace);
         $replacement = $replace_is_attribute ? '${1}' . $escaped_replace : $escaped_replace;
         $new_id = preg_replace($pattern, $replacement, $id);
