@@ -189,6 +189,7 @@ class CommandsTest extends WebDriverTestBase {
         });
         const ajax = Drupal.ajax({ url: location.href });
         await ajax.commandExecutionQueue([
+          { command: 'data', native: true, selector, name: 'disable-refocus', value: false },
           { command: 'data', selector, name: 'disable-refocus', value: true },
         ]);
         const keys = ['disable-refocus', 'dialog-options', 'ajax-http-method', 'refocus-blur', 'private-value'];
@@ -215,6 +216,11 @@ class CommandsTest extends WebDriverTestBase {
           minWidth: 21, paddingTop: 8, borderWidth: 3, '--size': 7,
         };
         await ajax.commands.css(ajax, { native: true, selector: '#native-selector', argument: styles });
+        await ajax.commands.css(ajax, { native: true, selector: '#native-selector', argument: {
+          width: -2, height: '-.5em', padding: -3, borderWidth: '-1px', marginLeft: -7,
+        } });
+        const signed = ['width', 'height', 'paddingLeft', 'borderWidth', 'marginLeft'].map((key) => target.style[key]);
+        await ajax.commands.css(ajax, { native: true, selector: '#native-selector', argument: styles });
         let selected;
         try {
           await ajax.commands.data(ajax, {
@@ -240,7 +246,7 @@ class CommandsTest extends WebDriverTestBase {
         }
         return [selected, Drupal.ajax.elementData.get(target, 'hasChild'),
           Object.keys(styles).filter((key) => key !== 'flex').map((key) => key.startsWith('--')
-          ? target.style.getPropertyValue(key) : target.style[key]), target.style.flexGrow, legacy];
+          ? target.style.getPropertyValue(key) : target.style[key]), target.style.flexGrow, legacy, signed];
       })()
       JS);
     $this->assertSame([
@@ -249,6 +255,7 @@ class CommandsTest extends WebDriverTestBase {
       ['', '', '', '0.5', '2', '21px', '8px', '3px', '7'],
       '1',
       [TRUE, TRUE, TRUE, TRUE],
+      ['0px', '0em', '0px', '0px', '-7px'],
     ], $result);
   }
 

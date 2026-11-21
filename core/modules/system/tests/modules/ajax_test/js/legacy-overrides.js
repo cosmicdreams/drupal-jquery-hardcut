@@ -8,6 +8,8 @@
   const originalBeforeSend = Drupal.Ajax.prototype.beforeSend;
   Drupal.Ajax.prototype.beforeSend = function (...args) {
     trace.push('beforeSend');
+    window.legacyAjaxOverrides.beforeSendIsFacade =
+      !(args[0] instanceof XMLHttpRequest) && typeof args[0].done === 'function';
     return originalBeforeSend.apply(this, args);
   };
   $(document).on('ajaxComplete.legacyOverrides', () => {

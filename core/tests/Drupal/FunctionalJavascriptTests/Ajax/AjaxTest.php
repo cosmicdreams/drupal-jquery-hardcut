@@ -798,6 +798,7 @@ JS;
       JS);
     $this->assertSession()->assertExpectedAjaxRequest(1);
     $this->assertSame(['beforeSend', 'success', 'ajaxComplete'], $session->evaluateScript('legacyAjaxOverrides.trace'));
+    $this->assertTrue($session->evaluateScript('legacyAjaxOverrides.beforeSendIsFacade'));
     $this->assertSame('override', $session->evaluateScript('document.activeElement.name'));
     $data = json_decode($this->assertSession()->elementExists('css', '#request-lane-echo')->getText(), TRUE, flags: JSON_THROW_ON_ERROR);
     $this->assertSame('enabled', $data['fields']['override']);
@@ -1312,6 +1313,84 @@ JS;
   }
 
   /**
+   * Tests removal of the native binding through jQuery.
+   */
+  public function testLegacyOffRemovesAjaxBinding(): void {
+    $this->drupalGet('ajax-test/global-events');
+    $result = $this->getSession()->evaluateScript(<<<'JS'
+      (() => {
+        const button = document.body.appendChild(document.createElement('button'));
+        Drupal.ajax({ element: button, event: 'click.scope change.keep', url: location.href }).eventResponse =
+          (element, event) => trace.push(event.type);
+        const trace = [];
+        button.dispatchEvent(new MouseEvent('click'));
+        jQuery(button).off('.scope');
+        jQuery(button).triggerHandler('click.scope');
+        button.dispatchEvent(new MouseEvent('click'));
+        button.dispatchEvent(new Event('change'));
+        jQuery(button).off();
+        button.dispatchEvent(new Event('change'));
+        return trace;
+      })()
+      JS);
+    $this->assertSame(['click', 'change'], $result);
+  }
+
+  /**
+   * Tests the native default action of an unnamespaced keyboard activation.
+   */
+  public function testUnnamespacedKeyboardActivation(): void {
+    $this->drupalGet('ajax-test/global-events');
+    $result = $this->getSession()->evaluateScript(<<<'JS'
+      (() => {
+        const checkbox = document.body.appendChild(document.createElement('input'));
+        checkbox.type = 'checkbox';
+        const trace = [];
+        const ajax = Drupal.ajax({ element: checkbox, event: 'click', url: location.href });
+        ajax.eventResponse = (element, event) => trace.push([element.checked, event.isTrigger]);
+        checkbox.dispatchEvent(new KeyboardEvent('keypress', { key: 'Enter', bubbles: true, cancelable: true }));
+        return [checkbox.checked, trace];
+      })()
+      JS);
+    $this->assertSame([TRUE, [[TRUE, 3]]], $result);
+  }
+
+  /**
+   * Tests that the bridge composes previously installed global event hooks.
+   */
+  public function testLegacyAjaxSpecialTriggers(): void {
+    $this->drupalGet('ajax-test/native-request');
+    $result = $this->getSession()->evaluateScript(<<<'JS'
+      (async () => {
+        const load = (path) => new Promise((resolve, reject) => {
+          const script = document.createElement('script');
+          script.onload = resolve;
+          script.onerror = reject;
+          script.src = Drupal.url(path);
+          document.head.append(script);
+        });
+        await load('core/assets/vendor/jquery/jquery.min.js');
+        const trace = [];
+        for (const type of ['ajaxSuccess', 'ajaxComplete']) {
+          jQuery.event.special[type] = {
+            trigger(event, xhr, settings, marker) {
+              trace.push([type, this === document, marker]);
+              return type !== 'ajaxSuccess';
+            },
+          };
+          jQuery(document).on(type, () => trace.push(type));
+        }
+        await load('core/misc/jquery.drupal-ajax-bc.js');
+        const xhr = { getResponseHeader: () => null };
+        jQuery(document).trigger('ajaxSuccess', [xhr, {}, 'success']);
+        jQuery(document).trigger('ajaxComplete', [xhr, {}, 'complete']);
+        return trace;
+      })()
+      JS);
+    $this->assertSame([['ajaxSuccess', TRUE, 'success'], ['ajaxComplete', TRUE, 'complete'], 'ajaxComplete'], $result);
+  }
+
+  /**
    * Tests that Enter and Space activate the configured event namespace.
    */
   public function testNamespacedKeyboardActivation(): void {
@@ -1433,6 +1512,88 @@ JS;
       JS);
     $this->assertJsCondition('window.failedLegacyForm.includes("AjaxError")');
     $this->assertSame([FALSE, 0, ['ajaxError', 'ajaxComplete', 'ajaxStop', 'AjaxError']], $session->evaluateScript('[legacyAjaxOverrides.ajax.ajaxing, jQuery.active, window.failedLegacyForm]'));
+  }
+
+  /**
+   * Tests recovery when a legacy form error callback throws.
+   */
+  #[IgnoreDeprecations]
+  public function testThrowingLegacyFormErrorCompletion(): void {
+    $this->failOnJavascriptConsoleErrors = FALSE;
+    $this->drupalGet('ajax-test/global-events', ['query' => ['legacy_overrides' => 1, 'legacy_plugin' => 1]]);
+    $session = $this->getSession();
+    $session->executeScript(<<<'JS'
+      drupalSettings.suppressDeprecationErrors = true;
+      const { ajax, $form } = window.legacyAjaxOverrides;
+      const trace = window.failedLegacyForm = [];
+      window.addEventListener('error', (event) => {
+        if (event.error?.message === 'Contributed callback failed') {
+          trace.push('thrown');
+        }
+        event.preventDefault();
+      });
+      jQuery(document).on('ajaxComplete ajaxStop', (event) => trace.push(event.type));
+      ajax.options.url = Drupal.url('ajax-test/echo-request?failure_test=1');
+      ajax.options.clearForm = true;
+      ajax.options.error = () => {
+        trace.push('error');
+        throw new Error('Contributed callback failed');
+      };
+      $form.find('select').val('enabled');
+      $form.find('button').trigger('mousedown.legacyOverrides');
+      JS);
+    $this->assertJsCondition('window.failedLegacyForm.includes("error")');
+    $this->assertSame([FALSE, FALSE, FALSE, 0, ['error', 'ajaxComplete', 'ajaxStop', 'thrown']], $session->evaluateScript(<<<'JS'
+      (() => {
+        const { ajax } = legacyAjaxOverrides;
+        return [ajax.ajaxing, ajax.element.disabled,
+          Boolean(ajax.form.querySelector('.ajax-progress')), jQuery.active, window.failedLegacyForm];
+      })()
+      JS));
+  }
+
+  /**
+   * Tests error completion when a synchronous native send throws.
+   */
+  public function testSynchronousNativeSendFailure(): void {
+    $this->drupalGet('ajax-test/native-request', ['query' => ['commands' => 1]]);
+    $result = $this->getSession()->evaluateScript(<<<'JS'
+      (() => {
+        const trace = [];
+        window.alert = () => trace.push('alert');
+        const form = document.body.appendChild(document.createElement('form'));
+        const button = form.appendChild(document.createElement('button'));
+        Drupal.behaviors.syncFailureProbe = {
+          attach(context) { if (context === form) trace.push('attach'); },
+          detach(context) { if (context === form) trace.push('detach'); },
+        };
+        const ajax = Drupal.ajax({ element: button, url: location.href, event: 'click' });
+        const { beforeSend, error, complete } = ajax.options;
+        ajax.options.async = false;
+        ajax.options.beforeSend = function (...args) {
+          const [xhr] = args;
+          beforeSend.apply(this, args);
+          xhr.send = () => {
+            trace.push(['send', button.disabled, Boolean(form.querySelector('.ajax-progress'))]);
+            throw new Error('Synchronous send failed');
+          };
+        };
+        ajax.options.error = function (xhr, status, reason) {
+          trace.push([status, reason.message]);
+          error.call(this, xhr, status, reason);
+        };
+        ajax.options.complete = function (xhr, status) {
+          try { complete.call(this, xhr, status); }
+          catch (error) {
+            if (!(error instanceof Drupal.AjaxError)) throw error;
+          }
+          trace.push('complete');
+        };
+        button.dispatchEvent(new MouseEvent('click', { cancelable: true }));
+        return [ajax.ajaxing, button.disabled, Boolean(form.querySelector('.ajax-progress')), trace];
+      })()
+      JS);
+    $this->assertSame([FALSE, FALSE, FALSE, ['detach', ['send', TRUE, TRUE], ['error', 'Synchronous send failed'], 'attach', 'complete']], $result);
   }
 
   /**
