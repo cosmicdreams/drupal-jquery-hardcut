@@ -138,7 +138,6 @@ admin.tabledrag:
     migration/js/tabledrag.js: {}
     js/tabledrag.js: {}
   dependencies:
-    - core/jquery
     - core/drupal
     - core/drupalSettings
     - core/once
@@ -338,7 +337,6 @@ tableselect:
   js:
     js/tableselect.js: {}
   dependencies:
-    - core/jquery
     - core/drupal
     - core/drupal.announce
     - core/drupal.debounce

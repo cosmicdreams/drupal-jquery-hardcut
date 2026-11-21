@@ -540,7 +540,6 @@ drupal.tabledrag:
       misc/components/tabledrag.module.css: {}
       misc/components/tree-child.module.css: {}
   dependencies:
-    - core/jquery
     - core/drupal
     - core/drupalSettings
     - core/once
@@ -565,7 +564,6 @@ drupal.tableresponsive:
   js:
     misc/tableresponsive.js: {}
   dependencies:
-    - core/jquery
     - core/drupal
     - core/once
 
@@ -576,7 +574,6 @@ drupal.tableselect:
   dependencies:
     - core/drupal
     - core/drupal.checkbox
-    - core/jquery
     - core/once
 
 drupal.tablesort:
@@ -679,6 +676,7 @@ jquery:
     assets/vendor/jquery/jquery.min.js: { preprocess: false, minified: true, preserve_override_order: true }
     misc/jquery.no-conflict.js: { preprocess: false, minified: false }
     misc/jquery.drupal-bc.js: { preprocess: false, minified: false }
+    misc/jquery.tabledrag.bc.js: { preprocess: false, minified: false }
 
 internal.jquery.form:
   # Internal library. Do not depend on it outside core nor add new core usage.
