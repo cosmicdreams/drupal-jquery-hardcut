@@ -64,10 +64,6 @@
       "owner": "T",
       "references": 1
     },
-    "misc/machine-name.js": {
-      "owner": "U",
-      "references": 1
-    },
     "misc/position.js": {
       "owner": "D",
       "references": 1

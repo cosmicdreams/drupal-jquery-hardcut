@@ -46,7 +46,6 @@
 - core/misc/jquery.form.js
 - core/misc/jquery.no-conflict.js
 - core/misc/jquery.tabledrag.bc.js
-- core/misc/machine-name.js
 - core/misc/position.js
 - core/misc/states.js
 - core/misc/vertical-tabs.js
