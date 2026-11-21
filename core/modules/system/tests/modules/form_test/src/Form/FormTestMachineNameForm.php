@@ -29,6 +29,9 @@ class FormTestMachineNameForm extends FormBase {
     if ($this->getRequest()->query->getBoolean('legacy-machine-name')) {
       $form['#attached']['library'][] = 'core/jquery';
     }
+    if ($this->getRequest()->query->getBoolean('ajax')) {
+      $form['#attached']['library'][] = 'core/drupal.ajax';
+    }
     $form['machine_name_1_label'] = [
       '#type' => 'textfield',
       '#title' => 'Machine name 1 label',

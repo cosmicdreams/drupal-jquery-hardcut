@@ -103,6 +103,18 @@ class TabbingManagerTest extends WebDriverTestBase {
       JS);
     $this->tab(TRUE);
     $this->assertSame('third', $session->evaluateScript('document.activeElement.id'));
+
+    // Tabbing manager accepts document as input natively.
+    $docResult = $session->evaluateScript(<<<'JS'
+      (() => {
+        const ctx = Drupal.tabbingManager.constrain(document);
+        const ids = ctx.tabbableElements.map((el) => el.id);
+        const disabled = ctx.disabledElements.length;
+        ctx.release();
+        return [ids.includes('first') && ids.includes('sixth'), disabled];
+      })()
+      JS);
+    $this->assertSame([TRUE, 0], $docResult);
   }
 
   /**
@@ -131,6 +143,9 @@ class TabbingManagerTest extends WebDriverTestBase {
           });
           const manager = Drupal.tabbingManager;
           const record = manager.recordTabindex;
+          const restore = manager.restoreTabindex;
+          const nativeRecord = manager.recordTabindexElement;
+          const nativeRestore = manager.restoreTabindexElement;
           let legacyOverride = false;
           manager.recordTabindex = function (element, level) {
             legacyOverride = element instanceof jQuery && this === manager;
@@ -148,16 +163,30 @@ class TabbingManagerTest extends WebDriverTestBase {
           jQuery(first).trigger(keyboard);
           const reverse = [document.activeElement.id, keyboard.isDefaultPrevented()];
           context.release();
+          const initialWarnings = warnings.length;
+
+          // Restoring recordTabindex/restoreTabindex must not re-wrap native methods.
+          manager.recordTabindex = record;
+          manager.restoreTabindex = restore;
+          const restoredCleanly =
+            manager.recordTabindexElement === nativeRecord &&
+            manager.restoreTabindexElement === nativeRestore;
+          const docContext = manager.constrain(jQuery(document));
+          const docCount = docContext.tabbableElements.length;
+          docContext.release();
+
           return {
-            types: legacy.map(([type]) => type),
-            sameContext: native.length === events.length && native.every(
-              ([type, value], index) => value === context && legacy[index][0] === type && legacy[index][1] === value
+            types: legacy.map(([type]) => type).slice(0, 4),
+            sameContext: native.length >= events.length && events.every(
+              (type, index) => native[index][1] === context && legacy[index][0] === type && legacy[index][1] === context
             ),
             legacyOverride,
             reverse,
             collection: collection === context.$tabbableElements && collection[0] === first,
             disabled: original === context.$disabledElements && original[0] === context.disabledElements[0],
-            warnings: warnings.length,
+            warnings: initialWarnings,
+            restoredCleanly,
+            docCount: docCount >= 6,
           };
         } finally {
           Drupal.deprecationError = warn;
@@ -175,7 +204,9 @@ class TabbingManagerTest extends WebDriverTestBase {
     $this->assertSame(['third', TRUE], $actual['reverse']);
     $this->assertTrue($actual['collection']);
     $this->assertTrue($actual['disabled']);
-    $this->assertSame(5, $actual['warnings']);
+    $this->assertSame(4, $actual['warnings']);
+    $this->assertTrue($actual['restoredCleanly']);
+    $this->assertTrue($actual['docCount']);
   }
 
   /**

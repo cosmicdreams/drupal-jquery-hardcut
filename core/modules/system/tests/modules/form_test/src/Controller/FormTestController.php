@@ -92,17 +92,15 @@ class FormTestController extends ControllerBase {
       ],
       '#cache' => ['contexts' => ['url.query_args:legacy']],
     ];
-    if ($request->query->getBoolean('legacy')) {
-      $build['#attached']['library'][] = 'core/jquery';
-    }
+    $this->attachLegacyJquery($build, $request);
     return $build;
   }
 
   /**
    * Renders the markup needed by locale and text form behaviors.
    */
-  public function adminBehaviors(): array {
-    return [
+  public function adminBehaviors(Request $request): array {
+    $build = [
       '#type' => 'inline_template',
       '#template' => <<<'HTML'
         <form id="locale-translate-edit-form">
@@ -143,20 +141,47 @@ class FormTestController extends ControllerBase {
           </div>
           <div class="js-form-type-textarea"><textarea></textarea></div>
         </div>
+        <div id="copy-field-fixture">
+          <input id="copy-source-field" type="text">
+          <input id="copy-target-field" type="text">
+        </div>
+        <div class="node-preview-container"></div>
+        <a id="preview-leave-link" href="/preview-target">Leave preview</a>
         HTML,
       '#attached' => [
         'library' => [
           'form_test/admin_behaviors',
           'locale/drupal.locale.admin',
           'content_translation/drupal.content_translation.admin',
+          'system/drupal.system',
         ],
         'drupalSettings' => [
           'contentTranslationDependentOptions' => [
             'dependent_selectors' => ['translation-columns' => ['body']],
           ],
+          'copyFieldValue' => [
+            'copy-source-field' => ['copy-target-field'],
+          ],
         ],
       ],
+      '#cache' => [
+        'contexts' => ['url.query_args:legacy', 'url.query_args:preview'],
+      ],
     ];
+    if ($request->query->getBoolean('preview')) {
+      $build['#attached']['library'][] = 'node/drupal.node.preview';
+    }
+    $this->attachLegacyJquery($build, $request);
+    return $build;
+  }
+
+  /**
+   * Attaches the explicit jQuery library when requested by query parameter.
+   */
+  private function attachLegacyJquery(array &$build, Request $request): void {
+    if ($request->query->getBoolean('legacy')) {
+      $build['#attached']['library'][] = 'core/jquery';
+    }
   }
 
 }

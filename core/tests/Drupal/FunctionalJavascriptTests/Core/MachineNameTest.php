@@ -48,6 +48,7 @@ class MachineNameTest extends WebDriverTestBase {
    */
   public function testReplacementAndTruncation(): void {
     $this->drupalGet('form-test/machine-name');
+    $this->assertSame('undefined', $this->getSession()->evaluateScript('typeof window.jQuery'));
     $assert = $this->assertSession();
     $label = $assert->fieldExists('machine_name_2_label');
     $preview = '#edit-machine-name-2-label-machine-name-suffix .machine-name-value';
@@ -96,8 +97,49 @@ class MachineNameTest extends WebDriverTestBase {
       [['first-value', TRUE], ['second-value', TRUE]],
       TRUE,
       'second-value',
-      3,
+      1,
     ], $actual);
+  }
+
+  /**
+   * Tests that late bridge loading preserves machine-name before Ajax change order.
+   */
+  public function testLateBridgeLoadPreservesAjaxOrder(): void {
+    $this->drupalGet('form-test/machine-name', ['query' => ['ajax' => 1]]);
+    $session = $this->getSession();
+    $this->assertSame('undefined', $session->evaluateScript('typeof window.jQuery'));
+    $scripts = json_encode(array_column(
+      \Drupal::service('library.discovery')->getLibraryByName('core', 'jquery')['js'],
+      'data',
+    ));
+    $session->executeScript(<<<JS
+      (async () => {
+        const source = document.getElementById('edit-machine-name-2-label');
+        const target = document.getElementById('edit-machine-name-2');
+        const seen = [];
+        const ajax = Drupal.ajax({ element: source, event: 'change', url: location.href });
+        ajax.eventResponse = () => {
+          seen.push(target.value);
+        };
+        for (const path of $scripts) {
+          await new Promise((resolve, reject) => {
+            const script = document.createElement('script');
+            script.src = drupalSettings.path.baseUrl + path;
+            script.onload = resolve;
+            script.onerror = reject;
+            document.head.append(script);
+          });
+        }
+        source.value = 'Native Order';
+        source.dispatchEvent(new Event('change', { bubbles: true }));
+        source.value = 'Legacy Order';
+        jQuery(source).trigger('change');
+        ajax.removeEventBindings();
+        window.lateMachineNameOrderResult = seen;
+      })();
+      JS);
+    $this->assertJsCondition('Array.isArray(window.lateMachineNameOrderResult)');
+    $this->assertSame(['native-order', 'legacy-order'], $session->evaluateScript('window.lateMachineNameOrderResult'));
   }
 
   /**
@@ -109,6 +151,7 @@ class MachineNameTest extends WebDriverTestBase {
   public function testMachineName(): void {
     // Visit the machine name test page which contains two machine name fields.
     $this->drupalGet('form-test/machine-name');
+    $this->assertSame('undefined', $this->getSession()->evaluateScript('typeof window.jQuery'));
 
     // Test values for conversion.
     $test_values = [

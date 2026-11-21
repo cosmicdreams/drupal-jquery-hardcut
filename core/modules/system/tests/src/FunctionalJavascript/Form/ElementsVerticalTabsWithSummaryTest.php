@@ -30,10 +30,88 @@ class ElementsVerticalTabsWithSummaryTest extends WebDriverTestBase {
    */
   public function testDynamicSummary(): void {
     $this->drupalGet('form_test/vertical-tabs-with-summary');
+    $this->assertSame('undefined', $this->getSession()->evaluateScript('typeof window.jQuery'));
     $this->assertSession()->elementTextEquals('css', '.vertical-tabs__menu-item.first .vertical-tabs__menu-item-title', 'Tab 1');
     $this->assertSession()->elementTextEquals('css', '.vertical-tabs__menu-item.first .vertical-tabs__menu-item-summary', 'Summary 1');
     $this->assertSession()->elementTextEquals('css', '.vertical-tabs__menu-item.last .vertical-tabs__menu-item-title', 'Tab 2');
     $this->assertSession()->elementTextEquals('css', '.vertical-tabs__menu-item.last .vertical-tabs__menu-item-summary', 'Summary 2');
+  }
+
+  /**
+   * Tests constructor overrides, detached tab data, and legacy constructor calls.
+   */
+  public function testVerticalTabConstructorAndDetachedData(): void {
+    $this->drupalGet('form_test/vertical-tabs-with-summary', ['query' => ['legacy' => 1]]);
+    $actual = $this->getSession()->evaluateScript(<<<'JS'
+      (() => {
+        const warn = Drupal.deprecationError;
+        const warnings = [];
+        Drupal.deprecationError = ({ message }) => warnings.push(message);
+        const OriginalTab = Drupal.verticalTab;
+        const seen = [];
+        function CustomTab(settings) {
+          seen.push(settings.details instanceof jQuery);
+          const instance = OriginalTab.call(this, settings) || this;
+          instance.customMarker = 'override-applied';
+          return instance;
+        }
+        CustomTab.prototype = OriginalTab.prototype;
+        Drupal.verticalTab = CustomTab;
+        try {
+          // Attach to a detached container (not in document).
+          const detached = document.createElement('div');
+          detached.innerHTML = '<div class="js-form-type-vertical-tabs"><div data-vertical-tabs-panes><input type="hidden" class="vertical-tabs__active-tab" value=""><details id="det-first"><summary>Detached</summary></details></div></div>';
+          Drupal.behaviors.verticalTabs.attach(detached);
+          const pane = detached.querySelector('#det-first');
+          const tab = jQuery(pane).data('verticalTab');
+
+          // Direct legacy constructor call with jQuery details.
+          const directPane = document.createElement('details');
+          directPane.id = 'direct-legacy';
+          const direct = new OriginalTab({ title: 'Direct', details: jQuery(directPane) });
+          return [
+            seen,
+            tab?.customMarker ?? null,
+            tab === Drupal.verticalTabs.get(pane),
+            direct.detailsElement === directPane,
+            warnings.some((msg) => msg.includes('Drupal.verticalTab')),
+          ];
+        } finally {
+          Drupal.verticalTab = OriginalTab;
+          Drupal.deprecationError = warn;
+        }
+      })()
+      JS);
+    $this->assertSame([[TRUE], 'override-applied', TRUE, TRUE, TRUE], $actual);
+
+    // Verify detached tabs created before late bridge load also expose data().
+    $this->drupalGet('form_test/vertical-tabs-with-summary');
+    $session = $this->getSession();
+    $this->assertSame('undefined', $session->evaluateScript('typeof window.jQuery'));
+    $scripts = json_encode(array_column(
+      \Drupal::service('library.discovery')->getLibraryByName('core', 'jquery')['js'],
+      'data',
+    ));
+    $session->executeScript(<<<JS
+      (async () => {
+        const detached = document.createElement('div');
+        detached.innerHTML = '<div class="js-form-type-vertical-tabs"><div data-vertical-tabs-panes><input type="hidden" class="vertical-tabs__active-tab" value=""><details id="late-det"><summary>Late Detached</summary></details></div></div>';
+        Drupal.behaviors.verticalTabs.attach(detached);
+        const pane = detached.querySelector('#late-det');
+        for (const path of $scripts) {
+          await new Promise((resolve, reject) => {
+            const script = document.createElement('script');
+            script.src = drupalSettings.path.baseUrl + path;
+            script.onload = resolve;
+            script.onerror = reject;
+            document.head.append(script);
+          });
+        }
+        window.lateDetachedTabResult = jQuery(pane).data('verticalTab') === Drupal.verticalTabs.get(pane);
+      })();
+      JS);
+    $this->assertJsCondition('window.lateDetachedTabResult !== undefined');
+    $this->assertTrue($session->evaluateScript('window.lateDetachedTabResult'));
   }
 
   /**

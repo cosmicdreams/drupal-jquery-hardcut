@@ -51,6 +51,7 @@ class FormGroupingElementsTest extends WebDriverTestBase {
     // Request the group vertical tabs testing page with a fragment identifier
     // to the second element.
     $this->drupalGet('form-test/group-vertical-tabs', ['fragment' => 'edit-element-2']);
+    $this->assertSame('undefined', $session->evaluateScript('typeof window.jQuery'));
 
     $page = $session->getPage();
 
@@ -68,7 +69,7 @@ class FormGroupingElementsTest extends WebDriverTestBase {
 
     // Click on a fragment link pointing to an invisible child inside an
     // inactive vertical tab.
-    $session->executeScript("jQuery('<a href=\"$child_1_selector\"></a>').insertAfter('h1')[0].click()");
+    $session->executeScript("const link = document.createElement('a'); link.href = '$child_1_selector'; document.querySelector('h1').after(link); link.click();");
 
     // Assert that the child in the first vertical tab becomes visible.
     $web_assert->waitForElementVisible('css', $child_1_selector, 50);
@@ -100,12 +101,21 @@ class FormGroupingElementsTest extends WebDriverTestBase {
 
     // Store reusable JavaScript code to remove the current URI fragment and
     // close all details.
-    $reset_js = "location.replace('#'); jQuery('details').removeAttr('open')";
+    $reset_js = "location.replace('#'); document.querySelectorAll('details').forEach((el) => el.removeAttribute('open'))";
 
     // Request the group details testing page.
     $this->drupalGet('form-test/group-details');
+    $this->assertSame('undefined', $session->evaluateScript('typeof window.jQuery'));
 
     $page = $session->getPage();
+
+    // Verify native details-aria.js toggles aria-expanded without jQuery on
+    // server-rendered open="open" details.
+    $summary = $page->find('css', '#edit-meta > summary');
+    $summary->click();
+    $this->assertEquals('false', $summary->getAttribute('aria-expanded'));
+    $summary->click();
+    $this->assertEquals('true', $summary->getAttribute('aria-expanded'));
 
     $session->executeScript($reset_js);
 
@@ -126,15 +136,12 @@ class FormGroupingElementsTest extends WebDriverTestBase {
 
     // Click on a fragment link pointing to an invisible child inside a closed
     // details element.
-    $session->executeScript("jQuery('<a href=\"$child_selector\"></a>').insertAfter('h1')[0].click()");
+    $session->executeScript("const link = document.createElement('a'); link.href = '$child_selector'; document.querySelector('h1').after(link); link.click();");
 
     // Assert that the child is visible again after a fragment link click.
     $web_assert->waitForElementVisible('css', $child_selector, 50);
 
-    // Find the summary belonging to the closest details element.
-    $summary = $page->find('css', '#edit-meta > summary');
-
-    // Assert that both aria-expanded and aria-pressed are true.
+    // Assert that aria-expanded is true.
     $this->assertEquals('true', $summary->getAttribute('aria-expanded'));
   }
 
@@ -303,6 +310,7 @@ class FormGroupingElementsTest extends WebDriverTestBase {
   public function testNativeFormSummary(): void {
     $this->drupalGet('form-test/group-details');
     $session = $this->getSession();
+    $this->assertSame('undefined', $session->evaluateScript('typeof window.jQuery'));
     $session->executeScript(<<<'JS'
       const form = document.body.appendChild(document.createElement('form'));
       form.id = 'summary-test-form';
@@ -337,11 +345,13 @@ class FormGroupingElementsTest extends WebDriverTestBase {
   public function testFormEventBindingsDetach(): void {
     $this->drupalGet('form-test/group-details');
     $session = $this->getSession();
+    $this->assertSame('undefined', $session->evaluateScript('typeof window.jQuery'));
     $session->executeScript(<<<'JS'
       (async () => {
         const region = document.body.appendChild(document.createElement('div'));
         const details = region.appendChild(document.createElement('details'));
         const sibling = document.body.appendChild(document.createElement('div'));
+        const destination = document.body.appendChild(document.createElement('div'));
         const targets = [region, details, sibling, window, document.body, document];
         const received = [];
         const stop = targets.map((target, index) =>
@@ -361,6 +371,12 @@ class FormGroupingElementsTest extends WebDriverTestBase {
           unobserve();
           snapshots.push(present);
         };
+        const originalDisconnect = MutationObserver.prototype.disconnect;
+        let disconnects = 0;
+        MutationObserver.prototype.disconnect = function (...args) {
+          disconnects += 1;
+          return originalDisconnect.apply(this, args);
+        };
 
         try {
           Drupal.detachBehaviors(region, drupalSettings, 'serialize');
@@ -372,11 +388,21 @@ class FormGroupingElementsTest extends WebDriverTestBase {
           await Promise.resolve();
           snapshot();
 
-          // Replacing the contents removes the old child but keeps the wrapper.
+          // Replacing the contents removes the old child, keeps the wrapper,
+          // disconnects the observer, and lets a later two-step move keep it.
           Drupal.detachBehaviors(region, drupalSettings, 'unload');
           region.replaceChildren();
           await Promise.resolve();
+          const disconnectsAfterReplace = disconnects;
           snapshot();
+
+          region.remove();
+          await Promise.resolve();
+          destination.append(region);
+          await Promise.resolve();
+          snapshot();
+          region.dispatchEvent(new Event('testFormDetach'));
+          const survivedMove = received.splice(0);
 
           Drupal.detachBehaviors(region, drupalSettings, 'unload');
           // htmx can defer the swap past the current task.
@@ -384,14 +410,23 @@ class FormGroupingElementsTest extends WebDriverTestBase {
           snapshot();
           region.remove();
           await Promise.resolve();
+          const disconnectsAfterRemove = disconnects;
           snapshot();
           targets.forEach((target) => target.dispatchEvent(new Event('testFormDetach')));
-          window.formEventDetachResult = [snapshots, received];
+          window.formEventDetachResult = [
+            snapshots,
+            survivedMove,
+            received,
+            disconnectsAfterReplace > 0,
+            disconnectsAfterRemove > disconnectsAfterReplace,
+          ];
         }
         finally {
+          MutationObserver.prototype.disconnect = originalDisconnect;
           stop.forEach((unbind) => unbind());
           region.remove();
           sibling.remove();
+          destination.remove();
         }
       })();
       JS);
@@ -402,10 +437,120 @@ class FormGroupingElementsTest extends WebDriverTestBase {
         [0, 1, 2, 3, 4, 5],
         [0, 2, 3, 4, 5],
         [0, 2, 3, 4, 5],
+        [0, 2, 3, 4, 5],
         [2, 3, 4, 5],
       ],
+      [0],
       [2, 3, 4, 5],
+      TRUE,
+      TRUE,
     ], $session->evaluateScript('window.formEventDetachResult'));
+  }
+
+  /**
+   * Tests zero-jQuery native dispatch, return values, deprecations, and details accessors.
+   */
+  public function testFormBridgeContracts(): void {
+    $this->drupalGet('form-test/group-details', ['query' => ['legacy-details' => 1]]);
+    $actual = $this->getSession()->evaluateScript(<<<'JS'
+      (() => {
+        const warnings = [];
+        const originalWarn = Drupal.deprecationError;
+        Drupal.deprecationError = ({ message }) => warnings.push(message);
+        const originalDispatch = jQuery.event.dispatch;
+        let dispatchCalls = 0;
+        jQuery.event.dispatch = function (...args) {
+          dispatchCalls += 1;
+          return originalDispatch.apply(this, args);
+        };
+
+        const container = document.body.appendChild(document.createElement('div'));
+        container.innerHTML = '<details id="bridge-details"><summary>Toggle</summary><form id="bridge-form" method="post"><input name="field" value="one"></form></details>';
+        const details = container.querySelector('details');
+        const summary = details.querySelector('summary');
+        const form = container.querySelector('form');
+        const input = form.querySelector('input');
+        Drupal.attachBehaviors(container);
+
+        try {
+          // Mixed page with no legacy subscribers makes zero jQuery dispatch calls.
+          dispatchCalls = 0;
+          summary.click();
+          const summaryExpanded = summary.getAttribute('aria-expanded');
+          const nativeDispatchCalls = dispatchCalls;
+
+          // Legacy return false prevents default and stops propagation.
+          const bubbleContainer = document.body.appendChild(document.createElement('div'));
+          const button = bubbleContainer.appendChild(document.createElement('button'));
+          let bubbled = false;
+          jQuery(bubbleContainer).on('click.returnTest', () => { bubbled = true; });
+          const stopReturn = Drupal.formEvents.listen(button, 'click', 'returnTest', () => false);
+          const returnEvent = jQuery.Event('click');
+          jQuery(button).trigger(returnEvent);
+          stopReturn();
+          jQuery(bubbleContainer).off('.returnTest');
+          bubbleContainer.remove();
+
+          // Synthetic submit against formSingleSubmit and standard event silence.
+          warnings.length = 0;
+          const submitFirst = jQuery.Event('submit');
+          jQuery(form).on('submit.preventNav', (e) => e.preventDefault());
+          jQuery(form).trigger(submitFirst);
+          jQuery(form).off('submit.preventNav');
+          const submitSecond = jQuery.Event('submit');
+          jQuery(form).trigger(submitSecond);
+          jQuery(input).trigger('change');
+          jQuery(input).trigger('input');
+          jQuery(summary).trigger('click');
+          const standardTriggerWarnings = warnings.splice(0);
+
+          // Drupal custom events emit §3.1 deprecation wording; summary plugins emit §3.7 wording.
+          jQuery(details).drupalSetSummary('Initial');
+          const gotSummary = jQuery(details).drupalGetSummary();
+          jQuery(details).trigger('formUpdated');
+          jQuery(details).trigger('summaryUpdated');
+          const customAndPluginWarnings = warnings.splice(0);
+
+          // DetailsSummarizedContent $node and $detailsSummarizedContentWrapper accessors.
+          const instance = Drupal.DetailsSummarizedContent.instances.find((item) => item.node === details);
+          const sameNode = instance.$node === instance.$node && instance.$node[0] === details;
+          const sameWrapper = instance.$detailsSummarizedContentWrapper === instance.$detailsSummarizedContentWrapper
+            && instance.$detailsSummarizedContentWrapper[0] === instance.summaryWrapper;
+          const replacement = document.createElement('span');
+          instance.$detailsSummarizedContentWrapper = jQuery(replacement);
+          const updatedWrapper = instance.summaryWrapper === replacement;
+
+          return {
+            summaryExpanded,
+            nativeDispatchCalls,
+            returnFalse: [returnEvent.result, returnEvent.isDefaultPrevented(), returnEvent.isPropagationStopped(), bubbled],
+            singleSubmit: [submitSecond.isDefaultPrevented()],
+            standardTriggerWarnings,
+            gotSummary,
+            customAndPluginWarnings,
+            detailsAccessors: [sameNode, sameWrapper, updatedWrapper],
+          };
+        } finally {
+          jQuery.event.dispatch = originalDispatch;
+          Drupal.deprecationError = originalWarn;
+          container.remove();
+        }
+      })()
+      JS);
+
+    $this->assertSame('true', $actual['summaryExpanded']);
+    $this->assertSame(0, $actual['nativeDispatchCalls']);
+    $this->assertSame([FALSE, TRUE, TRUE, FALSE], $actual['returnFalse']);
+    $this->assertSame([TRUE], $actual['singleSubmit']);
+    $this->assertSame([], $actual['standardTriggerWarnings']);
+    $this->assertSame('Initial', $actual['gotSummary']);
+    $this->assertSame([
+      'jQuery.fn.drupalSetSummary is deprecated in drupal:12.0.0 and is removed from drupal:13.0.0. Use the corresponding native Drupal form summary function. See https://www.drupal.org/node/CHANGE_RECORD.',
+      'jQuery.fn.drupalGetSummary is deprecated in drupal:12.0.0 and is removed from drupal:13.0.0. Use the corresponding native Drupal form summary function. See https://www.drupal.org/node/CHANGE_RECORD.',
+      'The jQuery synthetic trigger for formUpdated is deprecated in drupal:12.0.0 and is removed from drupal:13.0.0. Use the same native event name and its documented payload. See https://www.drupal.org/node/CHANGE_RECORD.',
+      'The jQuery synthetic trigger for summaryUpdated is deprecated in drupal:12.0.0 and is removed from drupal:13.0.0. Use the same native event name and its documented payload. See https://www.drupal.org/node/CHANGE_RECORD.',
+    ], $actual['customAndPluginWarnings']);
+    $this->assertSame([TRUE, TRUE, TRUE], $actual['detailsAccessors']);
   }
 
   /**
