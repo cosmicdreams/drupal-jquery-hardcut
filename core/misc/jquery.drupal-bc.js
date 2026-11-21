@@ -6,10 +6,12 @@
  */
 
 (function (instance) {
+  const foreignTriggers = [];
+
   /**
-   * Observes the fixture's owned bindings using one explicit jQuery instance.
+   * Observes the owned bindings using one explicit jQuery instance.
    * @param {function(HTMLElement): object} jquery
-   *   The jQuery instance used by the fixture.
+   *   The connected jQuery instance.
    * @param {object} registry
    *   The owned event binding registry.
    * @return {function(): void}
@@ -22,8 +24,13 @@
     return registry.observe({
       add(binding) {
         const { target, type, namespace, selector, listener } = binding;
-        // Only subscribe to the paths exercised by the fixture. A select has
-        // no native change() method for jQuery's trigger to invoke.
+        // The primary Ajax adapter owns its jQuery dispatch slots. Independent
+        // instances opt in to synthetic delivery through this bridge.
+        const foreignAjax = binding.ajax && jquery !== instance;
+        if (binding.ajax && !foreignAjax) {
+          return;
+        }
+        // A select has no native change() method for jQuery's trigger to invoke.
         const selectChange =
           !selector && type === 'change' && target instanceof HTMLSelectElement;
         const directActivation =
@@ -31,6 +38,7 @@
           ((type === 'click' && target instanceof HTMLAnchorElement) ||
             (type === 'submit' && target instanceof HTMLFormElement));
         if (
+          !foreignAjax &&
           type !== 'compatibility:probe' &&
           !directActivation &&
           !selectChange
@@ -41,7 +49,7 @@
         const name = namespace ? `${type}.${namespace}` : type;
 
         /**
-         * Routes one synthetic invocation through the fixture operation.
+         * Routes one synthetic invocation to the owned operation.
          * @param {object} event
          *   The active jQuery event.
          * @param {...unknown} args
@@ -54,30 +62,29 @@
           // A DOM event already reaches the owned listener directly.
           if (
             !event.isTrigger ||
-            event.originalEvent ||
-            (directActivation && event.target !== target)
+            (!foreignAjax &&
+              (event.originalEvent ||
+                (directActivation && event.target !== target)))
           ) {
             return undefined;
           }
 
-          // Forward cancellation to the active dispatch without creating or
-          // dispatching a second DOM event. Return the result to jQuery.
-          return listener.call(
-            this,
-            {
-              type: event.type,
-              target: event.target,
-              currentTarget: event.currentTarget,
-              delegateTarget: event.delegateTarget,
-              get defaultPrevented() {
-                return event.isDefaultPrevented();
-              },
-              preventDefault: () => event.preventDefault(),
-              stopPropagation: () => event.stopPropagation(),
-              stopImmediatePropagation: () => event.stopImmediatePropagation(),
+          if (foreignAjax) {
+            return listener.call(this, event, ...args);
+          }
+
+          // Preserve jQuery's event metadata and forward cancellation to the
+          // current dispatch without firing another event.
+          const projected = Object.create(event, {
+            isTrigger: { value: event.isTrigger },
+            defaultPrevented: { get: () => event.isDefaultPrevented() },
+            preventDefault: { value: () => event.preventDefault() },
+            stopPropagation: { value: () => event.stopPropagation() },
+            stopImmediatePropagation: {
+              value: () => event.stopImmediatePropagation(),
             },
-            ...args,
-          );
+          });
+          return listener.call(this, projected, ...args);
         }
 
         const element = jquery(target);
@@ -214,6 +221,58 @@
     };
   }
 
+  /**
+   * Tracks native default actions caused by an explicitly connected copy.
+   */
+  function observeForeignTriggers(jquery) {
+    const previous = jquery.event.trigger;
+    let connected = true;
+    function trigger(event, data, target) {
+      if (!connected) {
+        return previous.apply(this, arguments);
+      }
+      const type = (typeof event === 'string' ? event : event.type).split(
+        '.',
+      )[0];
+      foreignTriggers.push({ jquery, type, target: target || document });
+      try {
+        return previous.apply(this, arguments);
+      } finally {
+        foreignTriggers.pop();
+      }
+    }
+    jquery.event.trigger = trigger;
+    return () => {
+      connected = false;
+      if (jquery.event.trigger === trigger) {
+        jquery.event.trigger = previous;
+      }
+    };
+  }
+
+  /**
+   * Identifies the real event that accompanies a foreign synthetic dispatch.
+   */
+  function isForeignDefaultAction(event) {
+    const frame = foreignTriggers.at(-1);
+    if (frame?.type !== event.type || frame.target !== event.target) {
+      return false;
+    }
+    const { jquery } = frame;
+    const phase = ['click', 'focus', 'blur'].includes(event.type)
+      ? jquery._data(event.target, event.type)
+      : null;
+    if (
+      jquery.event.triggered === event.type ||
+      Array.isArray(phase) ||
+      (phase && Object.hasOwn(phase, 'value'))
+    ) {
+      frame.defaultEvent ??= event;
+      return frame.defaultEvent === event;
+    }
+    return false;
+  }
+
   const connections = new WeakMap();
 
   /**
@@ -230,10 +289,15 @@
 
     if (!connections.has(jquery)) {
       const registry = window.Drupal.eventBindings;
+      const stopTriggers =
+        jquery !== instance && observeForeignTriggers(jquery);
       const stopBindings = observeLegacyEvents(jquery, registry);
       const stopPublications = observeOwnedPublications(jquery, registry);
       const disconnect = () => {
         if (connections.get(jquery) === disconnect) {
+          if (stopTriggers) {
+            stopTriggers();
+          }
           stopBindings();
           stopPublications();
           connections.delete(jquery);
@@ -250,6 +314,7 @@
   function initialize() {
     const registry = window.Drupal.eventBindings;
     registry.connectLegacy = registry.connectLegacy ?? connect;
+    registry.isForeignDefaultAction ??= isForeignDefaultAction;
     registry.connectLegacy(instance);
   }
 

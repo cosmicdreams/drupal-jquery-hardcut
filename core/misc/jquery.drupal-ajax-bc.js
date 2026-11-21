@@ -1242,17 +1242,15 @@
         }
         const name = namespace ? `${type}.${namespace}` : type;
         const bindType = jQuery.event.special[type]?.bindType || type;
-        const selectChange =
-          type === 'change' && target instanceof HTMLSelectElement;
-        const directActivation =
-          (type === 'click' && target instanceof HTMLAnchorElement) ||
-          (type === 'submit' && target instanceof HTMLFormElement);
         const deliver = (event) => {
           if (!adapter || Drupal.ajax.compatibility !== adapter) {
             return;
           }
           const original = event.originalEvent;
-          if (original) {
+          if (!event.isTrigger && original) {
+            if (Drupal.eventBindings.isForeignDefaultAction?.(original)) {
+              return;
+            }
             const result = listener(event);
             // Marked native callbacks may cancel the original DOM event.
             if (original.defaultPrevented && !event.isDefaultPrevented()) {
@@ -1263,13 +1261,7 @@
             }
             return result;
           }
-          // The shared event adapter already forwards these synthetic events.
-          if (
-            !event.isTrigger ||
-            delivering.has(event) ||
-            selectChange ||
-            (directActivation && event.target === target)
-          ) {
+          if (!event.isTrigger || delivering.has(event)) {
             return;
           }
           delivering.add(event);
@@ -1309,6 +1301,9 @@
         );
       },
       isSyntheticDefaultAction(event) {
+        if (Drupal.eventBindings.isForeignDefaultAction?.(event)) {
+          return true;
+        }
         const frame = triggerFrames.at(-1);
         if (frame?.type !== event.type || frame?.target !== event.target) {
           return false;
@@ -1330,7 +1325,9 @@
         return false;
       },
       asEvent: (event) =>
-        event instanceof jQuery.Event ? event : jQuery.Event(event),
+        typeof event.isDefaultPrevented === 'function'
+          ? event
+          : jQuery.Event(event),
       withNativeEvent(event, invoke) {
         if (event instanceof Event) {
           return invoke(event);

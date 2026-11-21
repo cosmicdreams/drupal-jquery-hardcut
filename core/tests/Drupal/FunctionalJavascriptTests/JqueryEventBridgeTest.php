@@ -52,7 +52,7 @@ final class JqueryEventBridgeTest extends WebDriverTestBase {
    * Tests explicit opt-in and teardown with two independent instances.
    */
   public function testIndependentInstances(): void {
-    $this->drupalGet('jquery-bc-test/bridge-events');
+    $this->drupalGet('jquery-bc-test/bridge-events', ['query' => ['ajax' => 1]]);
     $session = $this->getSession();
     $session->executeScript(<<<'JS'
       const vendor = Array.from(document.scripts).find(({ src }) => src.includes('/assets/vendor/jquery/jquery.min.js'));
@@ -90,22 +90,31 @@ final class JqueryEventBridgeTest extends WebDriverTestBase {
         const unregister = Drupal.eventBindings.register({ target, type, listener });
         const firstBeforeOptIn = first(target).triggerHandler(type);
         const secondBeforeOptIn = second(target).triggerHandler(type);
+        const ajaxTrace = [];
+        const ajax = Drupal.ajax({ element: target, event: 'RefreshView.view', url: location.href });
+        ajax.eventResponse = (element, event) => ajaxTrace.push([element === target, event.namespace, event.isTrigger]);
+        second(target).trigger('RefreshView.view');
         const before = publish();
         const stop = connect(second);
         const sameStop = connect(second) === stop;
         const secondAfterOptIn = second(target).triggerHandler(type);
+        second(target).trigger('RefreshView.other');
+        second(target).trigger('RefreshView.view');
         const connected = publish();
         stop();
         const secondAfterStop = second(target).triggerHandler(type);
+        second(target).trigger('RefreshView.view');
         const disconnected = publish();
         const resume = connect(second);
         stop();
         const secondAfterResume = second(target).triggerHandler(type);
+        second(target).trigger('RefreshView.view');
         const reconnected = publish();
         resume();
         const firstAfterStop = first(target).triggerHandler(type);
         target.dispatchEvent(new Event(type));
         unregister();
+        ajax.removeEventBindings();
         target.removeEventListener(type, listener);
         return [
           first !== second,
@@ -118,6 +127,7 @@ final class JqueryEventBridgeTest extends WebDriverTestBase {
           firstAfterStop,
           calls,
           [before, connected, disconnected, reconnected],
+          ajaxTrace,
         ];
       })()
       JS);
@@ -129,6 +139,7 @@ final class JqueryEventBridgeTest extends WebDriverTestBase {
         [['first', TRUE, [TRUE]], ['second', TRUE, []]],
         [['first', TRUE, [TRUE]], ['second', TRUE, [TRUE]]],
       ],
+      [[TRUE, 'view', 3], [TRUE, 'view', 3]],
     ], $trace);
   }
 
@@ -269,7 +280,7 @@ final class JqueryEventBridgeTest extends WebDriverTestBase {
             }
           });
           const listener = (event, value) => {
-            trace.push(['owned', event.target === target, event.currentTarget === target, value]);
+            trace.push(['owned', event.target === target, event.currentTarget === target, value, event.namespace, event.isTrigger, event.fixture]);
             if (tag === 'form') {
               event.preventDefault();
             }
@@ -298,7 +309,7 @@ final class JqueryEventBridgeTest extends WebDriverTestBase {
             disconnect = install();
           }
 
-          const triggered = jQuery.Event(type);
+          const triggered = jQuery.Event(type, { fixture: 42 });
           legacy.trigger(triggered, ['trigger']);
           const result = legacy.triggerHandler(`${type}.compat`, ['handler']);
           const blocked = jQuery.Event(type);
@@ -319,9 +330,9 @@ final class JqueryEventBridgeTest extends WebDriverTestBase {
 
     $trace = [
       'before',
-      ['owned', TRUE, TRUE, 'trigger'],
+      ['owned', TRUE, TRUE, 'trigger', '', 3, 42],
       'after',
-      ['owned', TRUE, TRUE, 'handler'],
+      ['owned', TRUE, TRUE, 'handler', 'compat', 2, NULL],
       'before',
     ];
     $expected = [
