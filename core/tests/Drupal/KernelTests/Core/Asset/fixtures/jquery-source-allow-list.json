@@ -222,7 +222,7 @@
     },
     "modules/system/tests/modules/css_disable_transitions_test/js/disable_transitions.theme.js": {
       "owner": "U",
-      "references": 2
+      "references": 1
     },
     "modules/system/tests/modules/jquery_bc_test/js/event-bridge-dependent.js": {
       "owner": "B",
