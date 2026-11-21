@@ -224,7 +224,7 @@ JS;
    */
   public function testRequestEntryLanes(): void {
     $this->drupalLogin($this->drupalCreateUser(['access content']));
-    $this->drupalGet('ajax_forms_test_ajax_commands_form');
+    $this->drupalGet('ajax_forms_test_ajax_commands_form', ['query' => ['legacy_requests' => 1]]);
     $session = $this->getSession();
     $session->executeScript(<<<'JS'
       const jqueryAjax = jQuery.ajax;
@@ -269,19 +269,23 @@ JS;
           submit: { extra: ['a b', '+&'] },
         });
         const trace = window.requestLaneTrace = [];
-        jQuery(form).on('form-pre-serialize form-submit-validate form-submit-notify', (event) => {
+        let legacyForm;
+        jQuery(form).on('form-pre-serialize form-submit-validate form-submit-notify', (event, argument) => {
+          if (event.type === 'form-pre-serialize') {
+            legacyForm = argument;
+          }
           trace.push(event.type);
         });
         const { beforeSerialize, beforeSend, beforeSubmit } = ajax;
         ajax.beforeSerialize = function (element, options) {
-          trace.push(['serialize', element === button ? 'button' : 'form', options === ajax.options]);
+          trace.push(['serialize', element === button ? 'button' : element === legacyForm && element?.[0] === form ? 'legacy-form' : 'native-form', options === ajax.options]);
           beforeSerialize.call(this, element, options);
           return lane !== 'execute' && lane !== 'veto';
         };
-        ajax.beforeSubmit = function (values, element, options) {
+        ajax.beforeSubmit = Drupal.ajax.useNativeForm(function (values, element, options) {
           trace.push(['submit', element === form, options === ajax.options]);
           return beforeSubmit.call(this, values, element, options);
-        };
+        });
         ajax.beforeSend = function (xhr, options) {
           trace.push(['send', xhr instanceof XMLHttpRequest]);
           if (lane === 'multipart') {
@@ -320,7 +324,7 @@ JS;
       if ($lane === 'veto') {
         $this->assertSame([
           'form-pre-serialize',
-          ['serialize', 'form', FALSE],
+          ['serialize', 'legacy-form', FALSE],
         ], $session->evaluateScript('window.requestLaneTrace'));
         $this->assertSession()->elementTextEquals('css', '#request-lane-echo', '');
         continue;
@@ -332,7 +336,7 @@ JS;
       $this->assertSame($lane === 'outside' ? 'GET' : 'POST', $request['method']);
       $this->assertSame(in_array($lane, ['form', 'multipart'], TRUE) ? [
         'form-pre-serialize',
-        ['serialize', 'form', FALSE],
+        ['serialize', 'legacy-form', FALSE],
         ['submit', TRUE, FALSE],
         'form-submit-validate',
         ['send', TRUE],
@@ -388,7 +392,7 @@ JS;
    */
   public function testNativeRequestEntryLanes(): void {
     $this->drupalLogin($this->drupalCreateUser(['access content']));
-    $this->drupalGet('ajax_forms_test_ajax_commands_form');
+    $this->drupalGet('ajax_forms_test_ajax_commands_form', ['query' => ['legacy_requests' => 1]]);
     $session = $this->getSession();
     $session->executeScript(<<<'JS'
       const jqueryAjax = jQuery.ajax;
@@ -545,7 +549,7 @@ JS;
     // The Ajax errors are the subject of this test.
     $this->failOnJavascriptConsoleErrors = FALSE;
     $this->drupalLogin($this->drupalCreateUser(['access content']));
-    $this->drupalGet('ajax_forms_test_ajax_commands_form');
+    $this->drupalGet('ajax_forms_test_ajax_commands_form', ['query' => ['legacy_requests' => 1]]);
     $session = $this->getSession();
     $session->executeScript(<<<'JS'
       window.nativeErrors = [];
@@ -793,6 +797,67 @@ JS;
     $this->assertSame('override', $session->evaluateScript('document.activeElement.name'));
     $data = json_decode($this->assertSession()->elementExists('css', '#request-lane-echo')->getText(), TRUE, flags: JSON_THROW_ON_ERROR);
     $this->assertSame('enabled', $data['fields']['override']);
+  }
+
+  /**
+   * Tests the opted-in request factory and cross-origin settings.
+   */
+  public function testLegacyXhrFactory(): void {
+    $this->drupalGet('ajax-test/global-events');
+    $session = $this->getSession();
+    $session->executeScript(<<<'JS'
+      const output = document.createElement('div');
+      output.id = 'request-lane-echo';
+      document.body.append(output);
+      const run = async (crossDomain) => {
+        const ajax = Drupal.ajax({ url: Drupal.url('ajax-test/echo-request') });
+        let customRequest;
+        let method;
+        let headerWrites = 0;
+        Object.assign(ajax.options, {
+          crossDomain,
+          xhr() {
+            method = this.type;
+            customRequest = new XMLHttpRequest();
+            customRequest.setRequestHeader = (name, value) => {
+              ++headerWrites;
+              XMLHttpRequest.prototype.setRequestHeader.call(customRequest, name, value);
+            };
+            return customRequest;
+          },
+        });
+        await ajax.execute().commands;
+        return [customRequest.status, method, headerWrites > 0, JSON.parse(output.textContent).requestedWith];
+      };
+      (async () => {
+        window.factoryResults = [await run(true), await run(false)];
+      })();
+      JS);
+    $this->assertJsCondition('Boolean(window.factoryResults)');
+    $this->assertSame([[200, 'POST', TRUE, NULL], [200, 'POST', TRUE, 'XMLHttpRequest']], $session->evaluateScript('window.factoryResults'));
+  }
+
+  /**
+   * Tests a forced iframe submission using the explicitly attached plug-in.
+   */
+  public function testLegacyIframeSubmission(): void {
+    $this->drupalGet('ajax-test/global-events', ['query' => ['legacy_overrides' => 1, 'legacy_plugin' => 1]]);
+    $session = $this->getSession();
+    $this->assertJsCondition('Boolean(window.legacyAjaxOverrides)');
+    $session->executeScript(<<<'JS'
+      const { ajax, $form } = window.legacyAjaxOverrides;
+      ajax.options.url = Drupal.url('ajax-test/echo-request?iframe_test=1');
+      drupalSettings.ajaxTrustedUrl[ajax.url] = true;
+      Object.assign(ajax.options, { iframe: true, forceSync: true, clearForm: true });
+      $form.find('select').val('enabled');
+      $form.find('button').trigger('mousedown.legacyOverrides');
+      JS);
+    $this->assertJsCondition("document.querySelector('#request-lane-echo').textContent !== '' && !legacyAjaxOverrides.ajax.ajaxing");
+    $data = json_decode($this->assertSession()->elementExists('css', '#request-lane-echo')->getText(), TRUE, flags: JSON_THROW_ON_ERROR);
+    $this->assertSame('enabled', $data['fields']['override']);
+    $this->assertNull($data['requestedWith']);
+    $this->assertSame(-1, $session->evaluateScript('legacyAjaxOverrides.$form.find("select")[0].selectedIndex'));
+    $this->assertSame('function', $session->evaluateScript('typeof legacyAjaxOverrides.$form.data("jqxhr").abort'));
   }
 
   /**
@@ -1100,7 +1165,7 @@ JS);
    */
   public function testVetoAndAbortCleanup(): void {
     $this->drupalLogin($this->drupalCreateUser(['access content']));
-    $this->drupalGet('ajax_forms_test_ajax_commands_form');
+    $this->drupalGet('ajax_forms_test_ajax_commands_form', ['query' => ['legacy_requests' => 1]]);
     $session = $this->getSession();
     $session->executeScript(<<<'JS'
       const fixture = document.createElement('div');
@@ -1307,7 +1372,7 @@ JS);
    */
   public function testNativeRequestOptions(): void {
     $this->drupalLogin($this->drupalCreateUser(['access content']));
-    $this->drupalGet('ajax_forms_test_ajax_commands_form');
+    $this->drupalGet('ajax_forms_test_ajax_commands_form', ['query' => ['legacy_requests' => 1]]);
     $session = $this->getSession();
     $session->executeScript(<<<'JS'
       Drupal.ajax.compatibility = null;
@@ -1516,7 +1581,7 @@ JS);
     // The observer and command errors are part of this test.
     $this->failOnJavascriptConsoleErrors = FALSE;
     $this->drupalLogin($this->drupalCreateUser(['access content']));
-    $this->drupalGet('ajax_forms_test_ajax_commands_form');
+    $this->drupalGet('ajax_forms_test_ajax_commands_form', ['query' => ['legacy_requests' => 1]]);
     $session = $this->getSession();
     $session->executeScript(<<<'JS'
       window.alert = () => {};

@@ -63,7 +63,7 @@ class FormValuesTest extends WebDriverTestBase {
       // The AJAX command in the response will update the DOM.
       $select = $assertSession->waitForElement('css', "div#ajax_selected_color:contains('$item')");
       $this->assertNotNull($select, "DataCommand has updated the page with a value of $item.");
-      $condition = "(typeof jQuery !== 'undefined' && jQuery('[data-drupal-selector=\"edit-select\"]').is(':focus'))";
+      $condition = "document.activeElement.getAttribute('data-drupal-selector') === 'edit-select'";
       $this->assertJsCondition($condition, 5000);
     }
 

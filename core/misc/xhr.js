@@ -20,6 +20,8 @@
    *   The user name for HTTP authentication.
    * @param {string|null} [options.password=null]
    *   The password for HTTP authentication.
+   * @param {boolean} [options.crossDomain]
+   *   Override the same-origin check for the default request header.
    * @param {HeadersInit} [options.headers]
    *   The HTTP headers.
    * @param {XMLHttpRequestBodyInit|Document|function|null} [options.body=null]
@@ -42,21 +44,26 @@
     username = null,
     password = null,
     headers,
+    crossDomain,
     body = null,
     beforeSend,
     request = new XMLHttpRequest(),
   }) {
     const target = new URL(url, document.baseURI);
     const requestHeaders = new Headers(headers);
-    if (
-      target.origin === window.location.origin &&
-      !requestHeaders.has('X-Requested-With')
-    ) {
+    const isCrossOrigin =
+      crossDomain ?? target.origin !== window.location.origin;
+    if (!isCrossOrigin && !requestHeaders.has('X-Requested-With')) {
       requestHeaders.set('X-Requested-With', 'XMLHttpRequest');
     }
 
     request.open(method, target.href, async, username, password);
     // Header writes replace the prepared headers instead of adding to them.
+    const originalHeaders = Object.getOwnPropertyDescriptor(
+      request,
+      'setRequestHeader',
+    );
+    const originalAbort = Object.getOwnPropertyDescriptor(request, 'abort');
     request.setRequestHeader = (name, value) => {
       requestHeaders.set(name, value);
     };
@@ -71,6 +78,12 @@
     } finally {
       delete request.setRequestHeader;
       delete request.abort;
+      if (originalHeaders) {
+        Object.defineProperty(request, 'setRequestHeader', originalHeaders);
+      }
+      if (originalAbort) {
+        Object.defineProperty(request, 'abort', originalAbort);
+      }
     }
     if (proceed === false || aborted) {
       return request;

@@ -400,8 +400,12 @@ class AjaxTestController {
    */
   public function globalEvents(Request $request) {
     if ($request->query->getBoolean('legacy_overrides')) {
+      $libraries = ['ajax_test/legacy_overrides'];
+      if ($request->query->getBoolean('legacy_plugin')) {
+        $libraries[] = 'core/internal.jquery.form';
+      }
       return [
-        '#attached' => ['library' => ['ajax_test/legacy_overrides']],
+        '#attached' => ['library' => $libraries],
         '#markup' => Markup::create(implode('', [
           '<form id="legacy-ajax-overrides" action="' . Url::fromRoute('ajax_test.echo_request')->toString() . '">',
           '<select name="override"><option>disabled</option><option>enabled</option></select>',
@@ -472,11 +476,15 @@ class AjaxTestController {
   /**
    * Returns the request method and payload as an Ajax command.
    */
-  public function echoRequest(Request $request): AjaxResponse {
+  public function echoRequest(Request $request): Response {
     $response = new AjaxResponse();
     $response->addCommand(new HtmlCommand('#request-lane-echo', [
       '#plain_text' => json_encode($this->getRequestData($request), JSON_THROW_ON_ERROR),
     ]));
+    if ($request->query->getBoolean('iframe_test')) {
+      $json = htmlspecialchars(json_encode($response->getCommands(), JSON_THROW_ON_ERROR), ENT_QUOTES, 'UTF-8');
+      return new Response('<textarea>' . $json . '</textarea>', 200, ['Content-Type' => 'text/html; charset=UTF-8']);
+    }
     return $response;
   }
 

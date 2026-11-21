@@ -19,6 +19,7 @@
     return;
   }
 
+  const defaultXhr = jQuery.ajaxSettings.xhr;
   const rNotHtmlWhite = /[^\x20\t\r\n\f]+/g;
   const rHash = /#.*$/;
   const rAntiCache = /([?&])_=[^&]*/;
@@ -96,10 +97,16 @@
     return {
       native: true,
       send(headers, complete) {
-        const request = nativeRequests.get(jqXHR);
+        const request =
+          s.xhr === defaultXhr ? nativeRequests.get(jqXHR) : s.xhr();
         // Header writes and aborts during beforeSend went to the facade.
-        delete request?.setRequestHeader;
-        delete request?.abort;
+        if (s.xhr === defaultXhr) {
+          delete request?.setRequestHeader;
+          delete request?.abort;
+        }
+        if (request) {
+          nativeRequests.set(jqXHR, request);
+        }
         window.Drupal.xhr({
           request,
           url: s.url,
@@ -108,6 +115,7 @@
           username: s.username,
           password: s.password,
           headers,
+          crossDomain: s.crossDomain,
           body: () => (s.hasContent && s.data) || null,
           beforeSend(xhr) {
             Object.entries(s.xhrFields || {}).forEach(([name, value]) => {
@@ -1011,6 +1019,92 @@
     ].map((method) => [method, jQuery.fn[method]]),
   );
 
+  const legacyFormOptions = [
+    'iframe',
+    'iframeTarget',
+    'forceSync',
+    'closeKeepAlive',
+    'semantic',
+    'filtering',
+    'clearForm',
+    'includeHidden',
+    'target',
+    'replaceTarget',
+  ];
+
+  /**
+   * Uses the explicit Form plug-in for contributed options it owns.
+   */
+  function submitLegacyForm($form, options, onVeto, formArgument) {
+    if (typeof $form.ajaxSubmit !== 'function') {
+      throw new Error(
+        'Legacy Ajax form options require the core/internal.jquery.form library.',
+      );
+    }
+    let serialized = false;
+    let canceled = false;
+    const previous = $form.data('jqxhr');
+    const settings = {
+      ...options,
+      beforeSerialize(collection, settings) {
+        serialized = true;
+        return options.beforeSerialize?.call(
+          this,
+          formArgument(options.beforeSerialize, settings),
+          settings,
+        );
+      },
+      beforeSubmit(values, collection, settings) {
+        return options.beforeSubmit?.call(
+          this,
+          values,
+          formArgument(options.beforeSubmit, settings),
+          settings,
+        );
+      },
+      beforeSend(xhr, settings) {
+        const proceed = options.beforeSend?.call(this, xhr, settings);
+        if (proceed === false) {
+          canceled = true;
+          onVeto(serialized);
+        }
+        return proceed;
+      },
+      success(data, status, xhr) {
+        [options.success].flat(Infinity).forEach((callback) => {
+          if (typeof callback === 'function') {
+            const argument = formArgument(callback);
+            callback.call(this, data, status, xhr || argument, argument);
+          }
+        });
+      },
+      error(xhr, status, error) {
+        options.error?.call(
+          this,
+          xhr,
+          status,
+          error,
+          formArgument(options.error),
+        );
+      },
+      complete(xhr, status) {
+        options.complete?.call(
+          this,
+          xhr,
+          status,
+          formArgument(options.complete),
+        );
+      },
+    };
+    $form.ajaxSubmit(settings);
+    const request = $form.data('jqxhr');
+    if (!canceled && request === previous && !settings.closeKeepAlive) {
+      onVeto(serialized);
+      return;
+    }
+    return request;
+  }
+
   const wrappedForms = new WeakMap();
 
   /**
@@ -1052,6 +1146,9 @@
     Drupal.ajax.compatibility = {
       send,
       commandsComplete,
+      needsLegacyForm: (options) =>
+        legacyFormOptions.some((key) => options[key]),
+      submitLegacyForm,
       rejected(error) {
         const handle = jQuery.Deferred().reject();
         const failed = Promise.reject(error);

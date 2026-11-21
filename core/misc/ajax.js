@@ -562,6 +562,25 @@
   // and requests whose default success callback ran.
   const preparedRequests = new WeakSet();
   const receivedRequests = new WeakSet();
+  const nativeFormCallbacks = new WeakSet();
+  const submissionFormArguments = new WeakMap();
+
+  /**
+   * Selects the form shape expected by an overridden form method.
+   */
+  function formMethodArgument(element, method, options) {
+    const elementOrForm = nativeElement(element);
+    if (nativeFormCallbacks.has(method)) {
+      return elementOrForm;
+    }
+    const argument = submissionFormArguments.get(options);
+    return (
+      argument?.(method) ??
+      Drupal.ajax.compatibility?.wrap(elementOrForm) ??
+      elementOrForm
+    );
+  }
+
   const startedRequests = new WeakSet();
 
   /**
@@ -629,9 +648,25 @@
    */
   function submitForm(form, options, onVeto = () => {}) {
     const adapter = Drupal.ajax.compatibility;
-    // Callbacks receive the form, or the jQuery collection the jQuery Form
-    // plugin passed when an explicitly loaded adapter is present.
-    const formArgument = adapter ? adapter.wrap(form) : form;
+    let collection;
+    const legacyForm = () => {
+      collection = collection ?? adapter?.wrap(form);
+      return collection ?? form;
+    };
+    const formArgument = (callback, settings) => {
+      if (settings) {
+        submissionFormArguments.set(settings, formArgument);
+      }
+      return nativeFormCallbacks.has(callback) ? form : legacyForm();
+    };
+    if (adapter?.needsLegacyForm(options)) {
+      return adapter.submitLegacyForm(
+        legacyForm(),
+        options,
+        onVeto,
+        formArgument,
+      );
+    }
     const method =
       options.method || options.type || form.getAttribute('method');
     const action = options.url || form.getAttribute('action');
@@ -643,9 +678,10 @@
       options,
     );
 
+    submissionFormArguments.set(settings, formArgument);
     const veto = {};
     adapter?.trigger(form, 'form-pre-serialize', [
-      formArgument,
+      legacyForm(),
       settings,
       veto,
     ]);
@@ -655,7 +691,10 @@
     }
     if (
       settings.beforeSerialize &&
-      settings.beforeSerialize(formArgument, settings) === false
+      settings.beforeSerialize(
+        formArgument(settings.beforeSerialize),
+        settings,
+      ) === false
     ) {
       onVeto(true);
       return;
@@ -675,14 +714,18 @@
     }
     if (
       settings.beforeSubmit &&
-      settings.beforeSubmit(values, formArgument, settings) === false
+      settings.beforeSubmit(
+        values,
+        formArgument(settings.beforeSubmit),
+        settings,
+      ) === false
     ) {
       onVeto(true);
       return;
     }
     adapter?.trigger(form, 'form-submit-validate', [
       values,
-      formArgument,
+      legacyForm(),
       settings,
       veto,
     ]);
@@ -704,12 +747,19 @@
 
     const { success, error, complete } = settings;
     settings.success = function (data, status, xhr) {
-      return callAll(success, settings.context || this, [
-        data,
-        status,
-        xhr || formArgument,
-        formArgument,
-      ]);
+      return [success]
+        .flat(Infinity)
+        .filter((callback) => typeof callback === 'function')
+        .map((callback) => {
+          const argument = formArgument(callback);
+          return callback.call(
+            settings.context || this,
+            data,
+            status,
+            xhr || argument,
+            argument,
+          );
+        });
     };
     if (error) {
       settings.error = function (xhr, status, thrown) {
@@ -717,7 +767,7 @@
           xhr,
           status,
           thrown,
-          formArgument,
+          formArgument(error),
         ]);
       };
     }
@@ -726,7 +776,7 @@
         return complete.apply(settings.context || this, [
           xhr,
           status,
-          formArgument,
+          formArgument(complete),
         ]);
       };
     }
@@ -775,7 +825,7 @@
       request = sendRequest(settings, () => onVeto(true));
     }
 
-    adapter?.notify(form, [formArgument, settings], request);
+    adapter?.notify(form, [legacyForm(), settings], request);
     return request;
   }
 
@@ -1315,14 +1365,17 @@
       // Core's callbacks pass native values to the Drupal.Ajax methods, even
       // when an explicitly loaded jQuery adapter supplies jQuery values.
       beforeSerialize(elementSettings, options) {
-        return ajax.beforeSerialize(nativeElement(elementSettings), options);
+        return ajax.beforeSerialize(
+          formMethodArgument(elementSettings, ajax.beforeSerialize, options),
+          options,
+        );
       },
       beforeSubmit(formValues, elementSettings, options) {
         ajax.ajaxing = true;
         ajax.preCommandsFocusedElementSelector = null;
         return ajax.beforeSubmit(
           formValues,
-          nativeElement(elementSettings),
+          formMethodArgument(elementSettings, ajax.beforeSubmit, options),
           options,
         );
       },
@@ -1383,6 +1436,16 @@
       jsonp: false,
       method: ajax.httpMethod,
     };
+
+    for (const name of [
+      'beforeSerialize',
+      'beforeSubmit',
+      'success',
+      'error',
+      'complete',
+    ]) {
+      nativeFormCallbacks.add(ajax.options[name]);
+    }
 
     if (elementSettings.dialog) {
       ajax.options.data.dialogOptions = elementSettings.dialog;
@@ -3115,5 +3178,21 @@
    */
   Drupal.ajax.compatibility = Drupal.ajax.compatibility ?? null;
 
+  /**
+   * Declares that a form callback expects the native form element.
+   *
+   * @param {Function} callback
+   *   A callback assigned to an Ajax instance or its request options.
+   *
+   * @return {Function}
+   *   The same callback, for use in an assignment.
+   */
+  Drupal.ajax.useNativeForm = (callback) => {
+    nativeFormCallbacks.add(callback);
+    return callback;
+  };
+
+  nativeFormCallbacks.add(Drupal.Ajax.prototype.beforeSerialize);
+  nativeFormCallbacks.add(Drupal.Ajax.prototype.beforeSubmit);
   document.dispatchEvent(new CustomEvent('drupal:ajax-ready'));
 })(window, Drupal, drupalSettings, loadjs, window.tabbable);

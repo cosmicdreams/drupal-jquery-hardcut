@@ -177,7 +177,7 @@ class CommandsTest extends WebDriverTestBase {
     $form_path = 'ajax_forms_test_ajax_commands_form';
     $web_user = $this->drupalCreateUser(['access content']);
     $this->drupalLogin($web_user);
-    $this->drupalGet($form_path);
+    $this->drupalGet($form_path, ['query' => ['legacy_requests' => 1]]);
 
     // Tests the 'add_css' command.
     $page->pressButton("AJAX 'add_css' command");
@@ -205,19 +205,19 @@ class CommandsTest extends WebDriverTestBase {
     $this->assertEquals('Alert', $alert_text);
     $this->getSession()->getDriver()->getWebDriverSession()->alert()->accept();
 
-    $this->drupalGet($form_path);
+    $this->drupalGet($form_path, ['query' => ['legacy_requests' => 1]]);
     $page->pressButton("AJAX 'Announce': Click to announce");
     $this->assertWaitPageContains('<div id="drupal-live-announce" class="visually-hidden" aria-live="polite" aria-busy="false">Default announcement.</div>');
 
-    $this->drupalGet($form_path);
+    $this->drupalGet($form_path, ['query' => ['legacy_requests' => 1]]);
     $page->pressButton("AJAX 'Announce': Click to announce with 'polite' priority");
     $this->assertWaitPageContains('<div id="drupal-live-announce" class="visually-hidden" aria-live="polite" aria-busy="false">Polite announcement.</div>');
 
-    $this->drupalGet($form_path);
+    $this->drupalGet($form_path, ['query' => ['legacy_requests' => 1]]);
     $page->pressButton("AJAX 'Announce': Click to announce with 'assertive' priority");
     $this->assertWaitPageContains('<div id="drupal-live-announce" class="visually-hidden" aria-live="assertive" aria-busy="false">Assertive announcement.</div>');
 
-    $this->drupalGet($form_path);
+    $this->drupalGet($form_path, ['query' => ['legacy_requests' => 1]]);
     $page->pressButton("AJAX 'Announce': Click to announce twice");
     $this->assertWaitPageContains('<div id="drupal-live-announce" class="visually-hidden" aria-live="assertive" aria-busy="false">Assertive announcement.' . "\nAnother announcement.</div>");
 
@@ -235,7 +235,7 @@ class CommandsTest extends WebDriverTestBase {
 
     // Tests the 'changed' command using the second argument.
     // Refresh page for testing 'changed' command to same element again.
-    $this->drupalGet($form_path);
+    $this->drupalGet($form_path, ['query' => ['legacy_requests' => 1]]);
     $page->pressButton("AJAX changed: Click to mark div changed with asterisk.");
     $this->assertWaitPageContains('<div id="changed_div" class="ajax-changed"> <div id="changed_div_mark_this">This div can be marked as changed or not. <abbr class="ajax-changed" title="Changed">*</abbr> </div></div>');
 
