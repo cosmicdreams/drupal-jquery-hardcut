@@ -7,6 +7,10 @@ namespace Drupal\FunctionalJavascriptTests\TableDrag;
 use Behat\Mink\Element\NodeElement;
 use Behat\Mink\Exception\ExpectationException;
 use Drupal\FunctionalJavascriptTests\WebDriverTestBase;
+use Drupal\menu_link_content\Entity\MenuLinkContent;
+use Drupal\system\Entity\Menu;
+use Drupal\taxonomy\Entity\Term;
+use Drupal\taxonomy\Entity\Vocabulary;
 use PHPUnit\Framework\Attributes\Group;
 use PHPUnit\Framework\Attributes\RunTestsInSeparateProcesses;
 
@@ -101,7 +105,7 @@ class TableDragTest extends WebDriverTestBase {
 
     $session->executeScript(<<<'JS'
       document.getElementById('responsive-fixture').classList.remove('compact');
-      jQuery(window).trigger('resize.tableresponsive');
+      window.dispatchEvent(new Event('resize'));
       JS);
     $this->assertTrue($cell->isVisible());
     $this->assertFalse($toggle->isVisible());
@@ -122,21 +126,23 @@ class TableDragTest extends WebDriverTestBase {
     $weight_select2 = $page->findField("table[2][weight]");
     $weight_select3 = $page->findField("table[3][weight]");
 
-    $session->executeScript(<<<'JS'
-      const table = document.getElementById('tabledrag-test-table');
-      const nativeEvents = [];
-      const legacyEvents = [];
-      table.addEventListener('columnschange', (event) => nativeEvents.push(event));
-      jQuery(table).on('columnschange', (event, displayWeight) => {
-        legacyEvents.push({ event: event.originalEvent, displayWeight });
-      });
-      window.readColumnEvents = () => [
-        nativeEvents.map((event) => event.detail.displayWeight),
-        legacyEvents.map(({ displayWeight }) => displayWeight),
-        nativeEvents.every((event, index) => event === legacyEvents[index]?.event &&
-          event.target === table && event.bubbles && event.cancelable),
-      ];
-      JS);
+    $this->assertTrue($session->evaluateScript(<<<'JS'
+      (() => {
+        const drag = Drupal.tableDrag['tabledrag-test-table'];
+        const row = drag.table.tBodies[0].rows[0];
+        const rowObject = new drag.row(row, 'keyboard', true, drag.maxDepth, false);
+        return drag.table instanceof HTMLTableElement &&
+          drag.toggleWeightButton instanceof HTMLButtonElement &&
+          rowObject.element === row && rowObject.table === drag.table &&
+          Array.isArray(rowObject.group) && rowObject.group[0] === row;
+      })()
+      JS));
+    if ($this->defaultTheme === 'stark') {
+      $this->assertSame('undefined', $session->evaluateScript('typeof window.jQuery'));
+      $this->assertFalse($session->evaluateScript(
+        '"$table" in Drupal.tableDrag["tabledrag-test-table"]',
+      ));
+    }
 
     // Check that rows weight selects are hidden.
     $this->assertFalse($weight_select1->isVisible());
@@ -151,6 +157,13 @@ class TableDragTest extends WebDriverTestBase {
     $this->assertTrue($weight_select2->isVisible());
     $this->assertTrue($weight_select3->isVisible());
 
+    // Reload and verify the preference is still applied.
+    $this->drupalGet('tabledrag_test');
+    $weight_select1 = $page->findField("table[1][weight]");
+    $weight_select2 = $page->findField("table[2][weight]");
+    $weight_select3 = $page->findField("table[3][weight]");
+    $this->assertTrue($weight_select1->isVisible());
+
     // Toggle row weight selects back to hidden.
     $this->findWeightsToggle('Hide row weights')->click();
 
@@ -158,7 +171,86 @@ class TableDragTest extends WebDriverTestBase {
     $this->assertFalse($weight_select1->isVisible());
     $this->assertFalse($weight_select2->isVisible());
     $this->assertFalse($weight_select3->isVisible());
-    $this->assertSame([[TRUE, FALSE], [TRUE, FALSE], TRUE], $session->evaluateScript('window.readColumnEvents()'));
+  }
+
+  /**
+   * Tests deprecated table members, event callbacks and weight notifications.
+   */
+  public function testLegacyTableDrag(): void {
+    foreach (['Drupal.tableDrag#$table', 'Drupal.tableDrag#$toggleWeightButton', 'The legacy event argument for pointerCoords'] as $contract) {
+      $this->expectUserDeprecationMessage("Javascript Deprecation: $contract is deprecated in drupal:12.0.0 and is removed from drupal:13.0.0. Use the native table or row member, or native theme/interaction callback.");
+    }
+    $this->drupalGet('tabledrag_test', ['query' => ['legacy' => 1]]);
+    $session = $this->getSession();
+    $session->executeScript(<<<'JS'
+      const drag = Drupal.tableDrag['tabledrag-test-table'];
+      const table = document.getElementById('tabledrag-test-table');
+      const legacyTable = jQuery(table);
+      const button = drag.toggleWeightButton;
+      const legacyButton = jQuery(button);
+      drag.$table = legacyTable;
+      drag.$toggleWeightButton = legacyButton;
+      const members = drag.$table === legacyTable && drag.table === table &&
+        drag.$toggleWeightButton === legacyButton && drag.toggleWeightButton === button;
+
+      const args = [];
+      const original = drag.pointerCoords;
+      drag.pointerCoords = function (event) {
+        args.push(event);
+        return original.call(this, event);
+      };
+      const previous = drag.pointerCoords;
+      drag.pointerCoords = function (event) {
+        args.push(event);
+        return previous.call(this, event);
+      };
+      const pointer = new MouseEvent('mousemove', { clientX: 10, clientY: 20 });
+      const { x, y } = drag.pointerCoords(pointer);
+      const callbacks = args.length === 2 && args[0] === args[1] &&
+        args[0].originalEvent === pointer && x === 10 && y === 20;
+      const native = (event) => event === pointer;
+      native.nativeTableEvent = true;
+      drag.pointerCoords = native;
+
+      const nativeEvents = [];
+      const legacyEvents = [];
+      table.addEventListener('columnschange', (event) => nativeEvents.push(event));
+      jQuery(window).on('columnschange', (event, displayWeight) => {
+        legacyEvents.push({ event: event.originalEvent, displayWeight });
+      });
+      window.readTableDrag = () => [
+        members, callbacks, drag.pointerCoords(pointer),
+        nativeEvents.map((event) => event.detail.displayWeight),
+        legacyEvents.map(({ displayWeight }) => displayWeight),
+        nativeEvents.every((event, index) => event === legacyEvents[index]?.event &&
+          event.target === table && event.bubbles && event.cancelable),
+      ];
+      JS);
+
+    $this->findWeightsToggle('Show row weights')->click();
+    $this->findWeightsToggle('Hide row weights')->click();
+    $this->assertSame(
+      [TRUE, TRUE, TRUE, [TRUE, FALSE], [TRUE, FALSE], TRUE],
+      $session->evaluateScript('window.readTableDrag()'),
+    );
+  }
+
+  /**
+   * Tests that an Ajax response marks a row and adds the warning once.
+   */
+  public function testAjaxChangedWarning(): void {
+    $this->drupalGet('tabledrag_test', ['query' => ['ajax' => 1]]);
+    $assert = $this->assertSession();
+    $assert->elementNotExists('css', '.tabledrag-changed-warning');
+    $assert->elementNotExists('css', '#tabledrag-test-table-row-2 .tabledrag-changed');
+    $this->getSession()->getPage()->pressButton('Mark row changed');
+    $assert->assertWaitOnAjaxRequest();
+    $assert->elementsCount('css', '#tabledrag-test-table-row-2 .tabledrag-changed', 1);
+    $assert->elementsCount('css', '.tabledrag-changed-warning', 1);
+    $this->getSession()->getPage()->pressButton('Mark row changed');
+    $assert->assertWaitOnAjaxRequest();
+    $assert->elementsCount('css', '.tabledrag-changed-warning', 1);
+    $assert->elementsCount('css', '#tabledrag-test-table-row-2 .tabledrag-changed', 1);
   }
 
   /**
@@ -206,6 +298,81 @@ class TableDragTest extends WebDriverTestBase {
 
     // Check that the order is: row2, row3 and row1.
     $this->assertOrder(['Row with id 2', 'Row with id 3', 'Row with id 1']);
+  }
+
+  /**
+   * Tests touch events on a drag handle and the document.
+   */
+  public function testTouchDrag(): void {
+    $this->state->set('tabledrag_test_table', array_flip(range(1, 3)));
+    $this->drupalGet('tabledrag_test');
+    $trace = $this->getSession()->evaluateScript(<<<'JS'
+      (() => {
+        const table = document.getElementById('tabledrag-test-table');
+        const [first, second] = table.tBodies[0].rows;
+        const handle = first.querySelector('.tabledrag-handle');
+        const drag = Drupal.tableDrag[table.id];
+        const x = handle.getBoundingClientRect().left + 2;
+        const start = first.getBoundingClientRect().top + 2;
+        const end = second.getBoundingClientRect().top + 2;
+        const touch = (clientY) => new Touch({ identifier: 1, target: handle, clientX: x, clientY });
+        handle.dispatchEvent(new TouchEvent('touchstart', { touches: [touch(start)], cancelable: true }));
+        document.dispatchEvent(new TouchEvent('touchmove', { touches: [touch(end)], cancelable: true }));
+        document.dispatchEvent(new TouchEvent('touchend', { changedTouches: [touch(end)] }));
+        return [
+          table.tBodies[0].rows[0] === second,
+          first.classList.contains('drag-previous'),
+          drag.dragObject === null && drag.rowObject === null,
+        ];
+      })()
+      JS);
+    $this->assertSame([TRUE, TRUE, TRUE], $trace);
+  }
+
+  /**
+   * Tests table drag in the menu and taxonomy administration forms.
+   */
+  public function testMenuAndTaxonomyTables(): void {
+    $this->container->get('module_installer')->install(['menu_ui', 'taxonomy']);
+    Menu::create(['id' => 'drag_test', 'label' => 'Drag test menu'])->save();
+    Vocabulary::create(['vid' => 'drag_test', 'name' => 'Drag test vocabulary'])->save();
+    foreach ([0, 1] as $weight) {
+      MenuLinkContent::create([
+        'title' => "Drag test link $weight",
+        'link' => ['uri' => 'internal:/user'],
+        'menu_name' => 'drag_test',
+        'weight' => $weight,
+      ])->save();
+      Term::create([
+        'name' => "Drag test term $weight",
+        'vid' => 'drag_test',
+        'weight' => $weight,
+      ])->save();
+    }
+    $this->drupalLogin($this->drupalCreateUser(['administer menu', 'administer taxonomy']));
+    foreach ([
+      'admin/structure/menu/manage/drag_test' => 'link',
+      'admin/structure/taxonomy/manage/drag_test/overview' => 'term',
+    ] as $path => $label) {
+      $this->drupalGet($path);
+      $this->assertOrder(["Drag test $label 0", "Drag test $label 1"]);
+      $page = $this->getSession()->getPage();
+      $row = $page->find('named', ['link', "Drag test $label 1"])->getParent();
+      while ($row && $row->getTagName() !== 'tr') {
+        $row = $row->getParent();
+      }
+      $this->assertNotNull($row);
+      // These pages do not load the keyboard synchronization fixture.
+      $handle = $row->find('css', '.tabledrag-handle');
+      $handle->focus();
+      $handle->keyDown(38);
+      $handle->keyUp(38);
+      $handle->blur();
+      $this->assertOrder(["Drag test $label 1", "Drag test $label 0"]);
+      $this->submitForm([], 'Save');
+      $this->drupalGet($path);
+      $this->assertOrder(["Drag test $label 1", "Drag test $label 0"]);
+    }
   }
 
   /**
@@ -372,8 +539,9 @@ class TableDragTest extends WebDriverTestBase {
     $this->moveRowWithKeyboard($this->findRowById(5), 'down');
     $this->assertSession()->pageTextNotContains('You have unsaved changes.');
 
-    // Make a change. The message will appear.
+    // Wait for the warning to become visible during its fade-in.
     $this->moveRowWithKeyboard($this->findRowById(5), 'right');
+    $this->assertSession()->waitForText('You have unsaved changes.');
     $this->assertSession()->pageTextContainsOnce('You have unsaved changes.');
 
     // Make another change, the text will stay visible and appear only once.

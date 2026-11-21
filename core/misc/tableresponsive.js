@@ -3,7 +3,7 @@
  * Responsive table functionality.
  */
 
-(function ($, Drupal, window) {
+(function (Drupal, once, window) {
   /**
    * The TableResponsive object optimizes table presentation for screen size.
    *
@@ -21,35 +21,32 @@
    */
   function TableResponsive(table) {
     this.table = table;
-    this.$table = $(table);
     this.showText = Drupal.t('Show all columns');
     this.hideText = Drupal.t('Hide lower priority columns');
-    // Store a reference to the header elements of the table so that the DOM is
-    // traversed only once to find them.
-    this.$headers = this.$table.find('th');
-    // Add a link before the table for users to show or hide weight columns.
-    this.$link = $(
-      '<button type="button" class="link tableresponsive-toggle"></button>',
-    )
-      .attr(
-        'title',
-        Drupal.t(
-          'Show table cells that were hidden to make the table fit within a small screen.',
-        ),
-      )
-      .on('click', this.eventhandlerToggleColumns.bind(this));
+    this.headers = [...table.querySelectorAll('th')];
+    this.revealedCells = [];
 
-    this.$table.before(
-      $('<div class="tableresponsive-toggle-columns"></div>').append(
-        this.$link,
-      ),
+    this.link = document.createElement('button');
+    this.link.type = 'button';
+    this.link.className = 'link tableresponsive-toggle';
+    this.link.title = Drupal.t(
+      'Show table cells that were hidden to make the table fit within a small screen.',
+    );
+    this.link.addEventListener(
+      'click',
+      this.eventhandlerToggleColumns.bind(this),
     );
 
-    // Attach a resize handler to the window.
-    $(window).on(
-      'resize.tableresponsive',
-      this.eventhandlerEvaluateColumnVisibility.bind(this),
-    );
+    const wrapper = document.createElement('div');
+    wrapper.className = 'tableresponsive-toggle-columns';
+    wrapper.append(this.link);
+    table.before(wrapper);
+
+    // Capture the current handler, as a later assignment should only affect
+    // newly created tables.
+    const evaluate = this.eventhandlerEvaluateColumnVisibility.bind(this);
+    window.addEventListener('resize', evaluate);
+    TableResponsive.resizeHandlers.set(this, evaluate);
   }
 
   /**
@@ -77,142 +74,126 @@
    *   Attaches tableResponsive functionality.
    */
   Drupal.behaviors.tableResponsive = {
-    attach(context, settings) {
+    attach(context) {
       once('tableresponsive', 'table.responsive-enabled', context).forEach(
         (table) => {
           TableResponsive.tables.push(new TableResponsive(table));
         },
       );
-      if (TableResponsive.tables.length) {
-        $(window).trigger('resize.tableresponsive');
-      }
+      refreshToggles();
     },
   };
 
   /**
-   * Extend the TableResponsive function with a list of managed tables.
+   * Refreshes the visibility of all responsive toggles.
    */
-  $.extend(
-    TableResponsive,
-    /** @lends Drupal.TableResponsive */ {
-      /**
-       * Store all created instances.
-       *
-       * @type {Array.<Drupal.TableResponsive>}
-       */
-      tables: [],
-    },
-  );
+  function refreshToggles() {
+    const event = new Event('resize');
+    TableResponsive.tables.forEach((table) =>
+      TableResponsive.resizeHandlers.get(table)(event),
+    );
+  }
 
   /**
-   * Associates an action link with the table that will show hidden columns.
+   * Stores all created instances.
    *
-   * Columns are assumed to be hidden if their header has the class priority-low
-   * or priority-medium.
+   * @type {Drupal.TableResponsive[]}
    */
-  $.extend(
-    TableResponsive.prototype,
-    /** @lends Drupal.TableResponsive# */ {
-      /**
-       * @param {jQuery.Event} e
-       *   The event triggered.
-       */
-      eventhandlerEvaluateColumnVisibility(e) {
-        const pegged = parseInt(this.$link.data('pegged'), 10);
-        const hiddenLength = hiddenPriorityHeaders(
-          this.$headers.toArray(),
-        ).length;
-        // If the table has hidden columns, associate an action link with the
-        // table to show the columns.
-        if (hiddenLength > 0) {
-          this.$link.show();
-          this.$link[0].textContent = this.showText;
-        }
-        // When the toggle is pegged, its presence is maintained because the user
-        // has interacted with it. This is necessary to keep the link visible if
-        // the user adjusts screen size and changes the visibility of columns.
-        if (!pegged && hiddenLength === 0) {
-          this.$link.hide();
-          this.$link[0].textContent = this.hideText;
-        }
-      },
+  TableResponsive.tables = [];
+  TableResponsive.resizeHandlers = new WeakMap();
 
-      /**
-       * Toggle the visibility of columns based on their priority.
-       *
-       * Columns are classed with either 'priority-low' or 'priority-medium'.
-       *
-       * @param {jQuery.Event} e
-       *   The event triggered.
-       */
-      eventhandlerToggleColumns(e) {
-        e.preventDefault();
-        const self = this;
-        const hiddenHeaders = hiddenPriorityHeaders(this.$headers.toArray());
-        this.$revealedCells = this.$revealedCells || $();
-        // Reveal hidden columns.
-        if (hiddenHeaders.length > 0) {
-          hiddenHeaders.forEach((header) => {
-            const $header = $(header);
-            let position = 0;
-            for (
-              let sibling = header.previousElementSibling;
-              sibling;
-              sibling = sibling.previousElementSibling
-            ) {
-              if (sibling.matches('th')) {
-                position++;
-              }
-            }
-            self.$table.find('tbody tr').each(function () {
-              const $cells = $(this).find('td').eq(position);
-              $cells.show();
-              // Keep track of the revealed cells, so they can be hidden later.
-              self.$revealedCells = $().add(self.$revealedCells).add($cells);
-            });
-            $header.show();
-            // Keep track of the revealed headers, so they can be hidden later.
-            self.$revealedCells = $().add(self.$revealedCells).add($header);
-          });
-          this.$link[0].textContent = this.hideText;
-          this.$link.data('pegged', 1);
-        }
-        // Hide revealed columns.
-        else {
-          this.$revealedCells.hide();
-          // Strip the 'display:none' declaration from the style attributes of
-          // the table cells that .hide() added.
-          this.$revealedCells.each(function (index, element) {
-            const $cell = $(this);
-            const properties = $cell.attr('style').split(';');
-            const newProps = [];
-            // The hide method adds display none to the element. The element
-            // should be returned to the same state it was in before the columns
-            // were revealed, so it is necessary to remove the display none value
-            // from the style attribute.
-            const match = /^display\s*:\s*none$/;
-            for (let i = 0; i < properties.length; i++) {
-              const prop = properties[i];
-              prop.trim();
-              // Find the display:none property and remove it.
-              const isDisplayNone = match.exec(prop);
-              if (isDisplayNone) {
-                continue;
-              }
-              newProps.push(prop);
-            }
-            // Return the rest of the style attribute values to the element.
-            $cell.attr('style', newProps.join(';'));
-          });
-          this.$link[0].textContent = this.showText;
-          this.$link.data('pegged', 0);
-          // Refresh the toggle link.
-          $(window).trigger('resize.tableresponsive');
-        }
-      },
+  Object.assign(TableResponsive.prototype, {
+    /**
+     * Updates the toggle after a change in viewport size.
+     *
+     * @param {Event} event
+     *   The resize event.
+     */
+    eventhandlerEvaluateColumnVisibility(event) {
+      const pegged = this.link.dataset.pegged === '1';
+      const hiddenLength = hiddenPriorityHeaders(this.headers).length;
+      if (hiddenLength > 0) {
+        this.link.style.display = '';
+        this.link.textContent = this.showText;
+      }
+      // Keep the toggle visible after a user interaction, even if the user
+      // resizes the window and column visibility changes.
+      if (!pegged && hiddenLength === 0) {
+        this.link.style.display = 'none';
+        this.link.textContent = this.hideText;
+      }
     },
-  );
+
+    /**
+     * Toggles the visibility of lower-priority columns.
+     *
+     * @param {MouseEvent} event
+     *   The click event.
+     */
+    eventhandlerToggleColumns(event) {
+      event.preventDefault();
+      const hiddenHeaders = hiddenPriorityHeaders(this.headers);
+      if (hiddenHeaders.length) {
+        const rows = this.table.querySelectorAll('tbody tr');
+        const revealed = new Set(this.revealedCells);
+        hiddenHeaders.forEach((header) => {
+          let position = 0;
+          for (
+            let sibling = header.previousElementSibling;
+            sibling;
+            sibling = sibling.previousElementSibling
+          ) {
+            if (sibling.matches('th')) {
+              position += 1;
+            }
+          }
+          rows.forEach((row) => {
+            const cell = row.querySelectorAll('td')[position];
+            if (cell) {
+              revealCell(cell);
+              revealed.add(cell);
+            }
+          });
+          revealCell(header);
+          revealed.add(header);
+        });
+        this.revealedCells = [...revealed];
+        this.link.textContent = this.hideText;
+        this.link.dataset.pegged = '1';
+      } else {
+        // Restore the display rules from the stylesheet.
+        this.revealedCells.forEach((cell) =>
+          cell.style.removeProperty('display'),
+        );
+        this.link.textContent = this.showText;
+        this.link.dataset.pegged = '0';
+        refreshToggles();
+      }
+    },
+  });
+
+  /**
+   * Reveals a table cell hidden by an inline style or responsive CSS.
+   *
+   * @param {HTMLElement} cell
+   *   The table cell.
+   */
+  function revealCell(cell) {
+    if (cell.style.display === 'none') {
+      cell.style.removeProperty('display');
+    }
+    if (window.getComputedStyle(cell).display === 'none') {
+      cell.style.display = 'table-cell';
+    }
+  }
 
   // Make the TableResponsive object available in the Drupal namespace.
+  TableResponsive.eventCallbacks = Object.freeze({
+    eventhandlerEvaluateColumnVisibility:
+      TableResponsive.prototype.eventhandlerEvaluateColumnVisibility,
+    eventhandlerToggleColumns:
+      TableResponsive.prototype.eventhandlerToggleColumns,
+  });
   Drupal.TableResponsive = TableResponsive;
-})(jQuery, Drupal, window);
+  document.dispatchEvent(new Event('drupal:tableresponsive-ready'));
+})(Drupal, once, window);
