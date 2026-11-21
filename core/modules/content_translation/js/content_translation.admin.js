@@ -3,138 +3,140 @@
  * Content Translation admin behaviors.
  */
 
-(function ($, Drupal, drupalSettings) {
+((Drupal, drupalSettings) => {
+  const input = ':is(input, select, textarea, button)';
+  const bundleSelector = `table .bundle-settings .translatable ${input}`;
+  const fieldSelector = `table .field-settings .translatable ${input}`;
+
   /**
-   * Forces applicable options to be checked as translatable.
-   *
-   * @type {Drupal~behavior}
-   *
-   * @prop {Drupal~behaviorAttach} attach
-   *   Attaches content translation dependent options to the UI.
+   * Finds the following settings rows until the next group begins.
    */
+  function following(row, boundary) {
+    const rows = [];
+    for (
+      let next = row.nextElementSibling;
+      next && !next.matches(boundary);
+      next = next.nextElementSibling
+    ) {
+      rows.push(next);
+    }
+    return rows;
+  }
+
   Drupal.behaviors.contentTranslationDependentOptions = {
     attach(context) {
-      const $context = $(context);
-      const options = drupalSettings.contentTranslationDependentOptions;
-      let $fields;
-
-      function fieldsChangeHandler($fields, dependentColumns) {
-        return function (e) {
-          Drupal.behaviors.contentTranslationDependentOptions.check(
-            $fields,
-            dependentColumns,
-            $(e.target),
+      const settings = drupalSettings.contentTranslationDependentOptions;
+      Object.entries(settings?.dependent_selectors || {}).forEach(
+        ([name, columns]) => {
+          const fields = Array.from(
+            context.querySelectorAll(`input[name^="${CSS.escape(name)}"]`),
           );
-        };
-      }
-
-      // We're given a generic name to look for so we find all inputs containing
-      // that name and copy over the input values that require all columns to be
-      // translatable.
-      if (options?.dependent_selectors) {
-        Object.keys(options.dependent_selectors).forEach((field) => {
-          $fields = $context.find(`input[name^="${field}"]`);
-          const dependentColumns = options.dependent_selectors[field];
-
-          $fields.on('change', fieldsChangeHandler($fields, dependentColumns));
-          Drupal.behaviors.contentTranslationDependentOptions.check(
-            $fields,
-            dependentColumns,
-          );
-        });
-      }
+          fields.forEach((field) => {
+            Drupal.formEvents.listen(field, 'change', undefined, ({ target }) =>
+              this.checkNative(fields, columns, target),
+            );
+          });
+          this.checkNative(fields, columns);
+        },
+      );
     },
-    check($fields, dependentColumns, $changed) {
-      let $element = $changed;
-      let column;
 
-      function filterFieldsList(index, field) {
-        return field.value === column;
-      }
-
-      // A field that has many different translatable parts can also define one
-      // or more columns that require all columns to be translatable.
-      Object.keys(dependentColumns || {}).forEach((index) => {
-        column = dependentColumns[index];
-
-        if (!$changed) {
-          $element = $fields.filter(filterFieldsList);
-        }
-
-        if (
-          $element.length &&
-          $element[0].matches(`input[value="${column}"]:checked`)
-        ) {
-          $fields.prop('checked', true).not($element).prop('disabled', true);
+    /**
+     * Applies dependent column settings using native elements.
+     */
+    checkNative(fields, dependentColumns, changed) {
+      Object.values(dependentColumns || {}).forEach((column) => {
+        const matched = changed
+          ? [changed]
+          : fields.filter((field) => field.value === column);
+        if (matched[0]?.value === column && matched[0].checked) {
+          fields.forEach((field) => {
+            field.checked = true;
+            if (!matched.includes(field)) {
+              field.disabled = true;
+            }
+          });
         } else {
-          $fields.prop('disabled', false);
+          fields.forEach((field) => {
+            field.disabled = false;
+          });
         }
       });
     },
   };
 
-  /**
-   * Makes field translatability inherit bundle translatability.
-   *
-   * @type {Drupal~behavior}
-   *
-   * @prop {Drupal~behaviorAttach} attach
-   *   Attaches content translation behavior.
-   */
   Drupal.behaviors.contentTranslation = {
     attach(context) {
-      // Initially hide all field rows for non translatable bundles and all
-      // column rows for non translatable fields.
-      once(
-        'translation-entity-admin-hide',
-        // Keep jQuery because of the use of `:input`.
-        $(context).find('table .bundle-settings .translatable :input'),
-      ).forEach((input) => {
-        const $input = $(input);
-        const $bundleSettings = $input.closest('.bundle-settings');
-        if (!input.checked) {
-          $bundleSettings.nextUntil('.bundle-settings').hide();
-        } else {
-          $bundleSettings
-            .nextUntil('.bundle-settings', '.field-settings')
-            .find('.translatable :input:not(:checked)')
-            .closest('.field-settings')
-            .nextUntil(':not(.column-settings)')
-            .hide();
-        }
-      });
+      once('translation-entity-admin-hide', bundleSelector, context).forEach(
+        (checkbox) => {
+          const bundle = checkbox.closest('.bundle-settings');
+          const settings = following(bundle, '.bundle-settings');
+          if (!checkbox.checked) {
+            settings.forEach((row) => {
+              row.style.display = 'none';
+            });
+          } else {
+            settings
+              .filter((row) => row.matches('.field-settings'))
+              .forEach((row) => {
+                if (row.querySelector(`.translatable ${input}:not(:checked)`)) {
+                  following(row, ':not(.column-settings)').forEach((column) => {
+                    column.style.display = 'none';
+                  });
+                }
+              });
+          }
+        },
+      );
 
-      // When a bundle is made translatable all of its fields should inherit
-      // this setting. Instead when it is made non translatable its fields are
-      // hidden, since their translatability no longer matters.
-      $(once('translation-entity-admin-bind', 'body'))
-        .on('click', 'table .bundle-settings .translatable :input', (e) => {
-          const $target = $(e.target);
-          const $bundleSettings = $target.closest('.bundle-settings');
-          const $settings = $bundleSettings.nextUntil('.bundle-settings');
-          const $fieldSettings = $settings.filter('.field-settings');
-          if (e.target.checked) {
-            $bundleSettings
-              .find('.operations :input[name$="[language_alterable]"]')
-              .prop('checked', true);
-            $fieldSettings.find('.translatable :input').prop('checked', true);
-            $settings.show();
-          } else {
-            $settings.hide();
-          }
-        })
-        .on('click', 'table .field-settings .translatable :input', (e) => {
-          const $target = $(e.target);
-          const $fieldSettings = $target.closest('.field-settings');
-          const $columnSettings = $fieldSettings.nextUntil(
-            '.field-settings, .bundle-settings',
-          );
-          if (e.target.checked) {
-            $columnSettings.show();
-          } else {
-            $columnSettings.hide();
-          }
-        });
+      once('translation-entity-admin-bind', 'body').forEach((body) => {
+        Drupal.formEvents.listen(
+          body,
+          'click',
+          undefined,
+          (event, checkbox) => {
+            const bundle = checkbox.closest('.bundle-settings');
+            const settings = following(bundle, '.bundle-settings');
+            if (checkbox.checked) {
+              bundle
+                .querySelectorAll(
+                  `.operations ${input}[name$="[language_alterable]"]`,
+                )
+                .forEach((setting) => {
+                  setting.checked = true;
+                });
+              settings
+                .filter((row) => row.matches('.field-settings'))
+                .forEach((row) => {
+                  row
+                    .querySelectorAll(`.translatable ${input}`)
+                    .forEach((setting) => {
+                      setting.checked = true;
+                    });
+                });
+            }
+            settings.forEach((row) => {
+              row.style.display = checkbox.checked ? '' : 'none';
+            });
+          },
+          bundleSelector,
+        );
+        Drupal.formEvents.listen(
+          body,
+          'click',
+          undefined,
+          (event, checkbox) => {
+            const field = checkbox.closest('.field-settings');
+            following(field, '.field-settings, .bundle-settings').forEach(
+              (column) => {
+                column.style.display = checkbox.checked ? '' : 'none';
+              },
+            );
+          },
+          fieldSelector,
+        );
+      });
     },
   };
-})(jQuery, Drupal, drupalSettings);
+  document.dispatchEvent(new Event('drupal:translation-options-ready'));
+})(Drupal, drupalSettings);

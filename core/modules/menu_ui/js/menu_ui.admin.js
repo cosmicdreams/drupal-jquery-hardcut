@@ -1,70 +1,56 @@
 /**
  * @file
- * Menu UI admin behaviors.
+ * Updates the available menu parents.
  */
 
-(function ($, Drupal) {
-  /**
-   *
-   * @type {Drupal~behavior}
-   */
+((Drupal) => {
   Drupal.behaviors.menuUiChangeParentItems = {
-    attach(context, settings) {
-      const menu = once('menu-parent', '#edit-menu');
-      if (menu.length) {
-        const $menu = $(menu);
-        // Update the list of available parent menu items to match the initial
-        // available menus.
+    attach() {
+      once('menu-parent', '#edit-menu').forEach((menu) => {
         Drupal.menuUiUpdateParentList();
-
-        // Update list of available parent menu items.
-        $menu.on('change', 'input', Drupal.menuUiUpdateParentList);
-      }
+        Drupal.formEvents.listen(
+          menu,
+          'change',
+          undefined,
+          Drupal.menuUiUpdateParentList,
+          'input',
+        );
+      });
     },
   };
 
   /**
-   * Function to set the options of the menu parent item dropdown.
+   * Fetches the parents in the checked menus and preserves the selection.
    */
   Drupal.menuUiUpdateParentList = function () {
-    const $menu = $('#edit-menu');
-    const values = [];
-
-    $menu.find('input:checked').each(function () {
-      // Get the names of all checked menus.
-      values.push(Drupal.checkPlain(this.value));
+    const body = new URLSearchParams();
+    document.querySelectorAll('#edit-menu input:checked').forEach((input) => {
+      body.append('menus[]', Drupal.checkPlain(input.value));
     });
-
-    $.ajax({
-      url: `${window.location.protocol}//${window.location.host}${Drupal.url(
-        'admin/structure/menu/parents',
-      )}`,
-      type: 'POST',
-      data: { 'menus[]': values },
-      dataType: 'json',
-      success(options) {
-        const $select = $('#edit-menu-parent');
-        // Save key of last selected element.
-        const selected = $select[0].value;
-        // Remove all existing options from dropdown.
-        $select.children().remove();
-        // Add new options to dropdown. Keep a count of options for testing later.
-        let totalOptions = 0;
-        Object.keys(options || {}).forEach((machineName) => {
-          const selectContents = document.createElement('option');
-          selectContents.selected = machineName === selected;
-          selectContents.value = machineName;
-          selectContents.textContent = options[machineName];
-          $select.append(selectContents);
-          totalOptions++;
-        });
-
-        // Hide the parent options if there are no options for it.
-        $select
-          .closest('div')
-          .toggle(totalOptions > 0)
-          .attr('hidden', totalOptions === 0);
+    Drupal.ajaxRequest(
+      {
+        url: Drupal.url('admin/structure/menu/parents'),
+        method: 'POST',
+        body,
+        headers: { Accept: 'application/json, text/javascript, */*; q=0.01' },
       },
-    });
+      ({ status, response }) => {
+        const select = document.getElementById('edit-menu-parent');
+        if (status !== 'success' || !select) {
+          return;
+        }
+        const selected = select.value;
+        const options = Object.entries(response || {}).map(
+          ([value, title]) =>
+            new Option(title, value, false, value === selected),
+        );
+        select.replaceChildren(...options);
+        const wrapper = select.closest('div');
+        if (wrapper) {
+          wrapper.style.display = options.length ? '' : 'none';
+          wrapper.hidden = !options.length;
+        }
+      },
+    );
   };
-})(jQuery, Drupal);
+})(Drupal);

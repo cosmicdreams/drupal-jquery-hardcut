@@ -335,6 +335,50 @@
   }
 
   /**
+   * Adapts legacy dependent translation option overrides.
+   */
+  function installTranslationOptions() {
+    const behavior = window.Drupal.behaviors.contentTranslationDependentOptions;
+    const native = behavior.checkNative;
+    const contract =
+      'Drupal.behaviors.contentTranslationDependentOptions.check';
+    const migration = 'Use checkNative with native input elements.';
+    const callDefault = function (fields, columns, changed) {
+      warn(contract, migration);
+      return native.call(
+        this,
+        jquery(fields).toArray(),
+        columns,
+        jquery(changed)[0],
+      );
+    };
+    let override = behavior.check;
+    Object.defineProperty(behavior, 'check', {
+      configurable: true,
+      get() {
+        return override || callDefault;
+      },
+      set(callback) {
+        override = callback === callDefault ? undefined : callback;
+        behavior.checkNative = override
+          ? function (fields, columns, changed) {
+              warn(contract, migration);
+              return callback.call(
+                this,
+                jquery(fields),
+                columns,
+                changed && jquery(changed),
+              );
+            }
+          : native;
+      },
+    });
+    if (override) {
+      behavior.check = override;
+    }
+  }
+
+  /**
    * Installs the legacy summary plugins on an explicitly attached instance.
    */
   function installSummaryMethods() {
@@ -667,6 +711,15 @@
     document.addEventListener('drupal:form-ready', installSummaryMethods, {
       once: true,
     });
+  }
+  if (window.Drupal?.behaviors?.contentTranslationDependentOptions) {
+    installTranslationOptions();
+  } else {
+    document.addEventListener(
+      'drupal:translation-options-ready',
+      installTranslationOptions,
+      { once: true },
+    );
   }
   if (window.Drupal?.behaviors?.copyFieldValue) {
     installCopyFieldMethods();

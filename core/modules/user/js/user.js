@@ -3,7 +3,7 @@
  * User behaviors.
  */
 
-(($, Drupal) => {
+((Drupal) => {
   /**
    * An object containing CSS classes used for password widget.
    *
@@ -62,194 +62,133 @@
    */
   Drupal.behaviors.password = {
     attach(context, settings) {
-      const cssClasses = Drupal.user.password.css;
-      once('password', 'input.js-password-field', context).forEach((value) => {
-        const $mainInput = $(value);
-        const $mainInputParent = $mainInput
-          .parent()
-          .addClass(cssClasses.passwordParent);
-        const $passwordWidget = $mainInput.closest(
-          '.js-form-type-password-confirm',
-        );
-        const $confirmInput = $passwordWidget.find('input.js-password-confirm');
-        const $passwordConfirmMessage = $(
-          Drupal.theme('passwordConfirmMessage', settings.password),
-        );
+      const css = Drupal.user.password.css;
+      const config = settings.password;
+      const classes = (...names) =>
+        names.flatMap((name) => name?.split(/\s+/).filter(Boolean) || []);
+      const template = document.createElement('template');
+      const themeElement = (name, ...args) => {
+        template.innerHTML = Drupal.theme(name, config, ...args);
+        return template.content.firstElementChild;
+      };
 
-        const $passwordMatchStatus = $passwordConfirmMessage
-          .find('[data-drupal-selector="password-match-status-text"]')
-          .first();
-
-        const $confirmInputParent = $confirmInput
-          .parent()
-          .addClass('confirm-parent')
-          .append($passwordConfirmMessage);
-
-        // List of classes to be removed from the strength bar on a state
-        // change.
-        const passwordStrengthBarClassesToRemove = [
-          cssClasses.passwordWeak || '',
-          cssClasses.passwordFair || '',
-          cssClasses.passwordGood || '',
-          cssClasses.passwordStrong || '',
-        ]
-          .join(' ')
-          .trim();
-
-        // List of classes to be removed from the text wrapper on a state
-        // change.
-        const confirmTextWrapperClassesToRemove = [
-          cssClasses.passwordsMatch || '',
-          cssClasses.passwordsNotMatch || '',
-        ]
-          .join(' ')
-          .trim();
-
-        // List of classes to be removed from the widget on a state change.
-        const widgetClassesToRemove = [
-          cssClasses.widgetInitial || '',
-          cssClasses.passwordEmpty || '',
-          cssClasses.passwordFilled || '',
-          cssClasses.confirmEmpty || '',
-          cssClasses.confirmFilled || '',
-        ]
-          .join(' ')
-          .trim();
-
-        const password = {};
-
-        // If the password strength indicator is enabled, add its markup.
-        if (settings.password.showStrengthIndicator) {
-          const $passwordStrength = $(
-            Drupal.theme('passwordStrength', settings.password),
+      once('password', 'input.js-password-field', context).forEach(
+        (mainInput) => {
+          const mainParent = mainInput.parentElement;
+          const widget = mainInput.closest('.js-form-type-password-confirm');
+          const confirm = widget.querySelector('input.js-password-confirm');
+          const confirmParent = confirm.parentElement;
+          const confirmMessage = themeElement('passwordConfirmMessage');
+          const matchStatus = confirmMessage.querySelector(
+            '[data-drupal-selector="password-match-status-text"]',
           );
-          password.$strengthBar = $passwordStrength
-            .find('[data-drupal-selector="password-strength-indicator"]')
-            .first();
-          password.$strengthTextWrapper = $passwordStrength
-            .find('[data-drupal-selector="password-strength-text"]')
-            .first();
-          password.$suggestions = $(
-            Drupal.theme('passwordSuggestions', settings.password, []),
+          mainParent.classList.add(...classes(css.passwordParent));
+          confirmParent.classList.add('confirm-parent');
+          confirmParent.append(confirmMessage);
+
+          const strengthClasses = classes(
+            css.passwordWeak,
+            css.passwordFair,
+            css.passwordGood,
+            css.passwordStrong,
           );
+          const matchClasses = classes(
+            css.passwordsMatch,
+            css.passwordsNotMatch,
+          );
+          const widgetClasses = classes(
+            css.widgetInitial,
+            css.passwordEmpty,
+            css.passwordFilled,
+            css.confirmEmpty,
+            css.confirmFilled,
+          );
+          let strengthBar;
+          let strengthText;
+          let suggestions;
 
-          password.$suggestions.hide();
-          $mainInputParent.append($passwordStrength);
-          $confirmInputParent.after(password.$suggestions);
-        }
-
-        /**
-         * Adds classes to the widget indicating if the elements are filled.
-         */
-        const addWidgetClasses = () => {
-          $passwordWidget
-            .addClass(
-              $mainInput[0].value
-                ? cssClasses.passwordFilled
-                : cssClasses.passwordEmpty,
-            )
-            .addClass(
-              $confirmInput[0].value
-                ? cssClasses.confirmFilled
-                : cssClasses.confirmEmpty,
+          if (config.showStrengthIndicator) {
+            const strength = themeElement('passwordStrength');
+            strengthBar = strength.querySelector(
+              '[data-drupal-selector="password-strength-indicator"]',
             );
-        };
-
-        /**
-         * Check that password and confirmation inputs match.
-         *
-         * @param {string} confirmInputVal
-         *   The value of the confirm input.
-         */
-        const passwordCheckMatch = (confirmInputVal) => {
-          const passwordsAreMatching = $mainInput[0].value === confirmInputVal;
-          const confirmClass = passwordsAreMatching
-            ? cssClasses.passwordsMatch
-            : cssClasses.passwordsNotMatch;
-          const confirmMessage = passwordsAreMatching
-            ? settings.password.confirmSuccess
-            : settings.password.confirmFailure;
-
-          // Update the success message and set the class if needed.
-          if (
-            !$passwordMatchStatus.hasClass(confirmClass) ||
-            !$passwordMatchStatus.html() === confirmMessage
-          ) {
-            if (confirmTextWrapperClassesToRemove) {
-              $passwordMatchStatus.removeClass(
-                confirmTextWrapperClassesToRemove,
-              );
-            }
-            $passwordMatchStatus.html(confirmMessage).addClass(confirmClass);
+            strengthText = strength.querySelector(
+              '[data-drupal-selector="password-strength-text"]',
+            );
+            suggestions = themeElement('passwordSuggestions', []);
+            suggestions.style.display = 'none';
+            mainParent.append(strength);
+            confirmParent.after(suggestions);
           }
-        };
 
-        /**
-         * Checks the password strength.
-         */
-        const passwordCheck = () => {
-          if (settings.password.showStrengthIndicator) {
-            // Evaluate the password strength.
-            const result = Drupal.evaluatePasswordStrength(
-              $mainInput[0].value,
-              settings.password,
-            );
-            const $currentPasswordSuggestions = $(
-              Drupal.theme(
-                'passwordSuggestions',
-                settings.password,
-                result.messageTips,
+          const applyWidgetClasses = () => {
+            widget.classList.add(
+              ...classes(
+                mainInput.value ? css.passwordFilled : css.passwordEmpty,
+                confirm.value ? css.confirmFilled : css.confirmEmpty,
               ),
             );
+          };
 
-            // Update the suggestions for how to improve the password if needed.
-            if (
-              password.$suggestions.html() !==
-              $currentPasswordSuggestions.html()
-            ) {
-              password.$suggestions.replaceWith($currentPasswordSuggestions);
-              password.$suggestions = $currentPasswordSuggestions.toggle(
-                // Only show the description box if a weakness exists in the
-                // password.
-                result.strength !== 100,
+          const passwordCheck = () => {
+            if (config.showStrengthIndicator) {
+              const result = Drupal.evaluatePasswordStrength(
+                mainInput.value,
+                config,
               );
+              const nextSuggestions = themeElement(
+                'passwordSuggestions',
+                result.messageTips,
+              );
+              if (suggestions.innerHTML !== nextSuggestions.innerHTML) {
+                nextSuggestions.style.display =
+                  result.strength === 100 ? 'none' : '';
+                suggestions.replaceWith(nextSuggestions);
+                suggestions = nextSuggestions;
+              }
+              strengthBar.classList.remove(...strengthClasses);
+              strengthBar.style.width = String(result.strength) + '%';
+              strengthBar.classList.add(...classes(result.indicatorClass));
+              strengthText.innerHTML = result.indicatorText;
             }
 
-            if (passwordStrengthBarClassesToRemove) {
-              password.$strengthBar.removeClass(
-                passwordStrengthBarClassesToRemove,
+            if (confirm.value) {
+              const matching = mainInput.value === confirm.value;
+              const statusClasses = classes(
+                matching ? css.passwordsMatch : css.passwordsNotMatch,
               );
+              const message = matching
+                ? config.confirmSuccess
+                : config.confirmFailure;
+              if (
+                !statusClasses.length ||
+                statusClasses.some(
+                  (name) => !matchStatus.classList.contains(name),
+                ) ||
+                matchStatus.innerHTML !== message
+              ) {
+                matchStatus.classList.remove(...matchClasses);
+                matchStatus.innerHTML = message;
+                matchStatus.classList.add(...statusClasses);
+              }
             }
-            // Adjust the length of the strength indicator.
-            password.$strengthBar[0].style.width = `${result.strength}%`;
-            password.$strengthBar.addClass(result.indicatorClass);
+            confirmMessage.style.visibility = confirm.value
+              ? 'visible'
+              : 'hidden';
+            if (widgetClasses.length) {
+              widget.classList.remove(...widgetClasses);
+              applyWidgetClasses();
+            }
+          };
 
-            // Update the strength indication text.
-            password.$strengthTextWrapper.html(result.indicatorText);
+          if (widgetClasses.length) {
+            applyWidgetClasses();
           }
-
-          // Check the value in the confirm input and show results.
-          if ($confirmInput[0].value) {
-            passwordCheckMatch($confirmInput[0].value);
-            $passwordConfirmMessage[0].style.visibility = 'visible';
-          } else {
-            $passwordConfirmMessage[0].style.visibility = 'hidden';
-          }
-
-          if (widgetClassesToRemove) {
-            $passwordWidget.removeClass(widgetClassesToRemove);
-            addWidgetClasses();
-          }
-        };
-
-        if (widgetClassesToRemove) {
-          addWidgetClasses();
-        }
-
-        // Monitor input events.
-        $mainInput.on('input', passwordCheck);
-        $confirmInput.on('input', passwordCheck);
-      });
+          [mainInput, confirm].forEach((field) => {
+            Drupal.formEvents.listen(field, 'input', undefined, passwordCheck);
+          });
+        },
+      );
     },
   };
 
@@ -282,11 +221,9 @@
 
     // If there is a username edit box on the page, compare password to that,
     // otherwise use value from the database.
-    const $usernameBox = $('input.username');
     const username =
-      $usernameBox.length > 0
-        ? $usernameBox[0].value
-        : passwordSettings.username;
+      document.querySelector('input.username')?.value ??
+      passwordSettings.username;
 
     // Lose 5 points for every character less than 12, plus a 30 point penalty.
     if (password.length < 12) {
@@ -362,4 +299,4 @@
       messageTips,
     };
   };
-})(jQuery, Drupal);
+})(Drupal);
