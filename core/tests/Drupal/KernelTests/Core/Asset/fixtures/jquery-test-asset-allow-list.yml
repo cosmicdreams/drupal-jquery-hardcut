@@ -24,6 +24,3 @@
 - fixture: core/modules/system/tests/modules/js_message_test/js_message_test.libraries.yml:show_message
   removal: U
   assets: [js/js_message_test.js]
-- fixture: core/modules/system/tests/modules/tabledrag_test/tabledrag_test.libraries.yml:tabledrag
-  removal: T
-  assets: [js/tabledrag_test.js]

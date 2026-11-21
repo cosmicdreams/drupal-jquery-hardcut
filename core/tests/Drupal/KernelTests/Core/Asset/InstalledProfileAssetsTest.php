@@ -127,7 +127,9 @@ class InstalledProfileAssetsTest extends KernelTestBase {
         $bootstrap['minified'] = FALSE;
         $adapter = $bootstrap;
         $adapter['data'] = 'core/misc/jquery.drupal-bc.js';
-        array_splice($expected['js'], $index + 1, 0, [$bootstrap, $adapter]);
+        $tables_adapter = $bootstrap;
+        $tables_adapter['data'] = 'core/misc/jquery.tabledrag.bc.js';
+        array_splice($expected['js'], $index + 1, 0, [$bootstrap, $adapter, $tables_adapter]);
         break;
       }
     }

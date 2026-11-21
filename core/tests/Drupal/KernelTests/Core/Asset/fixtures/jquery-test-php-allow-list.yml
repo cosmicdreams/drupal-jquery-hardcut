@@ -15,6 +15,7 @@
     "core/jquery": 1
     "core/misc/jquery.drupal-bc.js": 1
     "core/misc/jquery.no-conflict.js": 1
+    "core/misc/jquery.tabledrag.bc.js": 1
 - path: core/tests/Drupal/KernelTests/Core/Asset/CoreLibraryDiscoveryTrait.php
   removal: Z (Drupal 13)
   literals:
@@ -30,12 +31,14 @@
     "core/misc/jquery.drupal-bc.js": 2
     "core/misc/jquery.form.js": 1
     "core/misc/jquery.no-conflict.js": 2
+    "core/misc/jquery.tabledrag.bc.js": 2
 - path: core/tests/Drupal/KernelTests/Core/Asset/InstalledProfileAssetsTest.php
   removal: Z (Drupal 13)
   literals:
     "core/assets/vendor/jquery/jquery.min.js": 1
     "core/misc/jquery.drupal-bc.js": 1
     "core/misc/jquery.no-conflict.js": 1
+    "core/misc/jquery.tabledrag.bc.js": 1
 - path: core/tests/Drupal/KernelTests/Core/Asset/JqueryFreeLibrariesTest.php
   removal: Z (Drupal 13)
   literals:
