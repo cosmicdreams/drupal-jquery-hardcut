@@ -27,14 +27,14 @@
 
   /**
    * A progressbar object. Initialized with the given id. Must be inserted into
-   * the DOM afterwards through progressBar.element.
+   * the DOM afterwards through progressBar.elementNode.
    *
    * Method is the function which will perform the HTTP request to get the
    * progress bar state. Either "GET" or "POST".
    *
    * @example
    * pb = new Drupal.ProgressBar('myProgressBar');
-   * some_element.appendChild(pb.element);
+   * some_element.appendChild(pb.elementNode);
    *
    * @constructor
    *
@@ -59,8 +59,20 @@
     // reader.
     const template = document.createElement('template');
     template.innerHTML = Drupal.theme('progressBar', id);
-    this.element = template.content.firstElementChild;
+    this.elementNode = template.content.firstElementChild;
   };
+
+  // With the legacy adapter, element is a deprecated jQuery accessor.
+  // Access elementNode in callbacks that use the native element.
+  Object.defineProperty(Drupal.ProgressBar.prototype, 'element', {
+    configurable: true,
+    get() {
+      return this.elementNode;
+    },
+    set(element) {
+      this.elementNode = element;
+    },
+  });
 
   Object.assign(Drupal.ProgressBar.prototype, {
     /**
@@ -75,10 +87,10 @@
      */
     setProgress(percentage, message, label) {
       if (percentage >= 0 && percentage <= 100) {
-        this.element.querySelectorAll('.progress__bar').forEach((bar) => {
+        this.elementNode.querySelectorAll('.progress__bar').forEach((bar) => {
           bar.style.width = `${percentage}%`;
         });
-        this.element
+        this.elementNode
           .querySelectorAll('.progress__percentage')
           .forEach((label) => {
             label.textContent = `${percentage}%`;
@@ -89,7 +101,7 @@
         ['label', label],
       ]) {
         if (value !== undefined) {
-          this.element
+          this.elementNode
             .querySelectorAll(`.progress__${part}`)
             .forEach((element) => {
               element.innerHTML = value;
@@ -136,34 +148,50 @@
       }
 
       const uri = new URL(this.uri, document.baseURI);
-      uri.searchParams.append('_format', 'json');
+      uri.search += `${uri.search ? '&' : '?'}_format=json`;
       const method = this.method.toUpperCase();
-      const hasBody = method !== 'GET' && method !== 'HEAD';
-      const headers = {
-        Accept: 'application/json, text/javascript, */*; q=0.01',
+      const success = (response) => {
+        if (response?.status === 0) {
+          this.displayError(response.data);
+          return;
+        }
+        if (response != null) {
+          this.setProgress(
+            response.percentage,
+            response.message,
+            response.label,
+          );
+        }
+        if (this.uri) {
+          this.timer = setTimeout(() => this.sendPing(), this.delay);
+        }
       };
-      if (hasBody) {
-        headers['Content-Type'] =
-          'application/x-www-form-urlencoded; charset=UTF-8';
+      const error = (xhr) => {
+        this.displayError(
+          `<pre>${new Drupal.AjaxError(xhr, this.uri).message}</pre>`,
+        );
+      };
+      if (Drupal.ProgressBar.request) {
+        Drupal.ProgressBar.request({
+          url: uri.href,
+          method,
+          dataType: 'json',
+          success,
+          error,
+        });
+        return;
       }
       Drupal.ajaxRequest(
-        { url: uri.href, method, headers, body: hasBody ? '' : null },
+        {
+          url: uri.href,
+          method,
+          headers: { Accept: 'application/json, text/javascript, */*; q=0.01' },
+        },
         ({ status, response, xhr }) => {
-          if (status !== 'success') {
-            this.displayError(
-              `<pre>${new Drupal.AjaxError(xhr, this.uri).message}</pre>`,
-            );
-          } else if (response.status === 0) {
-            this.displayError(response.data);
+          if (['success', 'nocontent', 'notmodified'].includes(status)) {
+            success(response);
           } else {
-            this.setProgress(
-              response.percentage,
-              response.message,
-              response.label,
-            );
-            if (this.uri) {
-              this.timer = setTimeout(() => this.sendPing(), this.delay);
-            }
+            error(xhr);
           }
         },
       ).commands.catch(Drupal.throwError);
@@ -179,12 +207,13 @@
       const error = document.createElement('div');
       error.className = 'messages messages--error';
       error.innerHTML = string;
-      this.element.before(error);
-      this.element.style.display = 'none';
+      this.elementNode.before(error);
+      this.elementNode.style.display = 'none';
 
       if (this.errorCallback) {
         this.errorCallback(this);
       }
     },
   });
+  document.dispatchEvent(new CustomEvent('drupal:progress-ready'));
 })(Drupal);
