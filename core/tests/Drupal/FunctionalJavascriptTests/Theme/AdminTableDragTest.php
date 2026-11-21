@@ -125,6 +125,11 @@ class AdminTableDragTest extends TableDragTest {
 
   /**
    * Asserts that an omitted wrapper leaves the other wrapper and both rows.
+   *
+   * @param string $hook
+   *   The theme hook to replace.
+   * @param bool $outer
+   *   Whether the outer wrapper should remain.
    */
   private function assertEmptyWrapperParity(string $hook, bool $outer): void {
     $this->getSession()->executeScript("window.emptyWrapperHook = '$hook';");
@@ -159,7 +164,7 @@ class AdminTableDragTest extends TableDragTest {
   #[IgnoreDeprecations]
   public function testBuiltInBulkActionsIgnoreSyntheticChange(): void {
     $this->drupalGet('tabledrag_test', ['query' => ['legacy' => 1]]);
-    $this->assertSame([[TRUE, 'Initial', FALSE], [TRUE, NULL, FALSE], [2, 2]], $this->getSession()->evaluateScript(<<<'JS'
+    $this->assertSame([[TRUE, ['Initial', 'Initial'], FALSE], [TRUE, [NULL, NULL], FALSE], [2, 2]], $this->getSession()->evaluateScript(<<<'JS'
       (() => {
         const calls = [];
         return [false, true].map((chain) => {
@@ -181,16 +186,16 @@ class AdminTableDragTest extends TableDragTest {
             }
           }
           let succeeded = true;
+          const statuses = [];
           for (const checkbox of fixture.querySelectorAll('th input, td input')) {
             try {
               jQuery(checkbox).triggerHandler('change');
             } catch (error) {
               succeeded = false;
             }
+            statuses.push(actions.querySelector('[data-drupal-views-bulk-actions-status]')?.textContent ?? null);
           }
-          return [succeeded,
-            actions.querySelector('[data-drupal-views-bulk-actions-status]')?.textContent ?? null,
-            bulk.bulkActionsSticky];
+          return [succeeded, statuses, bulk.bulkActionsSticky];
         }).concat([calls]);
       })()
       JS));
