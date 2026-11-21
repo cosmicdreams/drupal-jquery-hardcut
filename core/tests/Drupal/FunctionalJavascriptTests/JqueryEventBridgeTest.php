@@ -114,7 +114,7 @@ final class JqueryEventBridgeTest extends WebDriverTestBase {
         const resume = connect(second);
         stop();
         const secondAfterResume = second(target).triggerHandler(type);
-        second(target).trigger('RefreshView.view');
+        second(target).trigger('RefreshView');
         const reconnected = publish();
         resume();
         const firstAfterStop = first(target).triggerHandler(type);
@@ -148,7 +148,7 @@ final class JqueryEventBridgeTest extends WebDriverTestBase {
         [['first', TRUE, [TRUE]], ['second', TRUE, []]],
         [['first', TRUE, [TRUE]], ['second', TRUE, [TRUE]]],
       ],
-      [[TRUE, 'view', 3], [TRUE, 'view', 3]],
+      [[TRUE, 'view', 3], [TRUE, '', 3]],
       [[TRUE, 3]],
     ], $trace);
   }
