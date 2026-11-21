@@ -2589,6 +2589,11 @@
    * @namespace
    */
   Drupal.ajax.elementData = {
+    isLegacyKey(name) {
+      return (
+        typeof name === 'string' && legacyDataKeys.test(normalizeDataKey(name))
+      );
+    },
     get(element, name) {
       const key = normalizeDataKey(name);
       const data = elementData.get(element);

@@ -1429,7 +1429,18 @@
           "DataCommand's jQuery-data semantics",
           "Use Drupal's element data API.",
         );
-        jQuery(response.selector).data(response.name, response.value);
+        const { name, value } = response;
+        const targets = jQuery(response.selector);
+        targets.data(name, value);
+        if (value !== undefined && Drupal.ajax.elementData.isLegacyKey(name)) {
+          targets.each((index, element) => {
+            Drupal.ajax.elementData.set(
+              element,
+              name,
+              jQuery.data(element, name),
+            );
+          });
+        }
       },
       getData: (element, key) => jQuery.data(element, key),
       cloneContent(content) {
