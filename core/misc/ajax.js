@@ -2215,12 +2215,14 @@
         ? Math.max(0, speed)
         : ({ fast: 200, slow: 600 }[speed] ?? 400);
     if (duration) {
-      element.animate(
-        [{ opacity: 0 }, { opacity: getComputedStyle(element).opacity }],
-        {
-          duration,
-          easing: 'ease-in-out',
-        },
+      Drupal.trackAnimation(
+        element.animate(
+          [{ opacity: 0 }, { opacity: getComputedStyle(element).opacity }],
+          {
+            duration,
+            easing: 'ease-in-out',
+          },
+        ),
       );
     }
   }

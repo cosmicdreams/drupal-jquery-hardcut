@@ -83,7 +83,10 @@ class CommandsTest extends WebDriverTestBase {
         { command: 'toggleClass', selector: '#typed-command-input', className: 'error', enabled: true },
         { command: 'setAttribute', selector: '#typed-command-input', name: 'data-error', value: 'true' },
         { command: 'focus', selector: '#typed-command-input' },
+        { command: 'insert', selector: '#native-commands', method: 'append', effect: 'fade', speed: 500,
+          data: '<span class="animated-target">animated</span>' },
       ], 'success').then(() => {
+        fixture.dataset.animationTracked = String(Drupal.hasActiveAnimations());
         fixture.dataset.completed = 'yes';
       });
       JS);
@@ -93,6 +96,8 @@ class CommandsTest extends WebDriverTestBase {
     $fixture = $this->assertSession()->elementExists('css', '#native-commands');
     $this->assertSame('selected', $fixture->getAttribute('data-event-value'));
     $this->assertSame('true', $fixture->getAttribute('data-canceled'));
+    $this->assertSame('true', $fixture->getAttribute('data-animation-tracked'));
+    $this->assertJsCondition('!Drupal.hasActiveAnimations()');
     $this->assertSession()->elementsCount('css', '#native-commands .target > span', 2);
     $this->assertSession()->elementsCount('css', '#native-commands script[type="application/json"]', 2);
     $this->assertTrue($session->evaluateScript("Array.from(document.querySelectorAll('#native-commands .target')).every(target => target.firstChild.nodeType === Node.COMMENT_NODE && target.childNodes[1].textContent === 'first ')"));
