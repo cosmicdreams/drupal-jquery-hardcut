@@ -55,6 +55,54 @@ class CommandsTest extends WebDriverTestBase {
   }
 
   /**
+   * Tests the original command contracts on a page with the legacy library.
+   */
+  public function testLegacyCommands(): void {
+    $this->drupalLogin($this->drupalCreateUser(['access content']));
+    $this->drupalGet('ajax_forms_test_ajax_commands_form');
+    $session = $this->getSession();
+    $session->executeScript(<<<'JS'
+      const fixture = document.createElement('div');
+      fixture.id = 'legacy-commands';
+      fixture.innerHTML = '<div class="target" style="width: 30px"></div><div class="target"></div>';
+      document.body.append(fixture);
+
+      jQuery.cssHooks.fixtureColor = {
+        set(element, value) {
+          element.dataset.color = value;
+        }
+      };
+      jQuery.fn.fixtureInvoke = function (attribute, value) {
+        return this.attr(attribute, value);
+      };
+      jQuery.fn.fixtureInsert = function (nodes) {
+        return this.append(nodes).attr('data-plugin-insert', 'yes');
+      };
+
+      const ajax = Drupal.ajax({ url: location.href });
+      ajax.commandExecutionQueue([
+        { command: 'css', selector: '#legacy-commands .target:first', argument: { width: '+=12', fixtureColor: 'blue' } },
+        { command: 'data', selector: '#legacy-commands .target:first', name: 'fixture-key', value: { stored: true } },
+        { command: 'invoke', selector: '#legacy-commands .target:first', method: 'fixtureInvoke', args: ['data-invoked', 'yes'] },
+        { command: 'insert', selector: '#legacy-commands .target:first', method: 'fixtureInsert', data: '<span>plugin</span>' },
+        { command: 'remove', selector: '#legacy-commands .target:last' },
+      ], 'success').then(() => {
+        fixture.dataset.completed = 'yes';
+      });
+      JS);
+
+    $this->assertJsCondition("document.querySelector('#legacy-commands').dataset.completed === 'yes'");
+    $target = $this->assertSession()->elementExists('css', '#legacy-commands .target');
+    $this->assertSame('width: 42px;', $target->getAttribute('style'));
+    $this->assertSame('blue', $target->getAttribute('data-color'));
+    $this->assertSame('yes', $target->getAttribute('data-invoked'));
+    $this->assertSame('yes', $target->getAttribute('data-plugin-insert'));
+    $this->assertSame('plugin', $target->getText());
+    $this->assertSession()->elementsCount('css', '#legacy-commands .target', 1);
+    $this->assertTrue($session->evaluateScript("jQuery.data(document.querySelector('#legacy-commands .target'), 'fixtureKey').stored"));
+  }
+
+  /**
    * Tests the various Ajax Commands.
    */
   public function testAjaxCommands(): void {
