@@ -41,7 +41,11 @@
         const { target, type, namespace, selector, listener } = binding;
         if (
           subscriptions.has(binding) ||
-          window.Drupal.ajax?.compatibility?.ownsLegacyEvents?.(jquery, binding)
+          window.Drupal.ajax?.compatibility?.ownsLegacyEvents?.(
+            jquery,
+            binding,
+          ) ||
+          window.Drupal.formCompatibility?.ownsLegacyEvents?.(jquery, binding)
         ) {
           return;
         }
@@ -51,6 +55,13 @@
           jquery === instance &&
           binding.tableInteraction &&
           target instanceof Element &&
+          !binding.handlesNativeEvent;
+        const formSlot =
+          jquery === instance &&
+          (binding.formInteraction ||
+            binding.detailsAria ||
+            binding.tabbingFocusTrap ||
+            binding.navTabs) &&
           !binding.handlesNativeEvent;
         // A select has no native change() method for jQuery's trigger to invoke.
         const selectChange =
@@ -64,7 +75,7 @@
           type === 'compatibility:probe' ||
           directActivation ||
           selectChange;
-        if (!forwardsSynthetic && !tableSlot) {
+        if (!forwardsSynthetic && !tableSlot && !formSlot) {
           return;
         }
 
