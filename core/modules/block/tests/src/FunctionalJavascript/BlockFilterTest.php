@@ -57,7 +57,7 @@ class BlockFilterTest extends WebDriverTestBase {
 
     // Test block filter reduces the number of visible rows.
     $filter->setValue('ad');
-    $session->wait(10000, 'jQuery("#drupal-live-announce").html().indexOf("blocks are available") > -1');
+    $this->assertJsCondition("document.getElementById('drupal-live-announce')?.textContent.includes('blocks are available')");
     $visible_rows = $this->filterVisibleElements($block_rows);
     if (count($block_rows) > 0) {
       $this->assertNotSameSize($block_rows, $visible_rows);
@@ -69,7 +69,7 @@ class BlockFilterTest extends WebDriverTestBase {
 
     // Test Drupal.announce() message when only one match is expected.
     $filter->setValue('Powered by');
-    $session->wait(10000, 'jQuery("#drupal-live-announce").html().indexOf("block is available") > -1');
+    $this->assertJsCondition("document.getElementById('drupal-live-announce')?.textContent.includes('block is available')");
     $visible_rows = $this->filterVisibleElements($block_rows);
     $this->assertCount(1, $visible_rows);
     $expected_message = '1 block is available in the modified list.';
@@ -77,7 +77,7 @@ class BlockFilterTest extends WebDriverTestBase {
 
     // Test Drupal.announce() message when no matches are expected.
     $filter->setValue('Pan-Galactic Gargle Blaster');
-    $session->wait(10000, 'jQuery("#drupal-live-announce").html().indexOf("0 blocks are available") > -1');
+    $this->assertJsCondition("document.getElementById('drupal-live-announce')?.textContent.includes('0 blocks are available')");
     $visible_rows = $this->filterVisibleElements($block_rows);
     $this->assertCount(0, $visible_rows);
     $expected_message = '0 blocks are available in the modified list.';
