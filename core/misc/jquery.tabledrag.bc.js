@@ -357,25 +357,29 @@
           windowResize ||
           (target === document && documentGestures.includes(type));
         const element = jquery(target);
-        const sharesAjaxDispatch = (event) =>
-          target instanceof Element &&
-          window.Drupal.ajax?.compatibility?.hasEventBinding(
-            target,
-            type,
-            event,
+        const decisions = new WeakMap();
+        const sharesAjaxDispatch = (event, fromNative) => {
+          if (!(target instanceof Element)) {
+            return false;
+          }
+          const previous = decisions.get(event);
+          if (previous && previous.fromNative !== fromNative) {
+            decisions.delete(event);
+            return previous.shared;
+          }
+          // Keep the first listener's choice when a handler is added or
+          // removed between the native and jQuery dispatch slots.
+          const shared = Boolean(
+            window.Drupal.ajax?.compatibility?.hasEventBinding(
+              target,
+              type,
+              event,
+            ),
           );
-        const delivered = new WeakSet();
-        const yielded = new WeakSet();
-        binding.handlesNativeEvent = (event) => {
-          if (delivered.delete(event)) {
-            return true;
-          }
-          if (sharesAjaxDispatch(event)) {
-            yielded.add(event);
-            return true;
-          }
-          return false;
+          decisions.set(event, { fromNative, shared });
+          return shared;
         };
+        binding.handlesNativeEvent = (event) => sharesAjaxDispatch(event, true);
         let slot;
         const deliver = function (event) {
           const { originalEvent } = event;
@@ -391,14 +395,11 @@
             if (shared) {
               return deliverShared(binding, event);
             }
-            if (originalEvent instanceof Event) {
-              if (yielded.delete(originalEvent)) {
-                return deliverShared(binding, event, false);
-              }
-              if (sharesAjaxDispatch(originalEvent)) {
-                delivered.add(originalEvent);
-                return deliverShared(binding, event, false);
-              }
+            if (
+              originalEvent instanceof Event &&
+              sharesAjaxDispatch(originalEvent, false)
+            ) {
+              return deliverShared(binding, event, false);
             }
             return undefined;
           }

@@ -135,7 +135,8 @@ class AdminTableDragTest extends TableDragTest {
     $this->drupalGet('tabledrag_test', ['query' => ['tableselect' => 1, 'legacy_ajax' => 1]]);
     $result = $this->getSession()->evaluateScript(<<<'JS'
       (() => {
-        const cases = [[false, false], [true, false], [true, true]].map(([ajaxFirst, cancel]) => {
+        const orders = [[false, false], [true, false], [true, true], [false, false, true]];
+        const cases = orders.map(([ajaxFirst, cancel, attachDuringDispatch]) => {
           const trace = [];
           const fixture = document.body.appendChild(document.createElement('div'));
           fixture.innerHTML = '<form><div data-drupal-views-bulk-actions></div>' +
@@ -153,7 +154,14 @@ class AdminTableDragTest extends TableDragTest {
           if (ajaxFirst) attachAjax();
           const bulk = new Drupal.DefaultAdminBulkActions(fixture.querySelector('[data-drupal-views-bulk-actions]'));
           bulk.rowCheckboxHandler = () => trace.push('table');
-          if (!ajaxFirst) attachAjax();
+          if (attachDuringDispatch) {
+            jQuery(box).one('change', () => {
+              trace.push('attach');
+              attachAjax();
+            });
+          } else if (!ajaxFirst) {
+            attachAjax();
+          }
           jQuery(box).on('change', () => trace.push('after'));
           box.click();
           return trace;
@@ -167,6 +175,7 @@ class AdminTableDragTest extends TableDragTest {
         ['before', 'table', 'ajax', 'after'],
         ['before', 'ajax', 'table', 'after'],
         ['before', 'ajax'],
+        ['before', 'attach', 'after', 'table'],
       ],
     ], $result);
   }
