@@ -197,7 +197,7 @@ class TableDragTest extends WebDriverTestBase {
       'The legacy resize.tableresponsive removal',
     ];
     foreach ($contracts as $contract) {
-      $this->expectUserDeprecationMessage("Javascript Deprecation: $contract is deprecated in drupal:12.0.0 and is removed from drupal:13.0.0. Use the native table or row member, or native theme/interaction callback.");
+      $this->expectUserDeprecationMessage("Javascript Deprecation: $contract is deprecated in drupal:12.0.0 and is removed from drupal:13.0.0. Use the native table or row member, or native theme/interaction callback. See https://www.drupal.org/node/CHANGE_RECORD.");
     }
     $this->drupalGet('tabledrag_test', ['query' => ['legacy' => 1]]);
     $session = $this->getSession();
