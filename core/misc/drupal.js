@@ -65,6 +65,147 @@ window.Drupal = { behaviors: {}, locale: {} };
     }, 0);
   };
 
+  const activeAnimations = new Set();
+
+  /**
+   * Tracks completion of a finite Drupal-owned animation.
+   *
+   * @param {Animation} animation
+   *   The animation to track.
+   * @return {Animation}
+   *   The same animation, so the caller can control it.
+   *
+   * @internal
+   */
+  Drupal.trackAnimation = function (animation) {
+    if (Number.isFinite(animation.effect?.getComputedTiming().endTime)) {
+      const completion = animation.finished;
+      activeAnimations.add(completion);
+      const clear = () => activeAnimations.delete(completion);
+      // Cancellation rejects the completion promise.
+      completion.then(clear, clear);
+    }
+    return animation;
+  };
+
+  /**
+   * Returns whether a tracked animation has yet to settle.
+   *
+   * @return {boolean}
+   *   Whether an animation is active.
+   *
+   * @internal
+   */
+  Drupal.hasActiveAnimations = function () {
+    return activeAnimations.size > 0;
+  };
+
+  const ownedEventBindings = new Set();
+  const eventBindingObservers = new Set();
+  const eventPublicationObservers = new Set();
+
+  /**
+   * Exposes Drupal-owned bindings and publications to event adapters.
+   *
+   * The owner installs its native listener and reports the binding here.
+   * Removing an adapter leaves that listener in place.
+   *
+   * @namespace
+   * @internal
+   */
+  Drupal.eventBindings = {
+    /**
+     * Registers a binding while its native listener is installed.
+     *
+     * @param {object} binding
+     *   The descriptor for one owned binding, stable until removal.
+     * @return {function}
+     *   Removes the binding from the registry and all observers.
+     */
+    register(binding) {
+      if (!ownedEventBindings.has(binding)) {
+        ownedEventBindings.add(binding);
+        eventBindingObservers.forEach((observer) => observer.add(binding));
+      }
+      return () => {
+        if (ownedEventBindings.delete(binding)) {
+          eventBindingObservers.forEach((observer) => observer.remove(binding));
+        }
+      };
+    },
+
+    /**
+     * Observes bindings already installed and subsequent changes.
+     *
+     * @param {object} observer
+     *   An adapter with add and remove methods for an owned binding.
+     * @return {function}
+     *   Stops observing and removes this adapter's remaining subscriptions.
+     */
+    observe(observer) {
+      if (!eventBindingObservers.has(observer)) {
+        eventBindingObservers.add(observer);
+        ownedEventBindings.forEach((binding) => observer.add(binding));
+      }
+      return () => {
+        if (eventBindingObservers.delete(observer)) {
+          ownedEventBindings.forEach((binding) => observer.remove(binding));
+        }
+      };
+    },
+
+    /**
+     * Dispatches one owned event after notifying connected adapters.
+     *
+     * An observer exception is reported without interrupting native dispatch
+     * or other observers.
+     * @param {EventTarget} target
+     *   The original dispatch target.
+     * @param {CustomEvent} event
+     *   The native event to dispatch.
+     * @return {boolean}
+     *   The result of dispatchEvent().
+     */
+    publish(target, event) {
+      const cleanups = [];
+      try {
+        eventPublicationObservers.forEach((prepare) => {
+          try {
+            const cleanup = prepare(event);
+            if (cleanup) {
+              cleanups.push(cleanup);
+            }
+          } catch (error) {
+            Drupal.throwError(error);
+          }
+        });
+        return target.dispatchEvent(event);
+      } finally {
+        cleanups.forEach((cleanup) => {
+          try {
+            cleanup();
+          } catch (error) {
+            Drupal.throwError(error);
+          }
+        });
+      }
+    },
+
+    /**
+     * Observes future owned publications before their native dispatch.
+     * @param {(event: CustomEvent) => (() => void) | undefined} prepare
+     *   Prepares delivery and may return a cleanup to run after dispatch.
+     * @return {() => void}
+     *   Stops observing publications.
+     */
+    observePublications(prepare) {
+      eventPublicationObservers.add(prepare);
+      return () => {
+        eventPublicationObservers.delete(prepare);
+      };
+    },
+  };
+
   /**
    * Custom error thrown after attach/detach if one or more behaviors failed.
    * Initializes the JavaScript behaviors for page loads and Ajax requests.
@@ -663,3 +804,5 @@ window.Drupal = { behaviors: {}, locale: {} };
   window.Proxy,
   window.Reflect,
 );
+
+document.dispatchEvent(new Event('drupal:event-bindings-ready'));

@@ -80,24 +80,14 @@
             },
           });
 
-          // Override the AJAX success callback to shift focus to the media
-          // library content.
-          ajaxObject.success = function (response, status) {
-            return Promise.resolve(
-              Drupal.Ajax.prototype.success.call(ajaxObject, response, status),
-            ).then(() => {
-              // Set focus to the first tabbable element in the media library
-              // content.
-              const mediaLibraryContent = document.getElementById(
-                'media-library-content',
-              );
-              if (mediaLibraryContent) {
-                const tabbableContent = tabbable(mediaLibraryContent);
-                if (tabbableContent.length) {
-                  tabbableContent[0].focus();
-                }
-              }
-            });
+          // Move focus after the replacement and behavior attachment.
+          ajaxObject.afterSuccess = () => {
+            const mediaLibraryContent = document.getElementById(
+              'media-library-content',
+            );
+            if (mediaLibraryContent) {
+              tabbable(mediaLibraryContent)[0]?.focus();
+            }
           };
           ajaxObject.execute();
 
@@ -197,17 +187,14 @@
           },
         });
 
-        // Override the AJAX success callback to announce the updated content
-        // to screen readers.
+        // Announce and focus the updated display after its commands finish.
         if (displayAnnouncement || focusSelector) {
-          const success = ajaxObject.success;
-          ajaxObject.success = function (response, status) {
-            success.bind(this)(response, status);
+          ajaxObject.afterSuccess = () => {
             // The AJAX link replaces the whole view, including the clicked
             // link. Move the focus back to the clicked link when the view is
             // replaced.
             if (focusSelector) {
-              $(focusSelector).focus();
+              document.querySelector(focusSelector)?.focus();
             }
             // Announce the new view is loaded to screen readers.
             if (displayAnnouncement) {

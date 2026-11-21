@@ -5,6 +5,8 @@
 (() => {
   window.drupalCumulativeXhrCount = 0;
   window.drupalActiveXhrCount = 0;
+  window.drupalTestHasActiveAnimations = () =>
+    window.Drupal?.hasActiveAnimations?.() ?? false;
 
   function incrementActive() {
     window.drupalActiveXhrCount = (window.drupalActiveXhrCount ?? 0) + 1;

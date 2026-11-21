@@ -7,11 +7,12 @@ use Drupal\ckeditor5\LanguageMapper;
 use Drupal\ckeditor5\Plugin\Editor\CKEditor5;
 use Drupal\Component\Utility\UrlHelper;
 use Drupal\Core\Ajax\AjaxResponse;
-use Drupal\Core\Ajax\InvokeCommand;
 use Drupal\Core\Ajax\MessageCommand;
 use Drupal\Core\Ajax\PrependCommand;
 use Drupal\Core\Ajax\RemoveCommand;
 use Drupal\Core\Ajax\ReplaceCommand;
+use Drupal\Core\Ajax\SetAttributeCommand;
+use Drupal\Core\Ajax\ToggleClassCommand;
 use Drupal\Core\Asset\AttachedAssetsInterface;
 use Drupal\Core\Asset\LibraryDependencyResolverInterface;
 use Drupal\Core\Config\ConfigFactoryInterface;
@@ -581,15 +582,15 @@ class Ckeditor5Hooks {
     // that switch, add an error class and attribute to the editor select,
     // otherwise remove.
     $ckeditor5_selected_but_errors = !$form_state->get('ckeditor5_is_active') && $form_state->get('ckeditor5_is_selected') && !empty($form_state->getErrors());
-    $response->addCommand(new InvokeCommand(
+    $response->addCommand(new ToggleClassCommand(
       '[data-drupal-selector="edit-editor-editor"]',
-      $ckeditor5_selected_but_errors ? 'addClass' : 'removeClass',
-      ['error'],
+      'error',
+      $ckeditor5_selected_but_errors,
     ));
-    $response->addCommand(new InvokeCommand(
+    $response->addCommand(new SetAttributeCommand(
       '[data-drupal-selector="edit-editor-editor"]',
-      $ckeditor5_selected_but_errors ? 'attr' : 'removeAttr',
-      ['data-error-switching-to-ckeditor5', TRUE],
+      'data-error-switching-to-ckeditor5',
+      $ckeditor5_selected_but_errors ? 'true' : NULL,
     ));
 
     /*

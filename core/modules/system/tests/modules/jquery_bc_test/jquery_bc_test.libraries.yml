@@ -1,0 +1,18 @@
+explicit_jquery:
+  dependencies:
+    - core/drupal
+    - core/jquery
+
+event_bridge_early:
+  js:
+    js/event-bridge-dependent.js: {}
+  dependencies:
+    - core/jquery
+    - core/drupal
+
+event_bridge_late:
+  js:
+    js/event-bridge-dependent.js: {}
+  dependencies:
+    - core/drupal
+    - core/jquery

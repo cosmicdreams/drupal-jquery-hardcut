@@ -31,8 +31,6 @@
 - core/assets/vendor/jquery.ui/ui/widgets/resizable-min.js
 - core/assets/vendor/jquery/jquery.min.js
 - core/assets/vendor/sortable/Sortable.min.js
-- core/lib/Drupal/Core/Render/Element/RenderElementBase.php
-- core/misc/ajax.js
 - core/misc/autocomplete.js
 - core/misc/batch.js
 - core/misc/details-aria.js
@@ -45,13 +43,15 @@
 - core/misc/dialog/off-canvas/js/off-canvas.js
 - core/misc/displace.js
 - core/misc/dropbutton/dropbutton.js
-- core/misc/drupal.init.js
 - core/misc/entity-form.js
 - core/misc/form.js
+- core/misc/jquery.drupal-ajax-bc.js
+- core/misc/jquery.drupal-ajax-commands.js
+- core/misc/jquery.drupal-bc.js
 - core/misc/jquery.form.js
+- core/misc/jquery.no-conflict.js
 - core/misc/machine-name.js
 - core/misc/position.js
-- core/misc/progress.js
 - core/misc/states.js
 - core/misc/tabbingmanager.js
 - core/misc/tabledrag.js
@@ -98,7 +98,6 @@
 - core/modules/taxonomy/js/taxonomy.js
 - core/modules/user/js/user.js
 - core/modules/user/js/user.permissions.js
-- core/modules/views/js/ajax_view.js
 - core/modules/views/js/base.js
 - core/modules/views_ui/js/ajax.js
 - core/modules/views_ui/js/dialog.views.js

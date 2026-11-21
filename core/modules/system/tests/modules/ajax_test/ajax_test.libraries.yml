@@ -2,7 +2,7 @@ ajax_insert:
   js:
     js/insert-ajax.js: {}
   dependencies:
-    - core/drupal.ajax
+    - core/drupal.ajax.jquery
 order:
   drupalSettings:
     ajax: test
@@ -48,3 +48,12 @@ global_events:
     js/global_events.js: {}
   dependencies:
     - core/drupal.ajax
+    - core/jquery
+
+legacy_overrides:
+  js:
+    js/legacy-overrides.js: {}
+  dependencies:
+    - core/jquery
+    - core/drupal.ajax
+    - core/once

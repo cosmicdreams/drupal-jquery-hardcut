@@ -4,10 +4,6 @@
       "owner": "Z",
       "references": 1
     },
-    "misc/ajax.js": {
-      "owner": "A",
-      "references": 1
-    },
     "misc/autocomplete.js": {
       "owner": "C",
       "references": 1
@@ -56,10 +52,6 @@
       "owner": "U",
       "references": 1
     },
-    "misc/drupal.init.js": {
-      "owner": "B",
-      "references": 2
-    },
     "misc/entity-form.js": {
       "owner": "U",
       "references": 1
@@ -68,9 +60,25 @@
       "owner": "U",
       "references": 1
     },
+    "misc/jquery.drupal-ajax-bc.js": {
+      "owner": "A",
+      "references": 1
+    },
+    "misc/jquery.drupal-ajax-commands.js": {
+      "owner": "A",
+      "references": 1
+    },
+    "misc/jquery.drupal-bc.js": {
+      "owner": "B",
+      "references": 1
+    },
     "misc/jquery.form.js": {
       "owner": "A",
       "references": 4
+    },
+    "misc/jquery.no-conflict.js": {
+      "owner": "B",
+      "references": 1
     },
     "misc/machine-name.js": {
       "owner": "U",
@@ -78,10 +86,6 @@
     },
     "misc/position.js": {
       "owner": "D",
-      "references": 1
-    },
-    "misc/progress.js": {
-      "owner": "U",
       "references": 1
     },
     "misc/states.js": {
@@ -264,15 +268,15 @@
       "owner": "U",
       "references": 1
     },
-    "modules/system/tests/modules/ajax_test/js/command_promise-ajax.js": {
-      "owner": "A",
-      "references": 1
-    },
     "modules/system/tests/modules/ajax_test/js/global_events.js": {
       "owner": "A",
       "references": 1
     },
     "modules/system/tests/modules/ajax_test/js/insert-ajax.js": {
+      "owner": "A",
+      "references": 1
+    },
+    "modules/system/tests/modules/ajax_test/js/legacy-overrides.js": {
       "owner": "A",
       "references": 1
     },
@@ -282,6 +286,10 @@
     },
     "modules/system/tests/modules/form_test/js/form_test.js": {
       "owner": "U",
+      "references": 1
+    },
+    "modules/system/tests/modules/jquery_bc_test/js/event-bridge-dependent.js": {
+      "owner": "B",
       "references": 1
     },
     "modules/system/tests/modules/js_message_test/js/js_message_test.js": {
@@ -306,10 +314,6 @@
     },
     "modules/user/js/user.permissions.js": {
       "owner": "U",
-      "references": 1
-    },
-    "modules/views/js/ajax_view.js": {
-      "owner": "A",
       "references": 1
     },
     "modules/views/js/base.js": {

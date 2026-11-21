@@ -11,7 +11,7 @@
 - default_admin/comment/drupal.comment-by-viewer
 - default_admin/content_translation/drupal.content_translation.admin
 - default_admin/contextual/drupal.contextual-links
-- default_admin/core/drupal.ajax
+- default_admin/core/drupal.ajax.jquery
 - default_admin/core/drupal.autocomplete
 - default_admin/core/drupal.batch
 - default_admin/core/drupal.collapse
@@ -24,7 +24,6 @@
 - default_admin/core/drupal.form
 - default_admin/core/drupal.jquery.position
 - default_admin/core/drupal.machine-name
-- default_admin/core/drupal.progress
 - default_admin/core/drupal.states
 - default_admin/core/drupal.tabbingmanager
 - default_admin/core/drupal.tabledrag
@@ -91,7 +90,7 @@
 - stark/comment/drupal.comment-by-viewer
 - stark/content_translation/drupal.content_translation.admin
 - stark/contextual/drupal.contextual-links
-- stark/core/drupal.ajax
+- stark/core/drupal.ajax.jquery
 - stark/core/drupal.autocomplete
 - stark/core/drupal.batch
 - stark/core/drupal.collapse
@@ -104,7 +103,6 @@
 - stark/core/drupal.form
 - stark/core/drupal.jquery.position
 - stark/core/drupal.machine-name
-- stark/core/drupal.progress
 - stark/core/drupal.states
 - stark/core/drupal.tabbingmanager
 - stark/core/drupal.tabledrag
@@ -170,7 +168,7 @@
 - starterkit_theme/comment/drupal.comment-by-viewer
 - starterkit_theme/content_translation/drupal.content_translation.admin
 - starterkit_theme/contextual/drupal.contextual-links
-- starterkit_theme/core/drupal.ajax
+- starterkit_theme/core/drupal.ajax.jquery
 - starterkit_theme/core/drupal.autocomplete
 - starterkit_theme/core/drupal.batch
 - starterkit_theme/core/drupal.collapse
@@ -183,7 +181,6 @@
 - starterkit_theme/core/drupal.form
 - starterkit_theme/core/drupal.jquery.position
 - starterkit_theme/core/drupal.machine-name
-- starterkit_theme/core/drupal.progress
 - starterkit_theme/core/drupal.states
 - starterkit_theme/core/drupal.tabbingmanager
 - starterkit_theme/core/drupal.tabledrag
@@ -249,7 +246,7 @@
 - umami/comment/drupal.comment-by-viewer
 - umami/content_translation/drupal.content_translation.admin
 - umami/contextual/drupal.contextual-links
-- umami/core/drupal.ajax
+- umami/core/drupal.ajax.jquery
 - umami/core/drupal.autocomplete
 - umami/core/drupal.batch
 - umami/core/drupal.collapse
@@ -262,7 +259,6 @@
 - umami/core/drupal.form
 - umami/core/drupal.jquery.position
 - umami/core/drupal.machine-name
-- umami/core/drupal.progress
 - umami/core/drupal.states
 - umami/core/drupal.tabbingmanager
 - umami/core/drupal.tabledrag
