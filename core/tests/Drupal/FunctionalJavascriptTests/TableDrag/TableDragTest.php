@@ -12,6 +12,7 @@ use Drupal\system\Entity\Menu;
 use Drupal\taxonomy\Entity\Term;
 use Drupal\taxonomy\Entity\Vocabulary;
 use PHPUnit\Framework\Attributes\Group;
+use PHPUnit\Framework\Attributes\IgnoreDeprecations;
 use PHPUnit\Framework\Attributes\RunTestsInSeparateProcesses;
 
 /**
@@ -176,6 +177,7 @@ class TableDragTest extends WebDriverTestBase {
   /**
    * Tests deprecated table members, event callbacks and weight notifications.
    */
+  #[IgnoreDeprecations]
   public function testLegacyTableDrag(): void {
     $contracts = [
       'Drupal.tableDrag#$table',
@@ -223,8 +225,14 @@ class TableDragTest extends WebDriverTestBase {
       jQuery(window).on('columnschange', (event, displayWeight) => {
         legacyEvents.push({ event: event.originalEvent, displayWeight });
       });
+      let resizeRefreshes = 0;
+      jQuery(window).on('resize.tableresponsive', () => { resizeRefreshes += 1; });
+      const responsiveTable = document.createElement('table');
+      responsiveTable.classList.add('responsive-enabled');
+      document.body.append(responsiveTable);
+      Drupal.behaviors.tableResponsive.attach(document);
       window.readTableDrag = () => [
-        members, callbacks, drag.pointerCoords(pointer),
+        members, callbacks, drag.pointerCoords(pointer), resizeRefreshes,
         nativeEvents.map((event) => event.detail.displayWeight),
         legacyEvents.map(({ displayWeight }) => displayWeight),
         nativeEvents.every((event, index) => event === legacyEvents[index]?.event &&
@@ -235,9 +243,38 @@ class TableDragTest extends WebDriverTestBase {
     $this->findWeightsToggle('Show row weights')->click();
     $this->findWeightsToggle('Hide row weights')->click();
     $this->assertSame(
-      [TRUE, TRUE, TRUE, [TRUE, FALSE], [TRUE, FALSE], TRUE],
+      [TRUE, TRUE, TRUE, 1, [TRUE, FALSE], [TRUE, FALSE], TRUE],
       $session->evaluateScript('window.readTableDrag()'),
     );
+  }
+
+  /**
+   * Tests that suppressing the themed warning still completes the drop.
+   */
+  public function testSuppressedChangedWarning(): void {
+    $this->drupalGet('tabledrag_test');
+    $session = $this->getSession();
+    $session->executeScript(<<<'JS'
+      const drag = Drupal.tableDrag['tabledrag-test-table'];
+      Drupal.theme.tableDragChangedWarning = () => [];
+      window.tableDragDrops = 0;
+      drag.onDrop = () => { window.tableDragDrops += 1; };
+      JS);
+
+    $row = $this->findRowById(2);
+    $this->moveRowWithKeyboard($row, 'right');
+    $this->assertSession()->elementNotExists('css', '.tabledrag-changed-warning');
+    $this->assertTrue($row->hasClass('drag-previous'));
+    $this->assertSame([1, TRUE, 'true'], $session->evaluateScript(<<<'JS'
+      (() => {
+        const drag = Drupal.tableDrag['tabledrag-test-table'];
+        return [
+          window.tableDragDrops,
+          drag.rowObject === null,
+          drag.table.closest('form').getAttribute('data-tabledrag-save-warning'),
+        ];
+      })()
+      JS));
   }
 
   /**
@@ -340,13 +377,13 @@ class TableDragTest extends WebDriverTestBase {
   public function testMenuAndTaxonomyTables(): void {
     $this->container->get('module_installer')->install(['menu_ui', 'taxonomy']);
     $this->rebuildContainer();
-    Menu::create(['id' => 'drag_test', 'label' => 'Drag test menu'])->save();
+    Menu::create(['id' => 'drag-test', 'label' => 'Drag test menu'])->save();
     Vocabulary::create(['vid' => 'drag_test', 'name' => 'Drag test vocabulary'])->save();
     foreach ([0, 1] as $weight) {
       MenuLinkContent::create([
         'title' => "Drag test link $weight",
         'link' => ['uri' => 'internal:/user'],
-        'menu_name' => 'drag_test',
+        'menu_name' => 'drag-test',
         'weight' => $weight,
       ])->save();
       Term::create([
@@ -357,7 +394,7 @@ class TableDragTest extends WebDriverTestBase {
     }
     $this->drupalLogin($this->drupalCreateUser(['administer menu', 'administer taxonomy']));
     foreach ([
-      'admin/structure/menu/manage/drag_test' => 'link',
+      'admin/structure/menu/manage/drag-test' => 'link',
       'admin/structure/taxonomy/manage/drag_test/overview' => 'term',
     ] as $path => $label) {
       $this->drupalGet($path);

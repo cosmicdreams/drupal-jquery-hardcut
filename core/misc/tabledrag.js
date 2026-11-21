@@ -1424,10 +1424,12 @@
         Drupal.theme('tableDragChangedWarning'),
       );
       const warning =
-        content instanceof Element ? content : content.firstElementChild;
-      this.table.before(content);
+        content instanceof Element ? content : content?.firstElementChild;
+      if (warning) {
+        this.table.before(content);
+      }
       // Rebuilt tables show the warning immediately.
-      if (!form?.hasAttribute('data-tabledrag-save-warning')) {
+      if (warning && !form?.hasAttribute('data-tabledrag-save-warning')) {
         Drupal.trackAnimation(
           warning.animate([{ opacity: 0 }, { opacity: 1 }], {
             duration: 600,
@@ -1437,7 +1439,7 @@
       }
 
       // The form survives table rebuilds.
-      form?.setAttribute('data-tabledrag-save-warning', '');
+      form?.setAttribute('data-tabledrag-save-warning', 'true');
     }
   };
 
@@ -1824,7 +1826,7 @@
   /**
    * Converts theme markup to nodes for insertion.
    *
-   * @param {string|Node} markup
+   * @param {string|Node|Node[]} markup
    *   Theme output.
    * @return {Node}
    *   The nodes to insert.
@@ -1834,6 +1836,11 @@
       const template = document.createElement('template');
       template.innerHTML = markup.trim();
       return template.content;
+    }
+    if (Array.isArray(markup)) {
+      const fragment = document.createDocumentFragment();
+      fragment.append(...markup);
+      return fragment;
     }
     return markup;
   };

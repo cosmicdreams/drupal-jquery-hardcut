@@ -73,6 +73,9 @@
        */
       const createItemWrapBoundaries = (row) => {
         const cell = row.querySelector('td:first-of-type');
+        if (!cell) {
+          return;
+        }
         const { themeContent } = Drupal.tableDrag;
         const items = themeContent(Drupal.theme('tableDragCellItemsWrapper'));
         const content = themeContent(

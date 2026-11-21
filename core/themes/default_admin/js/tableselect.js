@@ -257,7 +257,7 @@
      */
     selectAllHandler(event) {
       // The select-all handler accounts for its updates to the other inputs.
-      if (!Drupal.tableSelect.isSelectionChange(event)) {
+      if (!Drupal.tableSelect?.isSelectionChange?.(event)) {
         const itemsCheckedCount = event.target.checked
           ? this.checkboxes.length
           : 0;
@@ -274,7 +274,7 @@
      */
     rowCheckboxHandler(event) {
       // The select-all handler accounts for its updates to the other inputs.
-      if (!Drupal.tableSelect.isSelectionChange(event)) {
+      if (!Drupal.tableSelect?.isSelectionChange?.(event)) {
         this.updateStatus(
           Array.prototype.slice
             .call(this.checkboxes)

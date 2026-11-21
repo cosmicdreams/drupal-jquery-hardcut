@@ -114,11 +114,14 @@
           if (event instanceof Event) {
             warn(`The legacy event argument for ${method}`);
             if (!events.has(event)) {
-              const eventProperties =
-                event.type === 'resize' && !event.target
-                  ? { target: window, currentTarget: window }
-                  : undefined;
-              const legacyEvent = jquery.Event(event, eventProperties);
+              const legacyEvent = jquery.Event(event);
+              if (event.type === 'resize' && !event.target) {
+                legacyEvent.target = window;
+                legacyEvent.currentTarget = window;
+              }
+              if (window.Drupal.tableSelect?.isSelectionChange?.(event)) {
+                legacyEvent.isTrigger = 3;
+              }
               events.set(event, legacyEvent);
               nativeEvents.set(legacyEvent, event);
             }
@@ -157,9 +160,7 @@
     tableDrag.themeContent = (markup) => {
       if (markup instanceof jquery) {
         warn('Returning a legacy collection from a table drag theme function');
-        const fragment = document.createDocumentFragment();
-        fragment.append(...markup);
-        return fragment;
+        return themeContent([...markup]);
       }
       return themeContent(markup);
     };
@@ -181,8 +182,18 @@
       'eventhandlerToggleColumns',
     ].forEach((method) => eventOverride(TableResponsive, method));
 
+    const resizeRefreshes = new WeakSet();
+    window.addEventListener('drupal:tableresponsive-refreshed', () => {
+      const event = jquery.Event('resize.tableresponsive');
+      resizeRefreshes.add(event);
+      jquery(window).trigger(event);
+    });
     jquery(window).on('resize.tableresponsive', (event) => {
-      if (event.isTrigger && !event.originalEvent) {
+      if (
+        event.isTrigger &&
+        !event.originalEvent &&
+        !resizeRefreshes.has(event)
+      ) {
         warn('The synthetic resize.tableresponsive trigger');
         const nativeEvent = new Event('resize', { cancelable: true });
         events.set(nativeEvent, event);

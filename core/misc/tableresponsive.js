@@ -80,7 +80,9 @@
           TableResponsive.tables.push(new TableResponsive(table));
         },
       );
-      refreshToggles();
+      if (TableResponsive.tables.length) {
+        refreshToggles();
+      }
     },
   };
 
@@ -92,6 +94,7 @@
     TableResponsive.tables.forEach((table) =>
       TableResponsive.resizeHandlers.get(table)(event),
     );
+    window.dispatchEvent(new Event('drupal:tableresponsive-refreshed'));
   }
 
   /**
