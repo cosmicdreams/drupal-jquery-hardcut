@@ -6,4 +6,4 @@
  * @see https://www.drupal.org/node/CHANGE_RECORD
  */
 
-Drupal.states.compatibility.enableLegacySelectors();
+Drupal.states?.compatibility?.enableLegacySelectors?.();

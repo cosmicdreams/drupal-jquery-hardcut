@@ -1,14 +1,16 @@
 /**
  * @file
  * Adapts States collections, callbacks and events for explicit consumers.
- * @param {function(Element[]): object} jquery
- *   The explicitly loaded library instance.
  * @deprecated in drupal:12.0.0 and is removed from drupal:13.0.0. Use a CSS
  *   selector and the native States callback arguments.
  * @see https://www.drupal.org/node/CHANGE_RECORD
  */
 
 ((jquery) => {
+  if (typeof jquery !== 'function') {
+    return;
+  }
+
   const { Drupal } = window;
   const deprecated = new Set();
   const collections = new WeakMap();
@@ -59,7 +61,7 @@
       configurable: true,
       get() {
         warn(`${name}#element`);
-        return collection(this.elements);
+        return this.elements ? collection(this.elements) : undefined;
       },
       set(input) {
         warn(`${name}#element`);
@@ -122,23 +124,6 @@
    */
   function adaptCallbacks(states) {
     const nativeDefaults = new Set(states.compatibility.defaults);
-    const facades = new WeakMap();
-
-    // Preserve the ability of an override to save and call its predecessor.
-    Object.values(states.Trigger.states).forEach((trigger) => {
-      if (typeof trigger !== 'object' || trigger === null) {
-        return;
-      }
-      Object.entries(trigger).forEach(([type, callback]) => {
-        if (nativeDefaults.has(callback)) {
-          const facade = function (event) {
-            return callback.call(this.toArray(), nativeEvent(event));
-          };
-          facades.set(facade, callback);
-          trigger[type] = facade;
-        }
-      });
-    });
 
     states.compatibility.trigger = (name) => {
       const trigger = states.Trigger.states[name];
@@ -152,20 +137,137 @@
       return Object.fromEntries(
         Object.entries(trigger ?? {}).map(([type, callback]) => [
           type,
-          facades.get(callback) ??
-            (nativeDefaults.has(callback)
-              ? callback
-              : function (event) {
-                  warn(`${contract}.${type}`);
-                  const wrapped =
-                    event && (legacyEvents.get(event) ?? jquery.Event(event));
-                  return event
-                    ? callback.call(collection(this), wrapped)
-                    : callback.call(collection(this));
-                }),
+          nativeDefaults.has(callback)
+            ? callback
+            : function (event) {
+                warn(`${contract}.${type}`);
+                const wrapped =
+                  event && (legacyEvents.get(event) ?? jquery.Event(event));
+                return event
+                  ? callback.call(collection(this), wrapped)
+                  : callback.call(collection(this));
+              },
         ]),
       );
     };
+  }
+
+  /**
+   * Shares one jQuery.Event instance across bubbling targets for state events.
+   * @param {object} eventBindings
+   *   The Drupal event bindings registry.
+   */
+  function installSharedStateEvents(eventBindings) {
+    const activeEvents = new WeakMap();
+    const wrappedTypes = new Set();
+
+    /**
+     * Copies mutated legacy state fields back onto the native event detail.
+     * @param {CustomEvent} original
+     *   The native state event.
+     * @param {object} legacyEvent
+     *   The shared jQuery event.
+     */
+    function syncDetail(original, legacyEvent) {
+      if (!original.detail || typeof original.detail !== 'object') {
+        return;
+      }
+      for (const field of ['value', 'oldValue', 'trigger']) {
+        if (Object.hasOwn(legacyEvent, field)) {
+          original.detail[field] = legacyEvent[field];
+        }
+      }
+    }
+
+    /**
+     * Wraps a state event type's special handle hook once to share one event.
+     * @param {string} type
+     *   The full state event type.
+     */
+    function wrapType(type) {
+      if (wrappedTypes.has(type)) {
+        return;
+      }
+      wrappedTypes.add(type);
+      const specials = jquery.event.special;
+      const special = specials[type] ?? {};
+      const previousHandle = special.handle;
+      specials[type] = special;
+
+      special.handle = function (event, ...args) {
+        const original = event.originalEvent;
+        if (!original || event.isTrigger || !activeEvents.has(original)) {
+          return (previousHandle || event.handleObj.handler).call(
+            this,
+            event,
+            ...args,
+          );
+        }
+
+        let shared = activeEvents.get(original);
+        if (!shared) {
+          shared = event;
+          activeEvents.set(original, shared);
+        }
+
+        if (shared === event) {
+          const result = (previousHandle || event.handleObj.handler).call(
+            this,
+            event,
+            ...args,
+          );
+          syncDetail(original, event);
+          return result;
+        }
+
+        shared.currentTarget = event.currentTarget;
+        shared.delegateTarget = event.delegateTarget;
+        shared.handleObj = event.handleObj;
+        shared.data = event.data;
+        const result = (previousHandle || event.handleObj.handler).call(
+          this,
+          shared,
+          ...args,
+        );
+        if (shared.isDefaultPrevented()) {
+          event.preventDefault();
+        }
+        if (shared.isImmediatePropagationStopped()) {
+          event.stopImmediatePropagation();
+        } else if (shared.isPropagationStopped()) {
+          event.stopPropagation();
+        }
+        if (result !== undefined) {
+          shared.result = result;
+        }
+        syncDetail(original, shared);
+        return result;
+      };
+    }
+
+    eventBindings.observePublications((event) => {
+      if (!event.type.startsWith('state:')) {
+        return undefined;
+      }
+      wrapType(event.type);
+      activeEvents.set(event, null);
+      return () => {
+        activeEvents.delete(event);
+      };
+    });
+  }
+
+  /**
+   * Reads the registered jQuery handlers for a target and event type.
+   * @param {EventTarget} target
+   *   The event target.
+   * @param {string} type
+   *   The event type.
+   * @return {object[]}
+   *   The registered handler descriptors.
+   */
+  function jqueryHandlers(target, type) {
+    return jquery._data(target, 'events')?.[type] ?? [];
   }
 
   /**
@@ -179,8 +281,68 @@
     collectionAlias(states.Dependent, 'Drupal.states.Dependent');
     collectionAlias(states.Trigger, 'Drupal.states.Trigger');
     adaptCallbacks(states);
+    installSharedStateEvents(eventBindings);
+
+    // Mark state:checked change dispatches as synthetic for jQuery listeners.
+    const change = jquery.event.special.change ?? {};
+    const previousChangeHandle = change.handle;
+    jquery.event.special.change = change;
+    change.handle = function (event, ...args) {
+      if (
+        event.originalEvent &&
+        states.compatibility.isCheckedChange?.(event.originalEvent)
+      ) {
+        event.isTrigger = 3;
+      }
+      return (previousChangeHandle ?? event.handleObj.handler).call(
+        this,
+        event,
+        ...args,
+      );
+    };
 
     const subscriptions = new Map();
+    const handlerToBinding = new WeakMap();
+    const targetSubscriptions = new WeakMap();
+    const removing = new WeakSet();
+
+    /**
+     * Reports whether another jQuery listener exists on the target and type.
+     * @param {EventTarget} target
+     *   The event target.
+     * @param {string} type
+     *   The event type.
+     * @return {boolean}
+     *   Whether a non-States jQuery handler is attached.
+     */
+    function hasExternalLegacyHandler(target, type) {
+      return jqueryHandlers(target, type).some(
+        ({ handler }) => !handlerToBinding.has(handler),
+      );
+    }
+
+    // Track external jQuery(target).off(...) calls that remove a States slot.
+    const originalRemove = jquery.event.remove;
+    jquery.event.remove = function (target, ...args) {
+      const result = originalRemove.call(this, target, ...args);
+      const subs = targetSubscriptions.get(target);
+      if (subs) {
+        subs.forEach((sub) => {
+          if (
+            !removing.has(sub) &&
+            !sub.removedByLegacy &&
+            !jqueryHandlers(target, sub.type).some(
+              ({ handler }) => handler === sub.handler,
+            )
+          ) {
+            sub.removedByLegacy = true;
+          }
+        });
+      }
+      return result;
+    };
+
+    let replaying = true;
     eventBindings.observe({
       add(binding) {
         if (!binding.states) {
@@ -188,8 +350,57 @@
         }
         const { target, type, listener, data } = binding;
         const element = jquery(target);
+        const decisions = new WeakMap();
+        const sub = {
+          binding,
+          target,
+          type,
+          replayed: replaying,
+          removedByLegacy: false,
+          handler: null,
+          slot: null,
+        };
+
+        const useLegacyForNative = (nativeEvt, fromNative) => {
+          if (sub.removedByLegacy) {
+            return true;
+          }
+          if (sub.replayed) {
+            return false;
+          }
+          if (nativeEvt) {
+            const previous = decisions.get(nativeEvt);
+            if (previous && previous.fromNative !== fromNative) {
+              decisions.delete(nativeEvt);
+              return previous.legacy;
+            }
+          }
+          const legacy = hasExternalLegacyHandler(target, type);
+          if (nativeEvt) {
+            decisions.set(nativeEvt, { fromNative, legacy });
+          }
+          return legacy;
+        };
+
         const deliver = (event) => {
-          if (event.isTrigger && type.startsWith('state:')) {
+          const { originalEvent } = event;
+          const isCheckedNative =
+            type === 'change' &&
+            originalEvent instanceof Event &&
+            states.compatibility.isCheckedChange?.(originalEvent);
+          if (!event.isTrigger || isCheckedNative) {
+            if (
+              sub.removedByLegacy ||
+              !useLegacyForNative(originalEvent, false)
+            ) {
+              return undefined;
+            }
+            if (data) {
+              event.data = data;
+            }
+            return listener(nativeEvent(event));
+          }
+          if (type.startsWith('state:')) {
             warn(
               `The jQuery synthetic trigger for ${type}`,
               'Use the same native event name and its documented payload.',
@@ -200,20 +411,36 @@
           }
           return listener(nativeEvent(event));
         };
+
         const slot = eventBindings.claimLegacyEvent?.(jquery, binding, deliver);
+        const handler = slot?.handler ?? deliver;
         if (!slot) {
-          element.on(type, data, deliver);
+          element.on(type, data, handler);
         }
-        // Deliver at the original jQuery slot on mixed pages, even when a
-        // previous handler has removed that slot or stopped propagation.
-        binding.handlesNativeEvent = () => true;
+        sub.slot = slot;
+        sub.handler = handler;
+        handlerToBinding.set(handler, binding);
+        let subs = targetSubscriptions.get(target);
+        if (!subs) {
+          subs = new Set();
+          targetSubscriptions.set(target, subs);
+        }
+        subs.add(sub);
+
+        binding.handlesNativeEvent = (event) => useLegacyForNative(event, true);
         subscriptions.set(binding, () => {
-          if (slot) {
-            slot.remove();
-          } else {
-            element.off(type, deliver);
+          removing.add(sub);
+          try {
+            if (slot) {
+              slot.remove(!sub.removedByLegacy);
+            } else if (!sub.removedByLegacy) {
+              element.off(type, handler);
+            }
+          } finally {
+            removing.delete(sub);
+            subs.delete(sub);
+            delete binding.handlesNativeEvent;
           }
-          delete binding.handlesNativeEvent;
         });
       },
       remove(binding) {
@@ -221,6 +448,10 @@
         subscriptions.delete(binding);
       },
     });
+    replaying = false;
+
+    states.compatibility.ownsLegacyEvents = (instance, binding) =>
+      instance === jquery && (!binding || subscriptions.has(binding));
 
     states.compatibility.enableLegacySelectors = () => {
       states.compatibility.select = (selector) => {
