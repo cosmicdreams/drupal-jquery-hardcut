@@ -15,5 +15,5 @@ admin_behaviors:
     /core/modules/locale/js/locale.bulk.js: {}
     /core/modules/text/js/text.js: {}
   dependencies:
-    - core/drupal
+    - core/drupal.form.events
     - core/once
