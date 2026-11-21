@@ -14,7 +14,7 @@ drupal.filter:
   js:
     js/filter.js: {}
   dependencies:
-    - core/jquery
+    - core/drupal.form.events
     - core/drupal
     - core/once
 
