@@ -214,52 +214,120 @@
   }
 
   /**
-   * Keeps jQuery handler order while switching the real event's entry point.
+   * Reads the registered handlers for one jQuery dispatch type.
+   *
+   * @param {EventTarget} target
+   *   The dispatch target.
+   * @param {string} type
+   *   The event type.
+   * @return {object[]}
+   *   The handler descriptors in dispatch order.
+   */
+  function jqueryHandlers(target, type) {
+    return jquery._data(target, 'events')?.[type] ?? [];
+  }
+
+  /**
+   * Updates shared delivery when jQuery's handler list changes.
    */
   function installSharedDispatch() {
-    function observe(target, type) {
-      const special = jquery.event.special[type] ?? {};
-      jquery.event.special[type] = special;
-      const { add, remove } = special;
+    const previousBindings = new Map();
 
-      function update(added) {
-        // jQuery calls add before inserting the handler and remove after
-        // splicing it out. The stored order stays intact for synthetic events.
-        const existing = jquery._data(target, 'events')?.[type] ?? [];
-        const handlers = added ? [...existing, added] : existing;
-        const bindings = handlers.map(({ handler }) =>
-          sharedHandlers.get(handler),
-        );
-        if (!bindings.some(Boolean)) {
-          return;
-        }
-        const mixed = bindings.includes(undefined);
-        bindings.forEach((binding) => binding?.setNativeActive(!mixed));
-        const dispatch = jquery._data(target, 'handle');
-        if (mixed) {
-          target.addEventListener(type, dispatch);
-        } else {
-          target.removeEventListener(type, dispatch);
-        }
+    function update(target, type) {
+      const handlers = jqueryHandlers(target, type);
+      const bindings = handlers
+        .map(({ handler }) => sharedHandlers.get(handler))
+        .filter(Boolean);
+      previousBindings.get(type)?.forEach((binding) => {
+        binding.nativeActive = true;
+      });
+      if (!bindings.length) {
+        previousBindings.delete(type);
+        return;
       }
+      previousBindings.set(type, bindings);
 
-      special.add = function (handle) {
-        add?.call(this, handle);
-        if (this === target) {
-          update(handle);
-        }
-      };
-      special.remove = function (handle) {
-        remove?.call(this, handle);
-        if (this === target) {
-          sharedHandlers.get(handle.handler)?.setNativeActive(true);
-          update();
-        }
-      };
+      const mixed = handlers.length !== bindings.length;
+      bindings.forEach((binding) => {
+        // Keep the native listener in its original registration position.
+        binding.nativeActive = !mixed;
+      });
+      const dispatch = jquery._data(target, 'handle');
+      if (mixed) {
+        target.addEventListener(type, dispatch);
+      } else {
+        target.removeEventListener(type, dispatch);
+      }
     }
 
-    documentGestures.forEach((type) => observe(document, type));
-    observe(window, 'resize');
+    // Track the completed registration even if a plugin replaces the special
+    // event hooks for a gesture.
+    ['add', 'remove'].forEach((method) => {
+      const original = jquery.event[method];
+      jquery.event[method] = function (target, ...args) {
+        const result = original.call(this, target, ...args);
+        if (target === window) {
+          update(target, 'resize');
+        } else if (target === document) {
+          documentGestures.forEach((type) => update(target, type));
+        }
+        return result;
+      };
+    });
+  }
+
+  /**
+   * Delivers a real event in jQuery's queue and mirrors native propagation.
+   *
+   * @param {object} binding
+   *   The table's event binding.
+   * @param {object} event
+   *   The jQuery event for this dispatch.
+   * @return {*}
+   *   The table listener's result.
+   */
+  function deliverShared(binding, event) {
+    if (binding.nativeActive) {
+      return undefined;
+    }
+
+    const native = toNativeEvent(event);
+    const methods = ['stopPropagation', 'stopImmediatePropagation'];
+    const descriptors = methods.map((method) =>
+      Object.getOwnPropertyDescriptor(native, method),
+    );
+    if (
+      !Object.isExtensible(native) ||
+      descriptors.some((descriptor) => descriptor?.configurable === false)
+    ) {
+      return binding.listener.call(binding.target, native);
+    }
+    const stopped = () => true;
+    methods.forEach((method) => {
+      const original = native[method];
+      Object.defineProperty(native, method, {
+        configurable: true,
+        writable: true,
+        value() {
+          original.call(this);
+          event.isPropagationStopped = stopped;
+          if (method === 'stopImmediatePropagation') {
+            event.isImmediatePropagationStopped = stopped;
+          }
+        },
+      });
+    });
+    try {
+      return binding.listener.call(binding.target, native);
+    } finally {
+      methods.forEach((method, index) => {
+        if (descriptors[index]) {
+          Object.defineProperty(native, method, descriptors[index]);
+        } else {
+          delete native[method];
+        }
+      });
+    }
   }
 
   /**
@@ -279,9 +347,7 @@
         const element = jquery(target);
         const deliver = function (event) {
           if (!event.isTrigger) {
-            return shared
-              ? listener.call(this, toNativeEvent(event))
-              : undefined;
+            return shared ? deliverShared(binding, event) : undefined;
           }
           const { originalEvent } = event;
           // The general Drupal bridge forwards direct clicks without a source event.
@@ -357,19 +423,12 @@
     const bindings = new WeakMap();
     const windowEvents = jquery(window);
     const nativeRefresh = TableResponsive.refresh;
-    const legacyListeners = new Set();
     const isLegacyResize = ({ handler, namespace }) =>
       !bindings.has(handler) &&
       typeof namespace === 'string' &&
       namespace.split('.').includes('tableresponsive');
-    // A late bridge also sees listeners registered before it loaded.
-    jquery._data(window, 'events')?.resize?.forEach((handle) => {
-      if (isLegacyResize(handle)) {
-        legacyListeners.add(handle);
-      }
-    });
     TableResponsive.refresh = () => {
-      if (!legacyListeners.size) {
+      if (!jqueryHandlers(window, 'resize').some(isLegacyResize)) {
         return nativeRefresh();
       }
       const event = jquery.Event('resize.tableresponsive');
@@ -379,16 +438,9 @@
 
     const resize = jquery.event.special.resize ?? {};
     jquery.event.special.resize = resize;
-    const { add: previousAdd, remove: previousRemove } = resize;
-    resize.add = function (handle) {
-      previousAdd?.call(this, handle);
-      if (this === window && isLegacyResize(handle)) {
-        legacyListeners.add(handle);
-      }
-    };
+    const { remove: previousRemove } = resize;
     resize.remove = function (handle) {
       previousRemove?.call(this, handle);
-      legacyListeners.delete(handle);
       const binding = bindings.get(handle.handler);
       if (binding) {
         bindings.delete(handle.handler);
@@ -417,7 +469,10 @@
           }
         }
         const handler = (event) => {
-          if (event.isTrigger && !refreshes.has(event)) {
+          if (!event.isTrigger) {
+            return deliverShared(binding, event);
+          }
+          if (!refreshes.has(event)) {
             warn('The synthetic resize.tableresponsive trigger');
           }
           return binding.listener(toNativeEvent(event));

@@ -1080,7 +1080,7 @@ class TableDragTest extends WebDriverTestBase {
   #[IgnoreDeprecations]
   public function testReplacedTouchmoveSpecialEvent(): void {
     $this->drupalGet('tabledrag_test', ['query' => ['legacy' => 1]]);
-    $this->assertSame([['drag', 'legacy'], ['drag']], $this->getSession()->evaluateScript(<<<'JS'
+    $this->assertSame([['drag', 'legacy'], ['drag'], ['drag']], $this->getSession()->evaluateScript(<<<'JS'
       (() => {
         const table = document.createElement('table');
         document.body.append(table);
@@ -1096,7 +1096,12 @@ class TableDragTest extends WebDriverTestBase {
         };
         const mixed = move();
         jQuery(document).off('touchmove', legacy);
-        return [mixed, move()];
+        const native = move();
+        const dispatch = jQuery._data(document, 'handle');
+        document.addEventListener('touchmove', dispatch);
+        const activeGuard = move();
+        document.removeEventListener('touchmove', dispatch);
+        return [mixed, native, activeGuard];
       })()
       JS));
   }

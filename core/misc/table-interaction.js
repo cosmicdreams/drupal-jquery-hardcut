@@ -83,29 +83,23 @@
      *   Releases the listener before its table or target unloads.
      */
     listen(owner, target, type, listener) {
-      const nativeListener = (event) => {
-        if (this.allowNativeEvent(event)) {
-          return listener.call(target, event);
-        }
-      };
-      const setNativeActive = (active) => {
-        if (active) {
-          target.addEventListener(type, nativeListener);
-        } else {
-          target.removeEventListener(type, nativeListener);
-        }
-      };
-      setNativeActive(true);
-      const unregister = Drupal.eventBindings.register({
+      const binding = {
         target,
         type,
         listener,
-        setNativeActive,
+        nativeActive: true,
         tableInteraction: true,
-      });
+      };
+      const nativeListener = (event) => {
+        if (binding.nativeActive && this.allowNativeEvent(event)) {
+          return listener.call(target, event);
+        }
+      };
+      target.addEventListener(type, nativeListener);
+      const unregister = Drupal.eventBindings.register(binding);
       return this.own(owner, target, () => {
         unregister();
-        setNativeActive(false);
+        target.removeEventListener(type, nativeListener);
       });
     },
 
