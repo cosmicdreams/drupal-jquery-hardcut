@@ -840,6 +840,7 @@
     try {
       inspect(prefilters, s, options, jqXHR);
       if (s.data && s.processData && typeof s.data !== 'string') {
+        // eslint-disable-next-line no-jquery/no-param -- Preserve legacy serialization.
         s.data = jQuery.param(s.data, s.traditional);
       }
       if (completed) {
@@ -1433,6 +1434,7 @@
           'Using jQuery Ajax selector, method or effect inputs',
           'Use a CSS selector and supported native command options.',
         );
+        // eslint-disable-next-line no-jquery/no-css -- Honor contributed CSS hooks.
         jQuery(response.selector).css(response.argument);
       },
       data(response) {
