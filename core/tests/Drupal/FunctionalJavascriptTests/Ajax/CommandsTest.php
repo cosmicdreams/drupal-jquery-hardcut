@@ -181,7 +181,10 @@ class CommandsTest extends WebDriverTestBase {
         target.id = 'native-selector';
         target.innerHTML = '<span data-label=":has("></span><span class="skip"></span>';
         const ajax = Drupal.ajax({ url: location.href });
-        const styles = { fontSize: 21, borderRadius: 3, gap: 8, opacity: 0.5, lineHeight: 2, '--size': 7 };
+        const styles = {
+          fontSize: 21, borderRadius: 3, gap: 8, flex: 1, opacity: 0.5, lineHeight: 2,
+          minWidth: 21, paddingTop: 8, borderWidth: 3, '--size': 7,
+        };
         await ajax.commands.css(ajax, { native: true, selector: '#native-selector', argument: styles });
         let selected;
         try {
@@ -207,14 +210,15 @@ class CommandsTest extends WebDriverTestBase {
           }
         }
         return [selected, Drupal.ajax.elementData.get(target, 'hasChild'),
-          Object.keys(styles).map((key) => key.startsWith('--')
-          ? target.style.getPropertyValue(key) : target.style[key]), legacy];
+          Object.keys(styles).filter((key) => key !== 'flex').map((key) => key.startsWith('--')
+          ? target.style.getPropertyValue(key) : target.style[key]), target.style.flexGrow, legacy];
       })()
       JS);
     $this->assertSame([
       TRUE,
       TRUE,
-      ['21px', '3px', '8px', '0.5', '2', '7'],
+      ['', '', '', '0.5', '2', '21px', '8px', '3px', '7'],
+      '1',
       [TRUE, TRUE, TRUE, TRUE],
     ], $result);
   }

@@ -2563,38 +2563,8 @@
     }
   }
 
-  // Properties that accepted numbers without units through jQuery.cssNumber.
-  const propertiesWithoutUnits = new Set([
-    'animation-iteration-count',
-    'aspect-ratio',
-    'border-image-slice',
-    'column-count',
-    'fill-opacity',
-    'flex-grow',
-    'flex-shrink',
-    'flood-opacity',
-    'font-weight',
-    'grid-area',
-    'grid-column',
-    'grid-column-end',
-    'grid-column-start',
-    'grid-row',
-    'grid-row-end',
-    'grid-row-start',
-    'line-height',
-    'opacity',
-    'order',
-    'orphans',
-    'scale',
-    'stop-opacity',
-    'stroke-miterlimit',
-    'stroke-opacity',
-    'stroke-width',
-    'widows',
-    'z-index',
-    'zoom',
-  ]);
-  const vendorPropertyPrefix = /^-(?:webkit|moz|ms|o)-/;
+  const pixelProperties =
+    /^(?:border(?:-(?:top|right|bottom|left))?(?:-width)?|(?:margin|padding)(?:-(?:top|right|bottom|left))?|top|right|bottom|left|(?:(?:min|max)-)?(?:width|height))$/;
 
   const elementData = new WeakMap();
   const normalizeDataKey = (key) =>
@@ -2992,11 +2962,7 @@
                     .toLowerCase()
                     .replace(/^ms-/, '-ms-');
           const units =
-            typeof value === 'number' &&
-            !property.startsWith('--') &&
-            !propertiesWithoutUnits.has(
-              property.replace(vendorPropertyPrefix, ''),
-            )
+            typeof value === 'number' && pixelProperties.test(property)
               ? 'px'
               : '';
           style.setProperty(property, `${value}${units}`);
