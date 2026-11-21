@@ -4,9 +4,15 @@
  */
 
 ((Drupal, drupalSettings) => {
-  const input = ':is(input, select, textarea, button)';
-  const bundleSelector = `table .bundle-settings .translatable ${input}`;
-  const fieldSelector = `table .field-settings .translatable ${input}`;
+  const inputTypes = ['input', 'select', 'textarea', 'button'];
+  const input = `:is(${inputTypes.join(', ')})`;
+  // The legacy event bridge also passes these selectors to jQuery delegation.
+  const translatableInputs = (group) =>
+    inputTypes
+      .map((type) => `table .${group}-settings .translatable ${type}`)
+      .join(', ');
+  const bundleSelector = translatableInputs('bundle');
+  const fieldSelector = translatableInputs('field');
 
   /**
    * Finds the following settings rows until the next group begins.
