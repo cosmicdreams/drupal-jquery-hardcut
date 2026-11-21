@@ -91,6 +91,11 @@ final class JqueryEventBridgeTest extends WebDriverTestBase {
         const firstBeforeOptIn = first(target).triggerHandler(type);
         const secondBeforeOptIn = second(target).triggerHandler(type);
         const ajaxTrace = [];
+        const checkableTrace = [];
+        const checkbox = target.appendChild(document.createElement('input'));
+        checkbox.type = 'checkbox';
+        const checkable = Drupal.ajax({ element: checkbox, event: 'click', url: location.href });
+        checkable.eventResponse = (element, event) => checkableTrace.push([element.checked, event.isTrigger]);
         const ajax = Drupal.ajax({ element: target, event: 'RefreshView.view', url: location.href });
         ajax.eventResponse = (element, event) => ajaxTrace.push([element === target, event.namespace, event.isTrigger]);
         second(target).trigger('RefreshView.view');
@@ -100,6 +105,7 @@ final class JqueryEventBridgeTest extends WebDriverTestBase {
         const secondAfterOptIn = second(target).triggerHandler(type);
         second(target).trigger('RefreshView.other');
         second(target).trigger('RefreshView.view');
+        second(checkbox).trigger('click');
         const connected = publish();
         stop();
         const secondAfterStop = second(target).triggerHandler(type);
@@ -115,6 +121,8 @@ final class JqueryEventBridgeTest extends WebDriverTestBase {
         target.dispatchEvent(new Event(type));
         unregister();
         ajax.removeEventBindings();
+        checkable.removeEventBindings();
+        checkbox.remove();
         target.removeEventListener(type, listener);
         return [
           first !== second,
@@ -128,6 +136,7 @@ final class JqueryEventBridgeTest extends WebDriverTestBase {
           calls,
           [before, connected, disconnected, reconnected],
           ajaxTrace,
+          checkableTrace,
         ];
       })()
       JS);
@@ -140,6 +149,7 @@ final class JqueryEventBridgeTest extends WebDriverTestBase {
         [['first', TRUE, [TRUE]], ['second', TRUE, [TRUE]]],
       ],
       [[TRUE, 'view', 3], [TRUE, 'view', 3]],
+      [[TRUE, 3]],
     ], $trace);
   }
 
