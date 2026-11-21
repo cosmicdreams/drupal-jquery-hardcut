@@ -41,13 +41,13 @@
       );
       dropbutton.classList.add('dropbutton-multiple');
       const handlers = {
-        mouseleave: this.hoverOutNative,
-        mouseenter: this.hoverInNative,
-        focusout: this.focusOutNative,
-        focusin: this.focusInNative,
+        mouseleave: 'hoverOutNative',
+        mouseenter: 'hoverInNative',
+        focusout: 'focusOutNative',
+        focusin: 'focusInNative',
       };
-      Object.entries(handlers).forEach(([type, handler]) => {
-        listen(dropbutton, type, 'dropbutton', handler.bind(this));
+      Object.entries(handlers).forEach(([type, method]) => {
+        listen(dropbutton, type, 'dropbutton', (event) => this[method](event));
       });
     } else {
       dropbutton.classList.add('dropbutton-single');
@@ -78,8 +78,8 @@
         );
       });
       dropbuttons.forEach((dropbutton) => {
-        DropButton.dropbuttons.push(
-          new DropButton(dropbutton, settings.dropbutton),
+        Drupal.DropButton.dropbuttons.push(
+          new Drupal.DropButton(dropbutton, settings.dropbutton),
         );
       });
     },

@@ -29,8 +29,37 @@
     }
   }
 
+  const fragmentEvent = 'formFragmentLinkClickOrHashChange';
+  const valueCopyEvent = 'value:copy';
+  const drupalCustomEvents = new Set([
+    'formUpdated',
+    'summaryUpdated',
+    fragmentEvent,
+    valueCopyEvent,
+  ]);
+  const tabbingMigration = 'Use native context members and element lists.';
+  const tabbingEvents = [
+    'drupalTabbingConstrained',
+    'drupalTabbingContextActivated',
+    'drupalTabbingContextDeactivated',
+    'drupalTabbingContextReleased',
+  ];
+
   /**
-   * Preserves cancellation in the legacy queue while core uses a native event.
+   * Checks whether a registry binding belongs to the form interaction adapter.
+   */
+  function isFormBinding(binding) {
+    return Boolean(
+      binding &&
+      (binding.formInteraction ||
+        binding.detailsAria ||
+        binding.tabbingFocusTrap ||
+        binding.navTabs),
+    );
+  }
+
+  /**
+   * Preserves cancellation and return values in the legacy queue.
    */
   function deliverFormInteraction(listener, native, event, matched) {
     const stop = native.stopImmediatePropagation;
@@ -46,13 +75,14 @@
     const previous = legacyEvents.get(native);
     legacyEvents.set(native, event);
     try {
-      listener(native, matched);
+      const result = listener(native, matched);
       if (native.defaultPrevented) {
         event.preventDefault();
       }
       if (native.cancelBubble && !event.isPropagationStopped()) {
         event.stopPropagation();
       }
+      return result;
     } finally {
       if (previous) {
         legacyEvents.set(native, previous);
@@ -68,13 +98,58 @@
   }
 
   /**
-   * Installs legacy bindings and removes native counterparts on legacy off().
+   * Installs lazy legacy bindings and preserves registration order when mixed.
    */
   function install() {
     const { Drupal } = window;
-    const subscriptions = new Map();
+    const entries = new Map();
+    const byTarget = new WeakMap();
     const handlers = new Map();
     const observed = new Set();
+    const triggerFrames = [];
+    let internalDepth = 0;
+
+    Drupal.formCompatibility = {
+      ownsLegacyEvents(instance, binding) {
+        return instance === jquery && isFormBinding(binding);
+      },
+    };
+
+    function getBindType(type, selector) {
+      const special = jquery.event.special[type];
+      return (selector ? special?.delegateType : special?.bindType) || type;
+    }
+
+    function hasExternalHandler(target, bindType) {
+      const list = jquery._data(target, 'events')?.[bindType];
+      return Boolean(list?.some(({ guid }) => !handlers.has(guid)));
+    }
+
+    function isSyntheticDefaultAction(event) {
+      if (Drupal.eventBindings.isForeignDefaultAction?.(event)) {
+        return true;
+      }
+      const frame = triggerFrames.at(-1);
+      if (
+        !frame ||
+        frame.type !== event.type ||
+        frame.target !== event.target
+      ) {
+        return false;
+      }
+      let synthetic = jquery.event.triggered === event.type;
+      if (!synthetic && ['click', 'focus', 'blur'].includes(event.type)) {
+        const phase = jquery._data(event.target, event.type);
+        synthetic =
+          Array.isArray(phase) ||
+          (Boolean(phase) && Object.hasOwn(phase, 'value'));
+      }
+      if (synthetic) {
+        frame.defaultEvent = frame.defaultEvent || event;
+        return frame.defaultEvent === event;
+      }
+      return false;
+    }
 
     function observeRemoval(type) {
       if (observed.has(type)) {
@@ -88,43 +163,237 @@
         try {
           remove?.call(this, handle);
         } finally {
-          const binding = handlers.get(handle.guid);
-          if (binding?.target === this) {
+          const entry = handlers.get(handle.guid);
+          if (entry?.binding.target === this) {
             handlers.delete(handle.guid);
-            binding.stop();
+            entry.attached = false;
+            entry.slot = undefined;
+            entry.handler = undefined;
+            entry.binding.stop();
           }
         }
       };
     }
 
+    function attachEntry(entry) {
+      if (entry.attached) {
+        return;
+      }
+      const { binding, name, deliver } = entry;
+      const { target, selector } = binding;
+      internalDepth += 1;
+      try {
+        const slot = Drupal.eventBindings.claimLegacyEvent?.(
+          jquery,
+          binding,
+          deliver,
+        );
+        const handler = slot?.handler ?? deliver;
+        if (!slot) {
+          jquery(target).on(name, selector, handler);
+        }
+        entry.slot = slot;
+        entry.handler = handler;
+        entry.attached = true;
+        handlers.set(handler.guid, entry);
+      } finally {
+        internalDepth -= 1;
+      }
+    }
+
+    function detachEntry(entry) {
+      if (!entry.attached) {
+        return;
+      }
+      const { binding, name, handler, slot } = entry;
+      const { target, selector } = binding;
+      entry.attached = false;
+      entry.slot = undefined;
+      entry.handler = undefined;
+      handlers.delete(handler.guid);
+      internalDepth += 1;
+      try {
+        if (slot) {
+          slot.remove(true);
+        } else {
+          jquery(target).off(name, selector, handler);
+        }
+      } finally {
+        internalDepth -= 1;
+      }
+    }
+
+    function syncTargetType(target, bindType) {
+      if (triggerFrames.length > 0 || hasExternalHandler(target, bindType)) {
+        return;
+      }
+      byTarget.get(target)?.forEach((entry) => {
+        if (entry.bindType === bindType && entry.attached) {
+          detachEntry(entry);
+        }
+      });
+    }
+
+    function materialize(target, types, selector) {
+      const targetEntries = byTarget.get(target);
+      if (!targetEntries?.size) {
+        return;
+      }
+      const wanted = new Set();
+      if (typeof types === 'string' && types.trim()) {
+        types
+          .trim()
+          .split(/\s+/)
+          .forEach((token) => {
+            const raw = token.split('.')[0];
+            if (raw) {
+              wanted.add(raw);
+              wanted.add(getBindType(raw, selector));
+              const special = jquery.event.special[raw];
+              if (special?.bindType) {
+                wanted.add(special.bindType);
+              }
+              if (special?.delegateType) {
+                wanted.add(special.delegateType);
+              }
+            }
+          });
+      }
+      targetEntries.forEach((entry) => {
+        if (
+          !entry.attached &&
+          (!wanted.size ||
+            wanted.has(entry.bindType) ||
+            wanted.has(entry.binding.type))
+        ) {
+          attachEntry(entry);
+        }
+      });
+    }
+
+    const originalAdd = jquery.event.add;
+    jquery.event.add = function (elem, types, handler, data, selector) {
+      if (internalDepth === 0 && elem) {
+        materialize(elem, types, selector);
+      }
+      return originalAdd.apply(this, arguments);
+    };
+
+    let removeDepth = 0;
+    const originalRemove = jquery.event.remove;
+    jquery.event.remove = function (elem, types, handler, selector) {
+      if (internalDepth === 0 && removeDepth === 0 && elem) {
+        materialize(elem, types, selector);
+      }
+      removeDepth += 1;
+      try {
+        return originalRemove.apply(this, arguments);
+      } finally {
+        removeDepth -= 1;
+        if (internalDepth === 0 && removeDepth === 0 && elem) {
+          const targetEntries = byTarget.get(elem);
+          if (targetEntries?.size) {
+            const bindTypes = new Set(
+              Array.from(targetEntries, (entry) => entry.bindType),
+            );
+            bindTypes.forEach((bindType) => syncTargetType(elem, bindType));
+          }
+        }
+      }
+    };
+
+    const originalTrigger = jquery.event.trigger;
+    jquery.event.trigger = function (event, data, elem, onlyHandlers) {
+      const rawType = (typeof event === 'string' ? event : event.type).split(
+        '.',
+      )[0];
+      const target = elem || document;
+      const tempAttached = [];
+      if (internalDepth === 0 && rawType) {
+        const special = jquery.event.special[rawType];
+        const directTypes = new Set([
+          rawType,
+          special?.bindType || rawType,
+          special?.delegateType || rawType,
+        ]);
+        const bubbleTypes = new Set([
+          rawType,
+          special?.delegateType || rawType,
+        ]);
+        const nodes = [target];
+        if (!onlyHandlers) {
+          let current = target.parentNode;
+          while (current) {
+            nodes.push(current);
+            current = current.parentNode;
+          }
+          const view =
+            target !== window
+              ? target.defaultView || target.ownerDocument?.defaultView
+              : null;
+          if (view) {
+            nodes.push(view);
+          }
+        }
+        nodes.forEach((node, index) => {
+          const typeSet = index === 0 ? directTypes : bubbleTypes;
+          byTarget.get(node)?.forEach((entry) => {
+            if (
+              !entry.attached &&
+              (typeSet.has(entry.bindType) || typeSet.has(entry.binding.type))
+            ) {
+              attachEntry(entry);
+              tempAttached.push(entry);
+            }
+          });
+        });
+      }
+      triggerFrames.push({ type: rawType, target });
+      try {
+        return originalTrigger.apply(this, arguments);
+      } finally {
+        triggerFrames.pop();
+        if (!triggerFrames.length) {
+          tempAttached.forEach((entry) => {
+            if (
+              entry.attached &&
+              !hasExternalHandler(entry.binding.target, entry.bindType)
+            ) {
+              detachEntry(entry);
+            }
+          });
+        }
+      }
+    };
+
+    let replaying = true;
     Drupal.eventBindings.observe({
       add(binding) {
-        const { target, selector, type, namespace, listener } = binding;
-        const { detailsAria, tabbingFocusTrap, navTabs, formInteraction } =
-          binding;
-        if (!detailsAria && !tabbingFocusTrap && !navTabs && !formInteraction) {
+        if (!isFormBinding(binding) || entries.has(binding)) {
           return;
         }
-        const contract = detailsAria
-          ? 'details summary clicks'
-          : navTabs
-            ? 'navigation tabs'
-            : tabbingFocusTrap
-              ? 'tabbing focus traps'
-              : type;
+        const { target, selector, type, namespace, listener, formInteraction } =
+          binding;
+        const bindType = getBindType(type, selector);
         observeRemoval(type);
-        const special = jquery.event.special[type];
-        const mapped = selector ? special?.delegateType : special?.bindType;
-        if (mapped && mapped !== type) {
-          observeRemoval(mapped);
+        if (bindType !== type) {
+          observeRemoval(bindType);
         }
-        const element = jquery(target);
         const name = namespace ? `${type}.${namespace}` : type;
         const deliver = function (event, fragmentTarget) {
-          if (event.isTrigger) {
+          if (!event.isTrigger) {
+            if (
+              Drupal.eventBindings.isForeignDefaultAction?.(
+                event.originalEvent,
+              ) ||
+              !hasExternalHandler(target, bindType)
+            ) {
+              return undefined;
+            }
+          } else if (drupalCustomEvents.has(type)) {
             warn(
-              `The jQuery synthetic trigger for ${contract}`,
-              `Use the native ${type} event.`,
+              `The jQuery synthetic trigger for ${type}`,
+              'Use the same native event name and its documented payload.',
             );
           }
           if (formInteraction) {
@@ -141,73 +410,132 @@
               });
               Object.defineProperties(native, {
                 target: { value: event.target },
+                currentTarget: { value: event.currentTarget },
                 key: { value: event.key },
-                shiftKey: { value: event.shiftKey },
+                altKey: {
+                  value: Boolean(event.altKey ?? event.originalEvent?.altKey),
+                },
+                ctrlKey: {
+                  value: Boolean(event.ctrlKey ?? event.originalEvent?.ctrlKey),
+                },
+                metaKey: {
+                  value: Boolean(event.metaKey ?? event.originalEvent?.metaKey),
+                },
+                shiftKey: {
+                  value: Boolean(
+                    event.shiftKey ?? event.originalEvent?.shiftKey,
+                  ),
+                },
                 keyCode: { value: event.keyCode },
                 which: { value: event.which },
-                button: { value: event.button },
+                button: {
+                  value: event.button ?? event.originalEvent?.button,
+                },
+                buttons: {
+                  value: event.buttons ?? event.originalEvent?.buttons,
+                },
               });
               if (event.isDefaultPrevented()) {
                 native.preventDefault();
               }
             }
-            deliverFormInteraction(listener, native, event, this);
-          } else if (type === 'click') {
-            listener(this);
-          } else {
-            const native =
-              !event.isTrigger && event.originalEvent instanceof Event
-                ? event.originalEvent
-                : new KeyboardEvent(type, {
-                    cancelable: true,
-                    key: event.key,
-                    shiftKey: event.shiftKey,
-                  });
-            listener(native);
-            if (native.defaultPrevented) {
-              event.preventDefault();
-            }
+            return deliverFormInteraction(listener, native, event, this);
           }
+          if (type === 'click') {
+            return listener(this);
+          }
+          const native =
+            !event.isTrigger && event.originalEvent instanceof Event
+              ? event.originalEvent
+              : new KeyboardEvent(type, {
+                  cancelable: true,
+                  key: event.key,
+                  shiftKey: event.shiftKey,
+                });
+          const result = listener(native);
+          if (native.defaultPrevented) {
+            event.preventDefault();
+          }
+          return result;
         };
-        const slot = Drupal.eventBindings.claimLegacyEvent?.(
-          jquery,
+
+        const entry = {
           binding,
+          bindType,
+          name,
           deliver,
-        );
-        const handler = slot?.handler ?? deliver;
-        if (!slot) {
-          element.on(name, selector, handler);
+          attached: false,
+          slot: undefined,
+          handler: undefined,
+        };
+        entries.set(binding, entry);
+        let targetEntries = byTarget.get(target);
+        if (!targetEntries) {
+          targetEntries = new Set();
+          byTarget.set(target, targetEntries);
         }
-        // On mixed pages the old delegation slot observes any prior legacy
-        // cancellation, including when no native click follows the trigger.
-        binding.handlesNativeEvent = true;
-        handlers.set(handler.guid, binding);
-        subscriptions.set(binding, () => {
-          const unbind = handlers.delete(handler.guid);
-          if (slot) {
-            slot.remove(unbind);
-          } else if (unbind) {
-            element.off(name, selector, handler);
+        targetEntries.add(entry);
+
+        binding.handlesNativeEvent = (event) => {
+          if (isSyntheticDefaultAction(event)) {
+            return true;
           }
-          delete binding.handlesNativeEvent;
-        });
+          if (!entry.attached || !hasExternalHandler(target, bindType)) {
+            return false;
+          }
+          if (bindType !== event.type && !event.isTrusted) {
+            return false;
+          }
+          return true;
+        };
+
+        if (replaying) {
+          // Claim any slot reserved in registration order by jquery.drupal-bc.js,
+          // or attach if an external jQuery handler is already on the target.
+          internalDepth += 1;
+          try {
+            const slot = Drupal.eventBindings.claimLegacyEvent?.(
+              jquery,
+              binding,
+              deliver,
+            );
+            if (slot) {
+              entry.slot = slot;
+              entry.handler = slot.handler;
+              entry.attached = true;
+              handlers.set(slot.handler.guid, entry);
+            }
+          } finally {
+            internalDepth -= 1;
+          }
+          if (!entry.attached && hasExternalHandler(target, bindType)) {
+            attachEntry(entry);
+          }
+        } else if (hasExternalHandler(target, bindType)) {
+          attachEntry(entry);
+        }
       },
       remove(binding) {
-        subscriptions.get(binding)?.();
-        subscriptions.delete(binding);
+        const entry = entries.get(binding);
+        if (!entry) {
+          return;
+        }
+        entries.delete(binding);
+        byTarget.get(binding.target)?.delete(entry);
+        detachEntry(entry);
+        delete binding.handlesNativeEvent;
       },
     });
-  }
+    replaying = false;
 
-  const fragmentEvent = 'formFragmentLinkClickOrHashChange';
-  const valueCopyEvent = 'value:copy';
-  const tabbingMigration = 'Use native context members and element lists.';
-  const tabbingEvents = [
-    'drupalTabbingConstrained',
-    'drupalTabbingContextActivated',
-    'drupalTabbingContextDeactivated',
-    'drupalTabbingContextReleased',
-  ];
+    // Release any reserved slots whose target/type has no external jQuery
+    // subscribers so unmixed targets stay on pure native DOM delivery.
+    entries.forEach((entry) => {
+      if (entry.attached) {
+        syncTargetType(entry.binding.target, entry.bindType);
+      }
+    });
+  }
 
   /**
    * Installs the legacy machine-name callback argument and assignment hook.
@@ -322,9 +650,14 @@
           warn(contract, migration);
           behavior[nativeName] = function (event) {
             const legacy = legacyEvents.get(event) || jquery.Event(event);
-            return targetHandler
+            const result = targetHandler
               ? callback.call(this, legacy, event.detail)
               : callback.call(this, legacy);
+            if (result === false) {
+              legacy.preventDefault();
+              legacy.stopPropagation();
+            }
+            return result;
           };
         },
       });
@@ -383,18 +716,14 @@
    */
   function installSummaryMethods() {
     const { form } = window.Drupal;
+    const summaryMigration =
+      'Use the corresponding native Drupal form summary function.';
     jquery.fn.drupalGetSummary = function () {
-      warn(
-        'jQuery.fn.drupalGetSummary',
-        'Use Drupal.form.getSummary(element).',
-      );
+      warn('jQuery.fn.drupalGetSummary', summaryMigration);
       return form.getSummary(this[0]);
     };
     jquery.fn.drupalSetSummary = function (summary) {
-      warn(
-        'jQuery.fn.drupalSetSummary',
-        'Use Drupal.form.setSummary(elements, summary).',
-      );
+      warn('jQuery.fn.drupalSetSummary', summaryMigration);
       this.off('formUpdated.summary');
       form.setSummary(this.toArray(), summary);
       return this;
@@ -467,6 +796,9 @@
         warn(contract, migration);
         return native.call(this, event?.originalEvent || event);
       };
+      const existing = Object.hasOwn(prototype, name)
+        ? prototype[name]
+        : undefined;
       Object.defineProperty(prototype, name, {
         configurable: true,
         get() {
@@ -483,15 +815,29 @@
           }
           warn(contract, migration);
           const adapted = function (event) {
-            return callback.call(
-              this,
+            const legacy =
               legacyEvents.get(event) ||
-                (event instanceof jquery.Event ? event : jquery.Event(event)),
-            );
+              (event instanceof jquery.Event ? event : jquery.Event(event));
+            const result = callback.call(this, legacy);
+            if (result === false) {
+              legacy.preventDefault();
+              legacy.stopPropagation();
+            }
+            return result;
           };
           adapted.legacyCallback = callback;
           this[nativeName] = adapted;
         },
+      });
+      if (existing) {
+        prototype[name] = existing;
+      }
+      NativeDropButton.dropbuttons.forEach((instance) => {
+        if (Object.hasOwn(instance, name)) {
+          const own = instance[name];
+          delete instance[name];
+          instance[name] = own;
+        }
       });
     });
 
@@ -500,11 +846,14 @@
         warn('The jQuery input to Drupal.DropButton', migration);
         [element] = jquery(element);
       }
-      return Reflect.construct(
-        NativeDropButton,
-        [element, options],
-        new.target || NativeDropButton,
-      );
+      if (new.target) {
+        return Reflect.construct(
+          NativeDropButton,
+          [element, options],
+          new.target,
+        );
+      }
+      return NativeDropButton.call(this, element, options);
     };
     Object.setPrototypeOf(Drupal.DropButton, NativeDropButton);
     Drupal.DropButton.prototype = prototype;
@@ -515,7 +864,10 @@
    */
   function installVerticalTabs() {
     const { Drupal } = window;
-    const NativeTab = Drupal.verticalTab;
+    const NativeTab =
+      Drupal.verticalTabs.nativeConstructor || Drupal.verticalTab;
+    const preBridgeOverride =
+      Drupal.verticalTab !== NativeTab ? Drupal.verticalTab : undefined;
     const migration =
       'Use Drupal.verticalTabs.get(pane) and native tab elements.';
     const markup = ['item', 'link', 'title', 'summary'];
@@ -529,25 +881,103 @@
       );
     });
 
-    Drupal.verticalTab = function (settings) {
+    function defaultConstructor(settings) {
       if (!settings.detailsElement) {
         const { details, ...remaining } = settings;
         warn('The jQuery input to Drupal.verticalTab', migration);
         settings = { ...remaining, detailsElement: jquery(details)[0] };
       }
-      return Reflect.construct(NativeTab, [settings], new.target || NativeTab);
-    };
-    Drupal.verticalTab.prototype = NativeTab.prototype;
+      if (new.target) {
+        return Reflect.construct(NativeTab, [settings], new.target);
+      }
+      return NativeTab.call(this, settings);
+    }
+    defaultConstructor.prototype = NativeTab.prototype;
+
+    function wrapConstructorOverride(Constructor) {
+      if (Constructor.nativeVerticalTab) {
+        return Constructor;
+      }
+      function AdaptedTab(settings) {
+        if (settings?.detailsElement && !settings.details) {
+          warn('Drupal.verticalTab', migration);
+          settings = {
+            ...settings,
+            details: jquery(settings.detailsElement),
+          };
+        }
+        if (new.target) {
+          return Reflect.construct(Constructor, [settings], new.target);
+        }
+        return Constructor.call(this, settings);
+      }
+      AdaptedTab.prototype = Constructor.prototype;
+      return AdaptedTab;
+    }
+
+    let activeConstructor = preBridgeOverride
+      ? wrapConstructorOverride(preBridgeOverride)
+      : defaultConstructor;
+    Object.defineProperty(Drupal, 'verticalTab', {
+      configurable: true,
+      get() {
+        return activeConstructor;
+      },
+      set(value) {
+        if (!value || value === defaultConstructor || value === NativeTab) {
+          activeConstructor = defaultConstructor;
+          return;
+        }
+        activeConstructor = wrapConstructorOverride(value);
+      },
+    });
+
+    const migratedPanes = new WeakSet();
+    function ensureTabData(pane) {
+      if (!pane || migratedPanes.has(pane)) {
+        return;
+      }
+      migratedPanes.add(pane);
+      if (jquery.data(pane, 'verticalTab') === undefined) {
+        const tab = Drupal.verticalTabs.get(pane);
+        if (tab) {
+          jquery.data(pane, 'verticalTab', tab);
+        }
+      }
+    }
 
     document.addEventListener('drupal:vertical-tab-created', (event) => {
-      jquery(event.target).data('verticalTab', event.detail);
+      const { pane, tab } = event.detail;
+      migratedPanes.add(pane);
+      jquery(pane).data('verticalTab', tab);
     });
     document.querySelectorAll('.vertical-tabs__pane').forEach((pane) => {
-      const tab = Drupal.verticalTabs.get(pane);
-      if (tab) {
-        jquery(pane).data('verticalTab', tab);
-      }
+      ensureTabData(pane);
     });
+
+    const originalFnData = jquery.fn.data;
+    jquery.fn.data = function (key) {
+      if (
+        (key === 'verticalTab' || key === undefined) &&
+        arguments.length <= 1 &&
+        this[0]
+      ) {
+        ensureTabData(this[0]);
+      }
+      return originalFnData.apply(this, arguments);
+    };
+
+    const originalData = jquery.data;
+    jquery.data = function (elem, name) {
+      if (
+        (name === 'verticalTab' || name === undefined) &&
+        arguments.length <= 2 &&
+        elem
+      ) {
+        ensureTabData(elem);
+      }
+      return originalData.apply(this, arguments);
+    };
 
     const nativeMarkup = Drupal.verticalTabs.createMarkup;
     const themeMigration =
@@ -668,13 +1098,15 @@
           return method || defaultMethod;
         },
         set(callback) {
+          method = callback === defaultMethod ? undefined : callback;
+          if (!method) {
+            manager[nativeName] = native;
+            return;
+          }
           warn(contract, tabbingMigration);
-          method = callback;
-          manager[nativeName] = callback
-            ? function (element, level) {
-                return callback.call(this, jquery(element), level);
-              }
-            : native;
+          manager[nativeName] = function (element, level) {
+            return method.call(this, jquery(element), level);
+          };
         },
       });
       if (method) {

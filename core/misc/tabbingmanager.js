@@ -176,10 +176,21 @@
 
         // The "active tabbing set" are the elements tabbing should be constrained
         // to.
-        const roots = elements instanceof Element ? [elements] : elements;
+        const roots =
+          elements instanceof Element ||
+          elements instanceof Document ||
+          elements instanceof DocumentFragment
+            ? [elements]
+            : elements;
         const tabbableElements = Array.from(roots || []).flatMap((root) => {
-          const descendants = tabbable(root);
-          return isTabbable(root) ? [...descendants, root] : descendants;
+          const target = root instanceof Document ? root.documentElement : root;
+          if (!target || typeof target.querySelectorAll !== 'function') {
+            return [];
+          }
+          const descendants = tabbable(target);
+          return target instanceof Element && isTabbable(target)
+            ? [...descendants, target]
+            : descendants;
         });
 
         const tabbingContext = new TabbingContext({
@@ -447,7 +458,7 @@
       },
     };
     function onKeydown(event) {
-      if (!binding.handlesNativeEvent) {
+      if (!binding.handlesNativeEvent?.(event)) {
         binding.listener(event);
       }
     }

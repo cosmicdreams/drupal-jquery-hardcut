@@ -5,11 +5,38 @@
 
 ((Drupal) => {
   const bindings = new Set();
-  const pendingRemoval = new Set();
-  const removalObserver = new MutationObserver(() => {
-    pendingRemoval.forEach((binding) => {
+  const pendingUnloads = new Set();
+
+  function disconnectIfIdle() {
+    if (!pendingUnloads.size) {
+      removalObserver.disconnect();
+    }
+  }
+
+  function settleBatch(batch) {
+    batch.bindings.forEach((binding) => {
       if (!binding.target.isConnected) {
         binding.stop();
+      }
+    });
+    pendingUnloads.delete(batch);
+    disconnectIfIdle();
+  }
+
+  const removalObserver = new MutationObserver((records) => {
+    Array.from(pendingUnloads).forEach((batch) => {
+      const { context } = batch;
+      const mutated =
+        !context.isConnected ||
+        records.some(
+          (record) =>
+            context.contains(record.target) ||
+            Array.from(record.removedNodes).some((node) =>
+              node.contains?.(context),
+            ),
+        );
+      if (mutated) {
+        settleBatch(batch);
       }
     });
   });
@@ -30,14 +57,18 @@
       stop() {
         target.removeEventListener(type, handle);
         bindings.delete(binding);
-        if (pendingRemoval.delete(binding) && !pendingRemoval.size) {
-          removalObserver.disconnect();
-        }
+        pendingUnloads.forEach((batch) => {
+          batch.bindings.delete(binding);
+          if (!batch.bindings.size) {
+            pendingUnloads.delete(batch);
+          }
+        });
+        disconnectIfIdle();
         unregister();
       },
     };
     const handle = (event) => {
-      if (binding.handlesNativeEvent) {
+      if (binding.handlesNativeEvent?.(event)) {
         return;
       }
       if (!selector) {
@@ -62,23 +93,41 @@
    * Releases form listeners when Drupal removes their target elements.
    */
   Drupal.behaviors.formEventBindings = {
+    attach(context) {
+      if (!pendingUnloads.size) {
+        return;
+      }
+      Array.from(pendingUnloads).forEach((batch) => {
+        if (
+          !batch.context.isConnected ||
+          context === document ||
+          (context instanceof Node &&
+            (context.contains(batch.context) ||
+              batch.context.contains(context)))
+        ) {
+          settleBatch(batch);
+        }
+      });
+    },
     detach(context, settings, trigger) {
       if (trigger !== 'unload' || context.nodeType !== Node.ELEMENT_NODE) {
         return;
       }
       // Detach runs before a DOM update. Keep listeners on any retained wrapper
-      // and release removed targets even when a swap is delayed.
+      // and release removed targets once the unload mutation settles.
+      const batchBindings = new Set();
       bindings.forEach((binding) => {
         const { target } = binding;
         if (target instanceof Node && context.contains(target)) {
           if (target.isConnected) {
-            pendingRemoval.add(binding);
+            batchBindings.add(binding);
           } else {
             binding.stop();
           }
         }
       });
-      if (pendingRemoval.size) {
+      if (batchBindings.size) {
+        pendingUnloads.add({ context, bindings: batchBindings });
         removalObserver.observe(document, { childList: true, subtree: true });
       }
     },

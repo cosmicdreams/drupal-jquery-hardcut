@@ -24,20 +24,20 @@
         return;
       }
 
-      const add = (target, type, handler) => {
+      const add = (target, type, methodName) => {
         const stop = Drupal.formEvents.listen(
           target,
           type,
           undefined,
-          (event) => handler.call(target, event),
+          (event) => this[methodName].call(target, event),
         );
         listeners.set(target, stop);
       };
       once('copy-field-values', 'body').forEach((body) => {
-        add(body, copyEvent, this.valueTargetCopyHandlerNative);
+        add(body, copyEvent, 'valueTargetCopyHandlerNative');
       });
       once('copy-field-values', selector(ids)).forEach((source) => {
-        add(source, 'blur', this.valueSourceBlurHandlerNative);
+        add(source, 'blur', 'valueSourceBlurHandlerNative');
       });
     },
     detach(context, settings, trigger) {

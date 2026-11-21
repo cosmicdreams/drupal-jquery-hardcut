@@ -124,16 +124,15 @@
             const title =
               pane.querySelector(':scope > summary')?.firstChild?.textContent ||
               '';
-            const tab = new VerticalTab({ title, detailsElement: pane });
+            const tab = new Drupal.verticalTab({ title, detailsElement: pane });
             menu.append(tab.itemElement);
             pane.classList.remove('collapsed');
             pane.removeAttribute('open');
             pane.classList.add('vertical-tabs__pane');
             tabs.set(pane, tab);
-            pane.dispatchEvent(
+            document.dispatchEvent(
               new CustomEvent('drupal:vertical-tab-created', {
-                bubbles: true,
-                detail: tab,
+                detail: { pane, tab },
               }),
             );
             if (pane.id === selectedId) {
@@ -281,6 +280,7 @@
       return this;
     },
   };
+  Drupal.verticalTabs.nativeConstructor = VerticalTab;
   Drupal.verticalTab = VerticalTab;
 
   /**

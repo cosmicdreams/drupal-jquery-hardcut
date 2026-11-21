@@ -30,7 +30,7 @@
           },
         };
         function onClick(event) {
-          if (binding.handlesNativeEvent || event.button >= 1) {
+          if (binding.handlesNativeEvent?.(event) || event.button >= 1) {
             return;
           }
           const summary = event.target.closest?.(binding.selector);
