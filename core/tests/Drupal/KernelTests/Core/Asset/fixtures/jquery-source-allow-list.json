@@ -72,10 +72,6 @@
       "owner": "S",
       "references": 1
     },
-    "misc/vertical-tabs.js": {
-      "owner": "U",
-      "references": 1
-    },
     "modules/block/js/block.admin.js": {
       "owner": "U",
       "references": 1
@@ -134,10 +130,6 @@
     },
     "modules/file/js/file.js": {
       "owner": "M",
-      "references": 1
-    },
-    "modules/filter/js/filter.admin.js": {
-      "owner": "U",
       "references": 1
     },
     "modules/filter/js/filter.js": {
@@ -270,10 +262,6 @@
     },
     "themes/default_admin/js/media-library.ui.js": {
       "owner": "M",
-      "references": 1
-    },
-    "themes/default_admin/js/vertical-tabs.js": {
-      "owner": "U",
       "references": 1
     }
   },

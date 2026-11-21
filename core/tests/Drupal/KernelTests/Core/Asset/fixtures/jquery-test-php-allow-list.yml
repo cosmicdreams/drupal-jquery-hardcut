@@ -21,6 +21,10 @@
   removal: Z (Drupal 13)
   literals:
     "core/jquery": 1
+- path: core/modules/system/tests/modules/form_test/src/Form/FormTestVerticalTabsWithSummaryForm.php
+  removal: Z (Drupal 13)
+  literals:
+    "core/jquery": 1
 - path: core/modules/system/tests/modules/position_shim_test/src/Controller/PositionShimTestController.php
   removal: D
   literals:
