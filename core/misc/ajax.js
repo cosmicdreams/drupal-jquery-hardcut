@@ -2576,6 +2576,10 @@
   const pixelProperties =
     /^(?:border(?:-(?:top|right|bottom|left))?(?:-width)?|(?:margin|padding)(?:-(?:top|right|bottom|left))?|top|right|bottom|left|(?:(?:min|max)-)?(?:width|height))$/;
 
+  // The pinned jQuery style hooks clamp single numeric box values.
+  const nonNegativeProperties = /^(?:width|height|padding|border-width)$/;
+  const cssNumber = /^([+-]?(?:\d*\.)?\d+(?:e[+-]?\d+)?)([a-z%]*)$/i;
+
   const elementData = new WeakMap();
   // These keys also had readers in the jQuery Ajax runtime.
   const legacyDataKeys =
@@ -2987,7 +2991,14 @@
             typeof value === 'number' && pixelProperties.test(property)
               ? 'px'
               : '';
-          style.setProperty(property, `${value}${units}`);
+          let cssValue = `${value}${units}`;
+          if (nonNegativeProperties.test(property)) {
+            const match = cssNumber.exec(cssValue);
+            if (match) {
+              cssValue = `${Math.max(0, Number(match[1]))}${match[2] || 'px'}`;
+            }
+          }
+          style.setProperty(property, cssValue);
         });
       });
     },
