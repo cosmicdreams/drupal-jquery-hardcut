@@ -1037,7 +1037,14 @@ class TableDragTest extends WebDriverTestBase {
    */
   public function testSharedResizePreservesNativeOrderAndCancellation(): void {
     $this->drupalGet('tabledrag_test', ['query' => ['legacy' => 1]]);
-    $this->assertSame([['table', 'legacy', 'native'], ['table', 'native'], ['table'], ['table', TRUE], ['table', TRUE], ['table', TRUE]], $this->getSession()->evaluateScript(<<<'JS'
+    $this->assertSame([
+      ['table', 'legacy', 'native'],
+      ['table', 'native'],
+      ['table'],
+      ['table', TRUE],
+      ['table', TRUE],
+      ['table', TRUE],
+    ], $this->getSession()->evaluateScript(<<<'JS'
       (() => {
         jQuery(window).off('resize');
         const fixture = document.createElement('section');
