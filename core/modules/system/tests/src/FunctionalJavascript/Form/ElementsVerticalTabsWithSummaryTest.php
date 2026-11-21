@@ -115,6 +115,143 @@ class ElementsVerticalTabsWithSummaryTest extends WebDriverTestBase {
   }
 
   /**
+   * Tests that constructor overrides keep the legacy settings consistent.
+   *
+   * A chaining override emits no #details deprecation, and an override that
+   * swaps settings.details renders and stores the swapped pane.
+   */
+  public function testVerticalTabOverrideSettings(): void {
+    $this->drupalGet('form_test/vertical-tabs-with-summary', ['query' => ['legacy' => 1]]);
+    $actual = $this->getSession()->evaluateScript(<<<'JS'
+      (() => {
+        const warn = Drupal.deprecationError;
+        const warnings = [];
+        Drupal.deprecationError = ({ message }) => warnings.push(message);
+        const Original = Drupal.verticalTab;
+        const oldTheme = Drupal.theme.verticalTab;
+        const attach = (id) => {
+          const context = document.body.appendChild(document.createElement('div'));
+          context.innerHTML = `<div class="js-form-type-vertical-tabs"><div data-vertical-tabs-panes><input type="hidden" class="vertical-tabs__active-tab" value=""><details id="${id}"><summary>${id}</summary></details></div></div>`;
+          Drupal.behaviors.verticalTabs.attach(context);
+          return Drupal.verticalTabs.get(context.querySelector(`#${id}`));
+        };
+        const describe = (tab, pane) => [
+          tab.detailsElement === pane,
+          tab.linkElement.getAttribute('href'),
+        ];
+        try {
+          const seen = [];
+          function Chaining(settings) {
+            seen.push(settings.details instanceof jQuery && settings.details[0] === settings.detailsElement);
+            Original.call(this, settings);
+          }
+          Chaining.prototype = Original.prototype;
+          Drupal.verticalTab = Chaining;
+          const chained = attach('chain-pane');
+          const chain = [seen, describe(chained, document.getElementById('chain-pane'))];
+
+          const swapped = [];
+          const themed = [];
+          Drupal.theme.verticalTab = (settings) => {
+            themed.push(settings.details[0].id);
+            return oldTheme(settings);
+          };
+          for (const mode of ['assign', 'spread']) {
+            const replacement = document.createElement('details');
+            replacement.id = `swap-${mode}`;
+            function Swapping(settings) {
+              if (mode === 'assign') {
+                settings.details = jQuery(replacement);
+                Original.call(this, settings);
+              }
+              else {
+                Original.call(this, { ...settings, details: jQuery(replacement) });
+              }
+            }
+            Swapping.prototype = Original.prototype;
+            Drupal.verticalTab = Swapping;
+            swapped.push(describe(attach(`source-${mode}`), replacement));
+          }
+          return [
+            chain,
+            swapped,
+            themed,
+            warnings.filter((message) => message.includes('#details')),
+          ];
+        }
+        finally {
+          Drupal.verticalTab = Original;
+          Drupal.theme.verticalTab = oldTheme;
+          Drupal.deprecationError = warn;
+        }
+      })()
+      JS);
+    $this->assertSame([
+      [[TRUE], [TRUE, '#chain-pane']],
+      [[TRUE, '#swap-assign'], [TRUE, '#swap-spread']],
+      ['swap-assign', 'swap-spread'],
+      [],
+    ], $actual);
+  }
+
+  /**
+   * Tests a constructor override set before the form adapter loads.
+   */
+  public function testPreAdapterVerticalTabOverride(): void {
+    $this->drupalGet('form_test/vertical-tabs-with-summary');
+    $session = $this->getSession();
+    $this->assertSame('undefined', $session->evaluateScript('typeof window.jQuery'));
+    $scripts = json_encode(array_column(
+      \Drupal::service('library.discovery')->getLibraryByName('core', 'jquery')['js'],
+      'data',
+    ));
+    $session->executeScript(<<<JS
+      (async () => {
+        const Native = Drupal.verticalTab;
+        const seen = [];
+        function Early(settings) {
+          seen.push(settings.details instanceof window.jQuery);
+          Native.call(this, settings);
+          this.early = true;
+        }
+        Early.prototype = Native.prototype;
+        Drupal.verticalTab = Early;
+        for (const path of $scripts) {
+          await new Promise((resolve, reject) => {
+            const script = document.createElement('script');
+            script.src = drupalSettings.path.baseUrl + path;
+            script.onload = resolve;
+            script.onerror = reject;
+            document.head.append(script);
+          });
+        }
+        const warnings = [];
+        const warn = Drupal.deprecationError;
+        Drupal.deprecationError = ({ message }) => warnings.push(message);
+        try {
+          const context = document.createElement('div');
+          context.innerHTML = '<div class="js-form-type-vertical-tabs"><div data-vertical-tabs-panes><input type="hidden" class="vertical-tabs__active-tab" value=""><details id="early-pane"><summary>Early</summary></details></div></div>';
+          Drupal.behaviors.verticalTabs.attach(context);
+          const pane = context.querySelector('#early-pane');
+          const tab = Drupal.verticalTabs.get(pane);
+          window.preAdapterOverrideResult = [
+            seen,
+            tab.early === true,
+            tab.detailsElement === pane,
+            jQuery(pane).data('verticalTab') === tab,
+            warnings.filter((message) => message.includes('#details')),
+          ];
+        }
+        finally {
+          Drupal.deprecationError = warn;
+        }
+      })();
+      JS);
+    $this->assertJsCondition('Array.isArray(window.preAdapterOverrideResult)');
+    $this->assertSame([[TRUE], TRUE, TRUE, TRUE, []], $session->evaluateScript('window.preAdapterOverrideResult'));
+  }
+
+  /**
    * Tests a legacy theme override and tab management after dynamic attachment.
    */
   public function testLegacyVerticalTabTheme(): void {

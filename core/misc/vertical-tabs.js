@@ -130,11 +130,6 @@
             pane.removeAttribute('open');
             pane.classList.add('vertical-tabs__pane');
             tabs.set(pane, tab);
-            document.dispatchEvent(
-              new CustomEvent('drupal:vertical-tab-created', {
-                detail: { pane, tab },
-              }),
-            );
             if (pane.id === selectedId) {
               selected = pane;
             }
@@ -280,6 +275,11 @@
       return this;
     },
   };
+  /**
+   * The native constructor, kept for the legacy adapter.
+   *
+   * @internal
+   */
   Drupal.verticalTabs.nativeConstructor = VerticalTab;
   Drupal.verticalTab = VerticalTab;
 

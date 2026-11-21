@@ -902,10 +902,20 @@
       function AdaptedTab(settings) {
         if (settings?.detailsElement && !settings.details) {
           warn('Drupal.verticalTab', migration);
-          settings = {
-            ...settings,
-            details: jquery(settings.detailsElement),
-          };
+          let details = jquery(settings.detailsElement);
+          settings = { ...settings };
+          // Keep the collection out of Object.assign() and object spread, and
+          // let an override that replaces it also replace the native pane.
+          Object.defineProperty(settings, 'details', {
+            configurable: true,
+            get() {
+              return details;
+            },
+            set(value) {
+              details = value instanceof jquery ? value : jquery(value);
+              settings.detailsElement = details[0];
+            },
+          });
         }
         if (new.target) {
           return Reflect.construct(Constructor, [settings], new.target);
@@ -933,25 +943,24 @@
       },
     });
 
+    // Copy each tab into jQuery data on first read, so a removed value stays
+    // removed. A pane read before its tab exists is copied later.
     const migratedPanes = new WeakSet();
     function ensureTabData(pane) {
-      if (!pane || migratedPanes.has(pane)) {
+      if (!pane || typeof pane !== 'object' || migratedPanes.has(pane)) {
+        return;
+      }
+      const tab = Drupal.verticalTabs.get(pane);
+      if (!tab) {
         return;
       }
       migratedPanes.add(pane);
-      if (jquery.data(pane, 'verticalTab') === undefined) {
-        const tab = Drupal.verticalTabs.get(pane);
-        if (tab) {
-          jquery.data(pane, 'verticalTab', tab);
-        }
+      if (originalData(pane, 'verticalTab') === undefined) {
+        originalData(pane, 'verticalTab', tab);
       }
     }
 
-    document.addEventListener('drupal:vertical-tab-created', (event) => {
-      const { pane, tab } = event.detail;
-      migratedPanes.add(pane);
-      jquery(pane).data('verticalTab', tab);
-    });
+    const originalData = jquery.data;
     document.querySelectorAll('.vertical-tabs__pane').forEach((pane) => {
       ensureTabData(pane);
     });
@@ -968,7 +977,6 @@
       return originalFnData.apply(this, arguments);
     };
 
-    const originalData = jquery.data;
     jquery.data = function (elem, name) {
       if (
         (name === 'verticalTab' || name === undefined) &&
