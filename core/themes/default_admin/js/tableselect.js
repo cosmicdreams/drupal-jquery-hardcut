@@ -9,6 +9,7 @@
    *
    * Extensions declaring core/jquery can set legacyTableEvent to true on an
    * event override before assigning it to receive the deprecated event shape.
+   * Set the flag on subclass methods before constructing the first instance.
    */
   Drupal.DefaultAdminBulkActions = class {
     constructor(bulkActions) {

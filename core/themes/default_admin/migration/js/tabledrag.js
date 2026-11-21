@@ -294,6 +294,8 @@
     const toggle = Drupal.tableDrag.themeContent(
       Drupal.theme('tableDragToggle'),
     );
+    const toggleWrapper =
+      toggle instanceof DocumentFragment ? toggle.firstElementChild : toggle;
     this.toggleWeightButton = toggle.querySelector(
       '[data-drupal-selector="tabledrag-toggle-weight"]',
     );
@@ -351,6 +353,12 @@
     tableInteraction.own(table, window, () => {
       window.removeEventListener('storage', updateStoredWeights);
       clearInterval(self.scrollInterval);
+      if (self.dragObject) {
+        document.body.classList.remove(self.dragOrientation);
+      }
+      self.dragObject = null;
+      self.rowObject = null;
+      toggleWrapper?.remove();
     });
 
     // Check for any rows marked as changed before this tabledrag was rerendered

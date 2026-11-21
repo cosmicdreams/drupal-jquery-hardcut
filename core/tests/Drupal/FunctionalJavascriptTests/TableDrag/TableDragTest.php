@@ -584,6 +584,9 @@ class TableDragTest extends WebDriverTestBase {
         mouseMove();
         Drupal.detachBehaviors(drag.table, drupalSettings, 'move');
         mouseMove();
+        const handle = drag.table.querySelector('.tabledrag-handle');
+        handle.dispatchEvent(new MouseEvent('mousedown'));
+        const active = drag.dragObject !== null && document.body.classList.contains(drag.dragOrientation);
         Drupal.detachBehaviors(drag.table, drupalSettings, 'unload');
         mouseMove();
         jQuery(document).triggerHandler('mousemove');
@@ -608,7 +611,8 @@ class TableDragTest extends WebDriverTestBase {
         const previousSelection = row.classList.contains('selected');
         Drupal.detachBehaviors(table, drupalSettings, 'unload');
         return [
-          movements === 2,
+          movements === 2 && active && drag.dragObject === null &&
+            !document.body.classList.contains(drag.dragOrientation) && !drag.toggleWeightButton.isConnected,
           selected && previousSelection,
           !Drupal.TableResponsive.tables.includes(responsive) && !responsive.link.isConnected,
         ];
