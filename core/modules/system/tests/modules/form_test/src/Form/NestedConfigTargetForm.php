@@ -104,11 +104,11 @@ class NestedConfigTargetForm extends TreeConfigTargetForm {
       '#states' => [
         'visible' => [
           // 2 favorite fruits.
-          ':input[name="favorites[first]"]' => ['empty' => FALSE],
-          ':input[name="favorites[second]"]' => ['empty' => FALSE],
+          'input[name="favorites[first]"]' => ['empty' => FALSE],
+          'input[name="favorites[second]"]' => ['empty' => FALSE],
           // Favorite & nemesis vegetable.
-          ':input[name="vegetables[favorite]"]' => ['empty' => FALSE],
-          ':input[name="vegetables[nemesis]"]' => ['empty' => FALSE],
+          'input[name="vegetables[favorite]"]' => ['empty' => FALSE],
+          'input[name="vegetables[nemesis]"]' => ['empty' => FALSE],
         ],
       ],
     ];
