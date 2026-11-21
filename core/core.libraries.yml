@@ -442,7 +442,6 @@ drupal.form:
   js:
     misc/form.js: {}
   dependencies:
-    - core/jquery
     - core/drupal
     - core/drupal.debounce
     - core/once
