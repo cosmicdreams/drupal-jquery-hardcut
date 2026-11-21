@@ -4,6 +4,8 @@
  *
  * @deprecated in drupal:12.0.0 and is removed from drupal:13.0.0.
  *   Use a native command or define an explicit command in your extension.
+ *
+ * @see https://www.drupal.org/node/CHANGE_RECORD
  */
 
 (($, Drupal, drupalSettings) => {
@@ -33,7 +35,7 @@
     if (!warned.has(contract)) {
       warned.add(contract);
       Drupal.deprecationError({
-        message: `${contract} is deprecated in drupal:12.0.0 and is removed from drupal:13.0.0. ${migration}.`,
+        message: `${contract} is deprecated in drupal:12.0.0 and is removed from drupal:13.0.0. ${migration}. See https://www.drupal.org/node/CHANGE_RECORD.`,
       });
     }
   }
@@ -113,8 +115,15 @@
       );
     },
 
-    wrapMultipleRoots(nodes) {
-      return $('<div></div>').append(nodes);
+    getData(element, key) {
+      if (
+        /^(?:dialog(?:Type|Options|Renderer)|ajaxHttpMethod|refocusBlur|disableRefocus)$/.test(
+          key,
+        )
+      ) {
+        projectData(element);
+        return data(element, key);
+      }
     },
 
     insert(ajax, response) {
@@ -150,11 +159,13 @@
 
       let $newContent = $(parseHTML(response.data));
 
-      $newContent = Drupal.theme(
-        'ajaxWrapperNewContent',
-        $newContent,
-        ajax,
-        response,
+      $newContent = $(
+        Drupal.ajax.themeContent(
+          'ajaxWrapperNewContent',
+          $newContent,
+          ajax,
+          response,
+        ),
       );
 
       // If removing content from the wrapper, detach behaviors first.

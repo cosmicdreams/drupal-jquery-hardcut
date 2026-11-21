@@ -113,13 +113,95 @@ class CommandsTest extends WebDriverTestBase {
   }
 
   /**
+   * Tests safe unmarked commands on a page without jQuery.
+   */
+  public function testCouncilNativeCommands(): void {
+    $this->drupalGet('ajax-test/native-request', ['query' => ['commands' => 1]]);
+    $result = $this->getSession()->evaluateScript(<<<'JS'
+      (async () => {
+        const target = document.createElement('div');
+        target.id = 'native-absolute';
+        target.dataset.fixture = 'alpha beta';
+        document.body.append(target);
+        const ajax = Drupal.ajax({ url: location.href });
+        await ajax.commandExecutionQueue([
+          { command: 'css', selector: "[data-fixture~='beta']", argument: { width: 42, cssFloat: 'left' } },
+          { command: 'data', selector: '#native-absolute', name: 'state', value: 7 },
+          { command: 'insert', selector: "[data-fixture ~= 'beta']", method: 'html',
+            data: '<div style="display:none"><span class="ajax-new-content">Visible</span></div>' },
+        ]);
+        return [typeof jQuery, target.style.width, target.style.cssFloat,
+          Drupal.ajax.elementData.get(target, 'state'), getComputedStyle(target.firstElementChild).display];
+      })()
+      JS);
+    $this->assertSame(['undefined', '42px', 'left', 7, 'block'], $result);
+  }
+
+  /**
+   * Tests mixed-page removal and compatibility data reads.
+   */
+  public function testCouncilMixedCommands(): void {
+    $this->drupalGet('ajax_forms_test_ajax_commands_form', ['query' => ['legacy_commands' => 1]]);
+    $result = $this->getSession()->evaluateScript(<<<'JS'
+      (async () => {
+        const parent = document.createElement('div');
+        parent.id = 'native-removal-parent';
+        parent.innerHTML = '<div id="native-removed"></div>';
+        document.body.append(parent);
+        const node = parent.firstElementChild;
+        let calls = 0;
+        jQuery(node).data('dialog-type', 'modal').on('probe', () => ++calls);
+        const value = Drupal.ajax.elementData.get(node, 'dialog-type');
+        const ajax = Drupal.ajax({ url: location.href });
+        await ajax.commandExecutionQueue([
+          { command: 'insert', selector: '#native-removal-parent', method: 'html', data: '' },
+        ]);
+        parent.append(node);
+        jQuery(node).trigger('probe');
+        return [value, jQuery.hasData(node), calls];
+      })()
+      JS);
+    $this->assertSame(['modal', FALSE, 0], $result);
+  }
+
+  /**
+   * Tests that external scripts preserve their nonce and cross-origin settings.
+   */
+  public function testCouncilScriptNonce(): void {
+    $this->drupalGet('ajax-test/native-request', ['query' => ['commands' => 1]]);
+    $result = $this->getSession()->evaluateScript(<<<'JS'
+      (async () => {
+        const target = document.body.appendChild(document.createElement('div'));
+        target.id = 'script-target';
+        const script = new Promise((resolve) => {
+          const observer = new MutationObserver((mutations) => {
+            for (const node of mutations.flatMap(({ addedNodes }) => [...addedNodes])) {
+              if (node.localName === 'script' && node.src.startsWith('data:')) {
+                observer.disconnect();
+                resolve([node.nonce, node.getAttribute('crossorigin')]);
+              }
+            }
+          });
+          observer.observe(document.head, { childList: true });
+        });
+        await Drupal.ajax({ url: location.href }).commandExecutionQueue([
+          { command: 'insert', selector: '#script-target', method: 'html',
+            data: '<script src="data:text/javascript,void%200" nonce="sample-nonce" crossorigin></script>' },
+        ]);
+        return Promise.race([script, new Promise((resolve) => setTimeout(resolve, 1500))]);
+      })()
+      JS);
+    $this->assertSame(['sample-nonce', ''], $result);
+  }
+
+  /**
    * Tests the original command contracts on a page with the legacy library.
    */
   #[IgnoreDeprecations]
   public function testLegacyCommands(): void {
-    $this->expectUserDeprecationMessage('Javascript Deprecation: Using jQuery Ajax selector, method or effect inputs is deprecated in drupal:12.0.0 and is removed from drupal:13.0.0. Use a CSS selector and supported native command options.');
-    $this->expectUserDeprecationMessage("Javascript Deprecation: DataCommand's jQuery-data semantics is deprecated in drupal:12.0.0 and is removed from drupal:13.0.0. Use Drupal's element data API.");
-    $this->expectUserDeprecationMessage('Javascript Deprecation: The invoke Ajax command is deprecated in drupal:12.0.0 and is removed from drupal:13.0.0. Use a native command for the operation, or define an explicit command in your extension.');
+    $this->expectUserDeprecationMessage('Javascript Deprecation: Using jQuery Ajax selector, method or effect inputs is deprecated in drupal:12.0.0 and is removed from drupal:13.0.0. Use a CSS selector and supported native command options. See https://www.drupal.org/node/CHANGE_RECORD.');
+    $this->expectUserDeprecationMessage("Javascript Deprecation: DataCommand's jQuery-data semantics is deprecated in drupal:12.0.0 and is removed from drupal:13.0.0. Use Drupal's element data API. See https://www.drupal.org/node/CHANGE_RECORD.");
+    $this->expectUserDeprecationMessage('Javascript Deprecation: The invoke Ajax command is deprecated in drupal:12.0.0 and is removed from drupal:13.0.0. Use a native command for the operation, or define an explicit command in your extension. See https://www.drupal.org/node/CHANGE_RECORD.');
     $this->drupalLogin($this->drupalCreateUser(['access content']));
     $this->drupalGet('ajax_forms_test_ajax_commands_form', ['query' => ['legacy_commands' => 1]]);
     $session = $this->getSession();
@@ -170,8 +252,8 @@ class CommandsTest extends WebDriverTestBase {
    */
   #[IgnoreDeprecations]
   public function testAjaxCommands(): void {
-    $this->expectUserDeprecationMessage('Javascript Deprecation: Using jQuery Ajax selector, method or effect inputs is deprecated in drupal:12.0.0 and is removed from drupal:13.0.0. Use a CSS selector and supported native command options.');
-    $this->expectUserDeprecationMessage('Javascript Deprecation: The invoke Ajax command is deprecated in drupal:12.0.0 and is removed from drupal:13.0.0. Use a native command for the operation, or define an explicit command in your extension.');
+    $this->expectUserDeprecationMessage('Javascript Deprecation: Using jQuery Ajax selector, method or effect inputs is deprecated in drupal:12.0.0 and is removed from drupal:13.0.0. Use a CSS selector and supported native command options. See https://www.drupal.org/node/CHANGE_RECORD.');
+    $this->expectUserDeprecationMessage('Javascript Deprecation: The invoke Ajax command is deprecated in drupal:12.0.0 and is removed from drupal:13.0.0. Use a native command for the operation, or define an explicit command in your extension. See https://www.drupal.org/node/CHANGE_RECORD.');
     $session = $this->getSession();
     $page = $this->getSession()->getPage();
 

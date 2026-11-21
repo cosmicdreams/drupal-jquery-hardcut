@@ -2287,15 +2287,24 @@
    * @return {Node[]}
    *   The nodes to insert.
    */
-  const wrapNewContent = (nodes, ajax, response) =>
-    (response.effect || ajax.effect) !== 'none' &&
-    Array.from(nodes).filter(
-      (node) =>
-        node.nodeType !== Node.COMMENT_NODE &&
-        (node.nodeType !== Node.TEXT_NODE || node.textContent.trim() !== ''),
-    ).length > 1
-      ? Drupal.theme('ajaxWrapperMultipleRootElements', nodes)
-      : nodes;
+  const wrapNewContent = (nodes, ajax, response) => {
+    if (
+      (response.effect || ajax.effect) === 'none' ||
+      Array.from(nodes).filter(
+        (node) =>
+          node.nodeType !== Node.COMMENT_NODE &&
+          (node.nodeType !== Node.TEXT_NODE || node.textContent.trim() !== ''),
+      ).length <= 1
+    ) {
+      return nodes;
+    }
+    const wrapper = Drupal.ajax.themeContent(
+      'ajaxWrapperMultipleRootElements',
+      nodes,
+    );
+    // A legacy override can call this implementation and keep its collection.
+    return nodes.jquery ? Drupal.ajax.compatibility.wrap(wrapper) : wrapper;
+  };
 
   Drupal.theme.ajaxWrapperNewContent = wrapNewContent;
 
@@ -2315,8 +2324,8 @@
    */
   const wrapMultipleRoots = (nodes) => {
     // Preserve the input type when a legacy override calls its predecessor.
-    if (!Array.isArray(nodes)) {
-      return Drupal.ajax.commandCompatibility.wrapMultipleRoots(nodes);
+    if (nodes?.jquery && Drupal.ajax.compatibility) {
+      return Drupal.ajax.compatibility.wrapMultipleRoots(nodes);
     }
     const wrapper = document.createElement('div');
     wrapper.append(...nodes);
@@ -2325,12 +2334,55 @@
 
   Drupal.theme.ajaxWrapperMultipleRootElements = wrapMultipleRoots;
 
-  // An unmarked command can use this CSS subset without invoking a legacy
-  // pseudo, attribute hook or selector extension. Marked native commands can
-  // use the full browser selector grammar.
-  const cssSelector = /^(?:[\w.#* ,>+~\t\n-]|\[[-\w]+(?:="[^"\\]*")?\])+$/;
-  const isNativeSelector = (selector) =>
-    !selector || cssSelector.test(selector);
+  const defaultContentThemes = {
+    ajaxWrapperNewContent: wrapNewContent,
+    ajaxWrapperMultipleRootElements: wrapMultipleRoots,
+  };
+
+  /**
+   * Calls an Ajax content theme hook with its declared argument type.
+   *
+   * @internal
+   */
+  Drupal.ajax.themeContent = (name, nodes, ...args) => {
+    const theme = Drupal.theme[name];
+    const adapter = Drupal.ajax.compatibility;
+    if (
+      adapter &&
+      theme !== defaultContentThemes[name] &&
+      !nativeCallbacks.has(theme)
+    ) {
+      adapter.warnLegacy(
+        `Drupal.theme.${name}() with a jQuery collection`,
+        'Use an array of native nodes.',
+      );
+      return Drupal.theme(
+        name,
+        nodes?.jquery ? nodes : adapter.wrap(nodes),
+        ...args,
+      );
+    }
+    return Drupal.theme(name, Array.from(nodes), ...args);
+  };
+
+  // Reject ambiguous legacy input, while allowing standard CSS
+  // attribute selector operators, quoted values and case modifiers.
+  const cssSelector =
+    /^(?:[\w.#* ,>+~\t\n\r\f-]|\[(?:[^\]'"\\]|\\.|"(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*')+\])+$/;
+  const isNativeSelector = (selector) => {
+    if (!selector || /^#[\w-]+$/.test(selector)) {
+      return true;
+    }
+    if (!cssSelector.test(selector)) {
+      return false;
+    }
+    try {
+      document.createDocumentFragment().querySelector(selector);
+      return true;
+    } catch (error) {
+      return false;
+    }
+  };
   const standardEffect = Drupal.Ajax.prototype.getEffect;
 
   function commandTargets(selector) {
@@ -2370,16 +2422,23 @@
       return;
     }
     const executable = document.createElement('script');
-    const { src, type, nonce, noModule, crossOrigin } = script;
+    const { src, type, nonce, noModule } = script;
+    const crossorigin = script.getAttribute('crossorigin');
+    if (nonce) {
+      executable.nonce = nonce;
+    }
+    if (crossorigin !== null) {
+      executable.setAttribute('crossorigin', crossorigin);
+    }
     if (src && (type || '').toLowerCase() !== 'module') {
       if (noModule) {
         return;
       }
-      if (new URL(src).origin !== window.location.origin || crossOrigin) {
+      if (
+        new URL(src).origin !== window.location.origin ||
+        crossorigin !== null
+      ) {
         executable.src = src;
-        if (crossOrigin) {
-          executable.crossOrigin = crossOrigin;
-        }
         executable.addEventListener('load', () => executable.remove());
         executable.addEventListener('error', () => executable.remove());
         document.head.append(executable);
@@ -2408,9 +2467,6 @@
         executable.type = type;
       }
       executable.noModule = noModule;
-    }
-    if (nonce) {
-      executable.nonce = nonce;
     }
     document.head.append(executable);
     executable.remove();
@@ -2474,6 +2530,10 @@
       if (value !== undefined) {
         return value;
       }
+      const legacy = Drupal.ajax.commandCompatibility?.getData?.(element, key);
+      if (legacy !== undefined) {
+        return legacy;
+      }
       const attribute = element.getAttribute(
         `data-${key.replace(/[A-Z]/g, '-$&').toLowerCase()}`,
       );
@@ -2522,8 +2582,9 @@
       const data = elementData.get(node);
       data?.forEach((value, key) => data.set(key, { value: undefined }));
     };
-    reset(element);
-    element.querySelectorAll('*').forEach(reset);
+    const nodes = [element, ...element.querySelectorAll('*')];
+    Drupal.ajax.compatibility?.cleanData(nodes);
+    nodes.forEach(reset);
   }
 
   /**
@@ -2587,18 +2648,8 @@
         (ajax.getEffect && ajax.getEffect !== standardEffect) ||
         (!response.native &&
           (!isNativeSelector(selector) ||
-            (Drupal.ajax.commandCompatibility &&
-              (Drupal.theme.ajaxWrapperNewContent !== wrapNewContent ||
-                Drupal.theme.ajaxWrapperMultipleRootElements !==
-                  wrapMultipleRoots ||
-                Drupal.ajax.commandCompatibility.overrides(method)))))
+            Drupal.ajax.commandCompatibility?.overrides(method)))
       ) {
-        if (Drupal.theme.ajaxWrapperNewContent !== wrapNewContent) {
-          Drupal.ajax.compatibility?.warnLegacy?.(
-            'Drupal.theme.ajaxWrapperNewContent() with a jQuery collection',
-            'Use an array of native nodes.',
-          );
-        }
         return legacyCommand('insert', ajax, response, status);
       }
 
@@ -2606,11 +2657,13 @@
       const settings = response.settings || ajax.settings || drupalSettings;
       const template = document.createElement('template');
       template.innerHTML = response.data;
-      const nodes = Drupal.theme(
-        'ajaxWrapperNewContent',
-        [...template.content.childNodes],
-        ajax,
-        response,
+      const nodes = Array.from(
+        Drupal.ajax.themeContent(
+          'ajaxWrapperNewContent',
+          template.content.childNodes,
+          ajax,
+          response,
+        ),
       );
       if (method === 'html' || method === 'replaceWith') {
         // Retain the original detach context, including the missing-wrapper
@@ -2653,6 +2706,9 @@
       const effectTargets = elements.flatMap((element) => [
         ...element.querySelectorAll('.ajax-new-content'),
       ]);
+      if (effectTargets.length) {
+        elements.forEach(showInsertedElement);
+      }
       if (effect === 'fade') {
         (effectTargets.length ? effectTargets : elements).forEach(
           (fadeInElement) =>
@@ -2814,7 +2870,12 @@
      *   The XMLHttpRequest status.
      */
     css(ajax, response, status) {
-      if (response.legacy || !response.native) {
+      if (
+        response.legacy ||
+        (!response.native &&
+          (Drupal.ajax.commandCompatibility ||
+            !isNativeSelector(response.selector)))
+      ) {
         return legacyCommand('css', ajax, response, status);
       }
       const properties = Object.entries(response.argument || {});
@@ -2830,12 +2891,15 @@
           if (value == null || Number.isNaN(value)) {
             return;
           }
-          const property = name.startsWith('--')
-            ? name
-            : name
-                .replace(/[A-Z]/g, '-$&')
-                .toLowerCase()
-                .replace(/^ms-/, '-ms-');
+          const property =
+            name === 'cssFloat'
+              ? 'float'
+              : name.startsWith('--')
+                ? name
+                : name
+                    .replace(/[A-Z]/g, '-$&')
+                    .toLowerCase()
+                    .replace(/^ms-/, '-ms-');
           const units =
             typeof value === 'number' && pixelProperties.test(property)
               ? 'px'
@@ -2907,7 +2971,13 @@
      *   The XMLHttpRequest status.
      */
     data(ajax, response, status) {
-      if (response.legacy || !response.native) {
+      if (
+        response.legacy ||
+        (!response.native &&
+          (Drupal.ajax.commandCompatibility ||
+            !isNativeSelector(response.selector) ||
+            typeof response.name !== 'string'))
+      ) {
         return legacyCommand('data', ajax, response, status);
       }
       commandTargets(response.selector).forEach((element) => {

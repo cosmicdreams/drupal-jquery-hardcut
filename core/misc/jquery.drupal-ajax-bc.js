@@ -11,6 +11,8 @@
  *
  * @deprecated in drupal:12.0.0 and is removed from drupal:13.0.0. Use the
  *   native Ajax lifecycle, request handle, form element or request options.
+ *
+ * @see https://www.drupal.org/node/CHANGE_RECORD
  */
 
 // cspell:ignore jqxhr nocontent notmodified prefilter prefilters
@@ -1223,6 +1225,8 @@
         });
         return native;
       },
+      cleanData: (nodes) => jQuery.cleanData(nodes),
+      wrapMultipleRoots: (nodes) => jQuery('<div></div>').append(nodes),
       warnLegacy,
       send,
       commandsComplete,

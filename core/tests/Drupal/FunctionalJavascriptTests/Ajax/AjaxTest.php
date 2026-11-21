@@ -109,7 +109,8 @@ class AjaxTest extends WebDriverTestBase {
    */
   #[IgnoreDeprecations]
   public function testInsertAjaxResponse(): void {
-    $this->expectUserDeprecationMessage('Javascript Deprecation: Using jQuery Ajax selector, method or effect inputs is deprecated in drupal:12.0.0 and is removed from drupal:13.0.0. Use a CSS selector and supported native command options.');
+    $this->expectUserDeprecationMessage('Javascript Deprecation: Drupal.theme.ajaxWrapperMultipleRootElements() with a jQuery collection is deprecated in drupal:12.0.0 and is removed from drupal:13.0.0. Use an array of native nodes. See https://www.drupal.org/node/CHANGE_RECORD.');
+    $this->expectUserDeprecationMessage('Javascript Deprecation: Drupal.theme.ajaxWrapperNewContent() with a jQuery collection is deprecated in drupal:12.0.0 and is removed from drupal:13.0.0. Use an array of native nodes. See https://www.drupal.org/node/CHANGE_RECORD.');
     $render_single_root = [
       'pre-wrapped-div' => '<div class="pre-wrapped">pre-wrapped<script> var test;</script></div>',
       'pre-wrapped-span' => '<span class="pre-wrapped">pre-wrapped<script> var test;</script></span>',
