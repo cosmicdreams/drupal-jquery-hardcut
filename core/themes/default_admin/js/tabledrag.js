@@ -15,6 +15,15 @@
       if (!context?.querySelectorAll) {
         return;
       }
+      const wrapCell = (cell, content, root) => {
+        let insertion = root;
+        while (insertion.firstElementChild) {
+          insertion = insertion.firstElementChild;
+        }
+        insertion.append(...cell.childNodes);
+        cell.append(content);
+      };
+
       /**
        * Refactors the table row markup to improve item label text wrapping.
        *
@@ -93,8 +102,7 @@
         const labels =
           content instanceof Element ? content : content?.firstElementChild;
         if (labels) {
-          labels.append(...cell.childNodes);
-          cell.append(content);
+          wrapCell(cell, content, labels);
         }
 
         const items = themeContent(Drupal.theme('tableDragCellItemsWrapper'));
@@ -102,8 +110,7 @@
           items instanceof Element ? items : items?.firstElementChild;
         if (wrapper) {
           wrapper.classList.add('js-tabledrag-cell-content');
-          wrapper.append(...cell.childNodes);
-          cell.append(items);
+          wrapCell(cell, items, wrapper);
           wrapper.prepend(
             ...wrapper.querySelectorAll(
               ':scope > .tabledrag-cell-content__item > :is(.js-tabledrag-handle, .js-indentation)',
