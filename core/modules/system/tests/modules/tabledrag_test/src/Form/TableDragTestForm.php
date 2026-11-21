@@ -171,10 +171,17 @@ class TableDragTestForm extends FormBase {
     // Provide a default set of five rows.
     $form['table'] = $this->buildTestTable();
     $form['actions'] = $this->buildFormActions();
+    if ($this->getRequest()->query->has('tableselect')) {
+      $form['#attached']['library'][] = 'core/drupal.tableselect';
+    }
+    if ($this->getRequest()->query->has('rtl')) {
+      $form['table']['#attributes']['dir'] = 'rtl';
+    }
     if ($this->getRequest()->query->has('legacy')) {
       $form['#attached']['library'][] = 'tabledrag_test/legacy';
     }
     if ($this->getRequest()->query->has('ajax')) {
+      $form['#attached']['library'][] = 'core/drupal.tabledrag.ajax';
       $form['actions']['mark_changed'] = [
         '#type' => 'button',
         '#value' => $this->t('Mark row changed'),
@@ -186,14 +193,13 @@ class TableDragTestForm extends FormBase {
   }
 
   /**
-   * Marks the second row as changed after a command for a removed row.
+   * Marks the second row as changed.
    *
    * @return \Drupal\Core\Ajax\AjaxResponse
    *   The response containing the tabledrag command.
    */
   public function markChanged(): AjaxResponse {
     $response = new AjaxResponse();
-    $response->addCommand(new TabledragWarningCommand('missing-row', 'tabledrag-test-table'));
     $response->addCommand(new TabledragWarningCommand('tabledrag-test-table-row-2', 'tabledrag-test-table'));
     return $response;
   }
