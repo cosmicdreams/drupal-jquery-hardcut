@@ -1,11 +1,9 @@
 /**
  * @file
  * Drupal's states library.
- * @param {object} Drupal
- *   The Drupal namespace.
  */
 
-(function (Drupal) {
+(function (Drupal, once) {
   /**
    * The base States namespace.
    *
@@ -22,40 +20,111 @@
 
   Drupal.states = states;
 
+  const nonTextInputTypes = [
+    'button',
+    'checkbox',
+    'color',
+    'date',
+    'datetime-local',
+    'email',
+    'file',
+    'hidden',
+    'image',
+    'month',
+    'number',
+    'password',
+    'radio',
+    'range',
+    'reset',
+    'search',
+    'submit',
+    'tel',
+    'time',
+    'url',
+    'week',
+  ];
   const formPseudos = {
     input: 'input, select, textarea, button',
-    radio: 'input[type="radio"]',
-    checkbox: 'input[type="checkbox"]',
-    text: 'input:not([type]), input[type="text"]',
-    password: 'input[type="password"]',
-    file: 'input[type="file"]',
+    radio: 'input[type="radio" i]',
+    checkbox: 'input[type="checkbox" i]',
+    text: `input:not(${nonTextInputTypes.map((type) => `[type="${type}" i]`).join(', ')})`,
+    password: 'input[type="password" i]',
+    file: 'input[type="file" i]',
     submit:
-      'input[type="submit"], button[type="submit"], button:not([type="button"], [type="reset"], [command], [commandfor])',
-    button: 'button, input[type="button"]',
-    image: 'input[type="image"]',
-    reset: 'input[type="reset"], button[type="reset"]',
+      'input[type="submit" i], button[type="submit" i], button:not([type="button" i], [type="reset" i], [command], [commandfor])',
+    button: 'button, input[type="button" i]',
+    image: 'input[type="image" i]',
+    reset: 'input[type="reset" i], button[type="reset" i]',
   };
   const nativePseudos = new Set([
+    'active',
+    'any-link',
+    'autofill',
+    'blank',
     'checked',
+    'default',
+    'defined',
+    'dir',
     'disabled',
-    'enabled',
     'empty',
+    'enabled',
     'first-child',
+    'first-of-type',
+    'focus',
+    'focus-visible',
+    'focus-within',
+    'fullscreen',
+    'hover',
+    'in-range',
+    'indeterminate',
+    'invalid',
+    'is',
+    'lang',
     'last-child',
-    'only-child',
+    'last-of-type',
+    'link',
+    'local-link',
+    'modal',
+    'not',
     'nth-child',
     'nth-last-child',
-    'first-of-type',
-    'last-of-type',
-    'only-of-type',
-    'nth-of-type',
     'nth-last-of-type',
-    'is',
-    'has',
-    'not',
+    'nth-of-type',
+    'only-child',
+    'only-of-type',
+    'open',
+    'optional',
+    'out-of-range',
+    'placeholder-shown',
+    'popover-open',
+    'read-only',
+    'read-write',
+    'required',
+    'root',
     'scope',
+    'target',
+    'target-within',
+    'user-invalid',
+    'user-valid',
+    'valid',
+    'visited',
     'where',
   ]);
+  const deprecatedSelectors = new Set();
+
+  /**
+   * Emits a selector deprecation once per selector string.
+   * @param {string} selector
+   *   The original selector string.
+   */
+  function deprecateSelector(selector) {
+    if (!deprecatedSelectors.has(selector)) {
+      deprecatedSelectors.add(selector);
+      Drupal.deprecationError({
+        message: `The jQuery selector "${selector}" in States is deprecated in drupal:12.0.0 and is removed from drupal:13.0.0. Use a CSS selector and the native States callback arguments. See https://www.drupal.org/node/CHANGE_RECORD.`,
+      });
+    }
+  }
 
   /**
    * Normalizes the audited form pseudos in a States selector.
@@ -64,13 +133,15 @@
    * selector in functional pseudos, including forgiving selector lists.
    * @param {string} selector
    *   A selector from the final States markup.
-   * @return {string|null}
-   *   A native selector, or null for selectors that need the legacy engine.
+   * @return {{selector: string, translated: boolean}|null}
+   *   A native selector result, or null for selectors that need the legacy
+   *   engine.
    */
   function nativeSelector(selector) {
     const tokens =
       /\\(?:[\da-f]{1,6}[\t\n\r\f ]?|[^\n\r\f])|\[(?:\\.|"(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*'|[^\]"'\\])*\]|"(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*'|:[\w-]*|\/\*/gis;
     let eligible = true;
+    let translated = false;
     const normalized = selector.replace(tokens, (token, offset) => {
       if (token === '/*') {
         eligible = false;
@@ -86,13 +157,14 @@
         return token;
       }
       if (Object.hasOwn(formPseudos, name)) {
+        translated = true;
         // Wrap the substitution so it can follow any simple selector.
         return `:is(${formPseudos[name]})`;
       }
       eligible = eligible && nativePseudos.has(name);
       return token;
     });
-    return eligible ? normalized : null;
+    return eligible ? { selector: normalized, translated } : null;
   }
 
   /**
@@ -106,7 +178,13 @@
     const normalized = nativeSelector(selector);
     if (normalized !== null) {
       try {
-        return Array.from(document.querySelectorAll(normalized));
+        const matches = Array.from(
+          document.querySelectorAll(normalized.selector),
+        );
+        if (normalized.translated) {
+          deprecateSelector(selector);
+        }
+        return matches;
       } catch (error) {
         if (error.name !== 'SyntaxError') {
           throw error;
@@ -225,66 +303,36 @@
     return a && b;
   }
 
-  const attached = new Map();
-
-  /**
-   * Finds state-bearing elements in the context, including the context itself.
-   * @param {Document|DocumentFragment|Element} context
-   *   The behavior context.
-   * @return {Element[]}
-   *   The state-bearing elements.
-   */
-  function stateElements(context) {
-    const selector = '[data-drupal-states]';
-    const elements = Array.from(context.querySelectorAll(selector));
-    if (context.matches?.(selector)) {
-      elements.unshift(context);
-    }
-    return elements;
-  }
-
-  /**
-   * Compares two ordered sets of matches.
-   * @param {Element[]} first
-   *   The first set of matches.
-   * @param {Element[]} second
-   *   The second set of matches.
-   * @return {boolean}
-   *   Whether both contain the same elements in the same order.
-   */
-  function sameElements(first, second) {
-    return (
-      first.length === second.length &&
-      first.every((element, index) => element === second[index])
-    );
-  }
+  const attached = new WeakMap();
+  const pending = new Set();
 
   /**
    * Attaches and releases States dependencies.
    */
   Drupal.behaviors.states = {
     attach(context) {
-      stateElements(context).forEach((element) => {
-        if (!attached.has(element)) {
-          const config = JSON.parse(element.getAttribute('data-drupal-states'));
-          attached.set(
-            element,
-            Object.entries(config || {}).map(
-              ([state, constraints]) =>
-                new states.Dependent({
-                  elements: [element],
-                  state: states.State.sanitize(state),
-                  constraints,
-                  defer: true,
-                }),
-            ),
-          );
-        }
-      });
-      // An insertion or an explicitly attached selector adapter can make a
-      // previously unavailable condition resolvable on an existing element.
-      attached.forEach((dependents) => {
+      once('states', '[data-drupal-states]', context).forEach((element) => {
+        const config = JSON.parse(element.getAttribute('data-drupal-states'));
+        const dependents = Object.entries(config || {}).map(
+          ([state, constraints]) =>
+            new states.Dependent({
+              elements: [element],
+              state: states.State.sanitize(state),
+              constraints,
+              defer: true,
+            }),
+        );
+        attached.set(element, dependents);
         dependents.forEach((dependent) => dependent.connect());
+      });
+      // Retry only previously unresolved legacy-selector dependents that are
+      // still connected to the document.
+      Array.from(pending).forEach((dependent) => {
+        if (!dependent.elements?.some((element) => element.isConnected)) {
+          pending.delete(dependent);
+          return;
+        }
+        dependent.connect();
       });
       while (states.postponed.length) {
         states.postponed.shift()();
@@ -295,10 +343,15 @@
       if (trigger !== 'unload') {
         return;
       }
-      stateElements(context).forEach((element) => {
-        attached.get(element)?.forEach((dependent) => dependent.disconnect());
-        attached.delete(element);
-      });
+      once
+        .remove('states', '[data-drupal-states]', context)
+        .forEach((element) => {
+          attached.get(element)?.forEach((dependent) => {
+            pending.delete(dependent);
+            dependent.disconnect();
+          });
+          attached.delete(element);
+        });
     },
   };
 
@@ -367,23 +420,22 @@
      * Connects resolved dependees and retries unresolved legacy selectors.
      */
     connect() {
+      if (this.connected) {
+        return;
+      }
       const matches = new Map();
       for (const selector of Object.keys(this.dependees)) {
         const elements = select(selector);
         if (elements === null) {
+          if (this.elements?.some((element) => element.isConnected)) {
+            pending.add(this);
+          }
           return;
         }
         matches.set(selector, elements);
       }
-      if (
-        this.matches &&
-        Array.from(matches).every(([selector, elements]) =>
-          sameElements(elements, this.matches.get(selector)),
-        )
-      ) {
-        return;
-      }
-      this.disconnect();
+      pending.delete(this);
+      this.connected = true;
       this.matches = matches;
       matches.forEach((elements, selector) => {
         this.initializeDependee(selector, this.dependees[selector]);
@@ -394,9 +446,11 @@
      * Releases the listeners and shared trigger subscriptions.
      */
     disconnect() {
+      pending.delete(this);
       this.disposers.forEach((dispose) => dispose());
       this.disposers.length = 0;
       this.matches = null;
+      this.connected = false;
     },
 
     /**
@@ -424,11 +478,7 @@
           );
         }
 
-        this.disposers.push(
-          acquireTrigger(elements, selector, state, (value) => {
-            this.update(selector, state, value);
-          }),
-        );
+        this.disposers.push(acquireTrigger(elements, selector, state));
       }
     },
 
@@ -628,51 +678,96 @@
     },
   };
 
-  const sharedTriggers = new WeakMap();
+  const elementTriggers = new WeakMap();
 
   /**
-   * Shares a trigger among dependents with the same ordered scope and state.
+   * Returns the active trigger driving a state on an element.
+   * @param {Element} element
+   *   The trigger element.
+   * @param {string} stateName
+   *   The normalized state name.
+   * @return {Drupal.states.Trigger|undefined}
+   *   The active trigger, if any.
+   */
+  function getElementTrigger(element, stateName) {
+    return elementTriggers.get(element)?.get(stateName);
+  }
+
+  /**
+   * Marks every element in a trigger's scope as driving that state.
+   * @param {Element[]} elements
+   *   The trigger's elements.
+   * @param {string} stateName
+   *   The normalized state name.
+   * @param {Drupal.states.Trigger} trigger
+   *   The active trigger instance.
+   */
+  function setElementTrigger(elements, stateName, trigger) {
+    for (const element of elements) {
+      let map = elementTriggers.get(element);
+      if (!map) {
+        map = new Map();
+        elementTriggers.set(element, map);
+      }
+      map.set(stateName, trigger);
+    }
+  }
+
+  /**
+   * Clears a trigger's per-element markers when it disconnects.
+   * @param {Element[]} elements
+   *   The trigger's elements.
+   * @param {string} stateName
+   *   The normalized state name.
+   * @param {Drupal.states.Trigger} trigger
+   *   The disconnecting trigger instance.
+   */
+  function clearElementTrigger(elements, stateName, trigger) {
+    for (const element of elements) {
+      const map = elementTriggers.get(element);
+      if (map?.get(stateName) === trigger) {
+        map.delete(stateName);
+      }
+    }
+  }
+
+  /**
+   * Shares a trigger among dependents using pinned per-element deduplication.
    * @param {Element[]} elements
    *   The trigger's ordered scope.
    * @param {string} selector
    *   The selector describing the scope.
    * @param {Drupal.states.State} state
    *   The monitored state.
-   * @param {function(unknown): void} update
-   *   Receives the last value when an existing trigger is reused.
    * @return {function(): void}
    *   Releases this dependency's use of the trigger.
    */
-  function acquireTrigger(elements, selector, state, update) {
+  function acquireTrigger(elements, selector, state) {
     if (!elements.length) {
       return () => {};
     }
-    let triggers = sharedTriggers.get(elements[0]);
-    if (!triggers) {
-      triggers = new Set();
-      sharedTriggers.set(elements[0], triggers);
+    const existing = getElementTrigger(elements[0], state.name);
+    if (existing) {
+      if (typeof existing.users === 'number') {
+        existing.users += 1;
+        return () => {
+          existing.users -= 1;
+          if (!existing.users) {
+            existing.disconnect();
+          }
+        };
+      }
+      return () => {};
     }
-    let trigger = Array.from(triggers).find(
-      (candidate) =>
-        candidate.state.name === state.name &&
-        sameElements(candidate.elements, elements),
-    );
-    if (trigger) {
-      states.postponed.push(() => {
-        if (trigger.initialized) {
-          update(trigger.value);
-        }
-      });
-    } else {
-      trigger = new states.Trigger({ selector, state, elements });
-      triggers.add(trigger);
+    const trigger = new states.Trigger({ selector, state, elements });
+    if (getElementTrigger(elements[0], state.name) !== trigger) {
+      return () => {};
     }
-    trigger.users = (trigger.users || 0) + 1;
+    trigger.users = 1;
     return () => {
       trigger.users -= 1;
       if (!trigger.users) {
         trigger.disconnect();
-        triggers.delete(trigger);
       }
     };
   }
@@ -702,11 +797,17 @@
    */
   states.Trigger = function (args) {
     Object.assign(this, args);
-    this.elements = this.elements ?? select(this.selector) ?? [];
-    this.disposers = [];
-    this.active = true;
-    if (this.elements.length) {
-      this.initialize();
+    const name = this.state?.name ?? String(this.state);
+    if (
+      registeredTriggers.has(name) ||
+      Object.hasOwn(states.Trigger.states, name)
+    ) {
+      this.elements = this.elements ?? select(this.selector) ?? [];
+      this.disposers = [];
+      this.active = true;
+      if (this.elements.length && !getElementTrigger(this.elements[0], name)) {
+        this.initialize();
+      }
     }
   };
 
@@ -715,7 +816,7 @@
      * @memberof Drupal.states.Trigger#
      */
     initialize() {
-      const name = this.state.name ?? String(this.state);
+      const name = this.state?.name ?? String(this.state);
       const trigger =
         registeredTriggers.get(name) ??
         (states.compatibility.trigger ?? ((key) => states.Trigger.states[key]))(
@@ -726,12 +827,16 @@
         const dispose = trigger.call(window, this.elements);
         if (typeof dispose === 'function') {
           this.disposers.push(dispose);
+        } else {
+          this.permanent = true;
         }
       } else {
         Object.entries(trigger || {}).forEach(([event, value]) => {
           this.defaultTrigger(event, value);
         });
       }
+
+      setElementTrigger(this.elements, name, this);
     },
 
     /**
@@ -777,6 +882,11 @@
     disconnect() {
       this.active = false;
       this.disposers.forEach((dispose) => dispose());
+      this.disposers.length = 0;
+      if (!this.permanent && this.elements) {
+        const name = this.state?.name ?? String(this.state);
+        clearElementTrigger(this.elements, name, this);
+      }
     },
   };
 
@@ -809,18 +919,51 @@
   }
 
   /**
+   * Tests whether any matched control is checked.
+   * @return {boolean}
+   *   Whether any control is checked.
+   */
+  function checked() {
+    for (let i = 0; i < this.length; i++) {
+      if (this[i].checked) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  /**
    * Reads the selected member of a group or the value of a single control.
    * @return {unknown}
    *   The current control value.
    */
   function value() {
     if (this.length > 1) {
-      return (
-        controlValue(this.find((element) => element.matches(':checked'))) ||
-        false
-      );
+      for (let i = 0; i < this.length; i++) {
+        if (this[i].matches(':checked')) {
+          return controlValue(this[i]) || false;
+        }
+      }
+      return false;
     }
     return controlValue(this[0]);
+  }
+
+  /**
+   * Reads the collapsed state from the event or the details element.
+   * @param {Event|object} [event]
+   *   The triggering event, if any.
+   * @return {boolean}
+   *   Whether the element is collapsed.
+   */
+  function collapsed(event) {
+    if (event?.detail && 'value' in event.detail) {
+      return event.detail.value;
+    }
+    if (event && 'value' in event) {
+      return event.value;
+    }
+    return !this[0].hasAttribute('open');
   }
 
   /**
@@ -834,20 +977,14 @@
       change: empty,
     },
     checked: {
-      change() {
-        return this.some((element) => element.checked);
-      },
+      change: checked,
     },
     value: {
       keyup: value,
       change: value,
     },
     collapsed: {
-      collapsed(event) {
-        return event?.detail && 'value' in event.detail
-          ? event.detail.value
-          : !this[0].hasAttribute('open');
-      },
+      collapsed,
     },
   };
 
@@ -984,6 +1121,9 @@
     }
   }
 
+  const checkedChanges = new WeakSet();
+  states.compatibility.isCheckedChange = (event) => checkedChanges.has(event);
+
   const handlers = {
     disabled(target, value) {
       const container = target.closest(wrapper);
@@ -1011,18 +1151,24 @@
     required(target, value) {
       if (value) {
         target.setAttribute('required', 'required');
+        const selector = target.id
+          ? `label[for="${CSS.escape(target.id)}"]`
+          : 'label';
+        target
+          .closest(item)
+          ?.querySelectorAll(selector)
+          .forEach((label) => {
+            label.classList.add('js-form-required', 'form-required');
+          });
       } else {
         target.removeAttribute('required');
+        target
+          .closest(item)
+          ?.querySelectorAll('label.js-form-required')
+          .forEach((label) => {
+            label.classList.remove('js-form-required', 'form-required');
+          });
       }
-      const selector =
-        value && target.id ? `label[for="${CSS.escape(target.id)}"]` : 'label';
-      target
-        .closest(item)
-        ?.querySelectorAll(selector)
-        .forEach((label) => {
-          label.classList.toggle('js-form-required', Boolean(value));
-          label.classList.toggle('form-required', Boolean(value));
-        });
     },
 
     visible(target, value) {
@@ -1043,9 +1189,9 @@
         input.checked = value;
       });
       inputs?.forEach((input) => {
-        input.dispatchEvent(
-          new Event('change', { bubbles: true, cancelable: true }),
-        );
+        const event = new Event('change', { bubbles: true, cancelable: true });
+        checkedChanges.add(event);
+        input.dispatchEvent(event);
       });
     },
 
@@ -1064,4 +1210,4 @@
     });
   });
   document.dispatchEvent(new Event('drupal:states-ready'));
-})(Drupal);
+})(Drupal, once);
