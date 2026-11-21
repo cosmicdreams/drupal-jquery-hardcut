@@ -495,10 +495,10 @@
     return (
       // Trusted iframe responses can reach Drupal without a token header.
       (received.has(xhr) ||
-        xhr.getResponseHeader('X-Drupal-Ajax-Token') === '1') &&
+        xhr?.getResponseHeader?.('X-Drupal-Ajax-Token') === '1') &&
       // The isInProgress() function might not be defined if the Ajax request
       // was initiated without Drupal.ajax() or new Drupal.Ajax().
-      typeof settings.isInProgress === 'function' &&
+      typeof settings?.isInProgress === 'function' &&
       // Until this is false, the Ajax request isn't completely done (the
       // response's commands might still be running).
       settings.isInProgress()
@@ -517,18 +517,14 @@
 
   // A raw $.ajax() call can still carry Drupal Ajax settings, so keep delaying
   // its global completion events until the commands have run.
-  jQuery.extend(true, jQuery.event.special, {
-    ajaxSuccess: {
-      trigger(event, xhr, settings, data) {
-        if (!facades.has(xhr) && commandsPending(xhr, settings)) {
+  ['ajaxSuccess', 'ajaxComplete'].forEach((type) => {
+    const special = (jQuery.event.special[type] ??= {});
+    const previous = special.trigger;
+    special.trigger = function (event, xhr, settings, data) {
+      if (!facades.has(xhr) && commandsPending(xhr, settings)) {
+        if (type === 'ajaxSuccess') {
           successData.set(xhr, data);
-          return false;
-        }
-      },
-    },
-    ajaxComplete: {
-      trigger(event, xhr, settings) {
-        if (!facades.has(xhr) && commandsPending(xhr, settings)) {
+        } else {
           // Keep the request counted while its commands run.
           jQuery.active++;
           pendingCompletion.set(xhr, {
@@ -536,10 +532,12 @@
             settings,
             data: successData.get(xhr),
           });
-          return false;
         }
-      },
-    },
+        return false;
+      }
+      // A deferred event invokes the earlier hook when it is replayed.
+      return previous?.apply(this, arguments);
+    };
   });
 
   /**
