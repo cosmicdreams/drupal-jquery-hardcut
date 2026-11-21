@@ -13,7 +13,26 @@
   const draggableRows = ':scope > tr.draggable, :scope > tbody > tr.draggable';
 
   const { tableInteraction } = Drupal;
-  const markedColumns = new WeakSet();
+  const weightColspans = new WeakMap();
+  const weightToggles = new WeakMap();
+  const rowHandles = new WeakMap();
+
+  /**
+   * Updates the span of a cell when its weight column changes visibility.
+   *
+   * @param {HTMLTableCellElement} cell
+   *   The cell that spans the weight column.
+   * @param {boolean} show
+   *   Whether the weight column is visible.
+   */
+  function setWeightColspan(cell, show) {
+    const state = weightColspans.get(cell);
+    if (state?.shown !== show) {
+      const span = state?.span ?? cell.colSpan;
+      cell.colSpan += show ? 1 : -1;
+      weightColspans.set(cell, { span, shown: show });
+    }
+  }
 
   /**
    * Finds an adjacent element matching a row selector.
@@ -296,12 +315,31 @@
       .querySelectorAll(draggableRows)
       .forEach((row) => self.makeDraggable(row));
 
-    const toggle = tableDrag.themeContent(Drupal.theme('tableDragToggle'));
-    const toggleWrapper =
-      toggle instanceof DocumentFragment ? toggle.firstElementChild : toggle;
-    this.toggleWeightButton = toggle.querySelector(
-      '[data-drupal-selector="tabledrag-toggle-weight"]',
-    );
+    let toggle = weightToggles.get(table);
+    if (
+      !toggle ||
+      !toggle.nodes.every((node) => node.parentNode === table.parentNode)
+    ) {
+      const markup = tableDrag.themeContent(Drupal.theme('tableDragToggle'));
+      if (markup instanceof Node) {
+        toggle = {
+          button:
+            markup.querySelector?.(
+              '[data-drupal-selector="tabledrag-toggle-weight"]',
+            ) ?? null,
+          nodes:
+            markup instanceof DocumentFragment
+              ? [...markup.childNodes]
+              : [markup],
+        };
+        table.before(markup);
+        weightToggles.set(table, toggle);
+      } else {
+        toggle = undefined;
+        weightToggles.delete(table);
+      }
+    }
+    this.toggleWeightButton = toggle?.button ?? null;
     if (this.toggleWeightButton) {
       tableInteraction.listen(
         table,
@@ -313,7 +351,6 @@
         },
       );
     }
-    table.before(toggle);
 
     // Initialize the specified columns (for example, weight or parent columns)
     // to show or hide according to user preference. This aids accessibility
@@ -367,7 +404,6 @@
       }
       self.dragObject = null;
       self.rowObject = null;
-      toggleWrapper?.remove();
       once.remove('tabledrag', table);
     });
 
@@ -435,38 +471,22 @@
    *   Function to add colspan class.
    */
   Drupal.tableDrag.prototype.addColspanClass = function (columnIndex) {
-    const { table } = this;
     return function () {
       // Get the columnIndex and adjust for any colspans in this row.
       let index = columnIndex;
       const cells = [...this.children];
+      const columnSpan = (cell) =>
+        weightColspans.get(cell)?.span ?? cell.colSpan;
       cells.forEach((cell, position) => {
-        if (position < index && cell.colSpan > 1) {
-          index -= cell.colSpan - 1;
+        const span = columnSpan(cell);
+        if (position < index && span > 1) {
+          index -= span - 1;
         }
       });
       const cell = cells[index - 1];
       if (cell) {
-        if (!markedColumns.has(cell)) {
-          markedColumns.add(cell);
-          const display = cell.style.display;
-          const colspan = cell.getAttribute('colspan');
-          const hidden = cell.classList.contains('tabledrag-hide');
-          const hasColspan = cell.classList.contains('tabledrag-has-colspan');
-          tableInteraction.own(table, cell, () => {
-            cell.style.display = display;
-            if (colspan === null) {
-              cell.removeAttribute('colspan');
-            } else {
-              cell.setAttribute('colspan', colspan);
-            }
-            cell.classList.toggle('tabledrag-hide', hidden);
-            cell.classList.toggle('tabledrag-has-colspan', hasColspan);
-            markedColumns.delete(cell);
-          });
-        }
         cell.classList.add(
-          cell.colSpan > 1 ? 'tabledrag-has-colspan' : 'tabledrag-hide',
+          columnSpan(cell) > 1 ? 'tabledrag-has-colspan' : 'tabledrag-hide',
         );
       }
     };
@@ -541,9 +561,9 @@
       element.style.display = '';
     });
     // Reduce the colspan of any effected multi-span columns.
-    descendants(tables, '.tabledrag-has-colspan').forEach((element) => {
-      element.colSpan -= 1;
-    });
+    descendants(tables, '.tabledrag-has-colspan').forEach((element) =>
+      setWeightColspan(element, false),
+    );
   };
 
   /**
@@ -562,9 +582,9 @@
       element.style.display = 'none';
     });
     // Increase the colspan for any columns where it was previously reduced.
-    descendants(tables, '.tabledrag-has-colspan').forEach((element) => {
-      element.colSpan += 1;
-    });
+    descendants(tables, '.tabledrag-has-colspan').forEach((element) =>
+      setWeightColspan(element, true),
+    );
   };
 
   /**
@@ -610,32 +630,33 @@
     descendants(firstCells, 'a').forEach((link) =>
       link.classList.add('menu-item__link'),
     );
-    // Create the handle.
-    const handleContent = tableDrag.themeContent(
-      Drupal.theme('tableDragHandle', this.dragOrientation),
-    );
-    const handle =
-      handleContent instanceof Element
-        ? handleContent
-        : handleContent.firstElementChild;
-
-    if (this.dragOrientation === 'drag-y') {
-      handle.classList.add('tabledrag-handle-y');
-    }
-    // Insert the handle after indentations (if any).
     const lastIndentation = descendants(firstCells, '.js-indentation').at(-1);
+    let handle = rowHandles.get(item);
+    if (!handle || !item.contains(handle)) {
+      const handleContent = tableDrag.themeContent(
+        Drupal.theme('tableDragHandle', this.dragOrientation),
+      );
+      handle =
+        handleContent instanceof Element
+          ? handleContent
+          : handleContent.firstElementChild;
+      if (this.dragOrientation === 'drag-y') {
+        handle.classList.add('tabledrag-handle-y');
+      }
+      if (lastIndentation) {
+        lastIndentation.after(handleContent);
+      } else {
+        item.querySelector('td')?.prepend(handleContent);
+      }
+      rowHandles.set(item, handle);
+    }
     if (lastIndentation) {
-      lastIndentation.after(handleContent);
       // Update the total width of indentation in this entire table.
       self.indentCount = Math.max(
         item.querySelectorAll('.js-indentation').length,
         self.indentCount,
       );
-    } else {
-      item.querySelector('td')?.prepend(handleContent);
     }
-
-    tableInteraction.own(self.table, handle, () => handle.remove());
 
     ['mousedown', 'touchstart', 'pointerdown'].forEach((type) => {
       tableInteraction.listen(self.table, handle, type, (event) => {
@@ -845,10 +866,11 @@
         case 40:
           event.preventDefault();
           event.stopPropagation();
-          break;
+          return false;
       }
 
       /* eslint-enable no-fallthrough */
+      return undefined;
     });
   };
 

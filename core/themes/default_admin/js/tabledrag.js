@@ -76,8 +76,14 @@
        * @todo this may be removable as part of https://drupal.org/node/3083044
        */
       const createItemWrapBoundaries = (row) => {
+        Drupal.tableInteraction.own(row.closest('table'), row, () =>
+          once.remove('adminTabledrag', row),
+        );
         const cell = row.querySelector('td:first-of-type');
-        if (!cell) {
+        if (
+          !cell ||
+          cell.querySelector(':scope > .js-tabledrag-cell-content')
+        ) {
           return;
         }
         const { themeContent } = tableDragConstructor;
@@ -99,11 +105,6 @@
             ':scope > .js-tabledrag-handle, :scope > .js-indentation',
           ),
         );
-        Drupal.tableInteraction.own(row.closest('table'), row, () => {
-          labels.replaceWith(...labels.childNodes);
-          wrapper.replaceWith(...wrapper.childNodes);
-          once.remove('adminTabledrag', row);
-        });
       };
 
       // Find each row in a draggable table and process it with
