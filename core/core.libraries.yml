@@ -422,6 +422,7 @@ drupal.dropbutton:
     - core/drupal
     - core/drupalSettings
     - core/once
+    - core/drupal.form.events
 
 drupal.entity-form:
   version: VERSION
@@ -445,6 +446,14 @@ drupal.form:
     - core/drupal
     - core/drupal.debounce
     - core/once
+    - core/drupal.form.events
+
+drupal.form.events:
+  version: VERSION
+  js:
+    misc/form-events.js: {}
+  dependencies:
+    - core/drupal
 
 drupal.htmx:
   aggregate_target:
