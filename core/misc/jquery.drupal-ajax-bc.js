@@ -1272,30 +1272,24 @@
     Drupal.ajax.compatibility = {
       isSyntheticDefaultAction(event) {
         const frame = triggerFrames.at(-1);
-        if (
-          frame?.type === event.type &&
-          frame.target === event.target &&
-          jQuery.event.triggered === event.type
-        ) {
+        if (frame?.type !== event.type || frame?.target !== event.target) {
+          return false;
+        }
+        let synthetic = jQuery.event.triggered === event.type;
+        if (!synthetic && ['click', 'focus', 'blur'].includes(event.type)) {
+          // The pinned leverageNative handler stores arguments during the DOM
+          // method call, then replaces them with the result. Our listener can
+          // run on either side of that handler.
+          const phase = jQuery._data(event.target, event.type);
+          synthetic = Array.isArray(phase)
+            ? !delivering.has(phase[0])
+            : !!phase && Object.hasOwn(phase, 'value');
+        }
+        if (synthetic) {
           frame.defaultEvent = frame.defaultEvent || event;
           return frame.defaultEvent === event;
         }
-        if (
-          event.type !== 'click' &&
-          event.type !== 'focus' &&
-          event.type !== 'blur'
-        ) {
-          return false;
-        }
-        // The pinned jQuery leverageNative handler stores its synthetic
-        // arguments during the DOM method call, then replaces them with the
-        // result. Check both phases because our listener may run on either
-        // side of that handler. A new native dispatch from a legacy handler
-        // still reaches the native listener.
-        const phase = jQuery._data(event.target, event.type);
-        return Array.isArray(phase)
-          ? !delivering.has(phase[0])
-          : !!phase && Object.hasOwn(phase, 'value');
+        return false;
       },
       asEvent: (event) =>
         event instanceof jQuery.Event ? event : jQuery.Event(event),

@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Drupal\FunctionalJavascriptTests\Ajax;
 
 use Drupal\Component\Utility\UrlHelper;
+use Drupal\FunctionalJavascriptTests\DrupalSelenium2Driver;
 use Drupal\FunctionalJavascriptTests\WebDriverTestBase;
 use PHPUnit\Framework\Attributes\Group;
 use PHPUnit\Framework\Attributes\IgnoreDeprecations;
@@ -878,10 +879,17 @@ JS;
       physical.click();
       buttonAjax.eventResponse = Drupal.ajax.useNativeCallback((element, event) => trace.push(event instanceof MouseEvent));
       physical.click();
+      buttonAjax.keypressResponse = (element, event) => trace.push(event instanceof jQuery.Event && event.key === 'z');
+      physical.dispatchEvent(new KeyboardEvent('keypress', { key: 'z' }));
       const nested = document.createElement('button');
       document.body.append(nested);
       Drupal.ajax({ element: nested, event: 'click', url: location.href }).eventResponse = () => trace.push('nested');
-      physical.addEventListener('click', () => nested.click());
+      physical.addEventListener('click', (event) => {
+        if (event.detail !== 7) {
+          nested.click();
+          physical.dispatchEvent(new MouseEvent('click', { detail: 7 }));
+        }
+      });
       jQuery(physical).trigger('click.other');
       const response = linkAjax.eventResponse;
       linkAjax.eventResponse = function (...args) {
@@ -890,7 +898,7 @@ JS;
       };
       jQuery(link.querySelector('span')).trigger('click');
       JS);
-    $this->assertSame([TRUE, TRUE, 'nested', 'descendant'], $session->evaluateScript('window.councilEventTrace'));
+    $this->assertSame([TRUE, TRUE, TRUE, 'nested', TRUE, 'descendant'], $session->evaluateScript('window.councilEventTrace'));
     $this->assertSession()->assertExpectedAjaxRequest(1);
   }
 
@@ -899,7 +907,6 @@ JS;
    */
   #[IgnoreDeprecations]
   public function testCouncilLegacyFormCancellation(): void {
-    $this->expectUserDeprecationMessage('core/internal.jquery.form is deprecated in drupal:12.0.0 and is removed from drupal:13.0.0. Use Drupal AJAX with native form options, or supply your own form plugin. See https://www.drupal.org/node/CHANGE_RECORD.');
     $this->expectUserDeprecationMessage('Javascript Deprecation: Drupal.Ajax#$form is deprecated in drupal:12.0.0 and is removed from drupal:13.0.0. Use Drupal.Ajax#form. See https://www.drupal.org/node/CHANGE_RECORD.');
     $this->expectUserDeprecationMessage('Javascript Deprecation: Submitting Drupal Ajax forms through the jQuery Form plugin is deprecated in drupal:12.0.0 and is removed from drupal:13.0.0. Use Drupal AJAX with native form options, or supply your own form plugin. See https://www.drupal.org/node/CHANGE_RECORD.');
     $this->drupalGet('ajax-test/global-events', ['query' => ['legacy_overrides' => 1, 'legacy_plugin' => 1]]);
@@ -973,6 +980,9 @@ JS;
         return [prefilter, multipart, thrown, iframe, alerts.some((alert) => alert.endsWith('beforeSend failed')), window.drupalCumulativeXhrCount - requests];
       })()
       JS);
+    $driver = $session->getDriver();
+    assert($driver instanceof DrupalSelenium2Driver);
+    $driver->processJavascriptDeprecations();
     $attempt = ['serialize', 'detach', 'submit', 'drupal:ajax-before-send', 'attach', 'drupal:ajax-complete'];
     $this->assertSame([
       ['prefilter', ['serialize', 'detach', 'submit', 'prefilter', 'attach'], FALSE, NULL, FALSE, 0],
@@ -989,7 +999,6 @@ JS;
    */
   #[IgnoreDeprecations]
   public function testCouncilLegacyViewsForm(): void {
-    $this->expectUserDeprecationMessage('core/internal.jquery.form is deprecated in drupal:12.0.0 and is removed from drupal:13.0.0. Use Drupal AJAX with native form options, or supply your own form plugin. See https://www.drupal.org/node/CHANGE_RECORD.');
     $this->expectUserDeprecationMessage('Javascript Deprecation: Drupal.Ajax#$form is deprecated in drupal:12.0.0 and is removed from drupal:13.0.0. Use Drupal.Ajax#form. See https://www.drupal.org/node/CHANGE_RECORD.');
     $this->expectUserDeprecationMessage('Javascript Deprecation: Submitting Drupal Ajax forms through the jQuery Form plugin is deprecated in drupal:12.0.0 and is removed from drupal:13.0.0. Use Drupal AJAX with native form options, or supply your own form plugin. See https://www.drupal.org/node/CHANGE_RECORD.');
     $this->expectUserDeprecationMessage('Javascript Deprecation: Drupal.views.ajaxView#$view is deprecated in drupal:12.0.0 and is removed from drupal:13.0.0. Use the native views property. See https://www.drupal.org/node/CHANGE_RECORD.');
@@ -1055,7 +1064,9 @@ JS;
     $result = json_decode($this->assertSession()->elementExists('css', '#request-lane-echo')->getText(), TRUE, flags: JSON_THROW_ON_ERROR);
     $this->assertSame('Preview', $result['fields']['op']);
     $this->assertNull($session->evaluateScript('window.councilNativeViewsForm.clk'));
-
+    $driver = $session->getDriver();
+    assert($driver instanceof DrupalSelenium2Driver);
+    $driver->processJavascriptDeprecations();
   }
 
   /**

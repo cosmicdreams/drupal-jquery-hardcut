@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Drupal\FunctionalJavascriptTests\Ajax;
 
+use Drupal\FunctionalJavascriptTests\DrupalSelenium2Driver;
 use Drupal\FunctionalJavascriptTests\WebDriverTestBase;
 use PHPUnit\Framework\Attributes\Group;
 use PHPUnit\Framework\Attributes\IgnoreDeprecations;
@@ -204,6 +205,9 @@ class CommandsTest extends WebDriverTestBase {
           ajax.progress.element[0] === ajax.progress.elementNode];
       })()
       JS);
+    $driver = $this->getSession()->getDriver();
+    assert($driver instanceof DrupalSelenium2Driver);
+    $driver->processJavascriptDeprecations();
     $this->assertSame([['undefined', TRUE, TRUE, TRUE, TRUE, TRUE, TRUE], 2, TRUE], $result);
   }
 
