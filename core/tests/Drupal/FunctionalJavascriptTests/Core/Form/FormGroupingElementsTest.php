@@ -496,6 +496,44 @@ class FormGroupingElementsTest extends WebDriverTestBase {
   }
 
   /**
+   * Tests a summary override assigned before the form adapter loads.
+   */
+  public function testPreAdapterSummaryOverride(): void {
+    $this->drupalGet('form-test/group-details');
+    $session = $this->getSession();
+    $this->assertSame('undefined', $session->evaluateScript('typeof window.jQuery'));
+    $scripts = json_encode(array_column(
+      \Drupal::service('library.discovery')->getLibraryByName('core', 'jquery')['js'],
+      'data',
+    ));
+    $session->executeScript(<<<JS
+      (async () => {
+        const calls = [];
+        Drupal.DetailsSummarizedContent.prototype.onSummaryUpdated = function (event) {
+          calls.push(event instanceof jQuery.Event && this instanceof Drupal.DetailsSummarizedContent);
+        };
+        for (const path of $scripts) {
+          await new Promise((resolve, reject) => {
+            const script = document.createElement('script');
+            script.src = drupalSettings.path.baseUrl + path;
+            script.onload = resolve;
+            script.onerror = reject;
+            document.head.append(script);
+          });
+        }
+        const container = document.body.appendChild(document.createElement('div'));
+        container.innerHTML = '<details id="pre-adapter-details"><summary>Pre-adapter</summary><input name="pre_adapter"></details>';
+        Drupal.attachBehaviors(container);
+        Drupal.formEvents.publish(container.querySelector('details'), 'summaryUpdated');
+        container.remove();
+        window.preAdapterSummaryResult = calls;
+      })();
+      JS);
+    $this->assertJsCondition('Array.isArray(window.preAdapterSummaryResult)');
+    $this->assertSame([TRUE, TRUE], $session->evaluateScript('window.preAdapterSummaryResult'));
+  }
+
+  /**
    * Tests that legacy summary overrides receive jQuery events.
    */
   public function testLegacySummaryUpdatedOverride(): void {

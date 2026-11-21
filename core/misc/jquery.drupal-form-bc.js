@@ -1066,6 +1066,10 @@
       warn(contract, migration);
       return native.call(this, event?.originalEvent || event);
     };
+    // Adopt an override assigned before this adapter loaded.
+    const existing = Object.hasOwn(prototype, 'onSummaryUpdated')
+      ? prototype.onSummaryUpdated
+      : undefined;
     Object.defineProperty(prototype, 'onSummaryUpdated', {
       configurable: true,
       get() {
@@ -1098,6 +1102,9 @@
         this.onSummaryUpdatedNative = adapted;
       },
     });
+    if (existing) {
+      prototype.onSummaryUpdated = existing;
+    }
     for (const [legacyName, nativeName] of [
       ['$node', 'node'],
       ['$detailsSummarizedContentWrapper', 'summaryWrapper'],
