@@ -13,6 +13,7 @@
   const draggableRows = ':scope > tr.draggable, :scope > tbody > tr.draggable';
 
   const { tableInteraction } = Drupal;
+  const markedColumns = new WeakSet();
 
   /**
    * Finds an adjacent element matching a row selector.
@@ -85,9 +86,9 @@
    * See blocks.js for an example of adding additional functionality to
    * tableDrag.
    *
-   * Event callbacks receive native events by default. An extension declaring
-   * core/jquery can set legacyTableEvent to true on an event override before
-   * assigning it to receive the deprecated event shape.
+   * With core/jquery loaded, assigned overrides receive legacy events.
+   * To keep native events on mixed pages, set nativeTableEvent to true on
+   * the override or on the saved wrapper returned by the method getter.
    *
    * @type {Drupal~behavior}
    */
@@ -121,7 +122,7 @@
    */
   Drupal.tableDrag = function (table, tableSettings) {
     const self = this;
-    Drupal.tableDrag.adoptEventOverrides(this);
+    adoptEventOverrides(this);
     /**
      *
      * @type {HTMLElement}
@@ -276,8 +277,8 @@
       table.append(testRow);
       const testCell = testRow.insertCell();
       testCell.prepend(
-        Drupal.tableDrag.themeContent(Drupal.theme('tableDragIndentation')),
-        Drupal.tableDrag.themeContent(Drupal.theme('tableDragIndentation')),
+        tableDrag.themeContent(Drupal.theme('tableDragIndentation')),
+        tableDrag.themeContent(Drupal.theme('tableDragIndentation')),
       );
       const [firstIndent, secondIndent] =
         testCell.querySelectorAll('.js-indentation');
@@ -295,18 +296,23 @@
       .querySelectorAll(draggableRows)
       .forEach((row) => self.makeDraggable(row));
 
-    const toggle = Drupal.tableDrag.themeContent(
-      Drupal.theme('tableDragToggle'),
-    );
+    const toggle = tableDrag.themeContent(Drupal.theme('tableDragToggle'));
     const toggleWrapper =
       toggle instanceof DocumentFragment ? toggle.firstElementChild : toggle;
     this.toggleWeightButton = toggle.querySelector(
       '[data-drupal-selector="tabledrag-toggle-weight"]',
     );
-    this.toggleWeightButton?.addEventListener('click', (event) => {
-      event.preventDefault();
-      this.toggleColumns();
-    });
+    if (this.toggleWeightButton) {
+      tableInteraction.listen(
+        table,
+        this.toggleWeightButton,
+        'click',
+        (event) => {
+          event.preventDefault();
+          this.toggleColumns();
+        },
+      );
+    }
     table.before(toggle);
 
     // Initialize the specified columns (for example, weight or parent columns)
@@ -325,17 +331,19 @@
      */
     function move(event) {
       const pointer = event.type === 'touchmove' ? event.touches?.[0] : event;
-      if (self.dragRow(pointer, self) === false) {
+      const result = self.dragRow(pointer, self);
+      if (result === false) {
         event.preventDefault();
         event.stopPropagation();
       }
+      return result;
     }
     tableInteraction.listen(table, document, 'touchmove', move);
     ['mousemove', 'pointermove'].forEach((type) => {
       tableInteraction.listen(table, document, type, move);
     });
     tableInteraction.listen(table, document, 'touchend', (event) =>
-      self.dropRow((event.changedTouches ?? event.touches)?.[0], self),
+      self.dropRow(event.changedTouches?.[0] ?? event.touches?.[0], self),
     );
     ['mouseup', 'pointerup'].forEach((type) => {
       tableInteraction.listen(table, document, type, (event) =>
@@ -360,6 +368,7 @@
       self.dragObject = null;
       self.rowObject = null;
       toggleWrapper?.remove();
+      once.remove('tabledrag', table);
     });
 
     // Check for any rows marked as changed before this tabledrag was rerendered
@@ -426,6 +435,7 @@
    *   Function to add colspan class.
    */
   Drupal.tableDrag.prototype.addColspanClass = function (columnIndex) {
+    const { table } = this;
     return function () {
       // Get the columnIndex and adjust for any colspans in this row.
       let index = columnIndex;
@@ -437,6 +447,24 @@
       });
       const cell = cells[index - 1];
       if (cell) {
+        if (!markedColumns.has(cell)) {
+          markedColumns.add(cell);
+          const display = cell.style.display;
+          const colspan = cell.getAttribute('colspan');
+          const hidden = cell.classList.contains('tabledrag-hide');
+          const hasColspan = cell.classList.contains('tabledrag-has-colspan');
+          tableInteraction.own(table, cell, () => {
+            cell.style.display = display;
+            if (colspan === null) {
+              cell.removeAttribute('colspan');
+            } else {
+              cell.setAttribute('colspan', colspan);
+            }
+            cell.classList.toggle('tabledrag-hide', hidden);
+            cell.classList.toggle('tabledrag-has-colspan', hasColspan);
+            markedColumns.delete(cell);
+          });
+        }
         cell.classList.add(
           cell.colSpan > 1 ? 'tabledrag-has-colspan' : 'tabledrag-hide',
         );
@@ -462,7 +490,7 @@
     }
 
     this.toggleWeightButton?.replaceChildren(
-      Drupal.tableDrag.themeContent(
+      tableDrag.themeContent(
         Drupal.theme('toggleButtonContent', displayWeight),
       ),
     );
@@ -583,7 +611,7 @@
       link.classList.add('menu-item__link'),
     );
     // Create the handle.
-    const handleContent = Drupal.tableDrag.themeContent(
+    const handleContent = tableDrag.themeContent(
       Drupal.theme('tableDragHandle', this.dragOrientation),
     );
     const handle =
@@ -606,6 +634,8 @@
     } else {
       item.querySelector('td')?.prepend(handleContent);
     }
+
+    tableInteraction.own(self.table, handle, () => handle.remove());
 
     ['mousedown', 'touchstart', 'pointerdown'].forEach((type) => {
       tableInteraction.listen(self.table, handle, type, (event) => {
@@ -933,13 +963,15 @@
           self.currentPointerCoords.x - self.dragObject.indentPointerPos.x;
         // Set the number of indentations the pointer has been moved left or
         // right.
-        const indentDiff = Math.round(xDiff / self.indentAmount);
+        const indentDiff = Math.round(
+          xDiff / (Math.abs(self.indentAmount) * self.rtl),
+        );
         // Indent the row with our estimated diff, which may be further
         // restricted according to the rows around this row.
         const indentChange = self.rowObject.indent(indentDiff);
         // Update table and pointer indentations.
         self.dragObject.indentPointerPos.x +=
-          self.indentAmount * indentChange * self.rtl;
+          Math.abs(self.indentAmount) * indentChange * self.rtl;
         self.indentCount = Math.max(self.indentCount, self.rowObject.indents);
       }
 
@@ -1447,7 +1479,7 @@
     // Do not add the changed warning if one is already present.
     if (!this.table.parentElement.querySelector('.tabledrag-changed-warning')) {
       const form = this.table.closest('form');
-      const content = Drupal.tableDrag.themeContent(
+      const content = tableDrag.themeContent(
         Drupal.theme('tableDragChangedWarning'),
       );
       const warning =
@@ -1674,7 +1706,7 @@
         const markup = Drupal.theme('tableDragIndentation');
         const cells = descendants(this.group, 'td:first-of-type');
         cells.forEach((cell, index) => {
-          const content = Drupal.tableDrag.themeContent(markup);
+          const content = tableDrag.themeContent(markup);
           cell.prepend(
             index === cells.length - 1 ? content : content.cloneNode(true),
           );
@@ -1749,13 +1781,15 @@
       ...(this.element?.querySelectorAll('td:first-of-type') ?? []),
     ];
     if (!cells.some((cell) => cell.querySelector('abbr.tabledrag-changed'))) {
-      const marker = Drupal.tableDrag.themeContent(
+      const marker = tableDrag.themeContent(
         Drupal.theme('tableDragChangedMarker'),
       );
       cells.forEach((cell, index) => {
-        cell.append(
-          index === cells.length - 1 ? marker : marker.cloneNode(true),
-        );
+        if (marker instanceof Node) {
+          cell.append(
+            index === cells.length - 1 ? marker : marker.cloneNode(true),
+          );
+        }
       });
     }
     Drupal.tableDrag[this.table.id].changedRowIds.add(this.element.id);
@@ -1873,7 +1907,9 @@
     }
     return markup;
   };
-  Drupal.tableDrag.adoptEventOverrides = tableInteraction.installEventOverrides(
+  const tableDrag = Drupal.tableDrag;
+  tableInteraction.tableDragConstructor = tableDrag;
+  const adoptEventOverrides = tableInteraction.installEventOverrides(
     Drupal.tableDrag.prototype,
     {
       dragStart: 0,

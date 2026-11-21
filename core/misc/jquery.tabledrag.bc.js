@@ -112,8 +112,14 @@
     if (!(event instanceof jquery.Event)) {
       return event;
     }
-    if (nativeEvents.has(event) || event.originalEvent instanceof Event) {
-      return nativeEvents.get(event) ?? event.originalEvent;
+    if (nativeEvents.has(event)) {
+      return nativeEvents.get(event);
+    }
+    if (!event.isTrigger && event.originalEvent instanceof Event) {
+      const native = event.originalEvent;
+      events.set(native, event);
+      nativeEvents.set(event, native);
+      return native;
     }
 
     const Constructor = eventConstructors[event.type] ?? Event;
@@ -141,7 +147,8 @@
     ].forEach((property) => {
       const fallback = native[property];
       Object.defineProperty(native, property, {
-        get: () => event[property] ?? fallback,
+        get: () =>
+          event[property] ?? event.originalEvent?.[property] ?? fallback,
       });
     });
     Object.defineProperties(native, {
@@ -158,7 +165,7 @@
   }
 
   /**
-   * Runs an explicitly registered legacy override at the compatibility boundary.
+   * Delivers the event shape selected by the callback registration.
    *
    * @param {Function} callback
    *   The override.
@@ -170,12 +177,15 @@
    *   The event argument position.
    * @param {string} method
    *   The method name.
+   * @param {boolean} builtin
+   *   Whether this is the original implementation.
    * @return {*}
    *   The callback result.
    */
-  function invoke(callback, context, args, index, method) {
+  function invoke(callback, context, args, index, method, builtin) {
     const event = args[index];
-    if (callback.legacyTableEvent && event instanceof Event) {
+    const legacy = !builtin && callback.nativeTableEvent !== true;
+    if (legacy && event instanceof Event) {
       warn(`The legacy event argument for ${method}`);
       if (!events.has(event)) {
         const legacyEvent = jquery.Event(event);
@@ -186,7 +196,7 @@
         nativeEvents.set(legacyEvent, event);
       }
       args[index] = events.get(event);
-    } else if (!callback.legacyTableEvent) {
+    } else if (!legacy) {
       args[index] = toNativeEvent(event);
     }
     return callback.apply(context, args);
@@ -208,18 +218,15 @@
         }
         const element = jquery(target);
         const deliver = function (event) {
-          if (!event.isTrigger || event.originalEvent) {
-            return undefined;
-          }
-          // Full click triggers on checkable inputs already use browser activation.
-          if (
-            event.isTrigger === 3 &&
-            type === 'click' &&
-            target.matches?.('input:is([type="checkbox"], [type="radio"])')
-          ) {
+          if (!event.isTrigger) {
             return undefined;
           }
           warn(`The synthetic ${type} trigger for table interactions`);
+          const { originalEvent } = event;
+          // A synthetic touch event can supply touch data without DOM methods.
+          if (originalEvent && !(originalEvent instanceof Event)) {
+            event.isSimulated = true;
+          }
           return listener.call(this, toNativeEvent(event));
         };
         element.on(type, deliver);
@@ -236,7 +243,7 @@
    * Connects the drag adapter to the native table constructor.
    */
   function installTableDrag() {
-    const { tableDrag } = window.Drupal;
+    const { tableDragConstructor: tableDrag } = window.Drupal.tableInteraction;
     ['table', 'toggleWeightButton'].forEach((name) =>
       collectionAlias(tableDrag, 'Drupal.tableDrag', name),
     );
@@ -255,32 +262,63 @@
    * Connects responsive table aliases and the synthetic resize namespace.
    */
   function installResponsive() {
-    const { TableResponsive } = window.Drupal;
+    const { responsiveConstructor: TableResponsive } =
+      window.Drupal.tableInteraction;
     collectionAlias(TableResponsive, 'Drupal.TableResponsive', 'table');
     collectionAlias(
       TableResponsive,
       'Drupal.TableResponsive',
       'link',
       false,
-      responsiveLink,
+      (collection) => {
+        const link = collection[0];
+        if (link && !TableResponsive.pegged.has(link)) {
+          TableResponsive.pegged.set(link, jquery.data(link, 'pegged'));
+        }
+        return collection;
+      },
     );
     ['headers', 'revealedCells'].forEach((name) =>
       collectionAlias(TableResponsive, 'Drupal.TableResponsive', name, true),
     );
+    adaptPeggedData(TableResponsive.pegged);
     const refreshes = new WeakSet();
-    TableResponsive.refresh = () => {
-      const event = jquery.Event('resize.tableresponsive');
-      refreshes.add(event);
-      jquery(window).trigger(event);
-    };
     const subscriptions = new Map();
     const bindings = new WeakMap();
     const windowEvents = jquery(window);
+    const nativeRefresh = TableResponsive.refresh;
+    const legacyListeners = new Set();
+    const isLegacyResize = ({ handler, namespace }) =>
+      !bindings.has(handler) &&
+      typeof namespace === 'string' &&
+      namespace.split('.').includes('tableresponsive');
+    // A late bridge also sees listeners registered before it loaded.
+    jquery._data(window, 'events')?.resize?.forEach((handle) => {
+      if (isLegacyResize(handle)) {
+        legacyListeners.add(handle);
+      }
+    });
+    TableResponsive.refresh = () => {
+      if (!legacyListeners.size) {
+        return nativeRefresh();
+      }
+      const event = jquery.Event('resize.tableresponsive');
+      refreshes.add(event);
+      return windowEvents.triggerHandler(event);
+    };
+
     const resize = jquery.event.special.resize ?? {};
     jquery.event.special.resize = resize;
-    const previousRemove = resize.remove;
+    const { add: previousAdd, remove: previousRemove } = resize;
+    resize.add = function (handle) {
+      previousAdd?.call(this, handle);
+      if (this === window && isLegacyResize(handle)) {
+        legacyListeners.add(handle);
+      }
+    };
     resize.remove = function (handle) {
       previousRemove?.call(this, handle);
+      legacyListeners.delete(handle);
       const binding = bindings.get(handle.handler);
       if (binding) {
         bindings.delete(handle.handler);
@@ -299,11 +337,9 @@
         ) {
           return;
         }
+        binding.removeNativeListener();
         const handler = (event) => {
-          if (!event.isTrigger || event.originalEvent) {
-            return undefined;
-          }
-          if (!refreshes.has(event)) {
+          if (event.isTrigger && !refreshes.has(event)) {
             warn('The synthetic resize.tableresponsive trigger');
           }
           return binding.listener(toNativeEvent(event));
@@ -324,56 +360,58 @@
   }
 
   /**
-   * Keeps the deprecated button data in sync with the native pegged value.
+   * Shares the legacy pegged key with native responsive buttons.
    *
-   * @param {object} collection
-   *   The responsive toggle collection.
-   * @return {object}
-   *   The same collection with pegged data access.
+   * @param {WeakMap} pegged
+   *   Stores the state by native button.
    */
-  function responsiveLink(collection) {
-    const link = collection[0];
-    if (!link || !link.dataset || Object.hasOwn(collection, 'data')) {
-      return collection;
-    }
-    const { data } = collection;
-    if (link.dataset.pegged === undefined) {
-      const pegged = data.call(collection, 'pegged');
-      if (pegged !== undefined) {
-        link.dataset.pegged = pegged;
+  function adaptPeggedData(pegged) {
+    const { data, removeData } = jquery.fn;
+    jquery.fn.data = function (key, value) {
+      if (key === 'pegged' && arguments.length === 1 && pegged.has(this[0])) {
+        return pegged.get(this[0]);
       }
-    }
-    collection.data = function (key, value) {
-      if (key === 'pegged') {
-        if (value === undefined) {
-          const pegged = link.dataset.pegged;
-          return pegged === '0' || pegged === '1' ? Number(pegged) : pegged;
-        }
-        link.dataset.pegged = value;
-      } else if (
-        key &&
-        typeof key === 'object' &&
-        Object.hasOwn(key, 'pegged')
-      ) {
-        link.dataset.pegged = key.pegged;
-      } else if (key === undefined) {
+      if (key === undefined && pegged.has(this[0])) {
         const values = data.call(this);
-        const pegged = this.data('pegged');
-        if (pegged !== undefined) {
-          values.pegged = pegged;
+        const current = pegged.get(this[0]);
+        if (current === undefined) {
+          delete values.pegged;
+        } else {
+          values.pegged = current;
         }
         return values;
       }
+      const values = typeof key === 'string' ? { [key]: value } : key;
+      if (values && values.pegged !== undefined) {
+        this.each(function () {
+          if (pegged.has(this)) {
+            pegged.set(this, values.pegged);
+          }
+        });
+      }
       return data.apply(this, arguments);
     };
-    return collection;
+    jquery.fn.removeData = function (key) {
+      if (
+        key === undefined ||
+        (Array.isArray(key) ? key : String(key).split(/\s+/)).includes('pegged')
+      ) {
+        this.each(function () {
+          if (pegged.has(this)) {
+            pegged.set(this, undefined);
+          }
+        });
+      }
+      return removeData.apply(this, arguments);
+    };
   }
 
   /**
    * Connects the Default Admin bulk actions adapter.
    */
   function installBulkActions() {
-    const { DefaultAdminBulkActions } = window.Drupal;
+    const { bulkActionsConstructor: DefaultAdminBulkActions } =
+      window.Drupal.tableInteraction;
     collectionAlias(
       DefaultAdminBulkActions,
       'Drupal.DefaultAdminBulkActions',
@@ -410,6 +448,19 @@
     installContext('tableSelect');
     const select = window.Drupal.tableSelect;
     const { checkboxContent } = select;
+    const change = jquery.event.special.change ?? {};
+    const previousHandle = change.handle;
+    jquery.event.special.change = change;
+    change.handle = function (event, ...args) {
+      if (select.isSelectionChange(event.originalEvent)) {
+        event.isTrigger = 3;
+      }
+      return (previousHandle ?? event.handleObj.handler).call(
+        this,
+        event,
+        ...args,
+      );
+    };
     select.checkboxContent = () => {
       const content = checkboxContent();
       if (content instanceof jquery) {
@@ -423,7 +474,20 @@
   }
 
   function installEventAdapter() {
-    window.Drupal.tableInteraction.invokeEventCallback = invoke;
+    const { tableInteraction } = window.Drupal;
+    tableInteraction.invokeEventCallback = invoke;
+    // jQuery 4 retains its original synthetic event while stimulating native
+    // checkbox activation and focus. Deliver the table operation only when
+    // that synthetic event reaches its jQuery handler, with its modifiers intact.
+    tableInteraction.allowNativeEvent = (event) => {
+      const { type, target } = event;
+      const leveragesNative =
+        type === 'focus' ||
+        type === 'blur' ||
+        (type === 'click' &&
+          target.matches?.('input:is([type="checkbox"], [type="radio"])'));
+      return !leveragesNative || !jquery._data(target, type);
+    };
   }
 
   if (Drupal?.tableInteraction) {

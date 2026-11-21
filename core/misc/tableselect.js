@@ -94,33 +94,30 @@
       ...table.querySelectorAll('td input[type="checkbox"]:enabled'),
     ];
     const headers = table.querySelectorAll('th.select-all');
-    const markup = Drupal.tableSelect.checkboxContent();
-    headers.forEach((header, index) => {
-      if (typeof markup === 'string') {
-        header.insertAdjacentHTML('afterbegin', markup.trim());
-      } else {
-        header.prepend(
-          index === headers.length - 1 ? markup : markup.cloneNode(true),
-        );
-      }
-      header.querySelector('input[type="checkbox"]').title = strings.selectAll;
-      tableInteraction.listen(
+    if (headers.length) {
+      tableInteraction.insertCheckboxes(
         table,
-        header.querySelector('input[type="checkbox"]'),
-        'click',
-        (event) => {
-          if (event.target.matches('input[type="checkbox"]')) {
-            checkboxes.forEach((checkbox) => {
-              setChecked(checkbox, event.target.checked);
-              checkbox
-                .closest('tr')
-                ?.classList.toggle('selected', checkbox.checked);
-            });
-            updateSelectAll(event.target.checked);
-          }
-        },
+        headers,
+        Drupal.tableSelect.checkboxContent(),
+        strings.selectAll,
       );
+    }
+    headers.forEach((header) => {
+      tableInteraction.listen(table, header, 'click', (event) => {
+        if (event.target.matches('input[type="checkbox"]')) {
+          checkboxes.forEach((checkbox) => {
+            setChecked(checkbox, event.target.checked);
+            checkbox
+              .closest('tr')
+              ?.classList.toggle('selected', checkbox.checked);
+          });
+          updateSelectAll(event.target.checked);
+        }
+      });
     });
+    tableInteraction.own(table, table, () =>
+      once.remove('table-select', table),
+    );
 
     checkboxes.forEach((checkbox) => {
       tableInteraction.listen(table, checkbox, 'click', function (e) {

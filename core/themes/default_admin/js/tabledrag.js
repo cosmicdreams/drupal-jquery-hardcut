@@ -4,6 +4,7 @@
  */
 
 ((Drupal, once) => {
+  const { tableDragConstructor } = Drupal.tableInteraction;
   /**
    * Extends core's Tabledrag functionality.
    *
@@ -79,7 +80,7 @@
         if (!cell) {
           return;
         }
-        const { themeContent } = Drupal.tableDrag;
+        const { themeContent } = tableDragConstructor;
         const items = themeContent(Drupal.theme('tableDragCellItemsWrapper'));
         const content = themeContent(
           Drupal.theme('tableDragCellContentWrapper'),
@@ -98,6 +99,11 @@
             ':scope > .js-tabledrag-handle, :scope > .js-indentation',
           ),
         );
+        Drupal.tableInteraction.own(row.closest('table'), row, () => {
+          labels.replaceWith(...labels.childNodes);
+          wrapper.replaceWith(...wrapper.childNodes);
+          once.remove('adminTabledrag', row);
+        });
       };
 
       // Find each row in a draggable table and process it with
@@ -134,7 +140,7 @@
         cells
           .flatMap((cell) => [...cell.querySelectorAll('.js-tabledrag-handle')])
           .forEach((handle) => {
-            const marker = Drupal.tableDrag.themeContent(
+            const marker = tableDragConstructor.themeContent(
               Drupal.theme('tableDragChangedMarker'),
             );
             const element =

@@ -5,15 +5,15 @@
 
 ((Drupal, { tabbable }, once) => {
   /**
-   * Adds sticky bulk actions. Overrides receive native events by default.
+   * Adds sticky bulk actions.
    *
-   * Extensions declaring core/jquery can set legacyTableEvent to true on an
-   * event override before assigning it to receive the deprecated event shape.
-   * Set the flag on subclass methods before constructing the first instance.
+   * With core/jquery loaded, assigned overrides receive legacy events.
+   * Set nativeTableEvent to true on an override or its method getter result
+   * to keep native events on mixed pages.
    */
   Drupal.DefaultAdminBulkActions = class {
     constructor(bulkActions) {
-      Drupal.DefaultAdminBulkActions.adoptEventOverrides(this);
+      adoptEventOverrides(this);
       this.bulkActions = bulkActions;
       this.form = this.bulkActions.closest('form');
       this.form.querySelectorAll('tr').forEach((element) => {
@@ -30,39 +30,49 @@
       this.scrollingTimeout = '';
       this.ignoreScrollEvent = false;
 
+      const { tableInteraction } = Drupal;
+      const { form } = this;
       this.checkboxes.forEach((checkbox) => {
-        checkbox.addEventListener('change', (event) =>
-          this.rowCheckboxHandler(event),
+        const change = (event) => this.rowCheckboxHandler(event);
+        checkbox.addEventListener('change', change);
+        tableInteraction.own(form, checkbox, () =>
+          checkbox.removeEventListener('change', change),
         );
       });
       this.selectAll.forEach((checkbox) => {
-        checkbox.addEventListener('change', (event) =>
-          this.selectAllHandler(event),
+        const change = (event) => this.selectAllHandler(event);
+        checkbox.addEventListener('change', change);
+        tableInteraction.own(form, checkbox, () =>
+          checkbox.removeEventListener('change', change),
         );
       });
       this.tabbable.forEach((element) => {
-        element.addEventListener('focus', (event) => this.focusHandler(event));
-        element.addEventListener('blur', (event) => this.blurHandler(event));
+        tableInteraction.listen(form, element, 'focus', (event) =>
+          this.focusHandler(event),
+        );
+        tableInteraction.listen(form, element, 'blur', (event) =>
+          this.blurHandler(event),
+        );
       });
 
-      // The will contain the CSS that hides the spacer during scroll
-      // and resize.
       this.spacerCss = document.createElement('style');
       document.body.appendChild(this.spacerCss);
-
       const scrollResizeHandler = Drupal.debounce(() => {
         this.scrollResizeHandler();
       }, 10);
-      window.addEventListener('scroll', () => scrollResizeHandler());
-      window.addEventListener('resize', () => scrollResizeHandler());
-
-      // Execute checkbox handler after the load event. This ensures that the
-      // actions form is sticky if any checkboxes are already checked on page
-      // load. One of the situations where it is possible to have pre-checked
-      // checkboxes on load is when the page is requested via the back button.
-      window.addEventListener('load', (event) =>
-        this.rowCheckboxHandler(event),
-      );
+      const load = (event) => this.rowCheckboxHandler(event);
+      window.addEventListener('scroll', scrollResizeHandler);
+      window.addEventListener('resize', scrollResizeHandler);
+      // The browser can restore checkbox state when navigating back.
+      window.addEventListener('load', load);
+      tableInteraction.own(form, bulkActions, () => {
+        window.removeEventListener('scroll', scrollResizeHandler);
+        window.removeEventListener('resize', scrollResizeHandler);
+        window.removeEventListener('load', load);
+        clearTimeout(this.scrollingTimeout);
+        this.spacerCss.remove();
+        once.remove('DefaultAdminBulkActions', bulkActions);
+      });
     }
 
     /**
@@ -378,15 +388,16 @@
       );
     },
   };
-  Drupal.DefaultAdminBulkActions.adoptEventOverrides =
-    Drupal.tableInteraction.installEventOverrides(
-      Drupal.DefaultAdminBulkActions.prototype,
-      {
-        blurHandler: 0,
-        focusHandler: 0,
-        rowCheckboxHandler: 0,
-        selectAllHandler: 0,
-      },
-    );
+  const adoptEventOverrides = Drupal.tableInteraction.installEventOverrides(
+    Drupal.DefaultAdminBulkActions.prototype,
+    {
+      blurHandler: 0,
+      focusHandler: 0,
+      rowCheckboxHandler: 0,
+      selectAllHandler: 0,
+    },
+  );
+  Drupal.tableInteraction.bulkActionsConstructor =
+    Drupal.DefaultAdminBulkActions;
   document.dispatchEvent(new Event('drupal:bulk-actions-ready'));
 })(Drupal, window.tabbable, once);
