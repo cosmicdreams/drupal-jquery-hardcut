@@ -18,12 +18,17 @@
    * Reports each deprecated contract once.
    * @param {string} contract
    *   The deprecated surface.
+   * @param {string} [migration]
+   *   The replacement contract.
    */
-  function warn(contract) {
+  function warn(
+    contract,
+    migration = 'Use a CSS selector and the native States callback arguments.',
+  ) {
     if (!deprecated.has(contract)) {
       deprecated.add(contract);
       window.Drupal.deprecationError({
-        message: `${contract} is deprecated in drupal:12.0.0 and is removed from drupal:13.0.0. Use a CSS selector and the native States callback arguments. See https://www.drupal.org/node/CHANGE_RECORD.`,
+        message: `${contract} is deprecated in drupal:12.0.0 and is removed from drupal:13.0.0. ${migration} See https://www.drupal.org/node/CHANGE_RECORD.`,
       });
     }
   }
@@ -184,6 +189,12 @@
         const { target, type, listener, data } = binding;
         const element = jquery(target);
         const deliver = (event) => {
+          if (event.isTrigger && type.startsWith('state:')) {
+            warn(
+              `The jQuery synthetic trigger for ${type}`,
+              'Use the same native event name and its documented payload.',
+            );
+          }
           if (data) {
             event.data = data;
           }
