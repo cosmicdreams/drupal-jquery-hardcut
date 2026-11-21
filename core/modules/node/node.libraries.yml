@@ -25,7 +25,6 @@ drupal.content_types:
   js:
     js/content_types.js: {}
   dependencies:
-    - core/jquery
     - core/drupal
     - core/drupal.form
 

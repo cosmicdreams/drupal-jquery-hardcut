@@ -341,7 +341,6 @@ drupal.collapse:
     misc/details-aria.js: {}
     misc/details.js: {}
   dependencies:
-    - core/jquery
     - core/drupal
     - core/drupal.form
     - core/once

@@ -3,7 +3,6 @@ drupal.comment:
   js:
     js/comment-entity-form.js: {}
   dependencies:
-    - core/jquery
     - core/drupal
     - core/drupal.form
 
