@@ -1468,7 +1468,11 @@
           }),
         );
         try {
-          return ajax.beforeSend(nativeRequest(xmlhttprequest), options);
+          const callback = ajax.beforeSend;
+          const request = nativeCallbacks.has(callback)
+            ? nativeRequest(xmlhttprequest)
+            : xmlhttprequest;
+          return callback.call(ajax, request, options);
         } finally {
           // Remember whether this attempt disabled the element.
           if (!wasDisabled && ajax.element?.disabled) {
@@ -3423,7 +3427,7 @@
   /**
    * Registers a native Ajax event or theme override, returning that function.
    *
-   * Use for eventResponse, keypressResponse, Drupal.theme.ajaxProgressBar,
+   * Use for beforeSend, eventResponse, keypressResponse, Drupal.theme.ajaxProgressBar,
    * Drupal.theme.ajaxWrapperNewContent and
    * Drupal.theme.ajaxWrapperMultipleRootElements.
    * Existing assignments receive their legacy arguments when the jQuery
@@ -3458,5 +3462,6 @@
   nativeCallbacks.add(Drupal.Ajax.prototype.keypressResponse);
   nativeCallbacks.add(Drupal.Ajax.prototype.beforeSerialize);
   nativeCallbacks.add(Drupal.Ajax.prototype.beforeSubmit);
+  nativeCallbacks.add(Drupal.Ajax.prototype.beforeSend);
   document.dispatchEvent(new CustomEvent('drupal:ajax-ready'));
 })(window, Drupal, drupalSettings, loadjs, window.tabbable);
