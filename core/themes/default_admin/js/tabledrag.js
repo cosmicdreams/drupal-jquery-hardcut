@@ -87,27 +87,29 @@
           return;
         }
         const { themeContent } = tableDragConstructor;
-        const items = themeContent(Drupal.theme('tableDragCellItemsWrapper'));
-        const wrapper =
-          items instanceof Element ? items : items?.firstElementChild;
-        if (!wrapper) {
-          return;
-        }
         const content = themeContent(
           Drupal.theme('tableDragCellContentWrapper'),
         );
         const labels =
-          content instanceof Element ? content : content.firstElementChild;
-        wrapper.classList.add('js-tabledrag-cell-content');
+          content instanceof Element ? content : content?.firstElementChild;
+        if (labels) {
+          labels.append(...cell.childNodes);
+          cell.append(content);
+        }
 
-        labels.append(...cell.childNodes);
-        wrapper.append(content);
-        cell.append(items);
-        wrapper.prepend(
-          ...labels.querySelectorAll(
-            ':scope > .js-tabledrag-handle, :scope > .js-indentation',
-          ),
-        );
+        const items = themeContent(Drupal.theme('tableDragCellItemsWrapper'));
+        const wrapper =
+          items instanceof Element ? items : items?.firstElementChild;
+        if (wrapper) {
+          wrapper.classList.add('js-tabledrag-cell-content');
+          wrapper.append(...cell.childNodes);
+          cell.append(items);
+          wrapper.prepend(
+            ...wrapper.querySelectorAll(
+              ':scope > .tabledrag-cell-content__item > :is(.js-tabledrag-handle, .js-indentation)',
+            ),
+          );
+        }
       };
 
       // Find each row in a draggable table and process it with
