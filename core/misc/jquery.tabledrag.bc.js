@@ -5,6 +5,8 @@
  *   The explicitly loaded library instance.
  * @deprecated in drupal:12.0.0 and is removed from drupal:13.0.0. Use the native
  *   table or row member, or native theme/interaction callback.
+ *
+ * @see https://www.drupal.org/node/CHANGE_RECORD
  */
 
 ((jquery) => {
@@ -34,7 +36,7 @@
     if (!deprecated.has(name)) {
       deprecated.add(name);
       window.Drupal.deprecationError({
-        message: `${name} is deprecated in drupal:12.0.0 and is removed from drupal:13.0.0. Use the native table or row member, or native theme/interaction callback.`,
+        message: `${name} is deprecated in drupal:12.0.0 and is removed from drupal:13.0.0. Use the native table or row member, or native theme/interaction callback. See https://www.drupal.org/node/CHANGE_RECORD.`,
       });
     }
   }
