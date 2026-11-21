@@ -1280,6 +1280,31 @@ class TableDragTest extends WebDriverTestBase {
       !unloadingTable.listenerRuns() &&
       !(unloadingTable.table.id in Drupal.tableDrag)
       JS);
+
+    $session->executeScript(<<<'JS'
+      const fixture = document.createElement('section');
+      const table = document.createElement('table');
+      table.id = 'replaced-drag-table';
+      table.dataset.drupalTabledrag = table.id;
+      const replacement = table.cloneNode();
+      const markup = '<tbody><tr id="retained-change" class="draggable"><td>Row</td></tr></tbody>';
+      table.innerHTML = replacement.innerHTML = markup;
+      fixture.append(table);
+      document.body.append(fixture);
+      const settings = { ...drupalSettings, tableDrag: { [table.id]: {} } };
+      Drupal.attachBehaviors(fixture, settings);
+      const original = Drupal.tableDrag[table.id];
+      original.changedRowIds.add('retained-change');
+      Drupal.detachBehaviors(table, settings, 'unload');
+      table.replaceWith(replacement);
+      Drupal.attachBehaviors(fixture, settings);
+      window.checkReplacementDrag = () => {
+        const drag = Drupal.tableDrag[table.id];
+        return drag?.table === replacement && drag.changedRowIds.has('retained-change') &&
+          !!replacement.querySelector('#retained-change .tabledrag-changed');
+      };
+      JS);
+    $this->assertTrue($session->evaluateScript('window.checkReplacementDrag()'));
   }
 
   /**
