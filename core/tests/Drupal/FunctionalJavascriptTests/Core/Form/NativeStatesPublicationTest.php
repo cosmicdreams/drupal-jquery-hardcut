@@ -2269,4 +2269,41 @@ final class NativeStatesPublicationTest extends WebDriverTestBase {
     $this->assertSame(2, $session->evaluateScript('window.r5MoveEvents'), 'Each change publishes one state event.');
   }
 
+  /**
+   * Tests jQuery namespace filtering on a namespaced States trigger key.
+   */
+  #[IgnoreDeprecations]
+  public function testNamespacedTriggerKeyFilterDelivery(): void {
+    $session = $this->getSession();
+    $dependent = '#r5-ns-dep';
+
+    $this->drupalGet('jquery-bc-test/events');
+    $session->executeScript(<<<'JS'
+      Drupal.states.Trigger.states.r5Namespaced = {
+        'change.r5ns'() {
+          return this.val() === 'go';
+        },
+      };
+      const wrap = document.createElement('div');
+      wrap.innerHTML = `
+        <input id="r5-ns-input" name="r5_ns_input" type="text" value="wait">
+        <div id="r5-ns-dep" class="js-form-wrapper" data-drupal-states='{"visible":{"#r5-ns-input":{"r5Namespaced":true}}}'>R5 namespaced dep</div>
+      `;
+      document.body.append(wrap);
+      Drupal.attachBehaviors(wrap);
+      window.r5Ns = (value, call) => {
+        const input = jQuery('#r5-ns-input');
+        input[0].value = value;
+        call(input);
+        return document.getElementById('r5-ns-dep').style.display !== 'none';
+      };
+      JS);
+    $this->assertFalse($this->assertSession()->elementExists('css', $dependent)->isVisible());
+    $this->assertFalse($session->evaluateScript('window.r5Ns("go", (input) => input.trigger("change.other"))'), 'A trigger with another namespace skips the States listener.');
+    $this->assertFalse($session->evaluateScript('window.r5Ns("go", (input) => input.triggerHandler("change.other"))'), 'A triggerHandler() call with another namespace skips the States listener.');
+    $this->assertTrue($session->evaluateScript('window.r5Ns("go", (input) => input.triggerHandler("change.r5ns"))'), 'A triggerHandler() call with the key namespace reaches the States listener.');
+    $this->assertFalse($session->evaluateScript('window.r5Ns("wait", (input) => input.trigger("change.r5ns"))'), 'A trigger with the key namespace reaches the States listener.');
+    $this->assertTrue($session->evaluateScript('window.r5Ns("go", (input) => input.trigger("change"))'), 'A trigger without a namespace reaches the States listener.');
+  }
+
 }
