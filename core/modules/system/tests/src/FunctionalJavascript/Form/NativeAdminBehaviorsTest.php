@@ -135,10 +135,13 @@ class NativeAdminBehaviorsTest extends WebDriverTestBase {
     $this->getSession()->executeScript('Drupal.attachBehaviors();');
     $assert->elementsCount('css', '.link-edit-summary', 2);
 
-    // Mixed page: synthetic jQuery trigger invokes raw addEventListener once.
+    // Mixed page: triggerHandler() and trigger() each toggle the summary once.
     $this->drupalGet('form-test/admin-behaviors', ['query' => ['legacy' => 1]]);
+    $wrapper = $assert->elementExists('css', '.js-text-format-wrapper:has(#empty-summary) .js-text-summary-wrapper');
+    $this->getSession()->executeScript("jQuery('.js-text-format-wrapper:has(#empty-summary) .field-edit-link').triggerHandler('click')");
+    $this->assertTrue($wrapper->isVisible());
     $this->getSession()->executeScript("jQuery('.js-text-format-wrapper:has(#empty-summary) .field-edit-link').trigger('click')");
-    $this->assertTrue($assert->elementExists('css', '.js-text-format-wrapper:has(#empty-summary) .js-text-summary-wrapper')->isVisible());
+    $this->assertFalse($wrapper->isVisible());
   }
 
   /**
