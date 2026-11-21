@@ -1337,6 +1337,31 @@ JS;
   }
 
   /**
+   * Tests that cleaning cloned jQuery handlers leaves the original binding.
+   */
+  public function testCleaningClonePreservesAjaxBinding(): void {
+    $this->drupalGet('ajax-test/global-events');
+    $result = $this->getSession()->evaluateScript(<<<'JS'
+      (() => {
+        const button = document.body.appendChild(document.createElement('button'));
+        const ajax = Drupal.ajax({ element: button, event: 'change.cloneFixture', url: location.href });
+        const trace = [];
+        ajax.eventResponse = (element, event) => trace.push(event.isTrigger ?? 'native');
+        const clone = jQuery(button).clone(true);
+        const originalGuid = jQuery._data(button, 'events').change[0].guid;
+        const cloneGuid = jQuery._data(clone[0], 'events').change[0].guid;
+        clone.off('.cloneFixture').remove();
+        jQuery(button).triggerHandler('change.cloneFixture');
+        button.dispatchEvent(new Event('change'));
+        jQuery(button).off('.cloneFixture');
+        button.dispatchEvent(new Event('change'));
+        return [originalGuid === cloneGuid, trace];
+      })()
+      JS);
+    $this->assertSame([TRUE, [2, 'native']], $result);
+  }
+
+  /**
    * Tests the native default action of keyboard activation without a namespace.
    */
   public function testKeyboardActivationWithoutNamespace(): void {
@@ -1359,7 +1384,7 @@ JS;
    * Tests that the bridge composes previously installed global event hooks.
    */
   public function testLegacyAjaxSpecialTriggers(): void {
-    $this->drupalGet('ajax-test/native-request');
+    $this->drupalGet('ajax-test/native-request', ['query' => ['commands' => 1]]);
     $result = $this->getSession()->evaluateScript(<<<'JS'
       (async () => {
         const load = (path) => new Promise((resolve, reject) => {
@@ -1384,10 +1409,23 @@ JS;
         const xhr = { getResponseHeader: () => null };
         jQuery(document).trigger('ajaxSuccess', [xhr, {}, 'success']);
         jQuery(document).trigger('ajaxComplete', [xhr, {}, 'complete']);
-        return trace;
+        const immediate = trace.splice(0);
+        let pending = true;
+        const request = { getResponseHeader: () => '1' };
+        const settings = { isInProgress: () => pending };
+        jQuery(document).trigger('ajaxSuccess', [request, settings, 'deferred']);
+        jQuery(document).trigger('ajaxComplete', [request, settings]);
+        const deferred = [trace.splice(0), jQuery.active];
+        pending = false;
+        Drupal.ajax.compatibility.commandsComplete(request, settings);
+        return [immediate, deferred, [trace, jQuery.active]];
       })()
       JS);
-    $this->assertSame([['ajaxSuccess', TRUE, 'success'], ['ajaxComplete', TRUE, 'complete'], 'ajaxComplete'], $result);
+    $this->assertSame([
+      [['ajaxSuccess', TRUE, 'success'], ['ajaxComplete', TRUE, 'complete'], 'ajaxComplete'],
+      [[], 1],
+      [[['ajaxSuccess', TRUE, 'deferred'], ['ajaxComplete', TRUE, NULL], 'ajaxComplete'], 0],
+    ], $result);
   }
 
   /**

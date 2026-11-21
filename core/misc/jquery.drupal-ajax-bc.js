@@ -1253,7 +1253,7 @@
           previous?.call(this, handle);
         } finally {
           const binding = handlers.get(handle.guid);
-          if (binding) {
+          if (binding?.target === this) {
             handlers.delete(handle.guid);
             subscriptions.delete(binding);
             binding.remove();
