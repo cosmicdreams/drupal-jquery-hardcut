@@ -403,7 +403,7 @@
       }
       self.dragObject = null;
       self.rowObject = null;
-      if (toggle) {
+      if (toggle?.nodes.length) {
         retainedWeightToggles.set(table, toggle);
         tableInteraction.removeOrphanedControls(table, toggle.nodes);
       }
@@ -852,7 +852,9 @@
       if (keyChange) {
         event.preventDefault();
         event.stopPropagation();
+        return false;
       }
+      return undefined;
     });
 
     // Compatibility addition, return false on keypress to prevent unwanted

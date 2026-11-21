@@ -5,6 +5,30 @@
 
 ((Drupal) => {
   const tableListeners = new WeakMap();
+  const pending = new Set();
+  const observer = new MutationObserver((records) => {
+    if (records.some(({ removedNodes }) => removedNodes.length)) {
+      releaseDisconnected();
+    }
+  });
+
+  /**
+   * Releases pending bindings after their owner or target leaves the page.
+   */
+  function releaseDisconnected() {
+    pending.forEach((binding) => {
+      const { owner, target } = binding;
+      if (
+        !owner.isConnected ||
+        (target instanceof Node && !target.isConnected)
+      ) {
+        binding.stop();
+      }
+    });
+    if (!pending.size) {
+      observer.disconnect();
+    }
+  }
 
   Drupal.behaviors.tableInteraction = {
     detach(context, settings, trigger) {
@@ -17,19 +41,25 @@
           owners.add(element);
         }
       }
+      const wasIdle = !pending.size;
       owners.forEach((owner) => {
-        const listeners = tableListeners.get(owner);
-        if (!listeners) {
-          return;
-        }
-        // A cleanup callback can release several owned listeners.
-        const removed = [...listeners].filter(
-          ({ target }) =>
+        tableListeners.get(owner)?.forEach((binding) => {
+          const { target } = binding;
+          if (
             context.contains(owner) ||
-            (target instanceof Node && context.contains(target)),
-        );
-        removed.forEach((binding) => binding.stop());
+            (target instanceof Node && context.contains(target))
+          ) {
+            pending.add(binding);
+          }
+        });
       });
+      if (pending.size) {
+        // Unload can keep a dialog in place or precede a delayed removal.
+        if (wasIdle) {
+          observer.observe(document, { childList: true, subtree: true });
+        }
+        queueMicrotask(releaseDisconnected);
+      }
     },
   };
 
@@ -59,16 +89,24 @@
           return listener.call(target, event);
         }
       };
-      target.addEventListener(type, nativeListener);
+      const setNativeActive = (active) => {
+        if (active) {
+          target.addEventListener(type, nativeListener);
+        } else {
+          target.removeEventListener(type, nativeListener);
+        }
+      };
+      setNativeActive(true);
       const unregister = Drupal.eventBindings.register({
         target,
         type,
         listener,
+        setNativeActive,
         tableInteraction: true,
       });
       return this.own(owner, target, () => {
         unregister();
-        target.removeEventListener(type, nativeListener);
+        setNativeActive(false);
       });
     },
 
@@ -91,16 +129,13 @@
      *   Nodes inserted beside the table or its wrapper.
      */
     removeOrphanedControls(table, controls) {
-      // Behaviors detach before the caller removes a table from the DOM.
-      queueMicrotask(() => {
-        if (!table.isConnected) {
-          controls.forEach((node) => {
-            if (node.isConnected) {
-              node.remove();
-            }
-          });
-        }
-      });
+      if (!table.isConnected) {
+        controls.forEach((node) => {
+          if (node.isConnected) {
+            node.remove();
+          }
+        });
+      }
     },
 
     /**
@@ -152,8 +187,10 @@
       }
       const listeners = tableListeners.get(owner);
       const binding = {
+        owner,
         target,
         stop() {
+          pending.delete(binding);
           if (listeners.delete(binding)) {
             stop();
           }

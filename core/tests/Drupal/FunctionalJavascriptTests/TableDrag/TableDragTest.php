@@ -469,7 +469,7 @@ class TableDragTest extends WebDriverTestBase {
         const handle = drag.table.querySelector('.tabledrag-handle');
         const keypress = jQuery.Event('keypress', { keyCode: 40 });
         const result = jQuery(handle).triggerHandler(keypress);
-        const keydown = jQuery.Event('keydown', { keyCode: 38 });
+        const keydown = jQuery.Event('keydown', { keyCode: 39 });
         const downResult = jQuery(handle).triggerHandler(keydown);
         return [result, keypress.isDefaultPrevented(), downResult, keydown.isDefaultPrevented()];
       })()
