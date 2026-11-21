@@ -1077,7 +1077,12 @@
       },
       error(...args) {
         completed = true;
-        return onError?.apply(this, args);
+        try {
+          return onError?.apply(this, args);
+        } catch (error) {
+          // jQuery must still call complete and release the global request.
+          window.Drupal.throwError(error);
+        }
       },
       complete(...args) {
         completed = true;
