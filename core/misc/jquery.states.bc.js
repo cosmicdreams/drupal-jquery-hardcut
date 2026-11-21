@@ -212,14 +212,23 @@
     // Snapshot pre-existing external jQuery handlers before dispatch so a
     // one-shot .one() handler registered before states.js loads still runs the
     // States slot through the jQuery queue even after unbinding itself.
+    // Only subscriptions on the path of a States publication can receive it.
+    const onPath = (target, origin) =>
+      !origin ||
+      target === window ||
+      (target instanceof Node && target.contains(origin));
     eventBindings.observePublications((event) => {
       const subs = typeSubscriptions.get(event.type);
       if (!subs) {
         return undefined;
       }
+      const origin = states.compatibility.publicationTarget?.(event);
       let matched;
       subs.forEach((sub) => {
-        if (hasExternalLegacyHandler(sub.target, sub.type)) {
+        if (
+          onPath(sub.target, origin) &&
+          hasExternalLegacyHandler(sub.target, sub.type)
+        ) {
           if (!matched) {
             matched = new Set();
           }

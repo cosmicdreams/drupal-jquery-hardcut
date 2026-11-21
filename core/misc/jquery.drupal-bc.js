@@ -303,7 +303,23 @@
       shared.delegateTarget = event.delegateTarget;
       shared.handleObj = event.handleObj;
       shared.data = event.data;
-      shared.namespace = event.namespace;
+      // A pinned .trigger() without namespaces set an empty namespace.
+      shared.namespace = event.namespace || '';
+
+      // Start from the current payload so an edit made through another
+      // instance is visible, and remember it to detect this handler's edits.
+      const { detail } = original;
+      const fields =
+        record.syncState && detail && typeof detail === 'object'
+          ? ['value', 'oldValue', 'trigger']
+          : [];
+      const before = {};
+      for (const field of fields) {
+        if (Object.hasOwn(detail, field) && shared[field] !== detail[field]) {
+          shared[field] = detail[field];
+        }
+        before[field] = shared[field];
+      }
 
       const result = (previousHandle || event.handleObj.handler).call(
         this,
@@ -325,15 +341,11 @@
       if (result !== undefined) {
         shared.result = result;
       }
-      if (
-        record.syncState &&
-        original.detail &&
-        typeof original.detail === 'object'
-      ) {
-        for (const field of ['value', 'oldValue', 'trigger']) {
-          if (Object.hasOwn(shared, field)) {
-            original.detail[field] = shared[field];
-          }
+      // Write back only what this handler changed, so a passive instance
+      // never restores a value another instance already edited.
+      for (const field of fields) {
+        if (shared[field] !== before[field]) {
+          detail[field] = shared[field];
         }
       }
       return result;
@@ -380,8 +392,7 @@
       const { type, detail } = event;
       const state = type.startsWith('state:');
       const statesSynthetic =
-        (type === 'change' &&
-          window.Drupal.states?.compatibility?.isCheckedChange?.(event)) ||
+        window.Drupal.states?.compatibility?.isSyntheticTrigger?.(event) ||
         (state && window.Drupal.states?.compatibility?.isStateEvent?.(event));
       if (statesSynthetic) {
         if (activeSynthetic.has(event)) {

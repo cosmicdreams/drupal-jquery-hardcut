@@ -257,6 +257,23 @@
   const stateEvents = new WeakSet();
   states.compatibility.isStateEvent = (event) => stateEvents.has(event);
 
+  // The original target of each event States publishes.
+  const publicationTargets = new WeakMap();
+  states.compatibility.publicationTarget = (event) =>
+    publicationTargets.get(event);
+
+  /**
+   * Publishes one owned event and records its original target.
+   * @param {EventTarget} target
+   *   The dispatch target.
+   * @param {Event} event
+   *   The event to publish.
+   */
+  function publish(target, event) {
+    publicationTargets.set(event, target);
+    Drupal.eventBindings.publish(target, event);
+  }
+
   /**
    * Publishes a state change on each original target.
    * @param {Iterable<Element>} elements
@@ -274,7 +291,7 @@
         detail: { ...detail },
       });
       stateEvents.add(event);
-      Drupal.eventBindings.publish(element, event);
+      publish(element, event);
     }
   }
 
@@ -1311,8 +1328,11 @@
     }
   }
 
-  const checkedChanges = new WeakSet();
-  states.compatibility.isCheckedChange = (event) => checkedChanges.has(event);
+  // Events that stand in for a pinned jQuery .trigger() call. The bridge
+  // delivers them to jQuery handlers as one synthetic event.
+  const syntheticTriggers = new WeakSet();
+  states.compatibility.isSyntheticTrigger = (event) =>
+    syntheticTriggers.has(event);
 
   const handlers = {
     disabled(target, value) {
@@ -1390,14 +1410,23 @@
       }
       inputs?.forEach((input) => {
         const event = new Event('change', { bubbles: true, cancelable: true });
-        checkedChanges.add(event);
-        Drupal.eventBindings.publish(input, event);
+        syntheticTriggers.add(event);
+        publish(input, event);
       });
     },
 
     collapsed(target, value) {
-      if (target.hasAttribute('open') === value) {
-        target.querySelector(':scope > summary')?.click();
+      const summary = target.querySelector(':scope > summary');
+      if (summary && target.hasAttribute('open') === value) {
+        // A dispatched click toggles the details element like click() does.
+        // Publishing it lets the bridge give jQuery a synthetic click.
+        const event = new MouseEvent('click', {
+          bubbles: true,
+          cancelable: true,
+          view: window,
+        });
+        syntheticTriggers.add(event);
+        publish(summary, event);
       }
     },
   };

@@ -1887,4 +1887,102 @@ final class NativeStatesPublicationTest extends WebDriverTestBase {
     $this->assertSame(1, $session->evaluateScript('window.r3OneCalls'));
   }
 
+  /**
+   * Tests payload edits across jQuery instances and the collapsed click.
+   */
+  #[IgnoreDeprecations]
+  public function testRound4ProjectionPayloadAndCollapsedClick(): void {
+    $session = $this->getSession();
+    $assert = $this->assertSession();
+
+    $this->drupalGet('jquery-bc-test/events');
+    $session->executeScript(<<<'JS'
+      const vendor = Array.from(document.scripts).find(({ src }) => src.includes('/assets/vendor/jquery/jquery.min.js'));
+      const script = document.createElement('script');
+      script.src = vendor.src;
+      script.onload = () => {
+        window.r4SecondJquery = window.jQuery.noConflict(true);
+      };
+      document.head.append(script);
+      JS);
+    $this->assertJsCondition('typeof window.r4SecondJquery === "function"');
+
+    $session->executeScript(<<<'JS'
+      const primary = window.jQuery;
+      const second = window.r4SecondJquery;
+      window.r4StopSecond = Drupal.eventBindings.connectLegacy(second);
+      window.r4Trace = { a: [], b: [] };
+
+      // The editing instance binds first, so its handler runs first. The
+      // passive instance only observes and must not restore the old value.
+      const build = (key, editor, passive) => {
+        const form = document.createElement('form');
+        form.innerHTML = `
+          <input type="checkbox" id="r4-src-${key}" name="r4_src_${key}">
+          <div id="r4-dep-${key}" class="js-form-wrapper" data-drupal-states='{"visible":{"#r4-src-${key}":{"checked":true}}}'>R4 dep ${key}</div>
+        `;
+        document.body.append(form);
+        Drupal.attachBehaviors(form);
+        const dep = form.querySelector(`#r4-dep-${key}`);
+        editor(dep).on('state:visible.r4edit', (event) => {
+          if (event.trigger && event.value) {
+            event.value = false;
+          }
+        });
+        passive(dep).on('state:visible', (event) => {
+          window.r4Trace[key].push([event.value, event.namespace]);
+        });
+      };
+      build('a', primary, second);
+      build('b', second, primary);
+
+      // Legacy summary click handlers on a mixed page.
+      const details = document.createElement('div');
+      details.innerHTML = `
+        <input type="checkbox" id="r4-col-src" name="r4_col_src">
+        <details id="r4-details" data-drupal-states='{"collapsed":{"#r4-col-src":{"checked":false}}}'><summary>R4 summary</summary><p>R4 body</p></details>
+      `;
+      document.body.append(details);
+      Drupal.attachBehaviors(details);
+      const summary = details.querySelector('summary');
+      window.r4Click = { direct: [], delegated: [], native: [], cancel: false };
+      primary(summary).on('click', (event) => {
+        window.r4Click.direct.push([event.isTrigger ?? null, event.originalEvent === undefined]);
+        return window.r4Click.cancel ? false : undefined;
+      });
+      primary(document).on('click', 'summary', (event) => {
+        if (event.target === summary) {
+          window.r4Click.delegated.push([event.isTrigger ?? null, event.originalEvent === undefined]);
+        }
+      });
+      summary.addEventListener('click', (event) => {
+        window.r4Click.native.push(event instanceof MouseEvent);
+      });
+      window.r4Trace.a.length = 0;
+      window.r4Trace.b.length = 0;
+      JS);
+
+    $assert->elementExists('css', '#r4-src-a')->check();
+    $assert->elementExists('css', '#r4-src-b')->check();
+    $this->assertFalse($assert->elementExists('css', '#r4-dep-a')->isVisible(), 'A passive second instance keeps the primary instance edit.');
+    $this->assertFalse($assert->elementExists('css', '#r4-dep-b')->isVisible(), 'A passive primary instance keeps the second instance edit.');
+    $trace = $session->evaluateScript('window.r4Trace');
+    $this->assertSame([[FALSE, '']], $trace['a'], 'The passive instance sees the edited value and an empty namespace.');
+    $this->assertSame([[FALSE, '']], $trace['b'], 'The passive instance sees the edited value and an empty namespace.');
+
+    $details = $assert->elementExists('css', '#r4-details');
+    $this->assertFalse($details->hasAttribute('open'));
+    $assert->elementExists('css', '#r4-col-src')->check();
+    $this->assertTrue($details->hasAttribute('open'), 'state:collapsed still opens the details element.');
+    $click = $session->evaluateScript('window.r4Click');
+    $session->executeScript('window.r4StopSecond();');
+    $this->assertSame([[3, TRUE]], $click['direct'], 'A legacy summary click handler receives a synthetic click.');
+    $this->assertSame([[3, TRUE]], $click['delegated'], 'A delegated legacy click handler receives the same synthetic click.');
+    $this->assertSame([TRUE], $click['native'], 'A native summary listener still receives a click.');
+
+    $session->executeScript('window.r4Click.cancel = true;');
+    $assert->elementExists('css', '#r4-col-src')->uncheck();
+    $this->assertTrue($details->hasAttribute('open'), 'A legacy summary handler returning false cancels the toggle.');
+  }
+
 }
