@@ -17,7 +17,6 @@
 - default_admin/core/drupal.dialog.ajax
 - default_admin/core/drupal.dialog.off_canvas
 - default_admin/core/drupal.displace
-- default_admin/core/drupal.dropbutton
 - default_admin/core/drupal.entity-form
 - default_admin/core/drupal.form
 - default_admin/core/drupal.jquery.position
@@ -80,7 +79,6 @@
 - stark/core/drupal.dialog.ajax
 - stark/core/drupal.dialog.off_canvas
 - stark/core/drupal.displace
-- stark/core/drupal.dropbutton
 - stark/core/drupal.entity-form
 - stark/core/drupal.form
 - stark/core/drupal.jquery.position
@@ -142,7 +140,6 @@
 - starterkit_theme/core/drupal.dialog.ajax
 - starterkit_theme/core/drupal.dialog.off_canvas
 - starterkit_theme/core/drupal.displace
-- starterkit_theme/core/drupal.dropbutton
 - starterkit_theme/core/drupal.entity-form
 - starterkit_theme/core/drupal.form
 - starterkit_theme/core/drupal.jquery.position
@@ -204,7 +201,6 @@
 - umami/core/drupal.dialog.ajax
 - umami/core/drupal.dialog.off_canvas
 - umami/core/drupal.displace
-- umami/core/drupal.dropbutton
 - umami/core/drupal.entity-form
 - umami/core/drupal.form
 - umami/core/drupal.jquery.position

@@ -32,10 +32,6 @@
       "owner": "D",
       "references": 1
     },
-    "misc/dropbutton/dropbutton.js": {
-      "owner": "U",
-      "references": 1
-    },
     "misc/jquery.drupal-ajax-bc.js": {
       "owner": "A",
       "references": 1
