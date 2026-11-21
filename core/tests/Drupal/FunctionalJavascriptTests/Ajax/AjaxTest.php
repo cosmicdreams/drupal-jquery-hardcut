@@ -1350,9 +1350,15 @@ JS;
         const clone = jQuery(button).clone(true);
         const originalGuid = jQuery._data(button, 'events').change[0].guid;
         const cloneGuid = jQuery._data(clone[0], 'events').change[0].guid;
-        clone.off('.cloneFixture').remove();
+        clone.remove();
         jQuery(button).triggerHandler('change.cloneFixture');
-        button.dispatchEvent(new Event('change'));
+        const adapter = Drupal.ajax.compatibility;
+        Drupal.ajax.compatibility = null;
+        try {
+          button.dispatchEvent(new Event('change'));
+        } finally {
+          Drupal.ajax.compatibility = adapter;
+        }
         jQuery(button).off('.cloneFixture');
         button.dispatchEvent(new Event('change'));
         return [originalGuid === cloneGuid, trace];
