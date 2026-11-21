@@ -49,17 +49,32 @@
     'drupalTabbingContextReleased',
   ];
 
+  const formMarkers = [
+    'formInteraction',
+    'detailsAria',
+    'tabbingFocusTrap',
+    'navTabs',
+  ];
+
   /**
    * Checks whether a registry binding belongs to the form interaction adapter.
+   *
+   * A form binding must also set reservesLegacySlot, so jquery.drupal-bc.js
+   * reserves the slot in registry order that this adapter claims.
    */
   function isFormBinding(binding) {
-    return Boolean(
-      binding &&
-      (binding.formInteraction ||
-        binding.detailsAria ||
-        binding.tabbingFocusTrap ||
-        binding.navTabs),
-    );
+    if (!binding || !formMarkers.some((marker) => binding[marker])) {
+      return false;
+    }
+    if (!binding.reservesLegacySlot) {
+      window.Drupal.throwError(
+        new Error(
+          `The form binding for "${binding.type}" must set reservesLegacySlot.`,
+        ),
+      );
+      return false;
+    }
+    return true;
   }
 
   /**
@@ -143,8 +158,11 @@
   }
 
   /**
-   * Installs lazy legacy bindings for one instance and keeps owned order.
+   * Installs legacy bindings for one instance in their reserved slots.
    *
+   * jquery.drupal-bc.js reserves a slot for each marked binding in registry
+   * order: when core registers it, or when the instance connects later. This
+   * adapter claims each slot in place and never reorders handlers.
    * @param {Function} jquery
    *   The connected instance.
    * @return {function(): void}
@@ -153,13 +171,9 @@
   function install(jquery) {
     const { Drupal } = window;
     const entries = new Map();
-    const byTarget = new WeakMap();
     const handlers = new Map();
     const observed = new Map();
     const triggerFrames = [];
-    // Bindings attached for synthetic triggers, released by the outermost one.
-    const tempAttached = new Set();
-    let internalDepth = 0;
     // jQuery exposes its internal returnTrue only on a prevented event.
     const probe = jquery.Event('drupal:form-probe');
     probe.preventDefault();
@@ -220,16 +234,19 @@
       const special = existing || (specials[type] = {});
       const hadRemove = Object.hasOwn(special, 'remove');
       const remove = special.remove;
+      // Removing core's handler through jQuery unbinds core, as pinned.
       const hook = function (handle) {
         try {
           remove?.call(this, handle);
         } finally {
           const entry = handlers.get(handle.guid);
           if (entry?.binding.target === this) {
+            const { slot } = entry;
             handlers.delete(handle.guid);
             entry.attached = false;
             entry.slot = undefined;
             entry.handler = undefined;
+            slot?.remove(false);
             entry.binding.stop();
           }
         }
@@ -260,39 +277,33 @@
       }
       const { binding, name, deliver, bindType } = entry;
       const { target, selector } = binding;
-      // A new jQuery handler list runs after every native listener already on
-      // the target, so core keeps its native position for real events.
-      entry.nativeOrder = !hasExternalHandler(target, bindType);
-      internalDepth += 1;
-      try {
-        const slot = Drupal.eventBindings.claimLegacyEvent?.(
-          jquery,
-          binding,
-          deliver,
-        );
-        const handler = slot?.handler ?? deliver;
-        if (!slot) {
-          jquery(target).on(name, selector, handler);
-        }
-        entry.slot = slot;
-        entry.handler = handler;
-        entry.attached = true;
-        handlers.set(handler.guid, entry);
-      } finally {
-        internalDepth -= 1;
+      const slot = Drupal.eventBindings.claimLegacyEvent?.(
+        jquery,
+        binding,
+        deliver,
+      );
+      const handler = slot?.handler ?? deliver;
+      let followsHandlers = slot?.followsHandlers;
+      if (!slot) {
+        // Without the base bridge, bind at registration time instead.
+        followsHandlers = hasExternalHandler(target, bindType);
+        jquery(target).on(name, selector, handler);
       }
+      // Behind handlers that precede the binding, core delivers real events
+      // from its slot to keep registration order. Otherwise core's native
+      // listener keeps its own position.
+      entry.nativeOrder = !followsHandlers;
+      entry.slot = slot;
+      entry.handler = handler;
+      entry.attached = true;
+      handlers.set(handler.guid, entry);
     }
 
     // Removes jQuery's own leftovers so the element has no jQuery listener.
     function releaseInternalHandlers(target, bindType) {
       const list = jquery._data(target, 'events')?.[bindType];
       if (list?.length && list.every(isInternalHandler)) {
-        internalDepth += 1;
-        try {
-          jquery.event.remove(target, bindType);
-        } finally {
-          internalDepth -= 1;
-        }
+        jquery.event.remove(target, bindType);
       }
     }
 
@@ -306,197 +317,28 @@
       entry.slot = undefined;
       entry.handler = undefined;
       handlers.delete(handler.guid);
-      internalDepth += 1;
-      try {
-        if (slot) {
-          slot.remove(true);
-        } else {
-          jquery(target).off(name, selector, handler);
-        }
-      } finally {
-        internalDepth -= 1;
+      if (slot) {
+        slot.remove(true);
+      } else {
+        jquery(target).off(name, selector, handler);
       }
       releaseInternalHandlers(target, bindType);
     }
 
-    function syncTargetType(target, bindType) {
-      if (triggerFrames.length > 0 || hasExternalHandler(target, bindType)) {
-        return;
-      }
-      byTarget.get(target)?.forEach((entry) => {
-        if (entry.bindType === bindType && entry.attached) {
-          detachEntry(entry);
-        }
-      });
-    }
-
-    /**
-     * Moves a handler ahead of handlers that predate the adapters.
-     *
-     * Synthetic triggers then reach core before contrib handlers that were
-     * bound after core's native listener, as with the pinned registration.
-     */
-    function placeBeforeEarlierHandlers(entry, floor) {
-      const list = jquery._data(entry.binding.target, 'events')?.[
-        entry.bindType
-      ];
-      const index =
-        list?.findIndex(({ guid }) => guid === entry.handler.guid) ?? -1;
-      if (index < 0) {
-        return;
-      }
-      const start = entry.binding.selector ? 0 : list.delegateCount;
-      for (let position = start; position < index; position += 1) {
-        const handleObj = list[position];
-        if (
-          !handlers.has(handleObj.guid) &&
-          !isInternalHandler(handleObj) &&
-          handleObj.guid < floor
-        ) {
-          list.splice(position, 0, ...list.splice(index, 1));
-          return;
-        }
-      }
-    }
-
-    function materialize(target, types, selector) {
-      const targetEntries = byTarget.get(target);
-      if (!targetEntries?.size) {
-        return;
-      }
-      const wanted = new Set();
-      if (typeof types === 'string' && types.trim()) {
-        types
-          .trim()
-          .split(/\s+/)
-          .forEach((token) => {
-            const raw = token.split('.')[0];
-            if (raw) {
-              wanted.add(raw);
-              wanted.add(getBindType(raw, selector));
-              const special = jquery.event.special[raw];
-              if (special?.bindType) {
-                wanted.add(special.bindType);
-              }
-              if (special?.delegateType) {
-                wanted.add(special.delegateType);
-              }
-            }
-          });
-      }
-      targetEntries.forEach((entry) => {
-        if (
-          !entry.attached &&
-          (!wanted.size ||
-            wanted.has(entry.bindType) ||
-            wanted.has(entry.binding.type))
-        ) {
-          attachEntry(entry);
-        }
-      });
-    }
-
-    const originalAdd = jquery.event.add;
-    const add = function (elem, types, handler, data, selector) {
-      if (internalDepth === 0 && elem) {
-        materialize(elem, types, selector);
-      }
-      return originalAdd.apply(this, arguments);
-    };
-    jquery.event.add = add;
-
-    let removeDepth = 0;
-    const originalRemove = jquery.event.remove;
-    const remove = function (elem, types, handler, selector) {
-      if (internalDepth === 0 && removeDepth === 0 && elem) {
-        materialize(elem, types, selector);
-      }
-      removeDepth += 1;
-      try {
-        return originalRemove.apply(this, arguments);
-      } finally {
-        removeDepth -= 1;
-        if (internalDepth === 0 && removeDepth === 0 && elem) {
-          const targetEntries = byTarget.get(elem);
-          if (targetEntries?.size) {
-            const bindTypes = new Set(
-              Array.from(targetEntries, (entry) => entry.bindType),
-            );
-            bindTypes.forEach((bindType) => syncTargetType(elem, bindType));
-          }
-        }
-      }
-    };
-    jquery.event.remove = remove;
-
     const originalTrigger = jquery.event.trigger;
-    const trigger = function (event, data, elem, onlyHandlers) {
+    const trigger = function (event, data, elem) {
       const rawType = (typeof event === 'string' ? event : event.type).split(
         '.',
       )[0];
-      const target = elem || document;
-      if (internalDepth === 0 && rawType) {
-        const special = jquery.event.special[rawType];
-        const directTypes = new Set([
-          rawType,
-          special?.bindType || rawType,
-          special?.delegateType || rawType,
-        ]);
-        const bubbleTypes = new Set([
-          rawType,
-          special?.delegateType || rawType,
-        ]);
-        const nodes = [target];
-        if (!onlyHandlers) {
-          let current = target.parentNode;
-          while (current) {
-            nodes.push(current);
-            current = current.parentNode;
-          }
-          const view =
-            target !== window
-              ? target.defaultView || target.ownerDocument?.defaultView
-              : null;
-          if (view) {
-            nodes.push(view);
-          }
-        }
-        nodes.forEach((node, index) => {
-          const typeSet = index === 0 ? directTypes : bubbleTypes;
-          byTarget.get(node)?.forEach((entry) => {
-            if (
-              !entry.attached &&
-              (typeSet.has(entry.bindType) || typeSet.has(entry.binding.type))
-            ) {
-              attachEntry(entry);
-              tempAttached.add(entry);
-            }
-          });
-        });
-      }
-      triggerFrames.push({ type: rawType, target });
+      triggerFrames.push({ type: rawType, target: elem || document });
       try {
         return originalTrigger.apply(this, arguments);
       } finally {
         triggerFrames.pop();
-        if (!triggerFrames.length) {
-          const attached = Array.from(tempAttached);
-          tempAttached.clear();
-          attached.forEach((entry) => {
-            if (
-              entry.attached &&
-              !hasExternalHandler(entry.binding.target, entry.bindType)
-            ) {
-              detachEntry(entry);
-            }
-          });
-        }
       }
     };
     jquery.event.trigger = trigger;
 
-    let replaying = true;
-    const replayed = [];
     const stopObserving = Drupal.eventBindings.observe({
       add(binding) {
         if (!isFormBinding(binding) || entries.has(binding)) {
@@ -515,7 +357,7 @@
           bindType,
           name,
           attached: false,
-          nativeOrder: false,
+          nativeOrder: true,
           slot: undefined,
           handler: undefined,
         };
@@ -615,37 +457,8 @@
         };
 
         entries.set(binding, entry);
-        let targetEntries = byTarget.get(target);
-        if (!targetEntries) {
-          targetEntries = new Set();
-          byTarget.set(target, targetEntries);
-        }
-        targetEntries.add(entry);
         trackBinding(binding, entry.handles);
-
-        if (replaying) {
-          // Claim any slot reserved in registration order by
-          // jquery.drupal-bc.js; settle the replayed entries below.
-          internalDepth += 1;
-          try {
-            const slot = Drupal.eventBindings.claimLegacyEvent?.(
-              jquery,
-              binding,
-              entry.deliver,
-            );
-            if (slot) {
-              entry.slot = slot;
-              entry.handler = slot.handler;
-              entry.attached = true;
-              handlers.set(slot.handler.guid, entry);
-            }
-          } finally {
-            internalDepth -= 1;
-          }
-          replayed.push(entry);
-        } else if (hasExternalHandler(target, bindType)) {
-          attachEntry(entry);
-        }
+        attachEntry(entry);
       },
       remove(binding) {
         const entry = entries.get(binding);
@@ -653,31 +466,9 @@
           return;
         }
         entries.delete(binding);
-        byTarget.get(binding.target)?.delete(entry);
-        tempAttached.delete(entry);
         detachEntry(entry);
         untrackBinding(binding, entry.handles);
       },
-    });
-    replaying = false;
-
-    // Handlers created before the reserved slots predate the adapters.
-    const floor = replayed.reduce(
-      (lowest, entry) => Math.min(lowest, entry.slot?.handler.guid ?? lowest),
-      Infinity,
-    );
-    replayed.forEach((entry) => {
-      const { target } = entry.binding;
-      if (!hasExternalHandler(target, entry.bindType)) {
-        // Unmixed targets stay on pure native DOM delivery.
-        detachEntry(entry);
-        return;
-      }
-      // The registration order of handlers bound before the adapters loaded is
-      // unknown. Core's native listener keeps its place for real events.
-      attachEntry(entry);
-      entry.nativeOrder = true;
-      placeBeforeEarlierHandlers(entry, floor);
     });
 
     const stopPublications = installPublications(jquery);
@@ -685,12 +476,6 @@
     return () => {
       stopObserving();
       stopPublications();
-      if (jquery.event.add === add) {
-        jquery.event.add = originalAdd;
-      }
-      if (jquery.event.remove === remove) {
-        jquery.event.remove = originalRemove;
-      }
       if (jquery.event.trigger === trigger) {
         jquery.event.trigger = originalTrigger;
       }
@@ -760,48 +545,27 @@
   }
 
   /**
-   * Gives explicitly connected instances the same form compatibility.
+   * Gives every connected instance the same form compatibility.
+   *
+   * This includes instances connected before this file loads.
    */
   function connectInstances() {
     const registry = window.Drupal.eventBindings;
-    // Report the bindings an installed adapter delivers so
-    // jquery.drupal-bc.js reserves no second slot for them.
-    const previousOwner = registry.ownsLegacyEvents;
-    registry.ownsLegacyEvents = (instance, binding) =>
-      (adapters.has(instance) && isFormBinding(binding)) ||
-      Boolean(previousOwner?.(instance, binding));
-    adapters.set(jquery, install(jquery));
-
-    const connect = registry.connectLegacy;
-    if (typeof connect !== 'function') {
+    if (typeof registry.observeLegacyConnections !== 'function') {
+      adapters.set(jquery, install(jquery));
       return;
     }
-    const disconnects = new WeakMap();
-    registry.connectLegacy = function (instance) {
-      // The bridge reserves slots in registry order before the adapter
-      // claims them.
-      const disconnect = connect.call(this, instance);
-      if (typeof instance !== 'function' || instance === jquery) {
-        return disconnect;
-      }
-      let stop = disconnects.get(instance);
-      if (stop?.disconnect !== disconnect) {
+    registry.observeLegacyConnections({
+      connect(instance) {
         if (!adapters.has(instance)) {
           adapters.set(instance, install(instance));
         }
-        stop = () => {
-          if (disconnects.get(instance) === stop) {
-            disconnects.delete(instance);
-            adapters.get(instance)?.();
-            adapters.delete(instance);
-            disconnect();
-          }
-        };
-        stop.disconnect = disconnect;
-        disconnects.set(instance, stop);
-      }
-      return stop;
-    };
+      },
+      disconnect(instance) {
+        adapters.get(instance)?.();
+        adapters.delete(instance);
+      },
+    });
   }
 
   /**

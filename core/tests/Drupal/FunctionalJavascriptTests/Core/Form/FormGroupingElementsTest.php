@@ -545,7 +545,7 @@ class FormGroupingElementsTest extends WebDriverTestBase {
   }
 
   /**
-   * Tests zero-jQuery native dispatch, return values, deprecations, and details accessors.
+   * Tests single core delivery, return values, deprecations, and details accessors.
    */
   public function testFormBridgeContracts(): void {
     $this->drupalGet('form-test/group-details', ['query' => ['legacy-details' => 1]]);
@@ -554,11 +554,11 @@ class FormGroupingElementsTest extends WebDriverTestBase {
         const warnings = [];
         const originalWarn = Drupal.deprecationError;
         Drupal.deprecationError = ({ message }) => warnings.push(message);
-        const originalDispatch = jQuery.event.dispatch;
-        let dispatchCalls = 0;
-        jQuery.event.dispatch = function (...args) {
-          dispatchCalls += 1;
-          return originalDispatch.apply(this, args);
+        const originalSetAttribute = Element.prototype.setAttribute;
+        let ariaWrites = 0;
+        Element.prototype.setAttribute = function (name, ...args) {
+          ariaWrites += name === 'aria-expanded' && this.localName === 'summary' ? 1 : 0;
+          return originalSetAttribute.call(this, name, ...args);
         };
 
         const container = document.body.appendChild(document.createElement('div'));
@@ -570,11 +570,13 @@ class FormGroupingElementsTest extends WebDriverTestBase {
         Drupal.attachBehaviors(container);
 
         try {
-          // Mixed page with no legacy subscribers makes zero jQuery dispatch calls.
-          dispatchCalls = 0;
+          // With no legacy subscriber, core's slot leaves a real click to the
+          // native listener, which runs once.
+          ariaWrites = 0;
           summary.click();
           const summaryExpanded = summary.getAttribute('aria-expanded');
-          const nativeDispatchCalls = dispatchCalls;
+          const nativeDeliveries = ariaWrites;
+          Element.prototype.setAttribute = originalSetAttribute;
 
           // Legacy return false prevents default and stops propagation.
           const bubbleContainer = document.body.appendChild(document.createElement('div'));
@@ -619,7 +621,7 @@ class FormGroupingElementsTest extends WebDriverTestBase {
 
           return {
             summaryExpanded,
-            nativeDispatchCalls,
+            nativeDeliveries,
             returnFalse: [returnEvent.result, returnEvent.isDefaultPrevented(), returnEvent.isPropagationStopped(), bubbled],
             singleSubmit: [submitSecond.isDefaultPrevented()],
             standardTriggerWarnings,
@@ -628,7 +630,7 @@ class FormGroupingElementsTest extends WebDriverTestBase {
             detailsAccessors: [sameNode, sameWrapper, updatedWrapper],
           };
         } finally {
-          jQuery.event.dispatch = originalDispatch;
+          Element.prototype.setAttribute = originalSetAttribute;
           Drupal.deprecationError = originalWarn;
           container.remove();
         }
@@ -636,7 +638,7 @@ class FormGroupingElementsTest extends WebDriverTestBase {
       JS);
 
     $this->assertSame('true', $actual['summaryExpanded']);
-    $this->assertSame(0, $actual['nativeDispatchCalls']);
+    $this->assertSame(1, $actual['nativeDeliveries']);
     $this->assertSame([FALSE, TRUE, TRUE, FALSE], $actual['returnFalse']);
     $this->assertSame([TRUE], $actual['singleSubmit']);
     $this->assertSame([], $actual['standardTriggerWarnings']);

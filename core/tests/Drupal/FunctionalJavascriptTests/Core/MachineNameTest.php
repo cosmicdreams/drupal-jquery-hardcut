@@ -143,51 +143,33 @@ class MachineNameTest extends WebDriverTestBase {
   }
 
   /**
-   * Tests contrib handlers bound before the form adapter loads.
+   * Tests a contrib handler bound after core's machine-name binding.
    *
-   * The page has jQuery before core binds a new machine-name widget. A contrib
-   * handler bound after core runs after core, reads the new machine name and
-   * cannot suppress it, whether jquery.drupal-bc.js loads early or late.
+   * Contrib runs after core, reads the new machine name and cannot suppress
+   * it, whether the adapters load early, only the form adapter loads late, or
+   * all of core/jquery loads after core binds.
+   *
+   * A contrib handler bound after core but before jquery.drupal-bc.js loads
+   * is not covered: its order relative to core is unknown. core/jquery loads
+   * its files consecutively, so no contrib code runs in that window.
    */
   public function testLateAdapterWindowKeepsCoreFirst(): void {
-    $scripts = $this->jqueryScripts();
-    foreach ([1, count($scripts) - 1] as $split) {
+    foreach ($this->loadingModes() as $mode => $phases) {
       $this->drupalGet('form-test/machine-name');
       $session = $this->getSession();
       $this->assertSame('undefined', $session->evaluateScript('typeof window.jQuery'));
-      $early = json_encode(array_slice($scripts, 0, $split));
-      $late = json_encode(array_slice($scripts, $split));
-      $session->executeScript(<<<JS
+      [$beforeAttach, $beforeContrib, $afterContrib] = array_map('json_encode', $phases);
+      $session->executeScript($this->widgetHelpers() . <<<JS
         (async () => {
-          const load = async (paths) => {
-            for (const path of paths) {
-              await new Promise((resolve, reject) => {
-                const script = document.createElement('script');
-                script.src = drupalSettings.path.baseUrl + path;
-                script.onload = resolve;
-                script.onerror = reject;
-                document.head.append(script);
-              });
-            }
-          };
-          await load($early);
-          const container = document.createElement('div');
-          container.innerHTML = '<input id="window-source"><span id="window-suffix"></span><div class="js-form-item"><input id="window-target" maxlength="64"></div>';
-          document.querySelector('form').append(container);
-          drupalSettings.machineName['#window-source'] = {
-            ...drupalSettings.machineName['#edit-machine-name-1-label'],
-            target: '#window-target',
-            suffix: '#window-suffix',
-          };
-          Drupal.behaviors.machineName.attach(container, drupalSettings);
-          const source = document.getElementById('window-source');
-          const target = document.getElementById('window-target');
+          await load($beforeAttach);
+          const { source, target } = attachWidget(createWidget('window'));
+          await load($beforeContrib);
           const seen = [];
           jQuery(source).on('input', (event) => {
             seen.push([event.isTrigger ? 'synthetic' : 'native', target.value]);
             event.stopImmediatePropagation();
           });
-          await load($late);
+          await load($afterContrib);
           source.value = 'Native Window';
           source.dispatchEvent(new Event('input'));
           const afterNative = target.value;
@@ -200,32 +182,128 @@ class MachineNameTest extends WebDriverTestBase {
         [['native', 'native_window'], ['synthetic', 'synthetic_window']],
         'native_window',
         'synthetic_window',
-      ], $session->evaluateScript('window.lateAdapterWindowResult'), "Split after $split script(s).");
+      ], $session->evaluateScript('window.lateAdapterWindowResult'), "Loading mode: $mode.");
     }
   }
 
   /**
-   * Tests that a rematerialized form binding keeps its native position.
+   * Tests a contrib handler bound before core's machine-name binding.
    *
-   * The late adapter releases the unused machine-name slot. A native listener
-   * added next and a contrib handler added after it run after core.
+   * The handler stops immediate propagation, so core leaves the machine name
+   * untouched for real and synthetic events, as with the pinned bindings.
+   * This holds even when jquery.drupal-bc.js loads after both bindings.
+   */
+  public function testContribBeforeCoreStopsMachineName(): void {
+    $modes = $this->loadingModes();
+    unset($modes['late']);
+    $scripts = $this->jqueryScripts();
+    $bridge = array_key_first(array_filter($scripts, fn ($path) => str_ends_with($path, 'jquery.drupal-bc.js')));
+    $modes['late base bridge'] = [array_slice($scripts, 0, $bridge), [], array_slice($scripts, $bridge)];
+    foreach ($modes as $mode => $phases) {
+      $this->drupalGet('form-test/machine-name');
+      $session = $this->getSession();
+      $this->assertSame('undefined', $session->evaluateScript('typeof window.jQuery'));
+      // Contrib needs jQuery, so the first phase always loads it.
+      [$beforeContrib, $beforeAttach, $afterAttach] = array_map('json_encode', $phases);
+      $session->executeScript($this->widgetHelpers() . <<<JS
+        (async () => {
+          await load($beforeContrib);
+          const container = createWidget('stop');
+          const source = container.querySelector('#stop-source');
+          const target = container.querySelector('#stop-target');
+          const seen = [];
+          jQuery(source).on('input', (event) => {
+            seen.push([event.isTrigger ? 'synthetic' : 'native', target.value]);
+            event.stopImmediatePropagation();
+          });
+          await load($beforeAttach);
+          attachWidget(container);
+          await load($afterAttach);
+          source.value = 'Native Stop';
+          source.dispatchEvent(new Event('input'));
+          jQuery(source).val('Synthetic Stop').trigger('input');
+          window.contribFirstResult = [seen, target.value];
+        })();
+        JS);
+      $this->assertJsCondition('Array.isArray(window.contribFirstResult)');
+      $this->assertSame([
+        [['native', ''], ['synthetic', '']],
+        '',
+      ], $session->evaluateScript('window.contribFirstResult'), "Loading mode: $mode.");
+    }
+  }
+
+  /**
+   * Tests Ajax and machine-name change bindings on one element.
+   *
+   * Real and synthetic change events run both bindings in registration order,
+   * whether core/jquery loads before or after the bindings exist.
+   */
+  public function testAjaxAndMachineNameRegistrationOrder(): void {
+    $scripts = $this->jqueryScripts();
+    foreach (['early' => [$scripts, []], 'late' => [[], $scripts]] as $mode => $phases) {
+      foreach (['ajax first' => TRUE, 'machine name first' => FALSE] as $order => $ajaxFirst) {
+        $this->drupalGet('form-test/machine-name', ['query' => ['ajax' => 1]]);
+        $session = $this->getSession();
+        $this->assertSame('undefined', $session->evaluateScript('typeof window.jQuery'));
+        [$beforeBindings, $afterBindings] = array_map('json_encode', $phases);
+        $first = json_encode($ajaxFirst);
+        $session->executeScript($this->widgetHelpers() . <<<JS
+          (async () => {
+            await load($beforeBindings);
+            const container = createWidget('order');
+            const source = container.querySelector('#order-source');
+            const target = container.querySelector('#order-target');
+            const seen = [];
+            let ajax;
+            const bindAjax = () => {
+              ajax = Drupal.ajax({ element: source, event: 'change', url: location.href });
+              ajax.eventResponse = () => {
+                seen.push(target.value);
+              };
+            };
+            if ($first) {
+              bindAjax();
+              attachWidget(container);
+            }
+            else {
+              attachWidget(container);
+              bindAjax();
+            }
+            await load($afterBindings);
+            source.value = 'Native Order';
+            source.dispatchEvent(new Event('change', { bubbles: true }));
+            source.value = 'Legacy Order';
+            jQuery(source).trigger('change');
+            ajax.removeEventBindings();
+            window.registrationOrderResult = seen;
+          })();
+          JS);
+        $this->assertJsCondition('Array.isArray(window.registrationOrderResult)');
+        $this->assertSame(
+          $ajaxFirst ? ['', 'native_order'] : ['native_order', 'legacy_order'],
+          $session->evaluateScript('window.registrationOrderResult'),
+          "Loading mode: $mode, $order.",
+        );
+      }
+    }
+  }
+
+  /**
+   * Tests that a slot claimed by the late adapter keeps the pinned order.
+   *
+   * Contrib handlers bound later share jQuery's dispatch with core's slot. As
+   * with the pinned jQuery binding, that dispatch runs before a native
+   * listener added after the slot.
    */
   public function testReleasedSlotKeepsNativeOrder(): void {
     $this->drupalGet('form-test/machine-name');
     $session = $this->getSession();
     $this->assertSame('undefined', $session->evaluateScript('typeof window.jQuery'));
     $scripts = json_encode($this->jqueryScripts());
-    $session->executeScript(<<<JS
+    $session->executeScript($this->widgetHelpers() . <<<JS
       (async () => {
-        for (const path of $scripts) {
-          await new Promise((resolve, reject) => {
-            const script = document.createElement('script');
-            script.src = drupalSettings.path.baseUrl + path;
-            script.onload = resolve;
-            script.onerror = reject;
-            document.head.append(script);
-          });
-        }
+        await load($scripts);
         const source = document.getElementById('edit-machine-name-1-label');
         const target = document.getElementById('edit-machine-name-1');
         const order = [];
@@ -239,19 +317,63 @@ class MachineNameTest extends WebDriverTestBase {
       JS);
     $this->assertJsCondition('Array.isArray(window.releasedSlotResult)');
     $this->assertSame([
-      ['other', 'released_slot'],
       ['contrib', 'released_slot'],
+      ['other', 'released_slot'],
       ['contrib', 'synthetic_slot'],
     ], $session->evaluateScript('window.releasedSlotResult'));
   }
 
   /**
-   * Tests that a nested synthetic trigger releases its temporary bindings.
+   * Tests an instance connected before the form adapter loads.
+   */
+  public function testForeignInstanceConnectedBeforeAdapter(): void {
+    $this->drupalGet('form-test/machine-name');
+    $session = $this->getSession();
+    $this->assertSame('undefined', $session->evaluateScript('typeof window.jQuery'));
+    $scripts = $this->jqueryScripts();
+    $split = 1 + (int) array_key_first(array_filter($scripts, fn ($path) => str_ends_with($path, 'jquery.drupal-bc.js')));
+    $vendor = json_encode([$scripts[0]]);
+    $early = json_encode(array_slice($scripts, 0, $split));
+    $late = json_encode(array_slice($scripts, $split));
+    $session->executeScript($this->widgetHelpers() . <<<JS
+      (async () => {
+        await load($vendor);
+        const foreign = window.jQuery.noConflict(true);
+        await load($early);
+        const disconnect = Drupal.eventBindings.connectLegacy(foreign);
+        await load($late);
+        const source = document.getElementById('edit-machine-name-1-label');
+        const target = document.getElementById('edit-machine-name-1');
+        foreign(source).val('Foreign Early').trigger('input.machineName');
+        const synthetic = target.value;
+        const payloads = [];
+        const element = document.getElementById('edit-machine-name-2');
+        foreign(document.body).on('formFragmentLinkClickOrHashChange.test', (event, collection) => {
+          payloads.push([collection instanceof foreign, collection?.[0] === element]);
+        });
+        Drupal.formEvents.publish(document.body, 'formFragmentLinkClickOrHashChange', element);
+        foreign(document.body).off('.test');
+        disconnect();
+        foreign(source).val('After Disconnect').trigger('input.machineName');
+        window.earlyForeignResult = [synthetic, payloads, target.value];
+      })();
+      JS);
+    $this->assertJsCondition('Array.isArray(window.earlyForeignResult)');
+    $this->assertSame([
+      'foreign_early',
+      [[TRUE, TRUE]],
+      'foreign_early',
+    ], $session->evaluateScript('window.earlyForeignResult'));
+  }
+
+  /**
+   * Tests that a nested synthetic trigger leaves single native delivery.
    */
   public function testNestedTriggerReleasesBindings(): void {
     $this->drupalGet('form-test/machine-name', ['query' => ['legacy-machine-name' => 1]]);
     $actual = $this->getSession()->evaluateScript(<<<'JS'
       (() => {
+        const behavior = Drupal.behaviors.machineName;
         const source = document.getElementById('edit-machine-name-1-label');
         const target = document.getElementById('edit-machine-name-1');
         const outer = document.body.appendChild(document.createElement('div'));
@@ -262,27 +384,31 @@ class MachineNameTest extends WebDriverTestBase {
         jQuery(outer).off('outer');
         outer.remove();
         const nested = target.value;
-        const dispatch = jQuery.event.dispatch;
+        const show = behavior.showMachineNameNative;
         let calls = 0;
-        jQuery.event.dispatch = function (...args) {
+        behavior.showMachineNameNative = function (...args) {
           calls += 1;
-          return dispatch.apply(this, args);
+          return show.apply(this, args);
         };
         try {
           source.value = 'After Nested';
           source.dispatchEvent(new Event('input'));
         }
         finally {
-          jQuery.event.dispatch = dispatch;
+          behavior.showMachineNameNative = show;
         }
         return [nested, target.value, calls];
       })()
       JS);
-    $this->assertSame(['nested_value', 'after_nested', 0], $actual);
+    $this->assertSame(['nested_value', 'after_nested', 1], $actual);
   }
 
   /**
    * Tests form compatibility for a jQuery instance connected explicitly.
+   *
+   * Real events follow the native listener order. The order of a handler
+   * bound before the connection is unknown, so its synthetic trigger reaches
+   * it before core's slot.
    */
   public function testConnectedForeignInstance(): void {
     $this->drupalGet('form-test/machine-name', ['query' => ['legacy-machine-name' => 1]]);
@@ -336,13 +462,73 @@ class MachineNameTest extends WebDriverTestBase {
       })()
       JS);
     $this->assertSame([
-      [['native', 'foreign_native'], ['synthetic', 'foreign_contrib']],
+      [['native', 'foreign_native'], ['synthetic', 'foreign_synthetic']],
       'foreign_synthetic',
-      'foreign_contrib',
+      'foreign_synthetic',
       [['fragment', TRUE, TRUE], ['copy', 'copied'], ['tabbing', 'context']],
       TRUE,
-      'foreign_contrib',
+      'foreign_synthetic',
     ], $actual);
+  }
+
+  /**
+   * Returns script phases for each way core/jquery can load.
+   *
+   * @return array<string, array<int, string[]>>
+   *   Three script lists per mode, loaded before core binds, after core binds,
+   *   and after a contrib handler binds.
+   */
+  private function loadingModes(): array {
+    $all = $this->jqueryScripts();
+    $index = array_key_first(array_filter($all, fn ($path) => str_ends_with($path, 'jquery.drupal-form-bc.js')));
+    $this->assertNotNull($index);
+    $others = $all;
+    $adapter = array_splice($others, $index, 1);
+    return [
+      'early' => [$all, [], []],
+      'late adapter' => [$others, [], $adapter],
+      'late' => [[], $all, []],
+    ];
+  }
+
+  /**
+   * Returns JavaScript helpers that load scripts and build widgets.
+   *
+   * @return string
+   *   Function declarations for load(), createWidget() and attachWidget().
+   */
+  private function widgetHelpers(): string {
+    return <<<'JS'
+      var load = async (paths) => {
+        for (const path of paths) {
+          await new Promise((resolve, reject) => {
+            const script = document.createElement('script');
+            script.src = drupalSettings.path.baseUrl + path;
+            script.onload = resolve;
+            script.onerror = reject;
+            document.head.append(script);
+          });
+        }
+      };
+      var createWidget = (id) => {
+        const container = document.createElement('div');
+        container.innerHTML = `<input id="${id}-source"><span id="${id}-suffix"></span><div class="js-form-item"><input id="${id}-target" maxlength="64"></div>`;
+        document.querySelector('form').append(container);
+        drupalSettings.machineName[`#${id}-source`] = {
+          ...drupalSettings.machineName['#edit-machine-name-1-label'],
+          target: `#${id}-target`,
+          suffix: `#${id}-suffix`,
+        };
+        return container;
+      };
+      var attachWidget = (container) => {
+        Drupal.behaviors.machineName.attach(container, drupalSettings);
+        return {
+          source: container.querySelector('input[id$="-source"]'),
+          target: container.querySelector('input[id$="-target"]'),
+        };
+      };
+      JS;
   }
 
   /**
