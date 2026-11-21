@@ -886,6 +886,8 @@ class TableDragTest extends WebDriverTestBase {
     $this->drupalGet('tabledrag_test', ['query' => ['legacy' => 1]]);
     $this->assertSame([TRUE, TRUE, 1, 0, 1, 3], $this->getSession()->evaluateScript(<<<'JS'
       (() => {
+        // Default Admin can attach other jQuery resize subscribers.
+        jQuery(window).off('resize');
         const fixture = document.createElement('section');
         fixture.innerHTML = '<table class="responsive-enabled"><thead><tr><th class="priority-low" style="display: none">Detail</th></tr></thead></table>';
         document.body.append(fixture);
@@ -1103,7 +1105,9 @@ class TableDragTest extends WebDriverTestBase {
       Drupal.behaviors.tableResponsive.attach(fixture);
       const responsive = Drupal.TableResponsive.tables.find((instance) => instance.table === table);
       let moves = 0;
-      drag.dragRow = () => { moves += 1; };
+      const move = () => { moves += 1; };
+      move.nativeTableEvent = true;
+      drag.dragRow = move;
       const listenerRuns = () => {
         const before = moves;
         document.dispatchEvent(new MouseEvent('mousemove'));
