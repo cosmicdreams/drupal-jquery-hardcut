@@ -311,10 +311,14 @@
       .querySelectorAll(draggableRows)
       .forEach((row) => self.makeDraggable(row));
 
+    const wrapper = table.parentElement;
+    const toggleAnchor = wrapper?.matches('.table-scroll-wrapper')
+      ? wrapper
+      : table;
     let toggle = weightToggles.get(table);
     if (
       !toggle ||
-      !toggle.nodes.every((node) => node.parentNode === table.parentNode)
+      !toggle.nodes.every((node) => node.parentNode === toggleAnchor.parentNode)
     ) {
       const markup = tableDrag.themeContent(Drupal.theme('tableDragToggle'));
       if (markup instanceof Node) {
@@ -328,7 +332,7 @@
               ? [...markup.childNodes]
               : [markup],
         };
-        table.before(markup);
+        toggleAnchor.before(markup);
         weightToggles.set(table, toggle);
       } else {
         toggle = undefined;
@@ -347,10 +351,6 @@
         },
       );
     }
-    const wrapper = table.parentElement;
-    (wrapper?.matches('.table-scroll-wrapper') ? wrapper : table).before(
-      toggle,
-    );
 
     // Initialize the specified columns (for example, weight or parent columns)
     // to show or hide according to user preference. This aids accessibility
@@ -404,6 +404,9 @@
       }
       self.dragObject = null;
       self.rowObject = null;
+      if (toggle) {
+        tableInteraction.removeOrphanedControls(table, toggle.nodes);
+      }
       once.remove('tabledrag', table);
     });
 

@@ -404,6 +404,9 @@
       }
       self.dragObject = null;
       self.rowObject = null;
+      if (toggle) {
+        tableInteraction.removeOrphanedControls(table, toggle.nodes);
+      }
       once.remove('tabledrag', table);
     });
 

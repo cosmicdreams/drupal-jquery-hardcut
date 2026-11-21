@@ -83,6 +83,27 @@
     },
 
     /**
+     * Removes adjacent controls left behind when a table is replaced.
+     *
+     * @param {HTMLTableElement} table
+     *   The unloading table.
+     * @param {Node[]} controls
+     *   Nodes inserted beside the table or its wrapper.
+     */
+    removeOrphanedControls(table, controls) {
+      // Behaviors detach before the caller removes a table from the DOM.
+      queueMicrotask(() => {
+        if (!table.isConnected) {
+          controls.forEach((node) => {
+            if (node.isConnected) {
+              node.remove();
+            }
+          });
+        }
+      });
+    },
+
+    /**
      * Inserts select-all markup in headers that need a checkbox.
      *
      * @param {HTMLElement[]} headers

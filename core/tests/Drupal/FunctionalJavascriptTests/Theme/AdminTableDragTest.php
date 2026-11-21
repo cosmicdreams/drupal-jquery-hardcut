@@ -52,7 +52,7 @@ class AdminTableDragTest extends TableDragTest {
   #[IgnoreDeprecations]
   public function testAdminTableDragThemes(): void {
     $this->drupalGet('tabledrag_test', ['query' => ['legacy' => 1]]);
-    $this->assertSame([TRUE, TRUE, TRUE, TRUE], $this->getSession()->evaluateScript(<<<'JS'
+    $this->assertSame([TRUE, TRUE, TRUE, TRUE, TRUE], $this->getSession()->evaluateScript(<<<'JS'
       (() => {
         const behavior = Drupal.behaviors.adminTableDrag;
         behavior.attach(null);
@@ -88,12 +88,19 @@ class AdminTableDragTest extends TableDragTest {
           row.addChangedWarning();
           return drag.changedRowIds.has(element.id);
         });
+        const scroll = document.createElement('div');
+        scroll.className = 'table-scroll-wrapper';
+        const table = document.createElement('table');
+        scroll.append(table);
+        fixture.append(scroll);
+        const wrapped = new Drupal.tableDrag(table, {});
         return [
           drags.every(({ table }) => !!table.querySelector('.js-tabledrag-cell-content > .js-tabledrag-handle')),
           marks.every(Boolean) && fixture.textContent.includes('text marker'),
           fixture.querySelectorAll('.tabledrag-changed-warning').length === 2,
           drags.every(({ table }) => !table.parentElement.matches('.table-scroll-wrapper') &&
             table.previousElementSibling.previousElementSibling.matches('.tabledrag-changed-warning')),
+          scroll.previousElementSibling.contains(wrapped.toggleWeightButton),
         ];
       })()
       JS));

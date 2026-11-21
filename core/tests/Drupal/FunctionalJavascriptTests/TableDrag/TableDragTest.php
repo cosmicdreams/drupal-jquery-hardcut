@@ -1006,6 +1006,26 @@ class TableDragTest extends WebDriverTestBase {
   }
 
   /**
+   * Tests removal of toggles left behind by a table-only replacement.
+   */
+  public function testUnloadedTableRemovesOrphanedToggles(): void {
+    $this->drupalGet('tabledrag_test');
+    $session = $this->getSession();
+    $session->executeScript(<<<'JS'
+      const table = document.createElement('table');
+      document.body.append(table);
+      const drag = new Drupal.tableDrag(table, {});
+      const responsive = new Drupal.TableResponsive(table);
+      window.removedTableToggles = [drag.toggleWeightButton, responsive.link];
+      Drupal.detachBehaviors(table, drupalSettings, 'unload');
+      table.remove();
+      JS);
+    $this->assertSame([FALSE, FALSE], $session->evaluateScript(<<<'JS'
+      window.removedTableToggles.map((toggle) => toggle.isConnected)
+      JS));
+  }
+
+  /**
    * Tests that suppressing the themed warning still completes the drop.
    */
   public function testSuppressedChangedWarning(): void {

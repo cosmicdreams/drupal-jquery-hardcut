@@ -90,6 +90,7 @@
         link: this.link,
         revealedCells: this.revealedCells,
       });
+      Drupal.tableInteraction.removeOrphanedControls(table, [wrapper]);
       once.remove('tableresponsive', table);
     });
   }
