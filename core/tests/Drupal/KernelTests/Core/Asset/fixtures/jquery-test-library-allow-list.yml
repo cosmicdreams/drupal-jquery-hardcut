@@ -1,12 +1,12 @@
 # Evidence from 92e5c3a3047. Remove each entry as its owning slice converts it.
 # Slice Z stages library declaration changes for the named slices.
 - fixture: core/modules/system/tests/modules/ajax_test/ajax_test.libraries.yml:ajax_insert
-  removal: A
+  removal: Z (Drupal 13)
   themes:
-    default_admin: [core/jquery]
-    stark: [core/jquery]
-    starterkit_theme: [core/jquery]
-    umami: [core/jquery]
+    default_admin: [core/drupal.ajax.jquery, core/jquery]
+    stark: [core/drupal.ajax.jquery, core/jquery]
+    starterkit_theme: [core/drupal.ajax.jquery, core/jquery]
+    umami: [core/drupal.ajax.jquery, core/jquery]
 - fixture: core/modules/system/tests/modules/ajax_test/ajax_test.libraries.yml:command_promise
   removal: A
   themes:

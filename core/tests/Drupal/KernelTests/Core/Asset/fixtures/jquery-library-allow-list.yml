@@ -12,6 +12,7 @@
 - default_admin/content_translation/drupal.content_translation.admin
 - default_admin/contextual/drupal.contextual-links
 - default_admin/core/drupal.ajax
+- default_admin/core/drupal.ajax.jquery
 - default_admin/core/drupal.autocomplete
 - default_admin/core/drupal.batch
 - default_admin/core/drupal.collapse
@@ -92,6 +93,7 @@
 - stark/content_translation/drupal.content_translation.admin
 - stark/contextual/drupal.contextual-links
 - stark/core/drupal.ajax
+- stark/core/drupal.ajax.jquery
 - stark/core/drupal.autocomplete
 - stark/core/drupal.batch
 - stark/core/drupal.collapse
@@ -171,6 +173,7 @@
 - starterkit_theme/content_translation/drupal.content_translation.admin
 - starterkit_theme/contextual/drupal.contextual-links
 - starterkit_theme/core/drupal.ajax
+- starterkit_theme/core/drupal.ajax.jquery
 - starterkit_theme/core/drupal.autocomplete
 - starterkit_theme/core/drupal.batch
 - starterkit_theme/core/drupal.collapse
@@ -250,6 +253,7 @@
 - umami/content_translation/drupal.content_translation.admin
 - umami/contextual/drupal.contextual-links
 - umami/core/drupal.ajax
+- umami/core/drupal.ajax.jquery
 - umami/core/drupal.autocomplete
 - umami/core/drupal.batch
 - umami/core/drupal.collapse

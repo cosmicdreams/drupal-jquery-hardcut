@@ -48,6 +48,7 @@
 - core/misc/entity-form.js
 - core/misc/form.js
 - core/misc/jquery.drupal-ajax-bc.js
+- core/misc/jquery.drupal-ajax-commands.js
 - core/misc/jquery.drupal-bc.js
 - core/misc/jquery.form.js
 - core/misc/jquery.no-conflict.js

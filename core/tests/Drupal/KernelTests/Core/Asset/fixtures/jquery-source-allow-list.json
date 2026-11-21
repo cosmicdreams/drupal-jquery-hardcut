@@ -68,6 +68,10 @@
       "owner": "A",
       "references": 1
     },
+    "misc/jquery.drupal-ajax-commands.js": {
+      "owner": "A",
+      "references": 1
+    },
     "misc/jquery.drupal-bc.js": {
       "owner": "B",
       "references": 1
