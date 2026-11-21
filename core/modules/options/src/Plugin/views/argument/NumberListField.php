@@ -72,7 +72,7 @@ class NumberListField extends NumericArgument {
       '#default_value' => $this->options['summary']['human'],
       '#states' => [
         'visible' => [
-          ':input[name="options[default_action]"]' => ['value' => 'summary'],
+          ':is(input, select, textarea, button)[name="options[default_action]"]' => ['value' => 'summary'],
         ],
       ],
     ];

@@ -273,7 +273,7 @@ abstract class Tasks {
       '#required' => TRUE,
       '#states' => [
         'required' => [
-          ':input[name=driver]' => ['value' => $driver],
+          ':is(input, select, textarea, button)[name=driver]' => ['value' => $driver],
         ],
       ],
     ];
@@ -286,7 +286,7 @@ abstract class Tasks {
       '#required' => TRUE,
       '#states' => [
         'required' => [
-          ':input[name=driver]' => ['value' => $driver],
+          ':is(input, select, textarea, button)[name=driver]' => ['value' => $driver],
         ],
       ],
     ];

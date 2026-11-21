@@ -136,7 +136,7 @@ class ContentLanguageSettingsForm extends FormBase {
         '#bundle_label' => $entity_type->getBundleLabel() ?: $label,
         '#states' => [
           'visible' => [
-            ':input[name="entity_types[' . $entity_type_id . ']"]' => ['checked' => TRUE],
+            ':is(input, select, textarea, button)[name="entity_types[' . $entity_type_id . ']"]' => ['checked' => TRUE],
           ],
         ],
       ];

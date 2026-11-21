@@ -72,7 +72,7 @@ class User extends Entity {
       '#description' => $this->t('If no roles are selected, users from any role will be allowed.'),
       '#states' => [
         'visible' => [
-          ':input[name="options[validate][options][' . $sanitized_id . '][restrict_roles]"]' => ['checked' => TRUE],
+          ':is(input, select, textarea, button)[name="options[validate][options][' . $sanitized_id . '][restrict_roles]"]' => ['checked' => TRUE],
         ],
       ],
     ];

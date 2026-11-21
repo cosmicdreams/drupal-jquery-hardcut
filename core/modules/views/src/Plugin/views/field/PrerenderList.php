@@ -61,7 +61,7 @@ abstract class PrerenderList extends FieldPluginBase implements MultiItemsFieldH
       '#default_value' => $this->options['separator'],
       '#states' => [
         'visible' => [
-          ':input[name="options[type]"]' => ['value' => 'separator'],
+          ':is(input, select, textarea, button)[name="options[type]"]' => ['value' => 'separator'],
         ],
       ],
     ];

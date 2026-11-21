@@ -289,7 +289,7 @@ class ImageItem extends FileItem {
       '#weight' => 10,
       '#states' => [
         'visible' => [
-          ':input[name="settings[alt_field]"]' => ['checked' => TRUE],
+          ':is(input, select, textarea, button)[name="settings[alt_field]"]' => ['checked' => TRUE],
         ],
       ],
     ];
@@ -307,7 +307,7 @@ class ImageItem extends FileItem {
       '#weight' => 12,
       '#states' => [
         'visible' => [
-          ':input[name="settings[title_field]"]' => ['checked' => TRUE],
+          ':is(input, select, textarea, button)[name="settings[title_field]"]' => ['checked' => TRUE],
         ],
       ],
     ];

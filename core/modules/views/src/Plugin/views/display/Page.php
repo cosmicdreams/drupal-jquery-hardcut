@@ -304,13 +304,13 @@ class Page extends PathPluginBase {
           '#states' => [
             'visible' => [
               [
-                ':input[name="menu[type]"]' => ['value' => 'normal'],
+                ':is(input, select, textarea, button)[name="menu[type]"]' => ['value' => 'normal'],
               ],
               [
-                ':input[name="menu[type]"]' => ['value' => 'tab'],
+                ':is(input, select, textarea, button)[name="menu[type]"]' => ['value' => 'tab'],
               ],
               [
-                ':input[name="menu[type]"]' => ['value' => 'default tab'],
+                ':is(input, select, textarea, button)[name="menu[type]"]' => ['value' => 'default tab'],
               ],
             ],
           ],
@@ -323,13 +323,13 @@ class Page extends PathPluginBase {
           '#states' => [
             'visible' => [
               [
-                ':input[name="menu[type]"]' => ['value' => 'normal'],
+                ':is(input, select, textarea, button)[name="menu[type]"]' => ['value' => 'normal'],
               ],
               [
-                ':input[name="menu[type]"]' => ['value' => 'tab'],
+                ':is(input, select, textarea, button)[name="menu[type]"]' => ['value' => 'tab'],
               ],
               [
-                ':input[name="menu[type]"]' => ['value' => 'default tab'],
+                ':is(input, select, textarea, button)[name="menu[type]"]' => ['value' => 'default tab'],
               ],
             ],
           ],
@@ -343,7 +343,7 @@ class Page extends PathPluginBase {
           // @see \Drupal\views\Plugin\views\display\PathPluginBase::getMenuLinks()
           '#states' => [
             'visible' => [
-              ':input[name="menu[type]"]' => ['value' => 'normal'],
+              ':is(input, select, textarea, button)[name="menu[type]"]' => ['value' => 'normal'],
             ],
           ],
         ];
@@ -358,10 +358,10 @@ class Page extends PathPluginBase {
           '#states' => [
             'visible' => [
               [
-                ':input[name="menu[type]"]' => ['value' => 'normal'],
+                ':is(input, select, textarea, button)[name="menu[type]"]' => ['value' => 'normal'],
               ],
               [
-                ':input[name="menu[type]"]' => ['value' => 'tab'],
+                ':is(input, select, textarea, button)[name="menu[type]"]' => ['value' => 'tab'],
               ],
             ],
           ],
@@ -374,13 +374,13 @@ class Page extends PathPluginBase {
           '#states' => [
             'visible' => [
               [
-                ':input[name="menu[type]"]' => ['value' => 'normal'],
+                ':is(input, select, textarea, button)[name="menu[type]"]' => ['value' => 'normal'],
               ],
               [
-                ':input[name="menu[type]"]' => ['value' => 'tab'],
+                ':is(input, select, textarea, button)[name="menu[type]"]' => ['value' => 'tab'],
               ],
               [
-                ':input[name="menu[type]"]' => ['value' => 'default tab'],
+                ':is(input, select, textarea, button)[name="menu[type]"]' => ['value' => 'default tab'],
               ],
             ],
           ],
@@ -393,7 +393,7 @@ class Page extends PathPluginBase {
           '#description' => $this->t('Displays the link in contextual links'),
           '#states' => [
             'visible' => [
-              ':input[name="menu[type]"]' => ['value' => 'tab'],
+              ':is(input, select, textarea, button)[name="menu[type]"]' => ['value' => 'tab'],
             ],
           ],
         ];
@@ -436,10 +436,10 @@ class Page extends PathPluginBase {
           '#states' => [
             'visible' => [
               [
-                ':input[name="tab_options[type]"]' => ['value' => 'normal'],
+                ':is(input, select, textarea, button)[name="tab_options[type]"]' => ['value' => 'normal'],
               ],
               [
-                ':input[name="tab_options[type]"]' => ['value' => 'tab'],
+                ':is(input, select, textarea, button)[name="tab_options[type]"]' => ['value' => 'tab'],
               ],
             ],
           ],
@@ -452,10 +452,10 @@ class Page extends PathPluginBase {
           '#states' => [
             'visible' => [
               [
-                ':input[name="tab_options[type]"]' => ['value' => 'normal'],
+                ':is(input, select, textarea, button)[name="tab_options[type]"]' => ['value' => 'normal'],
               ],
               [
-                ':input[name="tab_options[type]"]' => ['value' => 'tab'],
+                ':is(input, select, textarea, button)[name="tab_options[type]"]' => ['value' => 'tab'],
               ],
             ],
           ],
@@ -469,7 +469,7 @@ class Page extends PathPluginBase {
           '#description' => $this->t('If the parent menu link is a tab, enter the weight of the tab. Heavier tabs will sink and the lighter tabs will be positioned nearer to the first menu link.'),
           '#states' => [
             'visible' => [
-              ':input[name="tab_options[type]"]' => ['value' => 'tab'],
+              ':is(input, select, textarea, button)[name="tab_options[type]"]' => ['value' => 'tab'],
             ],
           ],
         ];

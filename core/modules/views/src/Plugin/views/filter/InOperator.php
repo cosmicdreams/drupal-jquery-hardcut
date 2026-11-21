@@ -207,7 +207,7 @@ class InOperator extends FilterPluginBase implements FilterOperatorsInterface {
 
     $which = 'all';
     if (!empty($form['operator'])) {
-      $source = ':input[name="options[operator]"]';
+      $source = ':is(input, select, textarea, button)[name="options[operator]"]';
     }
     if ($exposed) {
       $identifier = $this->options['expose']['identifier'];
@@ -217,7 +217,7 @@ class InOperator extends FilterPluginBase implements FilterOperatorsInterface {
         $which = in_array($this->operator, $this->operatorValues(1)) ? 'value' : 'none';
       }
       else {
-        $source = ':input[name="' . $this->options['expose']['operator_id'] . '"]';
+        $source = ':is(input, select, textarea, button)[name="' . $this->options['expose']['operator_id'] . '"]';
       }
 
       if (!empty($this->options['expose']['reduce'])) {

@@ -224,7 +224,7 @@ class FieldConfigEditForm extends EntityForm {
         $has_default_value = count($this->entity->getDefaultValue($form['#entity'])) > 0;
         $element['#states'] = [
           'invisible' => [
-            ':input[name="set_default_value"]' => ['checked' => FALSE],
+            ':is(input, select, textarea, button)[name="set_default_value"]' => ['checked' => FALSE],
           ],
         ];
         $form['set_default_value'] = [

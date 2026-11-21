@@ -152,7 +152,7 @@ class TaxonomyIndexTid extends ManyToOne {
       '#default_value' => !empty($this->options['hierarchy']),
       '#states' => [
         'visible' => [
-          ':input[name="options[type]"]' => ['value' => 'select'],
+          ':is(input, select, textarea, button)[name="options[type]"]' => ['value' => 'select'],
         ],
       ],
     ];

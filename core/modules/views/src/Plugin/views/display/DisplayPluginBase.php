@@ -1501,7 +1501,7 @@ abstract class DisplayPluginBase extends PluginBase implements DisplayPluginInte
           '#default_value' => $this->getOption('use_more_always'),
           '#states' => [
             'visible' => [
-              ':input[name="use_more"]' => ['checked' => TRUE],
+              ':is(input, select, textarea, button)[name="use_more"]' => ['checked' => TRUE],
             ],
           ],
         ];
@@ -1512,7 +1512,7 @@ abstract class DisplayPluginBase extends PluginBase implements DisplayPluginInte
           '#default_value' => $this->getOption('use_more_text'),
           '#states' => [
             'visible' => [
-              ':input[name="use_more"]' => ['checked' => TRUE],
+              ':is(input, select, textarea, button)[name="use_more"]' => ['checked' => TRUE],
             ],
           ],
         ];
@@ -1779,7 +1779,7 @@ abstract class DisplayPluginBase extends PluginBase implements DisplayPluginInte
           '#description' => $description,
           '#states' => [
             'visible' => [
-              ':input[name="link_display"]' => ['value' => 'custom_url'],
+              ':is(input, select, textarea, button)[name="link_display"]' => ['value' => 'custom_url'],
             ],
           ],
         ];

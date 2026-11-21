@@ -167,7 +167,7 @@ abstract class ViewsBlockBase extends BlockBase implements ContainerFactoryPlugi
       '#states' => [
         'visible' => [
           [
-            ':input[name="settings[views_label_checkbox]"]' => ['checked' => TRUE],
+            ':is(input, select, textarea, button)[name="settings[views_label_checkbox]"]' => ['checked' => TRUE],
           ],
         ],
       ],
@@ -180,7 +180,7 @@ abstract class ViewsBlockBase extends BlockBase implements ContainerFactoryPlugi
       '#states' => [
         'visible' => [
           [
-            ':input[name="settings[views_label_checkbox]"]' => ['checked' => TRUE],
+            ':is(input, select, textarea, button)[name="settings[views_label_checkbox]"]' => ['checked' => TRUE],
           ],
         ],
       ],

@@ -87,7 +87,7 @@ class LinkFormatter extends FormatterBase {
       '#description' => $this->t('Leave blank to allow unlimited link text lengths.'),
       '#states' => [
         'invisible' => [
-          ':input[name*="url_only"]' => ['checked' => TRUE],
+          ':is(input, select, textarea, button)[name*="url_only"]' => ['checked' => TRUE],
         ],
       ],
     ];
@@ -104,7 +104,7 @@ class LinkFormatter extends FormatterBase {
       '#access' => $this->getPluginId() == 'link',
       '#states' => [
         'visible' => [
-          ':input[name*="url_only"]' => ['checked' => TRUE],
+          ':is(input, select, textarea, button)[name*="url_only"]' => ['checked' => TRUE],
         ],
       ],
     ];

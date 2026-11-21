@@ -101,7 +101,7 @@ class ViewAddForm extends ViewFormBase {
       '#default_value' => '',
       '#states' => [
         'visible' => [
-          ':input[name="description_enable"]' => ['checked' => TRUE],
+          ':is(input, select, textarea, button)[name="description_enable"]' => ['checked' => TRUE],
         ],
       ],
     ];

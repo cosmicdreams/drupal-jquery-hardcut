@@ -208,14 +208,14 @@ class BooleanOperator extends FilterPluginBase implements FilterOperatorsInterfa
       $filter_form_type = 'radios';
     }
     $display_options = 'all';
-    $source = ':input[name="options[operator]"]';
+    $source = ':is(input, select, textarea, button)[name="options[operator]"]';
     if ($exposed) {
       $identifier = $this->options['expose']['identifier'];
       if (empty($this->options['expose']['use_operator']) || empty($this->options['expose']['operator_id'])) {
         $display_options = in_array($this->operator, $this->operatorValues(1)) ? 'value' : 'none';
       }
       else {
-        $source = ':input[name="' . $this->options['expose']['operator_id'] . '"]';
+        $source = ':is(input, select, textarea, button)[name="' . $this->options['expose']['operator_id'] . '"]';
       }
     }
 

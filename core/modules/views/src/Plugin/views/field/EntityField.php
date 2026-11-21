@@ -549,7 +549,7 @@ class EntityField extends FieldPluginBase implements CacheableDependencyInterfac
       ],
       '#states' => [
         'visible' => [
-          ':input[name="options[group_rows]"]' => ['checked' => TRUE],
+          ':is(input, select, textarea, button)[name="options[group_rows]"]' => ['checked' => TRUE],
         ],
       ],
       '#default_value' => $this->options['multi_type'],
@@ -562,8 +562,8 @@ class EntityField extends FieldPluginBase implements CacheableDependencyInterfac
       '#default_value' => $this->options['separator'],
       '#states' => [
         'visible' => [
-          ':input[name="options[group_rows]"]' => ['checked' => TRUE],
-          ':input[name="options[multi_type]"]' => ['value' => 'separator'],
+          ':is(input, select, textarea, button)[name="options[group_rows]"]' => ['checked' => TRUE],
+          ':is(input, select, textarea, button)[name="options[multi_type]"]' => ['value' => 'separator'],
         ],
       ],
       '#fieldset' => 'multiple_field_settings',
@@ -579,7 +579,7 @@ class EntityField extends FieldPluginBase implements CacheableDependencyInterfac
       '#prefix' => '<div class="container-inline">',
       '#states' => [
         'visible' => [
-          ':input[name="options[group_rows]"]' => ['checked' => TRUE],
+          ':is(input, select, textarea, button)[name="options[group_rows]"]' => ['checked' => TRUE],
         ],
       ],
       '#fieldset' => 'multiple_field_settings',
@@ -594,7 +594,7 @@ class EntityField extends FieldPluginBase implements CacheableDependencyInterfac
       '#default_value' => $this->options['delta_offset'],
       '#states' => [
         'visible' => [
-          ':input[name="options[group_rows]"]' => ['checked' => TRUE],
+          ':is(input, select, textarea, button)[name="options[group_rows]"]' => ['checked' => TRUE],
         ],
       ],
       '#description' => $this->t('(first item is 0)'),
@@ -607,7 +607,7 @@ class EntityField extends FieldPluginBase implements CacheableDependencyInterfac
       '#suffix' => $suffix,
       '#states' => [
         'visible' => [
-          ':input[name="options[group_rows]"]' => ['checked' => TRUE],
+          ':is(input, select, textarea, button)[name="options[group_rows]"]' => ['checked' => TRUE],
         ],
       ],
       '#description' => $this->t('(start from last values)'),
@@ -620,7 +620,7 @@ class EntityField extends FieldPluginBase implements CacheableDependencyInterfac
       '#suffix' => '</div>',
       '#states' => [
         'visible' => [
-          ':input[name="options[group_rows]"]' => ['checked' => TRUE],
+          ':is(input, select, textarea, button)[name="options[group_rows]"]' => ['checked' => TRUE],
         ],
       ],
       '#fieldset' => 'multiple_field_settings',

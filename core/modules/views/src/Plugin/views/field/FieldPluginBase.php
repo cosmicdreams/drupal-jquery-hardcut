@@ -590,7 +590,7 @@ abstract class FieldPluginBase extends HandlerBase implements FieldHandlerInterf
       '#default_value' => $label,
       '#states' => [
         'visible' => [
-          ':input[name="options[custom_label]"]' => ['checked' => TRUE],
+          ':is(input, select, textarea, button)[name="options[custom_label]"]' => ['checked' => TRUE],
         ],
       ],
       '#weight' => -102,
@@ -601,7 +601,7 @@ abstract class FieldPluginBase extends HandlerBase implements FieldHandlerInterf
       '#default_value' => $this->options['element_label_colon'],
       '#states' => [
         'visible' => [
-          ':input[name="options[custom_label]"]' => ['checked' => TRUE],
+          ':is(input, select, textarea, button)[name="options[custom_label]"]' => ['checked' => TRUE],
         ],
       ],
       '#weight' => -101,
@@ -635,7 +635,7 @@ abstract class FieldPluginBase extends HandlerBase implements FieldHandlerInterf
       '#description' => $this->t('Choose the HTML element to wrap around this field, e.g. H1, H2, etc.'),
       '#states' => [
         'visible' => [
-          ':input[name="options[element_type_enable]"]' => ['checked' => TRUE],
+          ':is(input, select, textarea, button)[name="options[element_type_enable]"]' => ['checked' => TRUE],
         ],
       ],
       '#fieldset' => 'style_settings',
@@ -646,7 +646,7 @@ abstract class FieldPluginBase extends HandlerBase implements FieldHandlerInterf
       '#title' => $this->t('Add HTML class'),
       '#states' => [
         'visible' => [
-          ':input[name="options[element_type_enable]"]' => ['checked' => TRUE],
+          ':is(input, select, textarea, button)[name="options[element_type_enable]"]' => ['checked' => TRUE],
         ],
       ],
       '#default_value' => !empty($this->options['element_class']) || (string) $this->options['element_class'] == '0',
@@ -659,8 +659,8 @@ abstract class FieldPluginBase extends HandlerBase implements FieldHandlerInterf
       '#default_value' => $this->options['element_class'],
       '#states' => [
         'visible' => [
-          ':input[name="options[element_type_enable]"]' => ['checked' => TRUE],
-          ':input[name="options[element_class_enable]"]' => ['checked' => TRUE],
+          ':is(input, select, textarea, button)[name="options[element_type_enable]"]' => ['checked' => TRUE],
+          ':is(input, select, textarea, button)[name="options[element_class_enable]"]' => ['checked' => TRUE],
         ],
       ],
       '#fieldset' => 'style_settings',
@@ -680,7 +680,7 @@ abstract class FieldPluginBase extends HandlerBase implements FieldHandlerInterf
       '#description' => $this->t('Choose the HTML element to wrap around this label, e.g. H1, H2, etc.'),
       '#states' => [
         'visible' => [
-          ':input[name="options[element_label_type_enable]"]' => ['checked' => TRUE],
+          ':is(input, select, textarea, button)[name="options[element_label_type_enable]"]' => ['checked' => TRUE],
         ],
       ],
       '#fieldset' => 'style_settings',
@@ -690,7 +690,7 @@ abstract class FieldPluginBase extends HandlerBase implements FieldHandlerInterf
       '#title' => $this->t('Add HTML class'),
       '#states' => [
         'visible' => [
-          ':input[name="options[element_label_type_enable]"]' => ['checked' => TRUE],
+          ':is(input, select, textarea, button)[name="options[element_label_type_enable]"]' => ['checked' => TRUE],
         ],
       ],
       '#default_value' => !empty($this->options['element_label_class']) || (string) $this->options['element_label_class'] == '0',
@@ -703,8 +703,8 @@ abstract class FieldPluginBase extends HandlerBase implements FieldHandlerInterf
       '#default_value' => $this->options['element_label_class'],
       '#states' => [
         'visible' => [
-          ':input[name="options[element_label_type_enable]"]' => ['checked' => TRUE],
-          ':input[name="options[element_label_class_enable]"]' => ['checked' => TRUE],
+          ':is(input, select, textarea, button)[name="options[element_label_type_enable]"]' => ['checked' => TRUE],
+          ':is(input, select, textarea, button)[name="options[element_label_class_enable]"]' => ['checked' => TRUE],
         ],
       ],
       '#fieldset' => 'style_settings',
@@ -724,7 +724,7 @@ abstract class FieldPluginBase extends HandlerBase implements FieldHandlerInterf
       '#description' => $this->t('Choose the HTML element to wrap around this field and label, e.g. H1, H2, etc. This may not be used if the field and label are not rendered together, such as with a table.'),
       '#states' => [
         'visible' => [
-          ':input[name="options[element_wrapper_type_enable]"]' => ['checked' => TRUE],
+          ':is(input, select, textarea, button)[name="options[element_wrapper_type_enable]"]' => ['checked' => TRUE],
         ],
       ],
       '#fieldset' => 'style_settings',
@@ -735,7 +735,7 @@ abstract class FieldPluginBase extends HandlerBase implements FieldHandlerInterf
       '#title' => $this->t('Add HTML class'),
       '#states' => [
         'visible' => [
-          ':input[name="options[element_wrapper_type_enable]"]' => ['checked' => TRUE],
+          ':is(input, select, textarea, button)[name="options[element_wrapper_type_enable]"]' => ['checked' => TRUE],
         ],
       ],
       '#default_value' => !empty($this->options['element_wrapper_class']) || (string) $this->options['element_wrapper_class'] == '0',
@@ -748,8 +748,8 @@ abstract class FieldPluginBase extends HandlerBase implements FieldHandlerInterf
       '#default_value' => $this->options['element_wrapper_class'],
       '#states' => [
         'visible' => [
-          ':input[name="options[element_wrapper_class_enable]"]' => ['checked' => TRUE],
-          ':input[name="options[element_wrapper_type_enable]"]' => ['checked' => TRUE],
+          ':is(input, select, textarea, button)[name="options[element_wrapper_class_enable]"]' => ['checked' => TRUE],
+          ':is(input, select, textarea, button)[name="options[element_wrapper_type_enable]"]' => ['checked' => TRUE],
         ],
       ],
       '#fieldset' => 'style_settings',
@@ -788,7 +788,7 @@ abstract class FieldPluginBase extends HandlerBase implements FieldHandlerInterf
         ]),
         '#states' => [
           'visible' => [
-            ':input[name="options[alter][alter_text]"]' => ['checked' => TRUE],
+            ':is(input, select, textarea, button)[name="options[alter][alter_text]"]' => ['checked' => TRUE],
           ],
         ],
       ];
@@ -805,7 +805,7 @@ abstract class FieldPluginBase extends HandlerBase implements FieldHandlerInterf
         '#description' => $this->t('The Drupal path or absolute URL for this link. You may enter data from this view as per the "Replacement patterns" below.'),
         '#states' => [
           'visible' => [
-            ':input[name="options[alter][make_link]"]' => ['checked' => TRUE],
+            ':is(input, select, textarea, button)[name="options[alter][make_link]"]' => ['checked' => TRUE],
           ],
         ],
         '#maxlength' => 255,
@@ -816,7 +816,7 @@ abstract class FieldPluginBase extends HandlerBase implements FieldHandlerInterf
         '#default_value' => $this->options['alter']['absolute'],
         '#states' => [
           'visible' => [
-            ':input[name="options[alter][make_link]"]' => ['checked' => TRUE],
+            ':is(input, select, textarea, button)[name="options[alter][make_link]"]' => ['checked' => TRUE],
           ],
         ],
       ];
@@ -826,7 +826,7 @@ abstract class FieldPluginBase extends HandlerBase implements FieldHandlerInterf
         '#default_value' => $this->options['alter']['replace_spaces'],
         '#states' => [
           'visible' => [
-            ':input[name="options[alter][make_link]"]' => ['checked' => TRUE],
+            ':is(input, select, textarea, button)[name="options[alter][make_link]"]' => ['checked' => TRUE],
           ],
         ],
       ];
@@ -837,7 +837,7 @@ abstract class FieldPluginBase extends HandlerBase implements FieldHandlerInterf
         '#description' => $this->t("Links to an external server using a full URL: e.g. 'http://www.example.com' or 'www.example.com'."),
         '#states' => [
           'visible' => [
-            ':input[name="options[alter][make_link]"]' => ['checked' => TRUE],
+            ':is(input, select, textarea, button)[name="options[alter][make_link]"]' => ['checked' => TRUE],
           ],
         ],
       ];
@@ -847,7 +847,7 @@ abstract class FieldPluginBase extends HandlerBase implements FieldHandlerInterf
         '#description' => $this->t('When printing URL paths, how to transform the case of the filter value.'),
         '#states' => [
           'visible' => [
-            ':input[name="options[alter][make_link]"]' => ['checked' => TRUE],
+            ':is(input, select, textarea, button)[name="options[alter][make_link]"]' => ['checked' => TRUE],
           ],
         ],
         '#options' => [
@@ -866,7 +866,7 @@ abstract class FieldPluginBase extends HandlerBase implements FieldHandlerInterf
         '#description' => $this->t('The CSS class to apply to the link.'),
         '#states' => [
           'visible' => [
-            ':input[name="options[alter][make_link]"]' => ['checked' => TRUE],
+            ':is(input, select, textarea, button)[name="options[alter][make_link]"]' => ['checked' => TRUE],
           ],
         ],
       ];
@@ -877,7 +877,7 @@ abstract class FieldPluginBase extends HandlerBase implements FieldHandlerInterf
         '#description' => $this->t('Text to place as "title" text which most browsers display as a tooltip when hovering over the link.'),
         '#states' => [
           'visible' => [
-            ':input[name="options[alter][make_link]"]' => ['checked' => TRUE],
+            ':is(input, select, textarea, button)[name="options[alter][make_link]"]' => ['checked' => TRUE],
           ],
         ],
       ];
@@ -888,7 +888,7 @@ abstract class FieldPluginBase extends HandlerBase implements FieldHandlerInterf
         '#description' => $this->t('Include Rel attribute for use in lightbox2 or other javascript utility.'),
         '#states' => [
           'visible' => [
-            ':input[name="options[alter][make_link]"]' => ['checked' => TRUE],
+            ':is(input, select, textarea, button)[name="options[alter][make_link]"]' => ['checked' => TRUE],
           ],
         ],
       ];
@@ -899,7 +899,7 @@ abstract class FieldPluginBase extends HandlerBase implements FieldHandlerInterf
         '#description' => $this->t('Any text to display before this link. You may include HTML.'),
         '#states' => [
           'visible' => [
-            ':input[name="options[alter][make_link]"]' => ['checked' => TRUE],
+            ':is(input, select, textarea, button)[name="options[alter][make_link]"]' => ['checked' => TRUE],
           ],
         ],
       ];
@@ -910,7 +910,7 @@ abstract class FieldPluginBase extends HandlerBase implements FieldHandlerInterf
         '#description' => $this->t('Any text to display after this link. You may include HTML.'),
         '#states' => [
           'visible' => [
-            ':input[name="options[alter][make_link]"]' => ['checked' => TRUE],
+            ':is(input, select, textarea, button)[name="options[alter][make_link]"]' => ['checked' => TRUE],
           ],
         ],
       ];
@@ -921,7 +921,7 @@ abstract class FieldPluginBase extends HandlerBase implements FieldHandlerInterf
         '#description' => $this->t("Target of the link, such as _blank, _parent or an iframe's name. This field is rarely used."),
         '#states' => [
           'visible' => [
-            ':input[name="options[alter][make_link]"]' => ['checked' => TRUE],
+            ':is(input, select, textarea, button)[name="options[alter][make_link]"]' => ['checked' => TRUE],
           ],
         ],
       ];
@@ -981,13 +981,13 @@ abstract class FieldPluginBase extends HandlerBase implements FieldHandlerInterf
         '#states' => [
           'visible' => [
             [
-              ':input[name="options[alter][make_link]"]' => ['checked' => TRUE],
+              ':is(input, select, textarea, button)[name="options[alter][make_link]"]' => ['checked' => TRUE],
             ],
             [
-              ':input[name="options[alter][alter_text]"]' => ['checked' => TRUE],
+              ':is(input, select, textarea, button)[name="options[alter][alter_text]"]' => ['checked' => TRUE],
             ],
             [
-              ':input[name="options[alter][more_link]"]' => ['checked' => TRUE],
+              ':is(input, select, textarea, button)[name="options[alter][more_link]"]' => ['checked' => TRUE],
             ],
           ],
         ],
@@ -1005,7 +1005,7 @@ abstract class FieldPluginBase extends HandlerBase implements FieldHandlerInterf
         '#default_value' => $this->options['alter']['max_length'],
         '#states' => [
           'visible' => [
-            ':input[name="options[alter][trim]"]' => ['checked' => TRUE],
+            ':is(input, select, textarea, button)[name="options[alter][trim]"]' => ['checked' => TRUE],
           ],
         ],
       ];
@@ -1017,7 +1017,7 @@ abstract class FieldPluginBase extends HandlerBase implements FieldHandlerInterf
         '#default_value' => $this->options['alter']['word_boundary'],
         '#states' => [
           'visible' => [
-            ':input[name="options[alter][trim]"]' => ['checked' => TRUE],
+            ':is(input, select, textarea, button)[name="options[alter][trim]"]' => ['checked' => TRUE],
           ],
         ],
       ];
@@ -1028,7 +1028,7 @@ abstract class FieldPluginBase extends HandlerBase implements FieldHandlerInterf
         '#default_value' => $this->options['alter']['ellipsis'],
         '#states' => [
           'visible' => [
-            ':input[name="options[alter][trim]"]' => ['checked' => TRUE],
+            ':is(input, select, textarea, button)[name="options[alter][trim]"]' => ['checked' => TRUE],
           ],
         ],
       ];
@@ -1039,7 +1039,7 @@ abstract class FieldPluginBase extends HandlerBase implements FieldHandlerInterf
         '#default_value' => $this->options['alter']['more_link'],
         '#states' => [
           'visible' => [
-            ':input[name="options[alter][trim]"]' => ['checked' => TRUE],
+            ':is(input, select, textarea, button)[name="options[alter][trim]"]' => ['checked' => TRUE],
           ],
         ],
       ];
@@ -1051,8 +1051,8 @@ abstract class FieldPluginBase extends HandlerBase implements FieldHandlerInterf
         '#description' => $this->t('You may use the "Replacement patterns" above.'),
         '#states' => [
           'visible' => [
-            ':input[name="options[alter][trim]"]' => ['checked' => TRUE],
-            ':input[name="options[alter][more_link]"]' => ['checked' => TRUE],
+            ':is(input, select, textarea, button)[name="options[alter][trim]"]' => ['checked' => TRUE],
+            ':is(input, select, textarea, button)[name="options[alter][more_link]"]' => ['checked' => TRUE],
           ],
         ],
       ];
@@ -1063,8 +1063,8 @@ abstract class FieldPluginBase extends HandlerBase implements FieldHandlerInterf
         '#description' => $this->t('This can be an internal Drupal path such as node/add or an external URL such as "https://www.drupal.org". You may use the "Replacement patterns" above.'),
         '#states' => [
           'visible' => [
-            ':input[name="options[alter][trim]"]' => ['checked' => TRUE],
-            ':input[name="options[alter][more_link]"]' => ['checked' => TRUE],
+            ':is(input, select, textarea, button)[name="options[alter][trim]"]' => ['checked' => TRUE],
+            ':is(input, select, textarea, button)[name="options[alter][more_link]"]' => ['checked' => TRUE],
           ],
         ],
       ];
@@ -1076,7 +1076,7 @@ abstract class FieldPluginBase extends HandlerBase implements FieldHandlerInterf
         '#default_value' => $this->options['alter']['html'],
         '#states' => [
           'visible' => [
-            ':input[name="options[alter][trim]"]' => ['checked' => TRUE],
+            ':is(input, select, textarea, button)[name="options[alter][trim]"]' => ['checked' => TRUE],
           ],
         ],
       ];
@@ -1094,7 +1094,7 @@ abstract class FieldPluginBase extends HandlerBase implements FieldHandlerInterf
         '#default_value' => $this->options['alter']['preserve_tags'],
         '#states' => [
           'visible' => [
-            ':input[name="options[alter][strip_tags]"]' => ['checked' => TRUE],
+            ':is(input, select, textarea, button)[name="options[alter][strip_tags]"]' => ['checked' => TRUE],
           ],
         ],
       ];

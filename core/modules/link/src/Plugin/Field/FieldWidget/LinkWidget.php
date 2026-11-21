@@ -277,7 +277,7 @@ class LinkWidget extends WidgetBase {
       }
 
       $element['uri']['#states']['required'] = [
-        ':input[name="' . $selector . '[' . $delta . '][title]"]' => ['filled' => TRUE],
+        ':is(input, select, textarea, button)[name="' . $selector . '[' . $delta . '][title]"]' => ['filled' => TRUE],
       ];
     }
 
@@ -307,7 +307,7 @@ class LinkWidget extends WidgetBase {
         }
 
         $element['title']['#states']['required'] = [
-          ':input[name="' . $selector . '[' . $delta . '][uri]"]' => ['filled' => TRUE],
+          ':is(input, select, textarea, button)[name="' . $selector . '[' . $delta . '][uri]"]' => ['filled' => TRUE],
         ];
       }
     }
@@ -409,7 +409,7 @@ class LinkWidget extends WidgetBase {
       '#description' => $this->t('Text that will be shown inside the field until a value is entered. This hint is usually a sample value or a brief description of the expected format.'),
       '#states' => [
         'invisible' => [
-          ':input[name="instance[settings][title]"]' => ['value' => LinkTitleVisibility::Disabled->value],
+          ':is(input, select, textarea, button)[name="instance[settings][title]"]' => ['value' => LinkTitleVisibility::Disabled->value],
         ],
       ],
     ];

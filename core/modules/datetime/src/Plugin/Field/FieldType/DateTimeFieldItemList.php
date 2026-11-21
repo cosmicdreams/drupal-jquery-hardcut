@@ -50,7 +50,7 @@ class DateTimeFieldItemList extends FieldItemList {
           '#default_value' => (isset($default_value[0]['default_date_type']) && $default_value[0]['default_date_type'] == static::DEFAULT_VALUE_CUSTOM) ? $default_value[0]['default_date'] : '',
           '#states' => [
             'visible' => [
-              ':input[id="edit-default-value-input-default-date-type"]' => ['value' => static::DEFAULT_VALUE_CUSTOM],
+              ':is(input, select, textarea, button)[id="edit-default-value-input-default-date-type"]' => ['value' => static::DEFAULT_VALUE_CUSTOM],
             ],
           ],
         ],

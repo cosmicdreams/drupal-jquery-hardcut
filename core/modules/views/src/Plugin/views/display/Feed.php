@@ -301,7 +301,7 @@ class Feed extends PathPluginBase implements ResponseDisplayPluginInterface {
         $form['title'] = $title;
         $form['title']['#states'] = [
           'visible' => [
-            ':input[name="sitename_title"]' => ['checked' => FALSE],
+            ':is(input, select, textarea, button)[name="sitename_title"]' => ['checked' => FALSE],
           ],
         ];
         break;

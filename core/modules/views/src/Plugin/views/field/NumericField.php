@@ -56,7 +56,7 @@ class NumericField extends FieldPluginBase {
         '#description' => $this->t('Specify how many digits to print after the decimal point.'),
         '#states' => [
           'visible' => [
-            ':input[name="options[set_precision]"]' => ['checked' => TRUE],
+            ':is(input, select, textarea, button)[name="options[set_precision]"]' => ['checked' => TRUE],
           ],
         ],
         '#size' => 2,
@@ -105,7 +105,7 @@ class NumericField extends FieldPluginBase {
         '#description' => $this->t('Text to use for this variant, @count will be replaced with the value.'),
         '#states' => [
           'visible' => [
-            ':input[name="options[format_plural]"]' => ['checked' => TRUE],
+            ':is(input, select, textarea, button)[name="options[format_plural]"]' => ['checked' => TRUE],
           ],
         ],
       ];
