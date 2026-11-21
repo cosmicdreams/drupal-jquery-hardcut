@@ -6,8 +6,8 @@ namespace Drupal\Core\Ajax;
  * An AJAX command for setting inline CSS properties.
  *
  * Set $native to TRUE to use CSS selectors and absolute property values.
- * Relative values and jQuery CSS hooks require the core/drupal.ajax.jquery
- * compatibility library. Absolute values with CSS selectors work without it.
+ * Unmarked commands use jQuery CSS hooks and relative values with core/jquery.
+ * On jQuery-free pages, use CSS selectors and absolute values.
  *
  * @see Drupal.AjaxCommands.prototype.css()
  *

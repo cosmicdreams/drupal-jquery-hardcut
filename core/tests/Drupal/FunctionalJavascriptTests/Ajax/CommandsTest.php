@@ -139,6 +139,123 @@ class CommandsTest extends WebDriverTestBase {
   }
 
   /**
+   * Tests unmarked commands when only the request adapter is loaded.
+   */
+  #[IgnoreDeprecations]
+  public function testMixedUnmarkedCommands(): void {
+    $this->expectUserDeprecationMessage('Javascript Deprecation: Using jQuery Ajax selector, method or effect inputs is deprecated in drupal:12.0.0 and is removed from drupal:13.0.0. Use native: true with a CSS selector and absolute values. See https://www.drupal.org/node/CHANGE_RECORD.');
+    $this->expectUserDeprecationMessage("Javascript Deprecation: DataCommand's jQuery-data semantics is deprecated in drupal:12.0.0 and is removed from drupal:13.0.0. Use native: true with Drupal.ajax.elementData. See https://www.drupal.org/node/CHANGE_RECORD.");
+    $this->drupalGet('ajax-test/global-events');
+    $result = $this->getSession()->evaluateScript(<<<'JS'
+      (async () => {
+        const target = document.body.appendChild(document.createElement('div'));
+        target.id = 'mixed-command';
+        jQuery.cssHooks.probeStyle = {
+          set(element, value) { element.dataset.probeStyle = value; },
+        };
+        const ajax = Drupal.ajax({ url: location.href });
+        await ajax.commandExecutionQueue([
+          { command: 'css', selector: '#mixed-command', argument: { probeStyle: 'hook' } },
+          { command: 'data', selector: '#mixed-command', name: 'probeValue', value: 'legacy' },
+          { command: 'data', native: true, selector: '#mixed-command', name: 'nativeValue', value: 'native' },
+        ]);
+        return [typeof Drupal.ajax.commandCompatibility, target.dataset.probeStyle,
+          jQuery(target).data('probeValue'), jQuery(target).data('nativeValue'),
+          Drupal.ajax.elementData.get(target, 'nativeValue')];
+      })()
+      JS);
+    $driver = $this->getSession()->getDriver();
+    assert($driver instanceof DrupalSelenium2Driver);
+    $driver->processJavascriptDeprecations();
+    $this->assertSame(['undefined', 'hook', 'legacy', NULL, 'native'], $result);
+  }
+
+  /**
+   * Tests native selectors and numerical style units.
+   */
+  public function testNativeSelectorAndStyleUnits(): void {
+    $this->drupalGet('ajax-test/native-request', ['query' => ['commands' => 1]]);
+    $result = $this->getSession()->evaluateScript(<<<'JS'
+      (async () => {
+        const target = document.body.appendChild(document.createElement('div'));
+        target.id = 'native-selector';
+        target.innerHTML = '<span data-label=":has("></span><span class="skip"></span>';
+        const ajax = Drupal.ajax({ url: location.href });
+        const styles = { fontSize: 21, borderRadius: 3, gap: 8, opacity: 0.5, lineHeight: 2, '--size': 7 };
+        await ajax.commands.css(ajax, { native: true, selector: '#native-selector', argument: styles });
+        let selected;
+        try {
+          await ajax.commands.data(ajax, {
+            selector: '#native-selector span:first-child:not(.skip)[data-label=":has("]',
+            name: 'marked', value: true,
+          });
+          selected = Drupal.ajax.elementData.get(target.firstElementChild, 'marked');
+        }
+        catch (error) {
+          selected = error.message;
+        }
+        ajax.commands.data(ajax, {
+          native: true, selector: '#native-selector:has(.skip)', name: 'hasChild', value: true,
+        });
+        const legacy = [];
+        for (const selector of [':visible', 'span:eq(0)', 'span:contains(foo)', 'div:has(span)']) {
+          try {
+            ajax.commands.remove(ajax, { selector });
+          }
+          catch (error) {
+            legacy.push(error.message.includes('requires the core/drupal.ajax.jquery library'));
+          }
+        }
+        return [selected, Drupal.ajax.elementData.get(target, 'hasChild'),
+          Object.keys(styles).map((key) => key.startsWith('--')
+          ? target.style.getPropertyValue(key) : target.style[key]), legacy];
+      })()
+      JS);
+    $this->assertSame([
+      TRUE,
+      TRUE,
+      ['21px', '3px', '8px', '0.5', '2', '7'],
+      [TRUE, TRUE, TRUE, TRUE],
+    ], $result);
+  }
+
+  /**
+   * Tests that mixed-page insertion clones legacy data and handlers.
+   */
+  #[IgnoreDeprecations]
+  public function testLegacyThemeClonesContent(): void {
+    $this->expectUserDeprecationMessage('Javascript Deprecation: Drupal.theme.ajaxWrapperNewContent() with a jQuery collection is deprecated in drupal:12.0.0 and is removed from drupal:13.0.0. Use an array of native nodes. See https://www.drupal.org/node/CHANGE_RECORD.');
+    $this->drupalGet('ajax-test/global-events');
+    $result = $this->getSession()->evaluateScript(<<<'JS'
+      (async () => {
+        const holder = document.body.appendChild(document.createElement('div'));
+        holder.id = 'legacy-clone';
+        holder.innerHTML = '<div></div><div></div>';
+        let calls = 0;
+        Drupal.theme.ajaxWrapperNewContent = (content) => {
+          content.data('root', 1).on('probe-root', () => calls++);
+          content.find('span').data('child', 2).on('probe-child', () => calls++);
+          return content;
+        };
+        const ajax = Drupal.ajax({ url: location.href });
+        await ajax.commands.insert(ajax, {
+          selector: '#legacy-clone > div', method: 'append', data: '<p><span>Child</span></p>',
+        });
+        const values = [...holder.querySelectorAll('p')].map((node) => {
+          const root = jQuery(node).trigger('probe-root');
+          const child = root.find('span').trigger('probe-child');
+          return [root.data('root'), child.data('child')];
+        });
+        return [values, calls];
+      })()
+      JS);
+    $driver = $this->getSession()->getDriver();
+    assert($driver instanceof DrupalSelenium2Driver);
+    $driver->processJavascriptDeprecations();
+    $this->assertSame([[[1, 2], [1, 2]], 4], $result);
+  }
+
+  /**
    * Tests mixed-page removal and compatibility data reads.
    */
   public function testCouncilMixedCommands(): void {

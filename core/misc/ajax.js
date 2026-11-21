@@ -2410,15 +2410,23 @@
     return Drupal.theme(name, Array.from(nodes), ...args);
   };
 
-  // Reject ambiguous legacy input, while allowing standard CSS
-  // attribute selector operators, quoted values and case modifiers.
-  const cssSelector =
-    /^(?:[\w.#* ,>+~\t\n\r\f-]|\[(?:[^\]'"\\]|\\.|"(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*')+\])+$/;
+  // Skip quoted values and escaped characters when recognizing jQuery pseudos.
+  // Both engines support :has(), with different selector behavior.
+  const legacyPseudos =
+    /\\.|"(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*'|:(has|contains|eq|gt|lt|even|odd|first|last|nth|visible|hidden|animated|input|button|checkbox|file|image|password|radio|reset|submit|text|header|parent|selected)(?![\w-])/gi;
   const isNativeSelector = (selector) => {
-    if (!selector || /^#[\w-]+$/.test(selector)) {
+    if (!selector) {
       return true;
     }
-    if (!cssSelector.test(selector)) {
+    if (typeof selector !== 'string') {
+      return false;
+    }
+    if (/^#[\w-]+$/.test(selector)) {
+      return true;
+    }
+    if (
+      Array.from(selector.matchAll(legacyPseudos)).some((match) => match[1])
+    ) {
       return false;
     }
     try {
@@ -2555,8 +2563,38 @@
     }
   }
 
-  const pixelProperties =
-    /^(?:border(?:-(?:top|right|bottom|left))?(?:-width)?|(?:margin|padding)(?:-(?:top|right|bottom|left))?|top|right|bottom|left|(?:(?:min|max)-)?(?:width|height))$/;
+  // Properties that accepted unitless numbers through jQuery.cssNumber.
+  const unitlessProperties = new Set([
+    'animation-iteration-count',
+    'aspect-ratio',
+    'border-image-slice',
+    'column-count',
+    'fill-opacity',
+    'flex-grow',
+    'flex-shrink',
+    'flood-opacity',
+    'font-weight',
+    'grid-area',
+    'grid-column',
+    'grid-column-end',
+    'grid-column-start',
+    'grid-row',
+    'grid-row-end',
+    'grid-row-start',
+    'line-height',
+    'opacity',
+    'order',
+    'orphans',
+    'scale',
+    'stop-opacity',
+    'stroke-miterlimit',
+    'stroke-opacity',
+    'stroke-width',
+    'widows',
+    'z-index',
+    'zoom',
+  ]);
+  const vendorPropertyPrefix = /^-(?:webkit|moz|ms|o)-/;
 
   const elementData = new WeakMap();
   const normalizeDataKey = (key) =>
@@ -2702,14 +2740,13 @@
       const settings = response.settings || ajax.settings || drupalSettings;
       const template = document.createElement('template');
       template.innerHTML = response.data;
-      const nodes = Array.from(
-        Drupal.ajax.themeContent(
-          'ajaxWrapperNewContent',
-          template.content.childNodes,
-          ajax,
-          response,
-        ),
+      const content = Drupal.ajax.themeContent(
+        'ajaxWrapperNewContent',
+        template.content.childNodes,
+        ajax,
+        response,
       );
+      const nodes = Array.from(content);
       if (method === 'html' || method === 'replaceWith') {
         // Retain the original detach context, including the missing-wrapper
         // fallback to document.
@@ -2719,7 +2756,8 @@
         const children =
           index === targets.length - 1
             ? nodes
-            : nodes.map((node) => node.cloneNode(true));
+            : (Drupal.ajax.compatibility?.cloneContent(content) ??
+              nodes.map((node) => node.cloneNode(true)));
         let destination = target;
         if (method === 'html' || method === 'replaceWith') {
           if (method === 'replaceWith') {
@@ -2916,6 +2954,14 @@
      */
     css(ajax, response, status) {
       if (
+        !response.native &&
+        !response.legacy &&
+        !Drupal.ajax.commandCompatibility &&
+        Drupal.ajax.compatibility
+      ) {
+        return Drupal.ajax.compatibility.css(response);
+      }
+      if (
         response.legacy ||
         (!response.native &&
           (Drupal.ajax.commandCompatibility ||
@@ -2946,7 +2992,9 @@
                     .toLowerCase()
                     .replace(/^ms-/, '-ms-');
           const units =
-            typeof value === 'number' && pixelProperties.test(property)
+            typeof value === 'number' &&
+            !property.startsWith('--') &&
+            !unitlessProperties.has(property.replace(vendorPropertyPrefix, ''))
               ? 'px'
               : '';
           style.setProperty(property, `${value}${units}`);
@@ -3016,6 +3064,14 @@
      *   The XMLHttpRequest status.
      */
     data(ajax, response, status) {
+      if (
+        !response.native &&
+        !response.legacy &&
+        !Drupal.ajax.commandCompatibility &&
+        Drupal.ajax.compatibility
+      ) {
+        return Drupal.ajax.compatibility.data(response);
+      }
       if (
         response.legacy ||
         (!response.native &&

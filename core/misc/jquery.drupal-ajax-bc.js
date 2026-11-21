@@ -1357,6 +1357,23 @@
         });
         return native;
       },
+      css(response) {
+        warnLegacy(
+          'Using jQuery Ajax selector, method or effect inputs',
+          'Use native: true with a CSS selector and absolute values.',
+        );
+        jQuery(response.selector).css(response.argument);
+      },
+      data(response) {
+        warnLegacy(
+          "DataCommand's jQuery-data semantics",
+          'Use native: true with Drupal.ajax.elementData.',
+        );
+        jQuery(response.selector).data(response.name, response.value);
+      },
+      cloneContent(content) {
+        return content?.jquery ? content.clone(true, true).get() : undefined;
+      },
       cleanData: (nodes) => jQuery.cleanData(nodes),
       wrapMultipleRoots: (nodes) => jQuery('<div></div>').append(nodes),
       bridgeAjaxProgress,

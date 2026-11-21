@@ -6,7 +6,7 @@ namespace Drupal\Core\Ajax;
  * An AJAX command for associating a value with each matched element.
  *
  * Set $native to TRUE to use Drupal.ajax.elementData. The default uses jQuery
- * data when core/drupal.ajax.jquery is present and native data otherwise.
+ * data when core/jquery is present and native data otherwise.
  *
  * @see Drupal.AjaxCommands.prototype.data()
  *
