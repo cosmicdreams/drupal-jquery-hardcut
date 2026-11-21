@@ -14,10 +14,10 @@
    */
   Drupal.behaviors.blockSettingsSummary = {
     attach() {
-      // The drupalSetSummary method required for this behavior is not available
+      // The form summary API is not available
       // on the Blocks administration page, so we need to make sure this
-      // behavior is processed only if drupalSetSummary is defined.
-      if (typeof $.fn.drupalSetSummary === 'undefined') {
+      // behavior is processed only if the form library is loaded.
+      if (!Drupal.form) {
         return;
       }
 
@@ -31,36 +31,38 @@
        *   A string with the summary.
        */
       function checkboxesSummary(context) {
-        const values = [];
-        const $checkboxes = $(context).find(
-          'input[type="checkbox"]:checked + label',
+        const values = Array.from(
+          context.querySelectorAll('input[type="checkbox"]:checked + label'),
+          (label) => label.innerHTML,
         );
-        const il = $checkboxes.length;
-        for (let i = 0; i < il; i++) {
-          values.push($($checkboxes[i]).html());
-        }
         if (!values.length) {
           values.push(Drupal.t('Not restricted'));
         }
         return values.join(', ');
       }
 
-      $(
-        '[data-drupal-selector="edit-visibility-node-type"], [data-drupal-selector="edit-visibility-entity-bundlenode"], [data-drupal-selector="edit-visibility-language"], [data-drupal-selector="edit-visibility-user-role"], [data-drupal-selector="edit-visibility-response-status"]',
-      ).drupalSetSummary(checkboxesSummary);
+      Drupal.form.setSummary(
+        document.querySelectorAll(
+          '[data-drupal-selector="edit-visibility-node-type"], [data-drupal-selector="edit-visibility-entity-bundlenode"], [data-drupal-selector="edit-visibility-language"], [data-drupal-selector="edit-visibility-user-role"], [data-drupal-selector="edit-visibility-response-status"]',
+        ),
+        checkboxesSummary,
+      );
 
-      $(
-        '[data-drupal-selector="edit-visibility-request-path"]',
-      ).drupalSetSummary((context) => {
-        const $pages = $(context).find(
-          'textarea[name="visibility[request_path][pages]"]',
-        );
-        if (!$pages.length || !$pages[0].value) {
-          return Drupal.t('Not restricted');
-        }
+      Drupal.form.setSummary(
+        document.querySelectorAll(
+          '[data-drupal-selector="edit-visibility-request-path"]',
+        ),
+        (context) => {
+          const pages = context.querySelector(
+            'textarea[name="visibility[request_path][pages]"]',
+          );
+          if (!pages?.value) {
+            return Drupal.t('Not restricted');
+          }
 
-        return Drupal.t('Restricted to certain pages');
-      });
+          return Drupal.t('Restricted to certain pages');
+        },
+      );
     },
   };
 

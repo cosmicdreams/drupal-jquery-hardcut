@@ -10,24 +10,24 @@
    * @type {Drupal~behavior}
    *
    * @prop {Drupal~behaviorAttach} attach
-   *   Find the form and call `drupalSetSummary` on it.
+   *   Find the form and set its summary.
    */
   Drupal.behaviors.menuUiDetailsSummaries = {
     attach(context) {
-      $(context)
-        .find('.menu-link-form')
-        .drupalSetSummary((context) => {
-          const $context = $(context);
+      Drupal.form.setSummary(
+        context.querySelectorAll('.menu-link-form'),
+        (context) => {
           if (
-            $context.find('.js-form-item-menu-enabled input:checked').length
+            context.querySelector('.js-form-item-menu-enabled input:checked')
           ) {
             return Drupal.checkPlain(
-              $context.find('.js-form-item-menu-title input')[0].value,
+              context.querySelector('.js-form-item-menu-title input').value,
             );
           }
 
           return Drupal.t('Not in menu');
-        });
+        },
+      );
     },
   };
 
@@ -77,8 +77,13 @@
             $linkTitle[0].value = '';
             $linkTitle.removeData('menuLinkAutomaticTitleOverridden');
           }
-          $checkbox.closest('.vertical-tabs-pane').trigger('summaryUpdated');
-          $checkbox.trigger('formUpdated');
+          const pane = $checkbox[0].closest('.vertical-tabs-pane');
+          if (pane) {
+            Drupal.form.publish(pane, 'summaryUpdated');
+          }
+          $checkbox.each((index, input) => {
+            Drupal.form.publish(input, 'formUpdated');
+          });
         });
         // Take over any title change.
         $title.on('keyup', () => {
@@ -87,7 +92,9 @@
             $checkbox[0].checked
           ) {
             $linkTitle[0].value = $title[0].value;
-            $linkTitle.trigger('formUpdated');
+            $linkTitle.each((index, input) => {
+              Drupal.form.publish(input, 'formUpdated');
+            });
           }
         });
       });

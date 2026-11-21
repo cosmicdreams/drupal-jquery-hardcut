@@ -59,7 +59,7 @@
 
         // Attach summary for configurable filters (only for screen readers).
         if (filterSettingsTab) {
-          filterSettingsTab.details.drupalSetSummary(() =>
+          Drupal.form.setSummary(filterSettingsTab.details[0], () =>
             checkbox.checked ? Drupal.t('Enabled') : Drupal.t('Disabled'),
           );
         }

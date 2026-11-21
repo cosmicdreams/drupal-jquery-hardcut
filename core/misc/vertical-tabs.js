@@ -179,11 +179,10 @@
       }
     });
 
-    this.details
-      .on('summaryUpdated', () => {
-        self.updateSummary();
-      })
-      .trigger('summaryUpdated');
+    this.details.on('summaryUpdated', () => {
+      self.updateSummary();
+    });
+    Drupal.form.publish(this.details[0], 'summaryUpdated');
   };
 
   Drupal.verticalTab.prototype = {
@@ -221,7 +220,7 @@
      * Updates the tab's summary.
      */
     updateSummary() {
-      this.summary.html(this.details.drupalGetSummary());
+      this.summary.html(Drupal.form.getSummary(this.details[0]));
     },
 
     /**

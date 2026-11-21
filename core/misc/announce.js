@@ -7,15 +7,14 @@
  * loads 10 more items into a list, one might announce the change like this.
  *
  * @example
- * $('#search-list')
- *   .on('itemInsert', function (event, data) {
- *     // Insert the new items.
- *     $(data.container.el).append(data.items.el);
- *     // Announce the change to the page contents.
- *     Drupal.announce(Drupal.t('@count items added to @container',
- *       {'@count': data.items.length, '@container': data.container.title}
- *     ));
- *   });
+ * document.getElementById('search-list').addEventListener('itemInsert', (event) => {
+ *   const { container, items } = event.detail;
+ *   container.el.append(items.el);
+ *   Drupal.announce(Drupal.t('@count items added to @container', {
+ *     '@count': items.length,
+ *     '@container': container.title,
+ *   }));
+ * });
  */
 
 (function (Drupal, debounce) {

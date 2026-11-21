@@ -3,7 +3,7 @@
  * Defines JavaScript behaviors for the block_content module.
  */
 
-(function ($, Drupal) {
+(function (Drupal) {
   /**
    * Sets summaries about revision and translation of entities.
    *
@@ -17,10 +17,9 @@
    */
   Drupal.behaviors.entityContentDetailsSummaries = {
     attach(context) {
-      const $context = $(context);
-      $context
-        .find('.entity-content-form-revision-information')
-        .drupalSetSummary((fieldset) => {
+      Drupal.form.setSummary(
+        context.querySelectorAll('.entity-content-form-revision-information'),
+        (fieldset) => {
           const revisionCheckbox = fieldset.querySelector(
             '.js-form-item-revision input',
           );
@@ -36,11 +35,12 @@
           }
 
           return Drupal.t('No revision');
-        });
+        },
+      );
 
-      $context
-        .find('details.entity-translation-options')
-        .drupalSetSummary((details) => {
+      Drupal.form.setSummary(
+        context.querySelectorAll('details.entity-translation-options'),
+        (details) => {
           const translate = details.querySelector(
             '.js-form-item-translation-translate input',
           );
@@ -57,7 +57,8 @@
           return retranslate?.checked
             ? Drupal.t('Flag other translations as outdated')
             : Drupal.t('Do not flag other translations as outdated');
-        });
+        },
+      );
     },
   };
-})(jQuery, Drupal);
+})(Drupal);

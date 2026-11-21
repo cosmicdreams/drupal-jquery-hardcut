@@ -217,6 +217,121 @@ class FormGroupingElementsTest extends WebDriverTestBase {
   }
 
   /**
+   * Tests the mixed fragment event payload and deferred focus.
+   */
+  public function testMixedFragmentPayloadAndFocus(): void {
+    $this->drupalGet('form-test/group-details', ['query' => ['legacy-details' => 1]]);
+    $session = $this->getSession();
+    $session->executeScript(<<<'JS'
+      const target = document.getElementById('edit-element');
+      const form = target.form;
+      const type = 'formFragmentLinkClickOrHashChange';
+      document.body.addEventListener(type, (event) => {
+        form.dataset.nativeFragment = event.detail === target;
+      });
+      let first;
+      jQuery(document.body).on(type, (event, collection) => {
+        first = collection;
+      });
+      jQuery(document.body).on(type, (event, collection) => {
+        form.dataset.legacyFragment = collection === first && collection[0] === target;
+        form.dataset.fragmentCount = Number(form.dataset.fragmentCount || 0) + 1;
+      });
+      const link = document.body.appendChild(document.createElement('a'));
+      link.href = '#edit-element';
+      link.click();
+      JS);
+    $this->assertJsCondition("document.activeElement.id === 'edit-element'");
+    $this->assertSame(['true', 'true', '1'], $session->evaluateScript(<<<'JS'
+      Array.from(['nativeFragment', 'legacyFragment', 'fragmentCount'], (key) =>
+        document.getElementById('edit-element').form.dataset[key]
+      )
+      JS));
+  }
+
+  /**
+   * Tests legacy summary chaining, arguments, and namespaced events.
+   */
+  public function testLegacySummaryPlugins(): void {
+    $this->drupalGet('form-test/group-details', ['query' => ['legacy-details' => 1]]);
+    $actual = $this->getSession()->evaluateScript(<<<'JS'
+      (() => {
+        const group = document.createElement('div');
+        group.innerHTML = '<div id="summary-first"><input></div><div id="summary-second"></div>';
+        document.body.append(group);
+        const elements = jQuery(group.children);
+        const received = [];
+        elements.on('summaryUpdated.test', (event) => received.push(event.currentTarget.id));
+        const warn = Drupal.deprecationError;
+        Drupal.deprecationError = () => {};
+        try {
+          const empty = elements.drupalGetSummary();
+          const result = elements.drupalSetSummary((element) => '  ' + element.id + '  ');
+          const updated = [elements.drupalGetSummary(), elements.eq(1).drupalGetSummary()];
+          const initial = received.splice(0);
+          const input = elements.eq(0).find('input');
+          input.trigger('formUpdated.other');
+          const otherNamespace = received.splice(0);
+          input.trigger('formUpdated.summary');
+          const grouped = received.splice(0);
+          elements.eq(0).off('formUpdated.summary');
+          input.trigger('formUpdated');
+          const afterRemoval = received.splice(0);
+          elements.eq(1).drupalSetSummary('  literal  ');
+          return [empty, result === elements, updated, initial, otherNamespace, grouped, afterRemoval, elements.eq(1).drupalGetSummary()];
+        } finally {
+          Drupal.deprecationError = warn;
+          group.remove();
+        }
+      })()
+      JS);
+    $this->assertSame([
+      '',
+      TRUE,
+      ['summary-first', 'summary-second'],
+      ['summary-first', 'summary-second'],
+      [],
+      ['summary-first', 'summary-second'],
+      [],
+      'literal',
+    ], $actual);
+  }
+
+  /**
+   * Tests native summary updates after form input and reattachment.
+   */
+  public function testNativeFormSummary(): void {
+    $this->drupalGet('form-test/group-details');
+    $session = $this->getSession();
+    $session->executeScript(<<<'JS'
+      const form = document.body.appendChild(document.createElement('form'));
+      form.id = 'summary-test-form';
+      form.innerHTML = '<div><input id="summary-input" name="summary-input"></div>';
+      const field = form.querySelector('input');
+      const summary = field.parentElement;
+      form.addEventListener('summaryUpdated', (event) => {
+        event.target.dataset.summary = Drupal.form.getSummary(event.target);
+      });
+      Drupal.form.setSummary(summary, (element) => ' ' + element.querySelector('input').value + ' ');
+      Drupal.behaviors.formUpdated.attach(form);
+      Drupal.behaviors.formUpdated.attach(form);
+      field.value = 'first';
+      field.dispatchEvent(new Event('input', { bubbles: true }));
+      JS);
+    $this->assertJsCondition("document.querySelector('#summary-test-form [data-summary]').dataset.summary === 'first'");
+
+    $session->executeScript(<<<'JS'
+      const form = document.getElementById('summary-test-form');
+      Drupal.behaviors.formUpdated.detach(form, {}, 'unload');
+      Drupal.behaviors.formUpdated.attach(form);
+      const field = form.querySelector('input');
+      field.value = 'second';
+      field.dispatchEvent(new Event('change', { bubbles: true }));
+      JS);
+    $this->assertJsCondition("document.querySelector('#summary-test-form [data-summary]').dataset.summary === 'second'");
+  }
+
+  /**
    * Tests that fallback time zone detection completes during attachment.
    */
   public function testSynchronousTimezoneDetection(): void {

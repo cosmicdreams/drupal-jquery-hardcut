@@ -61,26 +61,48 @@
     Drupal.eventBindings.observe({
       add(binding) {
         const { target, selector, type, namespace, listener } = binding;
-        const { detailsAria, tabbingFocusTrap, navTabs } = binding;
-        if (!detailsAria && !tabbingFocusTrap && !navTabs) {
+        const { detailsAria, tabbingFocusTrap, navTabs, formInteraction } =
+          binding;
+        if (!detailsAria && !tabbingFocusTrap && !navTabs && !formInteraction) {
           return;
         }
         const contract = detailsAria
           ? 'details summary clicks'
           : navTabs
             ? 'navigation tabs'
-            : 'tabbing focus traps';
+            : tabbingFocusTrap
+              ? 'tabbing focus traps'
+              : type;
         observeRemoval(type);
         const element = jquery(target);
-        const name = `${type}.${namespace}`;
-        const deliver = function (event) {
+        const name = namespace ? `${type}.${namespace}` : type;
+        const deliver = function (event, fragmentTarget) {
           if (event.isTrigger) {
             warn(
               `The jQuery synthetic trigger for ${contract}`,
               `Use the native ${type} event.`,
             );
           }
-          if (type === 'click') {
+          if (formInteraction) {
+            let native = event.originalEvent;
+            if (event.isTrigger || !(native instanceof Event)) {
+              native = new CustomEvent(type, {
+                cancelable: true,
+                detail:
+                  type === fragmentEvent
+                    ? (jquery(fragmentTarget)[0] ?? null)
+                    : undefined,
+              });
+              Object.defineProperty(native, 'target', { value: event.target });
+              if (event.isDefaultPrevented()) {
+                native.preventDefault();
+              }
+            }
+            listener(native, this);
+            if (native.defaultPrevented) {
+              event.preventDefault();
+            }
+          } else if (type === 'click') {
             listener(this);
           } else {
             const native =
@@ -127,6 +149,7 @@
     });
   }
 
+  const fragmentEvent = 'formFragmentLinkClickOrHashChange';
   const tabbingMigration = 'Use native context members and element lists.';
   const tabbingEvents = [
     'drupalTabbingConstrained',
@@ -136,29 +159,111 @@
   ];
 
   /**
-   * Adds the original context argument to existing tabbing lifecycle handlers.
+   * Supplies the positional arguments of existing form and tabbing events.
    */
-  function installTabbingPublications() {
-    const publications = new WeakSet();
+  function installPublications() {
+    const publications = new WeakMap();
+    const legacyTypes = [...tabbingEvents, fragmentEvent];
     window.Drupal.eventBindings.observePublications((event) => {
-      if (tabbingEvents.includes(event.type)) {
-        publications.add(event);
+      if (legacyTypes.includes(event.type)) {
+        publications.set(event, [
+          event.type === fragmentEvent ? jquery(event.detail) : event.detail,
+        ]);
         return () => publications.delete(event);
       }
       return undefined;
     });
-    tabbingEvents.forEach((type) => {
+    legacyTypes.forEach((type) => {
       const special =
         jquery.event.special[type] || (jquery.event.special[type] = {});
       const previous = special.handle;
       special.handle = function (event, ...args) {
-        const original = event.originalEvent;
-        if (!event.isTrigger && publications.has(original)) {
-          args = [original.detail];
-        }
-        return (previous || event.handleObj.handler).call(this, event, ...args);
+        const positional =
+          !event.isTrigger && publications.get(event.originalEvent);
+        return (previous || event.handleObj.handler).call(
+          this,
+          event,
+          ...(positional || args),
+        );
       };
     });
+  }
+
+  /**
+   * Installs the legacy summary plugins on an explicitly attached instance.
+   */
+  function installSummaryMethods() {
+    const { form } = window.Drupal;
+    jquery.fn.drupalGetSummary = function () {
+      warn(
+        'jQuery.fn.drupalGetSummary',
+        'Use Drupal.form.getSummary(element).',
+      );
+      return form.getSummary(this[0]);
+    };
+    jquery.fn.drupalSetSummary = function (summary) {
+      warn(
+        'jQuery.fn.drupalSetSummary',
+        'Use Drupal.form.setSummary(elements, summary).',
+      );
+      this.off('formUpdated.summary');
+      form.setSummary(this.toArray(), summary);
+      return this;
+    };
+  }
+
+  /**
+   * Preserves a legacy collection accessor and its identity until assignment.
+   */
+  function collectionAccessor(
+    prototype,
+    owner,
+    legacyName,
+    nativeName,
+    migration,
+    list = false,
+  ) {
+    const cached = new WeakMap();
+    const contract = `${owner}#${legacyName}`;
+    Object.defineProperty(prototype, legacyName, {
+      configurable: true,
+      get() {
+        warn(contract, migration);
+        const value = this[nativeName];
+        let entry = cached.get(this);
+        if (!entry || entry.value !== value) {
+          entry = { value, collection: jquery(value) };
+          cached.set(this, entry);
+        }
+        return entry.collection;
+      },
+      set(input) {
+        warn(contract, migration);
+        const collection = input instanceof jquery ? input : jquery(input);
+        const value = list ? collection.toArray() : collection[0];
+        this[nativeName] = value;
+        cached.set(this, { value, collection });
+      },
+    });
+  }
+
+  /**
+   * Supplies the collection accessors used by legacy details overrides.
+   */
+  function installDetailsMembers() {
+    const prototype = window.Drupal.DetailsSummarizedContent.prototype;
+    for (const [legacyName, nativeName] of [
+      ['$node', 'node'],
+      ['$detailsSummarizedContentWrapper', 'summaryWrapper'],
+    ]) {
+      collectionAccessor(
+        prototype,
+        'Drupal.DetailsSummarizedContent',
+        legacyName,
+        nativeName,
+        `Use the native ${nativeName} element.`,
+      );
+    }
   }
 
   /**
@@ -171,29 +276,15 @@
     }
 
     ['tabbableElements', 'disabledElements'].forEach((name) => {
-      const cached = new WeakMap();
       const legacyName = `$${name}`;
-      const contract = `TabbingContext#${legacyName}`;
-      Object.defineProperty(manager.contextPrototype, legacyName, {
-        configurable: true,
-        get() {
-          warn(contract, tabbingMigration);
-          const value = this[name];
-          let entry = cached.get(this);
-          if (!entry || entry.value !== value) {
-            entry = { value, collection: jquery(value) };
-            cached.set(this, entry);
-          }
-          return entry.collection;
-        },
-        set(input) {
-          warn(contract, tabbingMigration);
-          const collection = input instanceof jquery ? input : jquery(input);
-          const value = collection.toArray();
-          this[name] = value;
-          cached.set(this, { value, collection });
-        },
-      });
+      collectionAccessor(
+        manager.contextPrototype,
+        'TabbingContext',
+        legacyName,
+        name,
+        tabbingMigration,
+        true,
+      );
     });
 
     const nativeConstrain = manager.constrain;
@@ -252,14 +343,30 @@
 
   if (window.Drupal?.eventBindings) {
     install();
-    installTabbingPublications();
+    installPublications();
   } else {
     document.addEventListener(
       'drupal:event-bindings-ready',
       () => {
         install();
-        installTabbingPublications();
+        installPublications();
       },
+      { once: true },
+    );
+  }
+  if (window.Drupal?.form) {
+    installSummaryMethods();
+  } else {
+    document.addEventListener('drupal:form-ready', installSummaryMethods, {
+      once: true,
+    });
+  }
+  if (window.Drupal?.DetailsSummarizedContent) {
+    installDetailsMembers();
+  } else {
+    document.addEventListener(
+      'drupal:details-summary-ready',
+      installDetailsMembers,
       { once: true },
     );
   }
