@@ -248,16 +248,11 @@
       previousBindings.set(type, bindings);
 
       const mixed = handlers.length !== bindings.length;
+      // Keep both dispatch slots so later native listeners cannot overtake
+      // table delivery when legacy subscribers arrive or leave.
       bindings.forEach((binding) => {
-        // Keep the native listener in its original registration position.
         binding.nativeActive = !mixed;
       });
-      const dispatch = jquery._data(target, 'handle');
-      if (mixed) {
-        target.addEventListener(type, dispatch);
-      } else {
-        target.removeEventListener(type, dispatch);
-      }
     }
 
     // Track the completed registration even if a plugin replaces the special
@@ -277,7 +272,7 @@
   }
 
   /**
-   * Delivers a real event in jQuery's queue and mirrors native propagation.
+   * Delivers a real event in jQuery's queue and mirrors native cancellation.
    *
    * @param {object} binding
    *   The table's event binding.
@@ -292,16 +287,14 @@
     }
 
     const native = toNativeEvent(event);
-    const methods = ['stopPropagation', 'stopImmediatePropagation'];
+    const methods = ['stopPropagation', 'stopImmediatePropagation'].filter(
+      (method) =>
+        Object.isExtensible(native) &&
+        Object.getOwnPropertyDescriptor(native, method)?.configurable !== false,
+    );
     const descriptors = methods.map((method) =>
       Object.getOwnPropertyDescriptor(native, method),
     );
-    if (
-      !Object.isExtensible(native) ||
-      descriptors.some((descriptor) => descriptor?.configurable === false)
-    ) {
-      return binding.listener.call(binding.target, native);
-    }
     const stopped = () => true;
     methods.forEach((method) => {
       const original = native[method];
@@ -320,6 +313,9 @@
     try {
       return binding.listener.call(binding.target, native);
     } finally {
+      if (native.defaultPrevented) {
+        event.isDefaultPrevented = stopped;
+      }
       methods.forEach((method, index) => {
         if (descriptors[index]) {
           Object.defineProperty(native, method, descriptors[index]);
@@ -429,11 +425,20 @@
       namespace.split('.').includes('tableresponsive');
     TableResponsive.refresh = () => {
       if (!jqueryHandlers(window, 'resize').some(isLegacyResize)) {
-        return nativeRefresh();
+        const event = jquery.Event('resize', {
+          target: window,
+          currentTarget: window,
+          namespace: 'tableresponsive',
+          isTrigger: 3,
+        });
+        return nativeRefresh(toNativeEvent(event), () =>
+          event.isImmediatePropagationStopped(),
+        );
       }
       const event = jquery.Event('resize.tableresponsive');
       refreshes.add(event);
-      return windowEvents.triggerHandler(event);
+      windowEvents.trigger(event);
+      return event.result;
     };
 
     const resize = jquery.event.special.resize ?? {};

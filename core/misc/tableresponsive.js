@@ -126,6 +126,7 @@
    */
   Drupal.behaviors.tableResponsive = {
     attach(context) {
+      Drupal.tableInteraction.releaseDisconnected();
       once('tableresponsive', 'table.responsive-enabled', context).forEach(
         (table) => {
           TableResponsive.tables.push(new TableResponsive(table));
@@ -139,16 +140,28 @@
 
   /**
    * Refreshes the visibility of all responsive toggles.
+   *
+   * @param {Event} event
+   *   The resize event.
+   * @param {Function} isStopped
+   *   Checks whether the refresh should stop before invoking another handler.
    */
-  function refreshToggles() {
-    const event = new Event('resize');
-    Object.defineProperties(event, {
-      target: { value: window },
-      currentTarget: { value: window },
-    });
-    [...TableResponsive.resizeHandlers.values()].forEach((evaluate) =>
-      evaluate(event),
-    );
+  function refreshToggles(
+    event = new Event('resize'),
+    isStopped = () => false,
+  ) {
+    if (!event.target) {
+      Object.defineProperties(event, {
+        target: { value: window },
+        currentTarget: { value: window },
+      });
+    }
+    for (const evaluate of [...TableResponsive.resizeHandlers.values()]) {
+      evaluate(event);
+      if (isStopped()) {
+        break;
+      }
+    }
   }
 
   /**

@@ -68,6 +68,8 @@
    * @internal
    */
   Drupal.tableInteraction = {
+    releaseDisconnected,
+
     /**
      * Binds a native listener and registers its synthetic entry point.
      *

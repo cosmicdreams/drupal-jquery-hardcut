@@ -978,7 +978,7 @@ class TableDragTest extends WebDriverTestBase {
   #[IgnoreDeprecations]
   public function testRealDragEventOrdering(): void {
     $this->drupalGet('tabledrag_test', ['query' => ['legacy' => 1]]);
-    $this->assertSame([['early', 'drag', 'late'], ['early'], ['drag'], 1], $this->getSession()->evaluateScript(<<<'JS'
+    $this->assertSame([['early', 'drag', 'late'], ['early'], ['drag'], 1, ['drag', 'legacy', 'native']], $this->getSession()->evaluateScript(<<<'JS'
       (() => {
         const order = [];
         let cancel = false;
@@ -1016,11 +1016,18 @@ class TableDragTest extends WebDriverTestBase {
           }
           return dispatch.call(this, event, ...args);
         };
+        let unmixed;
         try {
-          return [active, stopped, move(), dispatches];
+          unmixed = move();
         } finally {
           jQuery.event.dispatch = dispatch;
         }
+        document.addEventListener('mousemove', (event) => {
+          order.push('native');
+          event.stopImmediatePropagation();
+        });
+        jQuery(document).on('mousemove', () => order.push('legacy'));
+        return [active, stopped, unmixed, dispatches, move()];
       })()
       JS));
   }
@@ -1334,6 +1341,7 @@ class TableDragTest extends WebDriverTestBase {
       window.attachReplacementDrag = () => {
         fixture.append(replacement);
         Drupal.attachBehaviors(fixture, settings);
+        window.replacementDragAttached = true;
       };
       window.checkReplacementDrag = () => {
         const drag = Drupal.tableDrag[table.id];
@@ -1342,7 +1350,8 @@ class TableDragTest extends WebDriverTestBase {
       };
       JS);
     // The replacement arrives after unload cleanup has run, as with a settle delay.
-    $session->executeScript('window.attachReplacementDrag()');
+    $session->executeScript('setTimeout(window.attachReplacementDrag, 0)');
+    $this->assertJsCondition('window.replacementDragAttached === true');
     $this->assertTrue($session->evaluateScript('window.checkReplacementDrag()'));
   }
 

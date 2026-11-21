@@ -253,7 +253,7 @@
     this.indentEnabled = false;
 
     /**
-     * Keeps track of rows that have changed.
+     * Keeps changed rows in the registry for later renders of this table.
      */
     this.changedRowIds = Drupal.tableDrag[table.id]
       ? Drupal.tableDrag[table.id].changedRowIds
@@ -408,7 +408,6 @@
         tableInteraction.removeOrphanedControls(table, toggle.nodes);
       }
       once.remove('tabledrag', table);
-      // Keep the registry entry so a later replacement can inherit changed rows.
     });
 
     // Check for any rows marked as changed before this tabledrag was rerendered
