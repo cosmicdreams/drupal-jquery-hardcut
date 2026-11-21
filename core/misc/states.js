@@ -22,6 +22,28 @@
   Drupal.states = states;
 
   /**
+   * Publishes a state change on each original target.
+   * @param {Iterable<Element>} elements
+   *   The targets of the state change.
+   * @param {string} type
+   *   The full state event name.
+   * @param {object} detail
+   *   The state values and trigger flag.
+   */
+  function publishState(elements, type, detail) {
+    for (const element of elements) {
+      Drupal.eventBindings.publish(
+        element,
+        new CustomEvent(type, {
+          bubbles: true,
+          cancelable: true,
+          detail: { ...detail },
+        }),
+      );
+    }
+  }
+
+  /**
    * Inverts a (if it's not undefined) when invertState is true.
    *
    * @function Drupal.states~invert
@@ -290,8 +312,7 @@
 
         // By adding "trigger: true", we ensure that state changes don't go into
         // infinite loops.
-        this.element.trigger({
-          type: `state:${this.state}`,
+        publishState(this.element, `state:${this.state}`, {
           value,
           trigger: true,
         });
@@ -492,8 +513,7 @@
           const value = valueFn.call(this.element, e);
           // Only trigger the event if the value has actually changed.
           if (oldValue !== value) {
-            this.element.trigger({
-              type: `state:${this.state}`,
+            publishState(this.element, `state:${this.state}`, {
               value,
               oldValue,
             });
@@ -505,8 +525,7 @@
       states.postponed.push(
         function () {
           // Trigger the event once for initialization purposes.
-          this.element.trigger({
-            type: `state:${this.state}`,
+          publishState(this.element, `state:${this.state}`, {
             value: oldValue,
             oldValue: null,
           });
