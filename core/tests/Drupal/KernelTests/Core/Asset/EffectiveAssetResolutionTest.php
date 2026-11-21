@@ -11,6 +11,7 @@ use Drupal\KernelTests\KernelTestBase;
 use Drupal\system\Controller\CssAssetController;
 use Drupal\system\Controller\JsAssetController;
 use PHPUnit\Framework\Attributes\Group;
+use PHPUnit\Framework\Attributes\IgnoreDeprecations;
 use PHPUnit\Framework\Attributes\RunTestsInSeparateProcesses;
 use PHPUnit\Framework\Attributes\TestWith;
 use Symfony\Component\HttpFoundation\BinaryFileResponse;
@@ -97,6 +98,7 @@ class EffectiveAssetResolutionTest extends KernelTestBase {
   /**
    * Tests constituent provenance in lazy aggregates and their responses.
    */
+  #[IgnoreDeprecations]
   #[TestWith(['neutral'], 'neutral render attachment')]
   #[TestWith(['already-loaded'], 'shared libraries already loaded')]
   #[TestWith(['explicit-legacy'], 'explicit legacy render attachment')]
@@ -116,6 +118,7 @@ class EffectiveAssetResolutionTest extends KernelTestBase {
     $libraries = ['common_test/aggregation', 'core/drupal.checkbox', 'system/base', 'common_test/external'];
     $legacy_library = 'core/internal.jquery.form';
     if ($legacy) {
+      $this->expectUserDeprecationMessage($legacy_library . ' is deprecated in drupal:12.0.0 and is removed from drupal:13.0.0. Use Drupal AJAX with native form options, or supply your own form plugin. See https://www.drupal.org/node/CHANGE_RECORD.');
       $libraries[] = $legacy_library;
     }
     $build['content'] = ['#markup' => 'Asset provenance', '#attached' => ['library' => $libraries]];
