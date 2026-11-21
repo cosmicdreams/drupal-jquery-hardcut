@@ -454,6 +454,32 @@
   }
 
   /**
+   * Stops watching connected elements of a reused permanent trigger.
+   *
+   * A dependent that reattaches in place uses the trigger again, so a later
+   * move of the element must not release it.
+   * @param {Drupal.states.Trigger} trigger
+   *   The reused trigger.
+   */
+  function keepReusedTrigger(trigger) {
+    trigger.awaitingRemoval?.forEach((release, element) => {
+      if (!element.isConnected) {
+        return;
+      }
+      trigger.awaitingRemoval.delete(element);
+      const releases = awaitingRemoval.get(element);
+      releases?.delete(release);
+      if (releases && !releases.size) {
+        awaitingRemoval.delete(element);
+      }
+    });
+    if (!awaitingRemoval.size) {
+      removalObserver?.disconnect();
+      removalObserver = null;
+    }
+  }
+
+  /**
    * Attaches and releases States dependencies.
    */
   Drupal.behaviors.states = {
@@ -928,6 +954,7 @@
     }
     const existing = getElementTrigger(elements[0], state.name);
     if (existing) {
+      keepReusedTrigger(existing);
       if (typeof existing.users === 'number') {
         existing.users += 1;
         return () => {
@@ -985,7 +1012,11 @@
       this.elements = this.elements ?? select(this.selector) ?? [];
       this.disposers = new Set();
       this.active = true;
-      if (this.elements.length && !getElementTrigger(this.elements[0], name)) {
+      const existing =
+        this.elements.length && getElementTrigger(this.elements[0], name);
+      if (existing) {
+        keepReusedTrigger(existing);
+      } else if (this.elements.length) {
         this.initialize();
       }
     }
@@ -1023,8 +1054,13 @@
               // the unloaded element leaves the document.
               untrack = trackTargetCleanup(element, release);
               releaseOnRemoval(element, release);
+              if (!this.awaitingRemoval) {
+                this.awaitingRemoval = new Map();
+              }
+              this.awaitingRemoval.set(element, release);
               return;
             }
+            this.awaitingRemoval?.delete(element);
             cleanup();
             this.detachElement(element);
           };

@@ -2195,4 +2195,78 @@ final class NativeStatesPublicationTest extends WebDriverTestBase {
     $this->assertSame(1, $click['delegated'], 'A click cancelled by preventDefault() skips a native document listener.');
   }
 
+  /**
+   * Tests a reattached permanent trigger after a later move of its element.
+   */
+  #[IgnoreDeprecations]
+  public function testReattachedPermanentTriggerSurvivesLaterMove(): void {
+    $session = $this->getSession();
+    $assert = $this->assertSession();
+
+    $this->drupalGet('jquery-bc-test/events');
+    $session->executeScript(<<<'JS'
+      const captured = [];
+      const initialize = Drupal.states.Trigger.prototype.initialize;
+      Drupal.states.Trigger.prototype.initialize = function (...args) {
+        if ((this.state?.name ?? String(this.state)) === 'r5FnState') {
+          captured.push(this);
+        }
+        return initialize.apply(this, args);
+      };
+      window.r5Initialized = 0;
+      Drupal.states.Trigger.states.r5FnState = function ($elements) {
+        window.r5Initialized += 1;
+        $elements.on('change.r5fn', () => {
+          $elements.trigger({ type: 'state:r5FnState', value: $elements[0].checked });
+        });
+      };
+      const wrap = document.createElement('div');
+      wrap.id = 'r5-move-wrap';
+      wrap.innerHTML = `
+        <div id="r5-move-a"><input type="checkbox" id="r5-move-src"></div>
+        <div id="r5-move-b"></div>
+        <div id="r5-move-dep" class="js-form-wrapper" data-drupal-states='{"visible":{"#r5-move-src":{"r5FnState":true}}}'>Move dep</div>
+      `;
+      document.body.append(wrap);
+      try {
+        Drupal.attachBehaviors(wrap);
+        // Unload, then reattach in place while the dependee stays connected.
+        Drupal.detachBehaviors(wrap, drupalSettings, 'unload');
+        Drupal.attachBehaviors(wrap);
+      } finally {
+        Drupal.states.Trigger.prototype.initialize = initialize;
+      }
+      window.r5MoveTrigger = captured[0];
+      window.r5MoveSrc = document.getElementById('r5-move-src');
+      // Move the dependee in a later task: out of the document, then back.
+      window.r5MoveDone = false;
+      setTimeout(() => {
+        window.r5MoveSrc.remove();
+        setTimeout(() => {
+          document.getElementById('r5-move-b').append(window.r5MoveSrc);
+          window.r5MoveDone = true;
+        }, 50);
+      }, 0);
+      JS);
+    $this->assertJsCondition('window.r5MoveDone === true');
+    $this->assertSame(1, $session->evaluateScript('window.r5MoveTrigger.elements.length'), 'The reattached trigger keeps its moved element.');
+    // A later reattach reuses the live trigger instead of initializing again.
+    $session->executeScript(<<<'JS'
+      const wrap = document.getElementById('r5-move-wrap');
+      Drupal.detachBehaviors(wrap, drupalSettings, 'unload');
+      Drupal.attachBehaviors(wrap);
+      window.r5MoveEvents = 0;
+      jQuery(window.r5MoveSrc).on('state:r5FnState', () => {
+        window.r5MoveEvents += 1;
+      });
+      JS);
+    $this->assertSame(1, $session->evaluateScript('window.r5Initialized'), 'The permanent initializer runs once.');
+
+    $assert->elementExists('css', '#r5-move-src')->check();
+    $this->assertTrue($assert->elementExists('css', '#r5-move-dep')->isVisible(), 'The dependent keeps updating after the move.');
+    $assert->elementExists('css', '#r5-move-src')->uncheck();
+    $this->assertFalse($assert->elementExists('css', '#r5-move-dep')->isVisible());
+    $this->assertSame(2, $session->evaluateScript('window.r5MoveEvents'), 'Each change publishes one state event.');
+  }
+
 }
