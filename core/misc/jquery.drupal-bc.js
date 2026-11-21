@@ -8,6 +8,7 @@
 (function (instance) {
   const foreignTriggers = [];
   const legacySlots = new WeakMap();
+  const projectedOriginals = new WeakMap();
 
   /**
    * Gives a dedicated bridge the slot reserved in registry order.
@@ -93,6 +94,7 @@
           if (
             !forwardsSynthetic ||
             !event.isTrigger ||
+            projectedOriginals.has(event) ||
             (!binding.ajax &&
               (event.originalEvent ||
                 (directActivation && event.target !== target)))
@@ -126,6 +128,9 @@
             },
           });
           if (binding.states && !projected.detail) {
+            if (type.startsWith('state:')) {
+              window.Drupal.states?.compatibility?.warnSyntheticState?.(type);
+            }
             Object.defineProperty(projected, 'detail', {
               value: {
                 value: event.value,
@@ -237,6 +242,110 @@
   }
 
   /**
+   * Projects States checked change dispatches as one synthetic jQuery event.
+   * @param {object} jquery
+   *   The explicitly connected jQuery instance.
+   * @param {WeakMap} activeChecked
+   *   Maps active native change events to their shared synthetic jQuery event.
+   * @return {function(): void}
+   *   Disconnects the change projection.
+   * @internal
+   */
+  function observeCheckedChanges(jquery, activeChecked) {
+    const specials = jquery.event.special;
+    const existing = specials.change;
+    const special = existing ?? {};
+    const previousHandle = special.handle;
+    const hadHandle = Object.hasOwn(special, 'handle');
+    let connected = true;
+
+    /**
+     * Delivers one synthetic change event without originalEvent across targets.
+     * @param {object} event
+     *   The active jQuery event.
+     * @param {...unknown} args
+     *   Additional handler arguments.
+     * @return {unknown}
+     *   The downstream handler's return value.
+     */
+    function handle(event, ...args) {
+      const original = event.originalEvent;
+      if (
+        !connected ||
+        !original ||
+        event.isTrigger ||
+        !activeChecked.has(original)
+      ) {
+        return (previousHandle || event.handleObj.handler).call(
+          this,
+          event,
+          ...args,
+        );
+      }
+
+      let shared = activeChecked.get(original);
+      if (!shared) {
+        shared = jquery.Event(event.type);
+        shared.target = event.target;
+        shared.isTrigger = 3;
+        activeChecked.set(original, shared);
+        projectedOriginals.set(shared, original);
+      }
+
+      shared.currentTarget = event.currentTarget;
+      shared.delegateTarget = event.delegateTarget;
+      shared.handleObj = event.handleObj;
+      shared.data = event.data;
+      shared.namespace = event.namespace;
+
+      const result = (previousHandle || event.handleObj.handler).call(
+        this,
+        shared,
+        ...args,
+      );
+      if (result === false) {
+        shared.preventDefault();
+        shared.stopPropagation();
+      }
+      if (shared.isDefaultPrevented()) {
+        event.preventDefault();
+      }
+      if (shared.isImmediatePropagationStopped()) {
+        event.stopImmediatePropagation();
+      } else if (shared.isPropagationStopped()) {
+        event.stopPropagation();
+      }
+      if (result !== undefined) {
+        shared.result = result;
+      }
+      return result;
+    }
+
+    special.handle = handle;
+    if (!existing) {
+      specials.change = special;
+    }
+    return () => {
+      connected = false;
+      if (special.handle !== handle) {
+        return;
+      }
+      if (hadHandle) {
+        special.handle = previousHandle;
+      } else {
+        delete special.handle;
+      }
+      if (
+        !existing &&
+        specials.change === special &&
+        !Reflect.ownKeys(special).length
+      ) {
+        delete specials.change;
+      }
+    };
+  }
+
+  /**
    * Projects the legacy payloads of supported owned publications.
    * @param {object} jquery
    *   The explicitly connected jQuery instance.
@@ -247,9 +356,26 @@
    */
   function observeOwnedPublications(jquery, registry) {
     const payloads = new WeakMap();
+    const activeChecked = new WeakMap();
     const projections = new Map();
     const stop = registry.observePublications((event) => {
       const { type, detail } = event;
+      const checkedChange =
+        type === 'change' &&
+        window.Drupal.states?.compatibility?.isCheckedChange?.(event);
+      if (checkedChange) {
+        if (activeChecked.has(event)) {
+          return undefined;
+        }
+        if (!projections.has('change')) {
+          projections.set(
+            'change',
+            observeCheckedChanges(jquery, activeChecked),
+          );
+        }
+        activeChecked.set(event, null);
+        return () => activeChecked.delete(event);
+      }
       const state = type.startsWith('state:');
       if ((!state && type !== 'columnschange') || payloads.has(event)) {
         return undefined;
@@ -382,6 +508,9 @@
     registry.claimLegacyEvent = registry.claimLegacyEvent ?? claimLegacyEvent;
     registry.isForeignDefaultAction =
       registry.isForeignDefaultAction || isForeignDefaultAction;
+    registry.getProjectedOriginal =
+      registry.getProjectedOriginal ??
+      ((event) => projectedOriginals.get(event));
     registry.connectLegacy(instance);
   }
 
