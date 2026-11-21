@@ -1037,7 +1037,7 @@ class TableDragTest extends WebDriverTestBase {
    */
   public function testSharedResizePreservesNativeOrderAndCancellation(): void {
     $this->drupalGet('tabledrag_test', ['query' => ['legacy' => 1]]);
-    $this->assertSame([['table', 'legacy', 'native'], ['table', 'native'], ['table'], ['table', TRUE], ['table', TRUE]], $this->getSession()->evaluateScript(<<<'JS'
+    $this->assertSame([['table', 'legacy', 'native'], ['table', 'native'], ['table'], ['table', TRUE], ['table', TRUE], ['table', TRUE]], $this->getSession()->evaluateScript(<<<'JS'
       (() => {
         jQuery(window).off('resize');
         const fixture = document.createElement('section');
@@ -1058,8 +1058,8 @@ class TableDragTest extends WebDriverTestBase {
         Drupal.TableResponsive.prototype.eventhandlerEvaluateColumnVisibility = evaluate;
         Drupal.behaviors.tableResponsive.attach(fixture);
         order.length = 0;
-        const resize = () => {
-          window.dispatchEvent(new Event('resize', { cancelable: true }));
+        const resize = (cancelable = true) => {
+          window.dispatchEvent(new Event('resize', { cancelable }));
           return order.splice(0);
         };
         const stop = (event) => {
@@ -1082,7 +1082,7 @@ class TableDragTest extends WebDriverTestBase {
         cancel = 'stopPropagation';
         const propagation = resize();
         cancel = 'preventDefault';
-        return [mixedOrder, originalOrder, immediate, propagation, resize()];
+        return [mixedOrder, originalOrder, immediate, propagation, resize(), resize(false)];
       })()
       JS));
   }
