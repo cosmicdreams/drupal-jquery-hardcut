@@ -1406,7 +1406,8 @@ final class NativeStatesPublicationTest extends WebDriverTestBase {
     // items 8 (marker handoff), 13a (undefined disabled), and 13b (bare #id).
     $extra = $session->evaluateScript(<<<'JS'
       (() => {
-        // 7b. Raw removal without detachBehaviors is pruned on next attach.
+        // 7b. A dependee temporarily removed around attachBehaviors keeps its
+        // triggers when re-inserted, and is pruned on an unload detach instead.
         const rawWrap = document.createElement('div');
         rawWrap.innerHTML = `
           <input type="checkbox" id="raw-dependee">
@@ -1415,10 +1416,19 @@ final class NativeStatesPublicationTest extends WebDriverTestBase {
         document.body.append(rawWrap);
         Drupal.attachBehaviors(rawWrap);
         const rawDependee = document.getElementById('raw-dependee');
+        const rawDependent = document.getElementById('raw-dependent');
         const rawBefore = window.r2SnapshotBindings(rawDependee).forTarget;
         rawDependee.remove();
         Drupal.attachBehaviors(document);
-        const rawAfter = window.r2SnapshotBindings(rawDependee).forTarget;
+        const rawAfterAttach = window.r2SnapshotBindings(rawDependee).forTarget;
+        rawWrap.prepend(rawDependee);
+        rawDependee.checked = true;
+        rawDependee.dispatchEvent(new Event('change', { bubbles: true }));
+        const rawWorksAfterReinsert = rawDependent.style.display !== 'none';
+        rawDependee.remove();
+        const unrelatedUnload = document.createElement('div');
+        Drupal.detachBehaviors(unrelatedUnload, drupalSettings, 'unload');
+        const rawAfterUnload = window.r2SnapshotBindings(rawDependee).forTarget;
         rawWrap.remove();
 
         // 8. Marker handoff: broad trigger takes over narrow trigger's marker,
@@ -1514,7 +1524,9 @@ final class NativeStatesPublicationTest extends WebDriverTestBase {
 
         return {
           rawBefore,
-          rawAfter,
+          rawAfterAttach,
+          rawWorksAfterReinsert,
+          rawAfterUnload,
           mhStateEvents,
           mhBothVisible,
           undefSteps: [undefStep1, undefStep2, undefStep3, undefStep4],
@@ -1525,7 +1537,9 @@ final class NativeStatesPublicationTest extends WebDriverTestBase {
       JS);
 
     $this->assertGreaterThan(0, $extra['rawBefore']);
-    $this->assertSame(0, $extra['rawAfter'], 'Raw-removed dependee bindings are pruned from ownedEventBindings.');
+    $this->assertSame($extra['rawBefore'], $extra['rawAfterAttach'], 'Temporarily removed dependee keeps its bindings across attachBehaviors.');
+    $this->assertTrue($extra['rawWorksAfterReinsert'], 'Dependee removed and re-inserted around attachBehaviors still drives its dependent.');
+    $this->assertSame(0, $extra['rawAfterUnload'], 'Disconnected dependee bindings are pruned on unload detach.');
     $this->assertSame(1, $extra['mhStateEvents'], 'Marker handoff preserves active narrow trigger so later narrow dependent reuses it without duplicating state:checked.');
     $this->assertTrue($extra['mhBothVisible']);
     $this->assertSame([
@@ -1617,6 +1631,204 @@ final class NativeStatesPublicationTest extends WebDriverTestBase {
       ['form', TRUE, 'note-second', 3, TRUE, TRUE],
     ], $stateTrace['second'], 'Second connected jQuery receives its own shared state:* event with isTrigger === 3, no originalEvent, and shared annotation across bubbling targets.');
     $this->assertSame([[TRUE, TRUE, TRUE]], $stateTrace['native'], 'Native listener still receives native CustomEvent.');
+  }
+
+  /**
+   * Tests wasConnected updates, function trigger cleanup, multi-event listen(), and nits.
+   */
+  #[IgnoreDeprecations]
+  public function testFunctionTriggerCleanupListenAndNits(): void {
+    $session = $this->getSession();
+    $assert = $this->assertSession();
+    $page = $session->getPage();
+
+    $this->drupalGet('jquery-bc-test/events');
+    $r3Result = $session->evaluateScript(<<<'JS'
+      (() => {
+        const jquery = window.jQuery;
+        const snapshotBindings = (target) => {
+          const list = [];
+          const stop = Drupal.eventBindings.observe({
+            add(binding) {
+              list.push(binding);
+            },
+            remove() {},
+          });
+          stop();
+          return list.filter((b) => b.target === target).length;
+        };
+
+        // Item 2: wasConnected updates when a dependee attached while
+        // disconnected is later inserted into the DOM, so a subsequent removal
+        // + unload detach prunes it.
+        const offDomSrc = document.createElement('input');
+        offDomSrc.type = 'checkbox';
+        offDomSrc.id = 'r3-detached-src';
+        const offDomTrigger = new Drupal.states.Trigger({
+          selector: '#r3-detached-src',
+          state: Drupal.states.State.sanitize('checked'),
+          elements: [offDomSrc],
+        });
+        while (Drupal.states.postponed.length) {
+          Drupal.states.postponed.shift()();
+        }
+        const offDomBeforeInsert = snapshotBindings(offDomSrc);
+        document.body.append(offDomSrc);
+        Drupal.attachBehaviors(document);
+        offDomSrc.remove();
+        Drupal.detachBehaviors(document.createElement('div'), drupalSettings, 'unload');
+        const offDomAfterUnload = snapshotBindings(offDomSrc);
+        const offDomTriggerElements = offDomTrigger.elements.length;
+
+        // Item 3: A function-style legacy initializer trigger registers
+        // trackTargetCleanup. A replaced dependee (unloaded, then removed) is
+        // released from trigger.elements on the next unload detach. While it
+        // stays connected it keeps the trigger so the initializer runs once.
+        const capturedFnTriggers = [];
+        const origInit = Drupal.states.Trigger.prototype.initialize;
+        Drupal.states.Trigger.prototype.initialize = function (...args) {
+          if ((this.state?.name ?? String(this.state)) === 'r3FnState') {
+            capturedFnTriggers.push(this);
+          }
+          return origInit.apply(this, args);
+        };
+        Drupal.states.Trigger.states.r3FnState = function ($elements) {
+          $elements.on('change.r3fn', () => {
+            $elements.trigger({ type: 'state:r3FnState', value: $elements[0].checked });
+          });
+        };
+        const fnWrap = document.createElement('div');
+        fnWrap.innerHTML = `
+          <div id="r3-fn-host"><input type="checkbox" id="r3-fn-src"></div>
+          <div id="r3-fn-dep" class="js-form-wrapper" data-drupal-states='{"visible":{"#r3-fn-src":{"r3FnState":true}}}'>Fn dep</div>
+        `;
+        document.body.append(fnWrap);
+        try {
+          Drupal.attachBehaviors(fnWrap);
+        } finally {
+          Drupal.states.Trigger.prototype.initialize = origInit;
+        }
+        const fnHost = document.getElementById('r3-fn-host');
+        const fnSrc = document.getElementById('r3-fn-src');
+        const fnTrigger = capturedFnTriggers[0];
+        const fnElementsBefore = fnTrigger?.elements?.includes(fnSrc) ?? false;
+        const fnBindingsBefore = snapshotBindings(fnSrc);
+        Drupal.detachBehaviors(fnHost, drupalSettings, 'unload');
+        const fnElementsWhileConnected = fnTrigger?.elements?.includes(fnSrc) ?? false;
+        fnHost.remove();
+        Drupal.detachBehaviors(document.createElement('div'), drupalSettings, 'unload');
+        const fnElementsAfter = fnTrigger?.elements?.length ?? -1;
+        const fnBindingsAfter = snapshotBindings(fnSrc);
+        fnWrap.remove();
+
+        // Item 8a: checked handler leaves input.checked untouched when value is undefined.
+        Drupal.states.registerTrigger('r3UndefChecked', {
+          change() {
+            const v = this[0].value;
+            return v === 'undef' ? undefined : v === 'true';
+          },
+        });
+        const chkUndefWrap = document.createElement('div');
+        chkUndefWrap.innerHTML = `
+          <input type="text" id="r3-chk-undef-src" value="true">
+          <div class="js-form-item"><input type="checkbox" id="r3-chk-undef-dst"></div>
+        `;
+        document.body.append(chkUndefWrap);
+        const chkUndefSrc = document.getElementById('r3-chk-undef-src');
+        const chkUndefDst = document.getElementById('r3-chk-undef-dst');
+        new Drupal.states.Dependent({
+          elements: [chkUndefDst],
+          state: Drupal.states.State.sanitize('checked'),
+          constraints: { '#r3-chk-undef-src': { r3UndefChecked: (v) => v } },
+        });
+        while (Drupal.states.postponed.length) {
+          Drupal.states.postponed.shift()();
+        }
+        const checkedWhenTrue = chkUndefDst.checked;
+        chkUndefSrc.value = 'undef';
+        chkUndefSrc.dispatchEvent(new Event('change', { bubbles: true }));
+        const checkedWhenUndef = chkUndefDst.checked;
+        chkUndefWrap.remove();
+
+        // Item 8b: collapsed() on an empty collection returns true without throwing.
+        let collapsedEmptyNative;
+        let collapsedEmptyJquery;
+        try {
+          collapsedEmptyNative = Drupal.states.Trigger.states.collapsed.collapsed.call([]);
+        } catch (e) {
+          collapsedEmptyNative = `threw:${e.name}`;
+        }
+        try {
+          collapsedEmptyJquery = Drupal.states.Trigger.states.collapsed.collapsed.call(jquery([]));
+        } catch (e) {
+          collapsedEmptyJquery = `threw:${e.name}`;
+        }
+
+        return {
+          offDomBeforeInsert: offDomBeforeInsert > 0,
+          offDomAfterUnload,
+          offDomTriggerElements,
+          fnElementsBefore,
+          fnBindingsBefore: fnBindingsBefore > 0,
+          fnElementsWhileConnected,
+          fnElementsAfter,
+          fnBindingsAfter,
+          checkedWhenTrue,
+          checkedWhenUndef,
+          collapsedEmptyNative,
+          collapsedEmptyJquery,
+        };
+      })()
+      JS);
+
+    // Item 6: listen() splits whitespace-separated event names ('keyup change')
+    // and per-name namespaces, tested with real user input.
+    $session->executeScript(<<<'JS'
+      Drupal.states.Trigger.states.r3MultiEvent = {
+        'keyup.r3multi change.r3multi'() {
+          return this.val() === 'ready';
+        },
+      };
+      const multiWrap = document.createElement('div');
+      multiWrap.id = 'r3-multi-wrap';
+      multiWrap.innerHTML = `
+        <input id="r3-multi-input" name="r3_multi_input" type="text" value="">
+        <div id="r3-multi-dep" class="js-form-wrapper" data-drupal-states='{"visible":{"#r3-multi-input":{"r3MultiEvent":true}}}'>Multi dep</div>
+      `;
+      document.body.append(multiWrap);
+      Drupal.attachBehaviors(multiWrap);
+      JS);
+    $multiDep = $assert->elementExists('css', '#r3-multi-dep');
+    $multiInitialVisible = $multiDep->isVisible();
+    $session->getDriver()->getWebDriverSession()
+      ->element('css selector', '#r3-multi-input')
+      ->postValue(['text' => 'ready']);
+    $multiAfterKeyupVisible = $multiDep->isVisible();
+    $session->executeScript("jQuery('#r3-multi-input').off('keyup.r3multi');");
+    $page->findField('r3_multi_input')->setValue('reset');
+    $multiAfterChangeVisible = $multiDep->isVisible();
+
+    $r3Result['multiInitialVisible'] = $multiInitialVisible;
+    $r3Result['multiAfterKeyupVisible'] = $multiAfterKeyupVisible;
+    $r3Result['multiAfterChangeVisible'] = $multiAfterChangeVisible;
+
+    $this->assertEquals([
+      'offDomBeforeInsert' => TRUE,
+      'offDomAfterUnload' => 0,
+      'offDomTriggerElements' => 0,
+      'fnElementsBefore' => TRUE,
+      'fnBindingsBefore' => TRUE,
+      'fnElementsWhileConnected' => TRUE,
+      'fnElementsAfter' => 0,
+      'fnBindingsAfter' => 0,
+      'checkedWhenTrue' => TRUE,
+      'checkedWhenUndef' => TRUE,
+      'collapsedEmptyNative' => TRUE,
+      'collapsedEmptyJquery' => TRUE,
+      'multiInitialVisible' => FALSE,
+      'multiAfterKeyupVisible' => TRUE,
+      'multiAfterChangeVisible' => FALSE,
+    ], $r3Result);
   }
 
 }

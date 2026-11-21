@@ -210,7 +210,7 @@
    * @param {EventTarget} target
    *   The event target.
    * @param {string} type
-   *   The event name, optionally with jQuery-style namespaces.
+   *   One or more whitespace-separated event names, optionally with namespaces.
    * @param {function(Event): void} listener
    *   The native listener.
    * @param {object} [data]
@@ -219,29 +219,38 @@
    *   Removes the binding.
    */
   function listen(target, type, listener, data) {
-    const [baseType, ...namespaces] = type.split('.');
-    const namespace = namespaces.filter(Boolean).sort().join('.');
-    const binding = {
-      target,
-      type: baseType,
-      ...(namespace ? { namespace } : {}),
-      listener,
-      data,
-      states: true,
-    };
-    const nativeListener = (event) => {
-      const syntheticDefault =
-        Drupal.ajax?.compatibility?.isSyntheticDefaultAction?.(event) ??
-        Drupal.eventBindings.isForeignDefaultAction?.(event);
-      if (!syntheticDefault && !binding.handlesNativeEvent?.(event)) {
-        return listener(event);
+    const names = String(type).trim().split(/\s+/).filter(Boolean);
+    const removers = [];
+    for (const entry of names) {
+      const [baseType, ...namespaces] = entry.split('.');
+      if (baseType) {
+        const namespace = namespaces.filter(Boolean).sort().join('.');
+        const binding = {
+          target,
+          type: baseType,
+          ...(namespace ? { namespace } : {}),
+          listener,
+          data,
+          states: true,
+        };
+        const nativeListener = (event) => {
+          const syntheticDefault =
+            Drupal.ajax?.compatibility?.isSyntheticDefaultAction?.(event) ??
+            Drupal.eventBindings.isForeignDefaultAction?.(event);
+          if (!syntheticDefault && !binding.handlesNativeEvent?.(event)) {
+            return listener(event);
+          }
+        };
+        target.addEventListener(baseType, nativeListener);
+        const unregister = Drupal.eventBindings.register(binding);
+        removers.push(() => {
+          unregister();
+          target.removeEventListener(baseType, nativeListener);
+        });
       }
-    };
-    target.addEventListener(baseType, nativeListener);
-    const unregister = Drupal.eventBindings.register(binding);
+    }
     return () => {
-      unregister();
-      target.removeEventListener(baseType, nativeListener);
+      removers.forEach((remove) => remove());
     };
   }
 
@@ -349,11 +358,13 @@
       };
       elementCleanups.set(target, entry);
       trackedTargets.add(entry);
+    } else if (target.isConnected) {
+      entry.wasConnected = true;
     }
     entry.cleanups.add(cleanup);
     return () => {
       entry.cleanups.delete(cleanup);
-      if (!entry.cleanups.size) {
+      if (!entry.cleanups.size && elementCleanups.get(target) === entry) {
         elementCleanups.delete(target);
         trackedTargets.delete(entry);
       }
@@ -374,12 +385,12 @@
   }
 
   /**
-   * Prunes tracked dependee targets that were removed without detachBehaviors.
+   * Updates tracked connection state for dependees that joined the document.
    */
-  function pruneDisconnectedTargets() {
-    Array.from(trackedTargets).forEach((entry) => {
-      if (entry.wasConnected && !entry.target.isConnected) {
-        unloadTarget(entry);
+  function refreshConnectedTargets() {
+    trackedTargets.forEach((entry) => {
+      if (entry.target.isConnected) {
+        entry.wasConnected = true;
       }
     });
   }
@@ -391,6 +402,9 @@
    */
   function unloadTargetsInContext(context) {
     Array.from(trackedTargets).forEach((entry) => {
+      if (entry.target.isConnected) {
+        entry.wasConnected = true;
+      }
       if (
         context === document ||
         (context instanceof Node && context.contains(entry.target)) ||
@@ -406,7 +420,7 @@
    */
   Drupal.behaviors.states = {
     attach(context) {
-      pruneDisconnectedTargets();
+      refreshConnectedTargets();
       once('states', '[data-drupal-states]', context).forEach((element) => {
         const config = JSON.parse(element.getAttribute('data-drupal-states'));
         const dependents = Object.entries(config || {}).map(
@@ -959,6 +973,28 @@
         } else {
           this.permanent = true;
         }
+        for (const element of this.elements) {
+          let untrack;
+          const cleanup = () => {
+            this.disposers.delete(cleanup);
+            untrack();
+          };
+          const release = () => {
+            if (this.permanent && element.isConnected) {
+              // A permanent initializer's listeners stay on a connected
+              // element, so reattaching must not run it again. Keep tracking
+              // it so a later unload detach releases it once it is replaced.
+              untrack = trackTargetCleanup(element, release);
+              return;
+            }
+            cleanup();
+            this.detachElement(element);
+          };
+          untrack = trackTargetCleanup(element, release);
+          if (!this.permanent) {
+            this.disposers.add(cleanup);
+          }
+        }
       } else {
         Object.entries(trigger || {}).forEach(([event, value]) => {
           this.defaultTrigger(event, value);
@@ -1117,7 +1153,7 @@
     if (event && 'value' in event) {
       return event.value;
     }
-    return !this[0].hasAttribute('open');
+    return !this[0]?.hasAttribute('open');
   }
 
   /**
@@ -1347,9 +1383,11 @@
 
     checked(target, value) {
       const inputs = target.closest(item)?.querySelectorAll('input');
-      inputs?.forEach((input) => {
-        input.checked = value;
-      });
+      if (value !== undefined) {
+        inputs?.forEach((input) => {
+          input.checked = value;
+        });
+      }
       inputs?.forEach((input) => {
         const event = new Event('change', { bubbles: true, cancelable: true });
         checkedChanges.add(event);
