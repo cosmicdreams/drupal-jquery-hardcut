@@ -1233,6 +1233,7 @@
     }
     const subscriptions = new Map();
     const delivering = new Set();
+    let adapter;
     Drupal.eventBindings.observe({
       add(binding) {
         const { ajax, target, type, namespace, listener } = binding;
@@ -1247,6 +1248,9 @@
           (type === 'click' && target instanceof HTMLAnchorElement) ||
           (type === 'submit' && target instanceof HTMLFormElement);
         const deliver = (event) => {
+          if (!adapter || Drupal.ajax.compatibility !== adapter) {
+            return;
+          }
           const original = event.originalEvent;
           if (original) {
             const result = listener(event);
@@ -1285,7 +1289,7 @@
         subscriptions.delete(binding);
       },
     });
-    Drupal.ajax.compatibility = {
+    adapter = {
       handlesNativeEvent(binding, event) {
         const subscription = subscriptions.get(binding);
         if (
@@ -1417,6 +1421,7 @@
         jQuery(form).trigger('form-submit-notify', args);
       },
     };
+    Drupal.ajax.compatibility = adapter;
     Drupal.ajax.instances.forEach((ajax) => {
       if (ajax?.progress) {
         bridgeAjaxProgress(ajax.progress);

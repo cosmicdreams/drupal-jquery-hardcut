@@ -1260,13 +1260,26 @@ JS;
         hoverAjax.eventResponse = (target, event) => hoverTrace.push(event.type);
         $hover.on('mouseenter', () => hoverTrace.push('after'));
         hover.dispatchEvent(new MouseEvent('mouseover', { bubbles: true, relatedTarget: container }));
-        return [dispatched, trace, hoverTrace];
+        const detachedButton = container.appendChild(document.createElement('button'));
+        const detachedAjax = Drupal.ajax({ element: detachedButton, event: 'click', url: location.href });
+        const detachedTrace = [];
+        detachedAjax.eventResponse = (target, event) => detachedTrace.push(event instanceof Event);
+        const adapter = Drupal.ajax.compatibility;
+        Drupal.ajax.compatibility = null;
+        try {
+          detachedButton.dispatchEvent(new MouseEvent('click'));
+        }
+        finally {
+          Drupal.ajax.compatibility = adapter;
+        }
+        return [dispatched, trace, hoverTrace, detachedTrace];
       })()
       JS);
     $this->assertSame([
       FALSE,
       ['before', ['ajax', TRUE], ['after', TRUE]],
       ['before', 'mouseenter', 'after'],
+      [TRUE],
     ], $result);
   }
 
