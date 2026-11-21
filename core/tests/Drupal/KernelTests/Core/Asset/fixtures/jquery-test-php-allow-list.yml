@@ -25,6 +25,10 @@
   removal: Z (Drupal 13)
   literals:
     "misc/jquery.tabledrag.bc.js": 1
+- path: core/modules/system/tests/modules/tabledrag_test/src/Form/TableDragTestForm.php
+  removal: Z (Drupal 13)
+  literals:
+    "core/drupal.ajax.jquery": 1
 - path: core/tests/Drupal/KernelTests/Core/Asset/AttachedAssetsTest.php
   removal: Z (Drupal 13)
   literals:
