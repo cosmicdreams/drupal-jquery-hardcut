@@ -880,11 +880,11 @@ class TableDragTest extends WebDriverTestBase {
   }
 
   /**
-   * Tests that a mixed page refresh stays native without legacy listeners.
+   * Tests unmixed delivery when the bridge is loaded.
    */
   public function testResponsiveRefreshWithoutLegacyListeners(): void {
     $this->drupalGet('tabledrag_test', ['query' => ['legacy' => 1]]);
-    $this->assertSame([TRUE, TRUE, 1, 0, 1, 3], $this->getSession()->evaluateScript(<<<'JS'
+    $this->assertSame([TRUE, TRUE, 1, 1, 3, 3], $this->getSession()->evaluateScript(<<<'JS'
       (() => {
         // Default Admin can attach other jQuery resize subscribers.
         jQuery(window).off('resize');
@@ -978,7 +978,7 @@ class TableDragTest extends WebDriverTestBase {
   #[IgnoreDeprecations]
   public function testRealDragEventOrdering(): void {
     $this->drupalGet('tabledrag_test', ['query' => ['legacy' => 1]]);
-    $this->assertSame([['early', 'drag', 'late'], ['early'], ['drag'], 0], $this->getSession()->evaluateScript(<<<'JS'
+    $this->assertSame([['early', 'drag', 'late'], ['early'], ['drag'], 1], $this->getSession()->evaluateScript(<<<'JS'
       (() => {
         const order = [];
         let cancel = false;
@@ -1030,7 +1030,7 @@ class TableDragTest extends WebDriverTestBase {
    */
   public function testSharedResizePreservesNativeOrderAndCancellation(): void {
     $this->drupalGet('tabledrag_test', ['query' => ['legacy' => 1]]);
-    $this->assertSame([['table', 'native'], ['table'], ['table', TRUE]], $this->getSession()->evaluateScript(<<<'JS'
+    $this->assertSame([['table', 'legacy', 'native'], ['table', 'native'], ['table'], ['table', TRUE], ['table', TRUE]], $this->getSession()->evaluateScript(<<<'JS'
       (() => {
         jQuery(window).off('resize');
         const fixture = document.createElement('section');
@@ -1052,16 +1052,20 @@ class TableDragTest extends WebDriverTestBase {
         Drupal.behaviors.tableResponsive.attach(fixture);
         order.length = 0;
         const resize = () => {
-          window.dispatchEvent(new Event('resize'));
+          window.dispatchEvent(new Event('resize', { cancelable: true }));
           return order.splice(0);
         };
         const stop = (event) => {
           order.push('native');
           event.stopImmediatePropagation();
         };
-        const legacy = (event) => order.push(event.isPropagationStopped());
+        const legacy = (event) => order.push(cancel === 'preventDefault'
+          ? event.isDefaultPrevented()
+          : cancel ? event.isPropagationStopped() : 'legacy');
         window.addEventListener('resize', stop);
-        jQuery(window).on('resize', legacy).off('resize', legacy);
+        jQuery(window).on('resize', legacy);
+        const mixedOrder = resize();
+        jQuery(window).off('resize', legacy);
         const originalOrder = resize();
         window.removeEventListener('resize', stop);
 
@@ -1069,7 +1073,9 @@ class TableDragTest extends WebDriverTestBase {
         cancel = 'stopImmediatePropagation';
         const immediate = resize();
         cancel = 'stopPropagation';
-        return [originalOrder, immediate, resize()];
+        const propagation = resize();
+        cancel = 'preventDefault';
+        return [mixedOrder, originalOrder, immediate, propagation, resize()];
       })()
       JS));
   }
@@ -1107,6 +1113,35 @@ class TableDragTest extends WebDriverTestBase {
   }
 
   /**
+   * Tests the synthetic event and immediate stop on responsive attachment.
+   */
+  #[IgnoreDeprecations]
+  public function testResponsiveAttachSyntheticCancellation(): void {
+    $this->drupalGet('tabledrag_test', ['query' => ['legacy' => 1]]);
+    $this->assertSame([[['first', 3]], [['first', 3]]], $this->getSession()->evaluateScript(<<<'JS'
+      (() => {
+        jQuery(window).off('resize');
+        const fixture = document.createElement('section');
+        fixture.innerHTML = '<table id="first" class="responsive-enabled"></table>' +
+          '<table id="second" class="responsive-enabled"></table>';
+        document.body.append(fixture);
+        const calls = [];
+        Drupal.TableResponsive.prototype.eventhandlerEvaluateColumnVisibility = function (event) {
+          calls.push([this.table.id, event.isTrigger]);
+          if (this.table.id === 'first') {
+            event.stopImmediatePropagation();
+          }
+        };
+        Drupal.behaviors.tableResponsive.attach(fixture);
+        const withoutSubscribers = calls.splice(0);
+        jQuery(window).on('resize.tableresponsive', () => calls.push('legacy'));
+        Drupal.behaviors.tableResponsive.attach(fixture);
+        return [withoutSubscribers, calls];
+      })()
+      JS));
+  }
+
+  /**
    * Tests attach refresh for direct instances and same-task replacements.
    */
   public function testResponsiveRefreshIncludesDirectInstances(): void {
@@ -1137,7 +1172,7 @@ class TableDragTest extends WebDriverTestBase {
         replacement.id = 'replacement';
         Drupal.detachBehaviors(removed, drupalSettings, 'unload');
         removed.replaceWith(replacement);
-        Drupal.attachBehaviors(fixture, drupalSettings);
+        Drupal.behaviors.tableResponsive.attach(fixture);
         const owner = document.createElement('form');
         document.body.append(owner);
         const release = Drupal.tableInteraction.own(owner, owner, () => {});
@@ -1277,8 +1312,7 @@ class TableDragTest extends WebDriverTestBase {
       !unloadingTable.drag.toggleWeightButton.isConnected &&
       !unloadingTable.responsive.link.isConnected &&
       !Drupal.TableResponsive.tables.includes(unloadingTable.responsive) &&
-      !unloadingTable.listenerRuns() &&
-      !(unloadingTable.table.id in Drupal.tableDrag)
+      !unloadingTable.listenerRuns()
       JS);
 
     $session->executeScript(<<<'JS'
@@ -1296,14 +1330,19 @@ class TableDragTest extends WebDriverTestBase {
       const original = Drupal.tableDrag[table.id];
       original.changedRowIds.add('retained-change');
       Drupal.detachBehaviors(table, settings, 'unload');
-      table.replaceWith(replacement);
-      Drupal.attachBehaviors(fixture, settings);
+      table.remove();
+      window.attachReplacementDrag = () => {
+        fixture.append(replacement);
+        Drupal.attachBehaviors(fixture, settings);
+      };
       window.checkReplacementDrag = () => {
         const drag = Drupal.tableDrag[table.id];
         return drag?.table === replacement && drag.changedRowIds.has('retained-change') &&
           !!replacement.querySelector('#retained-change .tabledrag-changed');
       };
       JS);
+    // The replacement arrives after unload cleanup has run, as with a settle delay.
+    $session->executeScript('window.attachReplacementDrag()');
     $this->assertTrue($session->evaluateScript('window.checkReplacementDrag()'));
   }
 

@@ -108,6 +108,59 @@ class AdminTableDragTest extends TableDragTest {
   }
 
   /**
+   * Tests a theme that omits the outer cell-items wrapper.
+   */
+  public function testEmptyTableDragCellItemsWrapper(): void {
+    $this->drupalGet('tabledrag_test');
+    $this->assertSame([TRUE, TRUE, 2], $this->getSession()->evaluateScript(<<<'JS'
+      (() => {
+        Drupal.theme.tableDragCellItemsWrapper = () => '';
+        const fixture = document.createElement('section');
+        fixture.innerHTML = '<table id="unwrapped-drag"><tbody>' +
+          '<tr class="draggable"><td>First</td></tr><tr class="draggable"><td>Second</td></tr></tbody></table>';
+        document.body.append(fixture);
+        const tableDrag = { 'unwrapped-drag': {} };
+        Drupal.behaviors.tableDrag.attach(fixture, { tableDrag });
+        let attached = true;
+        try {
+          Drupal.behaviors.adminTableDrag.attach(fixture, { tableDrag });
+        } catch (error) {
+          attached = false;
+        }
+        const rows = [...fixture.querySelectorAll('tr')];
+        return [attached, !fixture.querySelector('.js-tabledrag-cell-content'),
+          rows.filter((row) => row.querySelector('.js-tabledrag-handle') &&
+            once.filter('adminTabledrag', [row]).length).length];
+      })()
+      JS));
+  }
+
+  /**
+   * Tests synthetic change delivery to contributed bulk-action overrides.
+   */
+  #[IgnoreDeprecations]
+  public function testBulkActionsSyntheticChange(): void {
+    $this->drupalGet('tabledrag_test', ['query' => ['legacy' => 1, 'tableselect' => 1]]);
+    $this->assertSame([['row', 2], ['all', 2]], $this->getSession()->evaluateScript(<<<'JS'
+      (() => {
+        const fixture = document.createElement('div');
+        fixture.innerHTML = '<form><div data-drupal-views-bulk-actions></div>' +
+          '<table><thead><tr><th class="select-all"><input type="checkbox"></th></tr></thead><tbody>' +
+          '<tr><td class="views-field views-field-node-bulk-form"><input type="checkbox"></td></tr>' +
+          '</tbody></table></form>';
+        document.body.append(fixture);
+        const bulk = new Drupal.DefaultAdminBulkActions(fixture.querySelector('[data-drupal-views-bulk-actions]'));
+        const calls = [];
+        bulk.rowCheckboxHandler = (event) => calls.push(['row', event.isTrigger]);
+        bulk.selectAllHandler = (event) => calls.push(['all', event.isTrigger]);
+        jQuery(fixture.querySelector('td input')).triggerHandler('change');
+        jQuery(fixture.querySelector('th input')).triggerHandler('change');
+        return calls;
+      })()
+      JS));
+  }
+
+  /**
    * Tests sticky bulk actions and a legacy override saved before bridge load.
    */
   #[IgnoreDeprecations]
