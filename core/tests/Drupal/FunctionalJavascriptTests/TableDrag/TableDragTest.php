@@ -989,6 +989,8 @@ class TableDragTest extends WebDriverTestBase {
         Drupal.behaviors.tableSelect.attach(fixture);
         const header = table.querySelector('th input');
         header.click();
+        const responsiveCount = fixture.querySelectorAll('.tableresponsive-toggle').length;
+        const nextResponsive = new Drupal.TableResponsive(table);
 
         Drupal.attachBehaviors(dragContainer, drupalSettings);
         const reattached = Drupal.tableDrag['tabledrag-test-table'];
@@ -1000,7 +1002,7 @@ class TableDragTest extends WebDriverTestBase {
             !document.body.classList.contains(drag.dragOrientation) && dragMarkupRetained,
           selected && previousSelection,
           released,
-          fixture.querySelectorAll('.tableresponsive-toggle').length === 1 && responsive.link.isConnected &&
+          responsiveCount === 1 && responsive.link.isConnected && nextResponsive.link !== responsive.link &&
             table.querySelectorAll('th input').length === 1 && header === originalHeader && checkbox.checked,
           reattached !== drag && starts === 1 && drag.dragObject === null &&
             reattached.toggleWeightButton === drag.toggleWeightButton && drag.table.contains(handle) &&

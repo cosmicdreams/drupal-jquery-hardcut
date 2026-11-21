@@ -32,6 +32,7 @@
     this.hideText = Drupal.t('Hide lower priority columns');
     this.headers = [...table.querySelectorAll('th')];
     const retained = retainedControls.get(table);
+    retainedControls.delete(table);
     this.revealedCells = retained?.revealedCells ?? [];
 
     const wrapper = retained?.wrapper ?? document.createElement('div');
