@@ -101,7 +101,7 @@
   };
 
   /**
-   * Normalizes a legacy event without redispatching it through the DOM.
+   * Normalizes a legacy event without dispatching it again through the DOM.
    *
    * @param {Event|object} event
    *   The event passed to a native callback.

@@ -373,6 +373,22 @@ class TableDragTest extends WebDriverTestBase {
       window.gestureEvents.some(([name, type, legacy]) =>
         name === 'dropRow' && type === 'blur' && legacy)
       JS));
+
+    $this->assertSame([TRUE, TRUE], $session->evaluateScript(<<<'JS'
+      (() => {
+        const drag = Drupal.tableDrag['tabledrag-test-table'];
+        const [first, second] = drag.table.tBodies[0].rows;
+        const handle = first.querySelector('.tabledrag-handle');
+        const x = handle.getBoundingClientRect().left + window.scrollX + 2;
+        const event = (type, row) => jQuery.Event(type, {
+          pageX: x, pageY: row.getBoundingClientRect().top + window.scrollY + 2,
+        });
+        jQuery(handle).triggerHandler(event('mousedown', first));
+        jQuery(document).triggerHandler(event('mousemove', second));
+        jQuery(document).triggerHandler(event('mouseup', second));
+        return [drag.table.tBodies[0].rows[0] === second, drag.dragObject === null && drag.rowObject === null];
+      })()
+      JS));
   }
 
   /**
