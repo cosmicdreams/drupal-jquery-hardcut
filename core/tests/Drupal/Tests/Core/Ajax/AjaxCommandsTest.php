@@ -15,6 +15,8 @@ use Drupal\Core\Ajax\CloseDialogCommand;
 use Drupal\Core\Ajax\CloseModalDialogCommand;
 use Drupal\Core\Ajax\CssCommand;
 use Drupal\Core\Ajax\DataCommand;
+use Drupal\Core\Ajax\DispatchEventCommand;
+use Drupal\Core\Ajax\FocusCommand;
 use Drupal\Core\Ajax\HtmlCommand;
 use Drupal\Core\Ajax\InsertCommand;
 use Drupal\Core\Ajax\InvokeCommand;
@@ -24,9 +26,12 @@ use Drupal\Core\Ajax\RedirectCommand;
 use Drupal\Core\Ajax\RemoveCommand;
 use Drupal\Core\Ajax\ReplaceCommand;
 use Drupal\Core\Ajax\RestripeCommand;
+use Drupal\Core\Ajax\SetAttributeCommand;
 use Drupal\Core\Ajax\SetDialogOptionCommand;
 use Drupal\Core\Ajax\SetDialogTitleCommand;
 use Drupal\Core\Ajax\SettingsCommand;
+use Drupal\Core\Ajax\SetValueCommand;
+use Drupal\Core\Ajax\ToggleClassCommand;
 use Drupal\Core\Ajax\UpdateBuildIdCommand;
 use Drupal\Core\Asset\AttachedAssets;
 use Drupal\Tests\UnitTestCase;
@@ -280,7 +285,9 @@ class AjaxCommandsTest extends UnitTestCase {
    *
    * @see \Drupal\Core\Ajax\CssCommand
    */
+  #[IgnoreDeprecations]
   public function testCssCommand(): void {
+    $this->expectUserDeprecationMessage('CssCommand without native: TRUE is deprecated in drupal:12.0.0 and is removed from drupal:13.0.0. Use native: TRUE with CSS selectors and absolute values. See https://www.drupal.org/node/CHANGE_RECORD.');
     $command = new CssCommand('#page-title', ['text-decoration' => 'blink']);
     $command->setProperty('font-size', '40px')->setProperty('font-weight', 'bold');
 
@@ -302,7 +309,9 @@ class AjaxCommandsTest extends UnitTestCase {
    *
    * @see \Drupal\Core\Ajax\DataCommand
    */
+  #[IgnoreDeprecations]
   public function testDataCommand(): void {
+    $this->expectUserDeprecationMessage('DataCommand without native: TRUE is deprecated in drupal:12.0.0 and is removed from drupal:13.0.0. Use native: TRUE with Drupal.ajax.elementData. See https://www.drupal.org/node/CHANGE_RECORD.');
     $command = new DataCommand('#page-title', 'my-data', ['key' => 'value']);
 
     $expected = [
@@ -313,6 +322,19 @@ class AjaxCommandsTest extends UnitTestCase {
     ];
 
     $this->assertEquals($expected, $command->render());
+  }
+
+  /**
+   * Tests the native command payloads.
+   */
+  public function testNativeCommandPayloads(): void {
+    self::assertSame(['command' => 'focus', 'selector' => '#target'], new FocusCommand('#target')->render());
+    self::assertSame(['command' => 'setValue', 'selector' => '#target', 'value' => 'new'], new SetValueCommand('#target', 'new')->render());
+    self::assertSame(['command' => 'dispatchEvent', 'selector' => '#target', 'event' => 'change'], new DispatchEventCommand('#target', 'change')->render());
+    self::assertSame(['command' => 'toggleClass', 'selector' => '#target', 'className' => 'active', 'enabled' => FALSE], new ToggleClassCommand('#target', 'active', FALSE)->render());
+    self::assertSame(['command' => 'setAttribute', 'selector' => '#target', 'name' => 'title', 'value' => 'New'], new SetAttributeCommand('#target', 'title', 'New')->render());
+    self::assertSame(['command' => 'css', 'selector' => '#target', 'argument' => ['color' => 'blue'], 'native' => TRUE], new CssCommand('#target', ['color' => 'blue'], native: TRUE)->render());
+    self::assertSame(['command' => 'data', 'selector' => '#target', 'name' => 'value', 'value' => 0, 'native' => TRUE], new DataCommand('#target', 'value', 0, native: TRUE)->render());
   }
 
   /**
