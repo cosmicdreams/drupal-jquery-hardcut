@@ -9,7 +9,9 @@ use Drupal\Core\Ajax\AjaxResponse;
 use Drupal\Core\Ajax\AlertCommand;
 use Drupal\Core\Ajax\CloseDialogCommand;
 use Drupal\Core\Ajax\HtmlCommand;
+use Drupal\Core\Render\Markup;
 use Drupal\Core\Url;
+use Symfony\Component\HttpFoundation\File\UploadedFile;
 use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\Response;
@@ -396,11 +398,26 @@ class AjaxTestController {
    * @return array
    *   The render array.
    */
-  public function globalEvents() {
+  public function globalEvents(Request $request) {
+    if ($request->query->getBoolean('legacy_overrides')) {
+      $libraries = ['ajax_test/legacy_overrides'];
+      if ($request->query->getBoolean('legacy_plugin')) {
+        $libraries[] = 'core/internal.jquery.form';
+      }
+      return [
+        '#attached' => ['library' => $libraries],
+        '#markup' => Markup::create(implode('', [
+          '<form id="legacy-ajax-overrides" action="' . Url::fromRoute('ajax_test.echo_request')->toString() . '">',
+          '<select name="override"><option>disabled</option><option>enabled</option></select>',
+          '<button type="button">Send request</button></form><div id="request-lane-echo"></div>',
+        ])),
+      ];
+    }
     return [
       '#attached' => [
         'library' => [
           'ajax_test/global_events',
+          'core/drupal.xhr',
         ],
       ],
       '#markup' => implode('', [
@@ -421,6 +438,93 @@ class AjaxTestController {
     $response = new AjaxResponse();
     $response->addCommand(new HtmlCommand('#test_global_events_log', ''));
     return $response;
+  }
+
+  /**
+   * Returns the request header in an Ajax command.
+   */
+  public function echoHeader(Request $request): AjaxResponse {
+    $response = new AjaxResponse();
+    $response->addCommand(new HtmlCommand('#test_global_events_log', [
+      '#plain_text' => $request->headers->get('X-Test-Ajax-Send', 'missing'),
+    ]));
+    return $response;
+  }
+
+  /**
+   * Loads the shared transport for a test page.
+   */
+  public function nativeRequest(Request $request): array {
+    if ($request->query->getBoolean('commands')) {
+      return [
+        'link' => [
+          '#type' => 'link',
+          '#title' => 'Send native Ajax request',
+          '#url' => Url::fromRoute('ajax_test.echo_request'),
+          '#attributes' => ['class' => ['use-ajax']],
+        ],
+        'output' => ['#markup' => '<div id="request-lane-echo"></div>'],
+        '#attached' => ['library' => ['core/drupal.ajax']],
+      ];
+    }
+    return [
+      '#markup' => 'Native request test',
+      '#attached' => ['library' => ['core/drupal.xhr']],
+    ];
+  }
+
+  /**
+   * Returns the request method and payload as an Ajax command.
+   */
+  public function echoRequest(Request $request): Response {
+    if ($request->query->getBoolean('failure_test')) {
+      return new Response('Ajax form failure', 500);
+    }
+    $response = new AjaxResponse();
+    $response->addCommand(new HtmlCommand('#request-lane-echo', [
+      '#plain_text' => json_encode($this->getRequestData($request), JSON_THROW_ON_ERROR),
+    ]));
+    if ($request->query->getBoolean('iframe_test')) {
+      $json = htmlspecialchars(json_encode($response->getCommands(), JSON_THROW_ON_ERROR), ENT_QUOTES, 'UTF-8');
+      return new Response('<textarea>' . $json . '</textarea>', 200, ['Content-Type' => 'text/html; charset=UTF-8']);
+    }
+    return $response;
+  }
+
+  /**
+   * Returns the request method and payload as JSON.
+   */
+  public function echoNativeRequest(Request $request): JsonResponse {
+    $data = $this->getRequestData($request);
+    if ($request->query->getBoolean('progress')) {
+      $data += [
+        'status' => 1,
+        'percentage' => 100,
+        'message' => $data['method'] . ' ' . $data['requestedWith'],
+        'label' => 'Finished',
+      ];
+    }
+    return new JsonResponse($data);
+  }
+
+  /**
+   * Collects the request method, headers, fields, and uploaded file details.
+   */
+  private function getRequestData(Request $request): array {
+    $upload = $request->files->get('upload');
+    return [
+      'method' => $request->getMethod(),
+      'query' => $request->server->get('QUERY_STRING'),
+      'body' => $request->getContent(),
+      'requestedWith' => $request->headers->get('X-Requested-With'),
+      'contentType' => $request->headers->get('Content-Type'),
+      'fields' => $request->request->all(),
+      'upload' => $upload instanceof UploadedFile ? [
+        $upload->getClientOriginalName(),
+        $upload->getSize(),
+        hash_file('sha256', $upload->getPathname()),
+      ] : NULL,
+    ];
   }
 
   /**

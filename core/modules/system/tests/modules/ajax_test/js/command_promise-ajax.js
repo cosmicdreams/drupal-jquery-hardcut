@@ -1,9 +1,9 @@
 /**
  * @file
- *  Testing behavior for the add_js command.
+ * Tests the execution order of commands that return promises.
  */
 
-(($, Drupal) => {
+((Drupal) => {
   /**
    * Test Ajax execution Order.
    *
@@ -12,7 +12,7 @@
    * @param {object} response
    *   The response from the Ajax request.
    * @param {string} response.selector
-   *   A jQuery selector string.
+   *   The selector for the insertion target.
    *
    * @return {Promise}
    *  The promise that will resolve once this command has finished executing.
@@ -21,11 +21,8 @@
     ajax,
     response,
   ) {
-    return new Promise((resolve, reject) => {
-      setTimeout(() => {
-        this.insert(ajax, response);
-        resolve();
-      }, Math.random() * 500);
-    });
+    return new Promise((resolve) => {
+      setTimeout(resolve, 0);
+    }).then(() => this.insert(ajax, response));
   };
-})(jQuery, Drupal);
+})(Drupal);

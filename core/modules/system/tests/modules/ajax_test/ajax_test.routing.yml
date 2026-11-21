@@ -123,6 +123,34 @@ ajax_test.global_events_clear_log:
   requirements:
     _access: 'TRUE'
 
+ajax_test.echo_header:
+  path: '/ajax-test/echo-header'
+  defaults:
+    _controller: '\Drupal\ajax_test\Controller\AjaxTestController::echoHeader'
+  requirements:
+    _access: 'TRUE'
+
+ajax_test.echo_request:
+  path: '/ajax-test/echo-request'
+  defaults:
+    _controller: '\Drupal\ajax_test\Controller\AjaxTestController::echoRequest'
+  requirements:
+    _access: 'TRUE'
+
+ajax_test.native_request:
+  path: '/ajax-test/native-request'
+  defaults:
+    _controller: '\Drupal\ajax_test\Controller\AjaxTestController::nativeRequest'
+  requirements:
+    _access: 'TRUE'
+
+ajax_test.echo_native_request:
+  path: '/ajax-test/echo-native-request'
+  defaults:
+    _controller: '\Drupal\ajax_test\Controller\AjaxTestController::echoNativeRequest'
+  requirements:
+    _access: 'TRUE'
+
 ajax_test.exception_link:
   path: '/ajax-test/exception-link'
   defaults:

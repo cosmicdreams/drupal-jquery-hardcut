@@ -4,10 +4,6 @@
       "owner": "Z",
       "references": 1
     },
-    "misc/ajax.js": {
-      "owner": "A",
-      "references": 1
-    },
     "misc/autocomplete.js": {
       "owner": "C",
       "references": 1
@@ -64,17 +60,29 @@
       "owner": "U",
       "references": 1
     },
-    "misc/jquery.drupal-bc.js": {
-      "owner": "B",
+    "misc/jquery.drupal-ajax-bc.js": {
+      "owner": "A",
       "references": 1
     },
-    "misc/jquery.no-conflict.js": {
+    "misc/jquery.drupal-ajax-commands.js": {
+      "owner": "A",
+      "references": 1
+    },
+    "misc/jquery.drupal-bc.js": {
       "owner": "B",
       "references": 1
     },
     "misc/jquery.form.js": {
       "owner": "A",
       "references": 4
+    },
+    "misc/jquery.no-conflict.js": {
+      "owner": "B",
+      "references": 1
+    },
+    "misc/jquery.tabledrag.bc.js": {
+      "owner": "T",
+      "references": 1
     },
     "misc/machine-name.js": {
       "owner": "U",
@@ -84,28 +92,12 @@
       "owner": "D",
       "references": 1
     },
-    "misc/progress.js": {
-      "owner": "U",
-      "references": 1
-    },
     "misc/states.js": {
       "owner": "S",
       "references": 1
     },
     "misc/tabbingmanager.js": {
       "owner": "U",
-      "references": 1
-    },
-    "misc/tabledrag.js": {
-      "owner": "T",
-      "references": 1
-    },
-    "misc/tableresponsive.js": {
-      "owner": "T",
-      "references": 1
-    },
-    "misc/tableselect.js": {
-      "owner": "T",
       "references": 1
     },
     "misc/timezone.js": {
@@ -268,15 +260,15 @@
       "owner": "U",
       "references": 1
     },
-    "modules/system/tests/modules/ajax_test/js/command_promise-ajax.js": {
-      "owner": "A",
-      "references": 1
-    },
     "modules/system/tests/modules/ajax_test/js/global_events.js": {
       "owner": "A",
       "references": 1
     },
     "modules/system/tests/modules/ajax_test/js/insert-ajax.js": {
+      "owner": "A",
+      "references": 1
+    },
+    "modules/system/tests/modules/ajax_test/js/legacy-overrides.js": {
       "owner": "A",
       "references": 1
     },
@@ -296,10 +288,6 @@
       "owner": "U",
       "references": 1
     },
-    "modules/system/tests/modules/tabledrag_test/js/tabledrag_test.js": {
-      "owner": "T",
-      "references": 1
-    },
     "modules/taxonomy/js/taxonomy.js": {
       "owner": "U",
       "references": 1
@@ -314,10 +302,6 @@
     },
     "modules/user/js/user.permissions.js": {
       "owner": "U",
-      "references": 1
-    },
-    "modules/views/js/ajax_view.js": {
-      "owner": "A",
       "references": 1
     },
     "modules/views/js/base.js": {
@@ -356,24 +340,8 @@
       "owner": "U",
       "references": 1
     },
-    "themes/default_admin/js/tabledrag.js": {
-      "owner": "T",
-      "references": 1
-    },
-    "themes/default_admin/js/tableselect.js": {
-      "owner": "T",
-      "references": 1
-    },
     "themes/default_admin/js/vertical-tabs.js": {
       "owner": "U",
-      "references": 1
-    },
-    "themes/default_admin/migration/js/tabledrag.js": {
-      "owner": "T",
-      "references": 1
-    },
-    "themes/default_admin/migration/js/tableselect.js": {
-      "owner": "T",
       "references": 1
     }
   },

@@ -3,7 +3,8 @@
  * Progress bar.
  */
 
-(function ($, Drupal) {
+// cspell:ignore nocontent notmodified
+((Drupal) => {
   /**
    * Theme function for the progress bar.
    *
@@ -27,14 +28,14 @@
 
   /**
    * A progressbar object. Initialized with the given id. Must be inserted into
-   * the DOM afterwards through progressBar.element.
+   * the DOM afterwards through progressBar.elementNode.
    *
    * Method is the function which will perform the HTTP request to get the
    * progress bar state. Either "GET" or "POST".
    *
    * @example
    * pb = new Drupal.ProgressBar('myProgressBar');
-   * some_element.appendChild(pb.element);
+   * some_element.appendChild(pb.elementNode);
    *
    * @constructor
    *
@@ -57,127 +58,163 @@
     // users
     // have completed their current activity and not interrupt the screen
     // reader.
-    this.element = $(Drupal.theme('progressBar', id));
+    const template = document.createElement('template');
+    template.innerHTML = Drupal.theme('progressBar', id);
+    this.elementNode = template.content.firstElementChild;
   };
 
-  $.extend(
-    Drupal.ProgressBar.prototype,
-    /** @lends Drupal.ProgressBar# */ {
-      /**
-       * Set the percentage and status message for the progressbar.
-       *
-       * @param {number} percentage
-       *   The progress percentage.
-       * @param {string} message
-       *   The message to show the user.
-       * @param {string} label
-       *   The text for the progressbar label.
-       */
-      setProgress(percentage, message, label) {
-        if (percentage >= 0 && percentage <= 100) {
-          $(this.element)
-            .find('div.progress__bar')
-            .each(function () {
-              this.style.width = `${percentage}%`;
+  // With the legacy adapter, element is a deprecated jQuery accessor.
+  // Access elementNode in callbacks that use the native element.
+  Object.defineProperty(Drupal.ProgressBar.prototype, 'element', {
+    configurable: true,
+    get() {
+      return this.elementNode;
+    },
+    set(element) {
+      this.elementNode = element;
+    },
+  });
+
+  Object.assign(Drupal.ProgressBar.prototype, {
+    /**
+     * Set the percentage and status message for the progressbar.
+     *
+     * @param {number} percentage
+     *   The progress percentage.
+     * @param {string} message
+     *   The message to show the user.
+     * @param {string} label
+     *   The text for the progressbar label.
+     */
+    setProgress(percentage, message, label) {
+      if (percentage >= 0 && percentage <= 100) {
+        this.elementNode.querySelectorAll('.progress__bar').forEach((bar) => {
+          bar.style.width = `${percentage}%`;
+        });
+        this.elementNode
+          .querySelectorAll('.progress__percentage')
+          .forEach((label) => {
+            label.textContent = `${percentage}%`;
+          });
+      }
+      for (const [part, value] of [
+        ['description', message],
+        ['label', label],
+      ]) {
+        if (value !== undefined) {
+          this.elementNode
+            .querySelectorAll(`.progress__${part}`)
+            .forEach((element) => {
+              element.innerHTML = value;
             });
-          $(this.element)
-            .find('div.progress__percentage')
-            .html(`${percentage}%`);
         }
-        $('div.progress__description', this.element).html(message);
-        $('div.progress__label', this.element).html(label);
-        if (this.updateCallback) {
-          this.updateCallback(percentage, message, this);
-        }
-      },
+      }
+      if (this.updateCallback) {
+        this.updateCallback(percentage, message, this);
+      }
+    },
 
-      /**
-       * Start monitoring progress via Ajax.
-       *
-       * @param {string} uri
-       *   The URI to use for monitoring.
-       * @param {number} delay
-       *   The delay for calling the monitoring URI.
-       */
-      startMonitoring(uri, delay) {
-        this.delay = delay;
-        this.uri = uri;
-        this.sendPing();
-      },
+    /**
+     * Start monitoring progress via Ajax.
+     *
+     * @param {string} uri
+     *   The URI to use for monitoring.
+     * @param {number} delay
+     *   The delay for calling the monitoring URI.
+     */
+    startMonitoring(uri, delay) {
+      this.delay = delay;
+      this.uri = uri;
+      this.sendPing();
+    },
 
-      /**
-       * Stop monitoring progress via Ajax.
-       */
-      stopMonitoring() {
+    /**
+     * Stop monitoring progress via Ajax.
+     */
+    stopMonitoring() {
+      clearTimeout(this.timer);
+      // This allows monitoring to be stopped from within the callback.
+      this.uri = null;
+    },
+
+    /**
+     * Request progress data from server.
+     */
+    sendPing() {
+      if (this.timer) {
         clearTimeout(this.timer);
-        // This allows monitoring to be stopped from within the callback.
-        this.uri = null;
-      },
+      }
+      if (!this.uri) {
+        return;
+      }
 
-      /**
-       * Request progress data from server.
-       */
-      sendPing() {
-        if (this.timer) {
-          clearTimeout(this.timer);
+      const uri = new URL(this.uri, document.baseURI);
+      uri.search += `${uri.search ? '&' : '?'}_format=json`;
+      const method = this.method.toUpperCase();
+      const success = (response) => {
+        if (response?.status === 0) {
+          this.displayError(response.data);
+          return;
+        }
+        if (response != null) {
+          this.setProgress(
+            response.percentage,
+            response.message,
+            response.label,
+          );
         }
         if (this.uri) {
-          const pb = this;
-          // When doing a post request, you need non-null data. Otherwise a
-          // HTTP 411 or HTTP 406 (with Apache mod_security) error may result.
-          let uri = this.uri;
-          if (!uri.includes('?')) {
-            uri += '?';
-          } else {
-            uri += '&';
-          }
-          uri += '_format=json';
-          $.ajax({
-            type: this.method,
-            url: uri,
-            data: '',
-            dataType: 'json',
-            success(progress) {
-              // Display errors.
-              if (progress.status === 0) {
-                pb.displayError(progress.data);
-                return;
-              }
-              // Update display.
-              pb.setProgress(
-                progress.percentage,
-                progress.message,
-                progress.label,
-              );
-              // Schedule next timer.
-              pb.timer = setTimeout(() => {
-                pb.sendPing();
-              }, pb.delay);
-            },
-            error(xmlhttp) {
-              const e = new Drupal.AjaxError(xmlhttp, pb.uri);
-              pb.displayError(`<pre>${e.message}</pre>`);
-            },
-          });
+          this.timer = setTimeout(() => this.sendPing(), this.delay);
         }
-      },
-
-      /**
-       * Display errors on the page.
-       *
-       * @param {string} string
-       *   The error message to show the user.
-       */
-      displayError(string) {
-        const error = $('<div class="messages messages--error"></div>').html(
-          string,
+      };
+      const error = (xhr) => {
+        this.displayError(
+          `<pre>${new Drupal.AjaxError(xhr, this.uri).message}</pre>`,
         );
-        $(this.element).before(error).hide();
-
-        if (this.errorCallback) {
-          this.errorCallback(this);
-        }
-      },
+      };
+      if (Drupal.ProgressBar.request) {
+        Drupal.ProgressBar.request({
+          url: uri.href,
+          method,
+          dataType: 'json',
+          success,
+          error,
+        });
+        return;
+      }
+      Drupal.ajaxRequest(
+        {
+          url: uri.href,
+          method,
+          headers: { Accept: 'application/json, text/javascript, */*; q=0.01' },
+        },
+        ({ status, response, xhr }) => {
+          if (['success', 'nocontent', 'notmodified'].includes(status)) {
+            success(response);
+          } else {
+            error(xhr);
+          }
+        },
+      ).commands.catch(Drupal.throwError);
     },
-  );
-})(jQuery, Drupal);
+
+    /**
+     * Display errors on the page.
+     *
+     * @param {string} string
+     *   The error message to show the user.
+     */
+    displayError(string) {
+      const error = document.createElement('div');
+      error.className = 'messages messages--error';
+      error.innerHTML = string;
+      this.elementNode.before(error);
+      this.elementNode.style.display = 'none';
+
+      if (this.errorCallback) {
+        this.errorCallback(this);
+      }
+    },
+  });
+  document.dispatchEvent(new CustomEvent('drupal:progress-ready'));
+})(Drupal);

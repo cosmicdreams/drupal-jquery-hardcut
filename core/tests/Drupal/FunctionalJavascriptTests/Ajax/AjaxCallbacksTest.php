@@ -32,8 +32,13 @@ class AjaxCallbacksTest extends WebDriverTestBase {
 
     // Test Ajax callback when date changes.
     $this->drupalGet('ajax_forms_test_ajax_element_form');
+    $this->assertSame('undefined', $this->getSession()->evaluateScript('typeof window.jQuery?.fn.ajaxSubmit'));
     $this->assertNotEmpty($this->getSession()->getPage()->find('xpath', '//div[@id="ajax_date_value"][text()="No date yet selected"]'));
-    $this->getSession()->executeScript('jQuery("[data-drupal-selector=edit-date]").val("2016-01-01").trigger("change");');
+    $this->getSession()->executeScript(<<<'JS'
+      const input = document.querySelector('[data-drupal-selector=edit-date]');
+      input.value = '2016-01-01';
+      input.dispatchEvent(new Event('change', { bubbles: true }));
+      JS);
     $this->assertNotEmpty($this->assertSession()->waitForElement('xpath', '//div[@id="ajax_date_value"]/div[text()="2016-01-01"]'));
   }
 
@@ -45,8 +50,12 @@ class AjaxCallbacksTest extends WebDriverTestBase {
     // Test Ajax callback when datetime changes.
     $this->drupalGet('ajax_forms_test_ajax_element_form');
     $this->assertNotEmpty($this->getSession()->getPage()->find('xpath', '//div[@id="ajax_datetime_value"][text()="No datetime selected."]'));
-    $this->getSession()->executeScript('jQuery("[data-drupal-selector=edit-datetime-date]").val("2016-01-01");');
-    $this->getSession()->executeScript('jQuery("[data-drupal-selector=edit-datetime-time]").val("12:00:00").trigger("change");');
+    $this->getSession()->executeScript(<<<'JS'
+      document.querySelector('[data-drupal-selector=edit-datetime-date]').value = '2016-01-01';
+      const time = document.querySelector('[data-drupal-selector=edit-datetime-time]');
+      time.value = '12:00:00';
+      time.dispatchEvent(new Event('change', { bubbles: true }));
+      JS);
     $this->assertNotEmpty($this->assertSession()->waitForElement('xpath', '//div[@id="ajax_datetime_value"]/div[text()="2016-01-01 12:00:00"]'));
   }
 

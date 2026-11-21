@@ -13,6 +13,11 @@ namespace Drupal\Core\Ajax;
  * This command is implemented by Drupal.AjaxCommands.prototype.invoke()
  * defined in misc/ajax.js.
  *
+ * @deprecated in drupal:12.0.0 and is removed from drupal:13.0.0. Use a native
+ *   command for the operation, or define an explicit command in your extension.
+ *
+ * @see https://www.drupal.org/node/CHANGE_RECORD
+ *
  * @ingroup ajax
  */
 class InvokeCommand implements CommandInterface {
@@ -38,7 +43,7 @@ class InvokeCommand implements CommandInterface {
    * Implements Drupal\Core\Ajax\CommandInterface:render().
    */
   public function render() {
-
+    @trigger_error(__CLASS__ . ' is deprecated in drupal:12.0.0 and is removed from drupal:13.0.0. Use a native command for the operation, or define an explicit command in your extension. See https://www.drupal.org/node/CHANGE_RECORD.', E_USER_DEPRECATED);
     return [
       'command' => 'invoke',
       'selector' => $this->selector,

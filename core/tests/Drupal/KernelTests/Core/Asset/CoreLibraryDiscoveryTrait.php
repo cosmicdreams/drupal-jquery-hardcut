@@ -19,6 +19,7 @@ trait CoreLibraryDiscoveryTrait {
    * The jQuery family of libraries.
    */
   private const JQUERY_LIBRARIES = [
+    'core/drupal.ajax.jquery',
     'core/drupal.jquery.position',
     'core/internal.jquery.form',
     'core/internal.jquery_ui',

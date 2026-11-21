@@ -1,6 +1,9 @@
 /*!
  * jQuery Form Plugin
- * version: 4.3.0
+ * version: 4.3.0 (modified by Drupal)
+ * Drupal maintains jQuery 4 compatibility and builds extra iframe fields
+ * with DOM APIs. The plugin accepts Drupal's prepared forms, honors upload
+ * vetoes and aborts, restores resetForm, and tracks deferred iframe requests.
  * Requires jQuery v1.7.2 or later
  * Project repository: https://github.com/jquery-form/form
 
@@ -176,54 +179,58 @@
 			iframeSrc : iframeSrc
 		}, options);
 
-		// hook for manipulating the form data before it is extracted;
-		// convenient for use with rich editors like tinyMCE or FCKEditor
-		var veto = {};
+		var prepared = options.drupalAjaxPreparedForm;
+		var traditional;
+		var elements = prepared ? prepared.elements.slice() : [];
+		var qx, a;
+		if (prepared) {
+			traditional = options.traditional === undefined ? $.ajaxSettings.traditional : options.traditional;
+			a = prepared.values;
+			qx = prepared.extraQuery;
+		} else {
+			// hook for manipulating the form data before it is extracted;
+			// convenient for use with rich editors like tinyMCE or FCKEditor
+			var veto = {};
 
-		this.trigger('form-pre-serialize', [this, options, veto]);
+			this.trigger('form-pre-serialize', [this, options, veto]);
 
-		if (veto.veto) {
-			log('ajaxSubmit: submit vetoed via form-pre-serialize trigger');
+			if (veto.veto) {
+				log('ajaxSubmit: submit vetoed via form-pre-serialize trigger');
 
-			return this;
-		}
+				return this;
+			}
 
-		// provide opportunity to alter form data before it is serialized
-		if (options.beforeSerialize && options.beforeSerialize(this, options) === false) {
-			log('ajaxSubmit: submit aborted via beforeSerialize callback');
+			// provide opportunity to alter form data before it is serialized
+			if (options.beforeSerialize && options.beforeSerialize(this, options) === false) {
+				log('ajaxSubmit: submit aborted via beforeSerialize callback');
 
-			return this;
-		}
+				return this;
+			}
 
-		var traditional = options.traditional;
+			traditional = options.traditional === undefined ? $.ajaxSettings.traditional : options.traditional;
+			a = this.formToArray(options.semantic, elements, options.filtering);
 
-		if (typeof traditional === 'undefined') {
-			traditional = $.ajaxSettings.traditional;
-		}
+			if (options.data) {
+				var optionsData = typeof(options.data) === "function" ? options.data(a) : options.data;
 
-		var elements = [];
-		var qx, a = this.formToArray(options.semantic, elements, options.filtering);
+				options.extraData = optionsData;
+				qx = $.param(optionsData, traditional);
+			}
 
-		if (options.data) {
-			var optionsData = typeof(options.data) === "function" ? options.data(a) : options.data;
+			// give pre-submit callback an opportunity to abort the submit
+			if (options.beforeSubmit && options.beforeSubmit(a, this, options) === false) {
+				log('ajaxSubmit: submit aborted via beforeSubmit callback');
 
-			options.extraData = optionsData;
-			qx = $.param(optionsData, traditional);
-		}
+				return this;
+			}
 
-		// give pre-submit callback an opportunity to abort the submit
-		if (options.beforeSubmit && options.beforeSubmit(a, this, options) === false) {
-			log('ajaxSubmit: submit aborted via beforeSubmit callback');
+			// fire vetoable 'validate' event
+			this.trigger('form-submit-validate', [a, this, options, veto]);
+			if (veto.veto) {
+				log('ajaxSubmit: submit vetoed via form-submit-validate trigger');
 
-			return this;
-		}
-
-		// fire vetoable 'validate' event
-		this.trigger('form-submit-validate', [a, this, options, veto]);
-		if (veto.veto) {
-			log('ajaxSubmit: submit vetoed via form-submit-validate trigger');
-
-			return this;
+				return this;
+			}
 		}
 
 		var q = $.param(a, traditional);
@@ -240,6 +247,12 @@
 		}
 
 		var callbacks = [];
+
+		if (options.resetForm) {
+			callbacks.push(function() {
+				HTMLFormElement.prototype.reset.call($form[0]);
+			});
+		}
 
 		if (options.clearForm) {
 			callbacks.push(function() {
@@ -315,13 +328,21 @@
 
 		// options.iframe allows user to force iframe mode
 		// 06-NOV-09: now defaulting to iframe mode if file input is detected
-		if (options.iframe !== false && (options.iframe || shouldUseFrame)) {
+		var useFrame = options.iframe !== false && (options.iframe || shouldUseFrame);
+		if (useFrame) {
 			// hack to fix Safari hang (thanks to Tim Molendijk for this)
 			// see: http://groups.google.com/group/jquery-dev/browse_thread/thread/36395b7ab510dd5d
 			if (options.closeKeepAlive) {
-				$.get(options.closeKeepAlive, function() {
+				var keepAlive = $.get(options.closeKeepAlive, function() {
 					jqxhr = fileUploadIframe(a);
+					if (prepared) {
+						$form.data('jqxhr', jqxhr);
+						prepared.track(jqxhr);
+					}
 				});
+				if (prepared) {
+					jqxhr = keepAlive.fail(prepared.cancel);
+				}
 
 			} else {
 				jqxhr = fileUploadIframe(a);
@@ -336,8 +357,12 @@
 
 		$form.removeData('jqxhr').data('jqxhr', jqxhr);
 
-		// clear element array
-		for (var k = 0; k < elements.length; k++) {
+		if (prepared && jqxhr && !(useFrame && options.closeKeepAlive)) {
+			prepared.track(jqxhr);
+		}
+
+		// A deferred iframe submission still needs these inputs.
+		for (var k = 0; k < elements.length && !(useFrame && options.closeKeepAlive); k++) {
 			elements[k] = null;
 		}
 
@@ -427,7 +452,7 @@
 				}
 
 				if (beforeSend) {
-					beforeSend.call(this, xhr, o);
+					return beforeSend.call(this, xhr, o);
 				}
 			};
 
@@ -488,10 +513,15 @@
 				getResponseHeader     : function() {},
 				setRequestHeader      : function() {},
 				abort                 : function(status) {
+					if (this.aborted || deferred.state() !== 'pending') {
+						return;
+					}
 					var e = (status === 'timeout' ? 'timeout' : 'aborted');
 
 					log('aborting upload... ' + e);
 					this.aborted = 1;
+					clearTimeout(timeoutHandle);
+					removeLoadListener();
 
 					try { // #214, #257
 						if (io.contentWindow.document.execCommand) {
@@ -499,18 +529,33 @@
 						}
 					} catch (ignore) {}
 
-					$io.attr('src', s.iframeSrc); // abort op in progress
+					if (s.iframeTarget) {
+						$io.attr('src', s.iframeSrc);
+					} else {
+						$io.remove();
+					}
 					xhr.error = e;
-					if (s.error) {
-						s.error.call(s.context, xhr, e, status);
-					}
-
-					if (g) {
-						$.event.trigger('ajaxError', [xhr, s, e]);
-					}
-
-					if (s.complete) {
-						s.complete.call(s.context, xhr, e);
+					try {
+						if (s.error) {
+							s.error.call(s.context, xhr, e, status);
+						}
+						if (g) {
+							$.event.trigger('ajaxError', [xhr, s, e]);
+						}
+						if (s.complete) {
+							s.complete.call(s.context, xhr, e);
+						}
+					} finally {
+						try {
+							deferred.reject(xhr, status === 'server abort' ? 'error' : e, status);
+							if (g) {
+								$.event.trigger('ajaxComplete', [xhr, s]);
+							}
+						} finally {
+							if (g && !--$.active) {
+								$.event.trigger('ajaxStop');
+							}
+						}
 					}
 				}
 			};
@@ -525,8 +570,8 @@
 			}
 
 			if (s.beforeSend && s.beforeSend.call(s.context, xhr, s) === false) {
-				if (s.global) {
-					$.active--;
+				if (!xhr.aborted && g && !--$.active) {
+					$.event.trigger('ajaxStop');
 				}
 				deferred.reject();
 
@@ -602,6 +647,9 @@
 
 			// take a breath so that pending repaints get some cpu time before the upload starts
 			function doSubmit() {
+				if (xhr.aborted) {
+					return;
+				}
 				// make sure form attrs are set
 				var t = $form.attr2('target'),
 					a = $form.attr2('action'),
@@ -717,6 +765,14 @@
 
 			var data, doc, domCheckCount = 50, callbackProcessed;
 
+			function removeLoadListener() {
+				if (io && io.detachEvent) {
+					io.detachEvent('onload', cb);
+				} else if (io) {
+					io.removeEventListener('load', cb, false);
+				}
+			}
+
 			function cb(e) {
 				if (xhr.aborted || callbackProcessed) {
 					return;
@@ -729,14 +785,12 @@
 				}
 				if (e === CLIENT_TIMEOUT_ABORT && xhr) {
 					xhr.abort('timeout');
-					deferred.reject(xhr, 'timeout');
 
 					return;
 
 				}
 				if (e === SERVER_ABORT && xhr) {
 					xhr.abort('server abort');
-					deferred.reject(xhr, 'error', 'server abort');
 
 					return;
 				}
@@ -748,11 +802,7 @@
 					}
 				}
 
-				if (io.detachEvent) {
-					io.detachEvent('onload', cb);
-				} else {
-					io.removeEventListener('load', cb, false);
-				}
+				removeLoadListener();
 
 				var status = 'success', errMsg;
 

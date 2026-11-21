@@ -63,12 +63,15 @@
       // both text formats using CKEditor 5 and text formats in the process of
       // switching to CKEditor 5, but prevented from doing so by validation.
       if (
-        this.$form[0].querySelector('#edit-editor-editor').value !== 'ckeditor5'
+        this.form.querySelector('#edit-editor-editor').value !== 'ckeditor5'
       ) {
         return;
       }
     }
 
-    originalAjaxEventResponse.apply(this, args);
+    return originalAjaxEventResponse.apply(this, args);
   };
+  if (Drupal.ajax.isNativeCallback(originalAjaxEventResponse)) {
+    Drupal.ajax.useNativeCallback(Drupal.Ajax.prototype.eventResponse);
+  }
 })(Drupal, once);

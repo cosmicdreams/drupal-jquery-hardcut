@@ -119,7 +119,7 @@ class InstalledProfileAssetsTest extends KernelTestBase {
     $baseline = Json::decode(file_get_contents(__DIR__ . '/fixtures/effective-assets-pinned.json'));
     $expected = $baseline['profiles']["$profile:$theme"];
     // The explicit compatibility library restores the alias and connects its
-    // adapter immediately after the distribution.
+    // adapters immediately after the distribution.
     foreach ($expected['js'] as $index => $asset) {
       if ($asset['data'] === 'core/assets/vendor/jquery/jquery.min.js') {
         $bootstrap = $asset;
@@ -127,7 +127,11 @@ class InstalledProfileAssetsTest extends KernelTestBase {
         $bootstrap['minified'] = FALSE;
         $adapter = $bootstrap;
         $adapter['data'] = 'core/misc/jquery.drupal-bc.js';
-        array_splice($expected['js'], $index + 1, 0, [$bootstrap, $adapter]);
+        $ajax_adapter = $bootstrap;
+        $ajax_adapter['data'] = 'core/misc/jquery.drupal-ajax-bc.js';
+        $tables_adapter = $bootstrap;
+        $tables_adapter['data'] = 'core/misc/jquery.tabledrag.bc.js';
+        array_splice($expected['js'], $index + 1, 0, [$bootstrap, $adapter, $ajax_adapter, $tables_adapter]);
         break;
       }
     }

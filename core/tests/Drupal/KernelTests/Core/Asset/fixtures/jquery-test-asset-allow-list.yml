@@ -2,12 +2,12 @@
 - fixture: core/modules/system/tests/modules/ajax_test/ajax_test.libraries.yml:ajax_insert
   removal: A
   assets: [js/insert-ajax.js]
-- fixture: core/modules/system/tests/modules/ajax_test/ajax_test.libraries.yml:command_promise
-  removal: A
-  assets: [js/command_promise-ajax.js]
 - fixture: core/modules/system/tests/modules/ajax_test/ajax_test.libraries.yml:global_events
   removal: A
   assets: [js/global_events.js]
+- fixture: core/modules/system/tests/modules/ajax_test/ajax_test.libraries.yml:legacy_overrides
+  removal: Z (Drupal 13)
+  assets: [js/legacy-overrides.js]
 - fixture: core/modules/system/tests/modules/css_disable_transitions_test/css_disable_transitions_test.libraries.yml:testing.css_disable_transitions_test
   removal: U
   assets: [js/disable_transitions.theme.js]
@@ -24,6 +24,3 @@
 - fixture: core/modules/system/tests/modules/js_message_test/js_message_test.libraries.yml:show_message
   removal: U
   assets: [js/js_message_test.js]
-- fixture: core/modules/system/tests/modules/tabledrag_test/tabledrag_test.libraries.yml:tabledrag
-  removal: T
-  assets: [js/tabledrag_test.js]
