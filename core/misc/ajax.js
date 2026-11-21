@@ -2563,8 +2563,8 @@
     }
   }
 
-  // Properties that accepted unitless numbers through jQuery.cssNumber.
-  const unitlessProperties = new Set([
+  // Properties that accepted numbers without units through jQuery.cssNumber.
+  const propertiesWithoutUnits = new Set([
     'animation-iteration-count',
     'aspect-ratio',
     'border-image-slice',
@@ -2994,7 +2994,9 @@
           const units =
             typeof value === 'number' &&
             !property.startsWith('--') &&
-            !unitlessProperties.has(property.replace(vendorPropertyPrefix, ''))
+            !propertiesWithoutUnits.has(
+              property.replace(vendorPropertyPrefix, ''),
+            )
               ? 'px'
               : '';
           style.setProperty(property, `${value}${units}`);
