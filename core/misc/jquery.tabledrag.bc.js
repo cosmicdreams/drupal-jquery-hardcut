@@ -210,6 +210,7 @@
     window.Drupal.eventBindings.observe({
       add(binding) {
         const { target, type, listener } = binding;
+        // The general Drupal jQuery bridge already forwards anchor clicks.
         if (
           !binding.tableInteraction ||
           (type === 'click' && target instanceof HTMLAnchorElement)
@@ -486,7 +487,12 @@
         type === 'blur' ||
         (type === 'click' &&
           target.matches?.('input:is([type="checkbox"], [type="radio"])'));
-      return !leveragesNative || !jquery._data(target, type);
+      // Other triggers, such as button clicks, may also run a native default
+      // action after jQuery has already delivered the table handler.
+      return (
+        jquery.event.triggered !== type &&
+        (!leveragesNative || !jquery._data(target, type))
+      );
     };
   }
 

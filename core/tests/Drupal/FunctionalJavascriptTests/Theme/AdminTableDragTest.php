@@ -125,6 +125,11 @@ class AdminTableDragTest extends TableDragTest {
             Number(event instanceof jQuery.Event && event.currentTarget.id === 'bulk-row');
           return super.focusHandler(event);
         }
+
+        blurHandler(event) {
+          window.bulkBlur.push(event instanceof jQuery.Event && event.currentTarget.id === 'bulk-row');
+          return super.blurHandler(event);
+        }
       }
       const originalClass = Drupal.DefaultAdminBulkActions;
       const Wrapped = function (...args) {
@@ -132,6 +137,7 @@ class AdminTableDragTest extends TableDragTest {
       };
       Wrapped.prototype = BulkActions.prototype;
       window.bulkChanges = [];
+      window.bulkBlur = [];
       Drupal.DefaultAdminBulkActions = Wrapped;
       try {
         window.bulkInstance = new Wrapped(fixture.querySelector('[data-drupal-views-bulk-actions]'));
@@ -140,7 +146,7 @@ class AdminTableDragTest extends TableDragTest {
       }
       JS);
     $this->loadLateBridge();
-    $this->assertSame([TRUE, TRUE, TRUE, TRUE, [TRUE, TRUE, FALSE]], $session->evaluateScript(<<<'JS'
+    $this->assertSame([TRUE, TRUE, [TRUE], TRUE, TRUE, [TRUE, TRUE, FALSE]], $session->evaluateScript(<<<'JS'
       (() => {
         const bulk = window.bulkInstance;
         const legacyTabbable = bulk.$tabbable;
@@ -153,6 +159,7 @@ class AdminTableDragTest extends TableDragTest {
         const singleFocus = window.bulkFocus === 1;
         jQuery(bulk.$tabbable.filter('#bulk-row')).triggerHandler('focus');
         const syntheticFocus = window.bulkFocus === 2;
+        jQuery(row).trigger('blur');
         const selectAll = bulk.selectAll[0];
         selectAll.click();
         const selected = row.checked && bulk.bulkActions.dataset.drupalStickyVbo === 'true' &&
@@ -160,7 +167,7 @@ class AdminTableDragTest extends TableDragTest {
         selectAll.click();
         const cleared = !row.checked && bulk.bulkActions.dataset.drupalStickyVbo === 'false';
         row.click();
-        return [alias && emptyAlias, singleFocus && syntheticFocus, selected, cleared, window.bulkChanges];
+        return [alias && emptyAlias, singleFocus && syntheticFocus, window.bulkBlur, selected, cleared, window.bulkChanges];
       })()
       JS));
   }

@@ -365,6 +365,48 @@ class TableDragTest extends WebDriverTestBase {
   }
 
   /**
+   * Tests synthetic clicks on themed anchors and uncancelled buttons.
+   */
+  #[IgnoreDeprecations]
+  public function testLegacyToggleClicks(): void {
+    $this->drupalGet('tabledrag_test', ['query' => ['legacy' => 1]]);
+    $this->assertSame([[1, 2], [1, 2]], $this->getSession()->evaluateScript(<<<'JS'
+      (() => {
+        const table = document.createElement('table');
+        table.id = 'toggle-clicks';
+        document.body.append(table);
+        const originalTheme = Drupal.theme.tableDragToggle;
+        const prototype = Drupal.TableResponsive.prototype;
+        const originalToggle = prototype.eventhandlerToggleColumns;
+        let anchorClicks = 0;
+        let buttonClicks = 0;
+        try {
+          Drupal.theme.tableDragToggle = () => {
+            const wrapper = document.createElement('div');
+            wrapper.innerHTML = '<a href="#" data-drupal-selector="tabledrag-toggle-weight">Weights</a>';
+            return wrapper;
+          };
+          const drag = new Drupal.tableDrag(table, {});
+          drag.toggleColumns = () => { anchorClicks += 1; };
+          jQuery(drag.toggleWeightButton).triggerHandler('click');
+          const anchorAfterHandler = anchorClicks;
+          jQuery(drag.toggleWeightButton).trigger('click');
+
+          prototype.eventhandlerToggleColumns = () => { buttonClicks += 1; };
+          const responsive = new Drupal.TableResponsive(table);
+          jQuery(responsive.link).trigger('click');
+          const buttonAfterTrigger = buttonClicks;
+          responsive.link.click();
+          return [[anchorAfterHandler, anchorClicks], [buttonAfterTrigger, buttonClicks]];
+        } finally {
+          Drupal.theme.tableDragToggle = originalTheme;
+          prototype.eventhandlerToggleColumns = originalToggle;
+        }
+      })()
+      JS));
+  }
+
+  /**
    * Checks legacy gesture overrides at the real mouse and keyboard bindings.
    */
   #[IgnoreDeprecations]
