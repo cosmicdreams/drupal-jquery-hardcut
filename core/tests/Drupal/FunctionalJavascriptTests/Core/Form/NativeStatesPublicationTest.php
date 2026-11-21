@@ -1640,7 +1640,6 @@ final class NativeStatesPublicationTest extends WebDriverTestBase {
   public function testFunctionTriggerCleanupListenAndNits(): void {
     $session = $this->getSession();
     $assert = $this->assertSession();
-    $page = $session->getPage();
 
     $this->drupalGet('jquery-bc-test/events');
     $r3Result = $session->evaluateScript(<<<'JS'
@@ -1807,12 +1806,16 @@ final class NativeStatesPublicationTest extends WebDriverTestBase {
       ->element('css selector', '#r3-multi-input')
       ->postValue(['text' => 'ready']);
     $multiAfterKeyupVisible = $multiDep->isVisible();
-    $session->executeScript("jQuery('#r3-multi-input').off('keyup.r3multi');");
-    $page->findField('r3_multi_input')->setValue('reset');
+    // Prove the change half alone: a new value without an event does not flip
+    // the state, and a lone change event does, while keyup is still bound.
+    $session->executeScript("document.getElementById('r3-multi-input').value = 'reset';");
+    $multiBeforeChangeVisible = $multiDep->isVisible();
+    $session->executeScript("document.getElementById('r3-multi-input').dispatchEvent(new Event('change', { bubbles: true }));");
     $multiAfterChangeVisible = $multiDep->isVisible();
 
     $r3Result['multiInitialVisible'] = $multiInitialVisible;
     $r3Result['multiAfterKeyupVisible'] = $multiAfterKeyupVisible;
+    $r3Result['multiBeforeChangeVisible'] = $multiBeforeChangeVisible;
     $r3Result['multiAfterChangeVisible'] = $multiAfterChangeVisible;
 
     $this->assertEquals([
@@ -1831,6 +1834,7 @@ final class NativeStatesPublicationTest extends WebDriverTestBase {
       'collapsedEmptyJquery' => TRUE,
       'multiInitialVisible' => FALSE,
       'multiAfterKeyupVisible' => TRUE,
+      'multiBeforeChangeVisible' => TRUE,
       'multiAfterChangeVisible' => FALSE,
     ], $r3Result);
   }
