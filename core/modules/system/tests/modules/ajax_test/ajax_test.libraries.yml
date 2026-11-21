@@ -49,3 +49,11 @@ global_events:
   dependencies:
     - core/drupal.ajax
     - core/jquery
+
+legacy_overrides:
+  js:
+    js/legacy-overrides.js: {}
+  dependencies:
+    - core/jquery
+    - core/drupal.ajax
+    - core/once
