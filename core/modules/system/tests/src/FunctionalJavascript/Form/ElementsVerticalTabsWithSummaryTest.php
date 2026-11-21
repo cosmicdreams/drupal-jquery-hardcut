@@ -64,14 +64,14 @@ class ElementsVerticalTabsWithSummaryTest extends WebDriverTestBase {
           const chain = second.tabHide() === second;
           const switched = context.querySelector('.is-selected') === first.item[0];
           second.tabShow();
-          return [seen, selected.includes('Second'), initial, chain, switched, second.details[0].open];
+          return [seen, selected.includes('Second'), initial, chain, switched, second.details[0].getAttribute("open")];
         } finally {
           Drupal.theme.verticalTab = oldTheme;
           Drupal.deprecationError = warn;
         }
       })()
       JS);
-    $this->assertSame([[TRUE, TRUE], TRUE, TRUE, TRUE, TRUE, TRUE], $actual);
+    $this->assertSame([[TRUE, TRUE], TRUE, TRUE, TRUE, TRUE, 'true'], $actual);
   }
 
   /**

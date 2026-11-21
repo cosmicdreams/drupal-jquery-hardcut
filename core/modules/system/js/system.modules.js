@@ -56,8 +56,8 @@
           packages.forEach((details) => {
             if (!details.open) {
               details.dataset.drupalSystemState = 'forced-open';
-              details.open = true;
             }
+            details.setAttribute('open', 'true');
             if (
               !Array.from(details.querySelectorAll('tbody tr')).some(
                 (row) => row.getClientRects().length,

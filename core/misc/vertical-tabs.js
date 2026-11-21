@@ -221,7 +221,7 @@
             input.value = detailsElement.id;
           }
         });
-      detailsElement.setAttribute('open', 'open');
+      detailsElement.setAttribute('open', 'true');
       itemElement.classList.add('is-selected');
       document.getElementById('active-vertical-tab')?.remove();
       const marker = document.createElement('span');
