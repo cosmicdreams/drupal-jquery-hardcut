@@ -769,6 +769,33 @@ JS;
   }
 
   /**
+   * Tests legacy overrides against the production Ajax runtime.
+   */
+  public function testLegacyAjaxOverrides(): void {
+    $this->drupalGet('ajax-test/global-events', ['query' => ['legacy_overrides' => 1]]);
+    $session = $this->getSession();
+    $this->assertJsCondition('Boolean(window.legacyAjaxOverrides)');
+    $this->assertTrue($session->evaluateScript('legacyAjaxOverrides.ajax.$form === legacyAjaxOverrides.$form'));
+
+    $session->executeScript(<<<'JS'
+      jQuery('#legacy-ajax-overrides button').trigger('mousedown.legacyOverrides');
+      JS);
+    $this->assertSame(0, $session->evaluateScript('window.drupalCumulativeXhrCount'));
+    $this->assertSame([], $session->evaluateScript('legacyAjaxOverrides.trace'));
+
+    $session->executeScript(<<<'JS'
+      const form = document.querySelector('#legacy-ajax-overrides');
+      form.querySelector('select').value = 'enabled';
+      jQuery(form.querySelector('button')).trigger('mousedown.legacyOverrides');
+      JS);
+    $this->assertSession()->assertExpectedAjaxRequest(1);
+    $this->assertSame(['beforeSend', 'success', 'ajaxComplete'], $session->evaluateScript('legacyAjaxOverrides.trace'));
+    $this->assertSame('override', $session->evaluateScript('document.activeElement.name'));
+    $data = json_decode($this->assertSession()->elementExists('css', '#request-lane-echo')->getText(), TRUE, flags: JSON_THROW_ON_ERROR);
+    $this->assertSame('enabled', $data['fields']['override']);
+  }
+
+  /**
    * Tests native request completion separately from the Ajax command queue.
    */
   public function testNativeCommandRequest(): void {

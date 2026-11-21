@@ -61,30 +61,29 @@
     },
   };
 
-  // Override the beforeSend method to disable the submit button until
-  // the AJAX request is completed. This is done to avoid the race
-  // condition that is being caused by change event listener that is
-  // attached to every form element inside field storage config edit
-  // form to update the field config form based on changes made to the
-  // storage settings.
-  const originalAjaxBeforeSend = Drupal.Ajax.prototype.beforeSend;
-  // eslint-disable-next-line func-names
-  Drupal.Ajax.prototype.beforeSend = function () {
-    // Disable the submit button on AJAX request initiation.
-    $('.field-config-edit-form [data-drupal-selector="edit-submit"]').prop(
-      'disabled',
-      true,
-    );
-    // eslint-disable-next-line prefer-rest-params
-    return originalAjaxBeforeSend.apply(this, arguments);
-  };
-  // Re-enable the submit button after AJAX request is completed.
-  // eslint-disable-next-line
-  $(document).on('ajaxComplete', () => {
-    $('.field-config-edit-form [data-drupal-selector="edit-submit"]').prop(
-      'disabled',
-      false,
-    );
+  // Storage changes can replace the configuration form. Keep its submit
+  // button disabled through the command queue, including overlapping requests.
+  const pendingRequests = new Set();
+  function updateSubmitButtons() {
+    document
+      .querySelectorAll(
+        '.field-config-edit-form [data-drupal-selector="edit-submit"]',
+      )
+      .forEach((button) => {
+        button.disabled = pendingRequests.size > 0;
+      });
+  }
+  document.addEventListener(
+    'drupal:ajax-before-send',
+    ({ detail: { ajax } }) => {
+      pendingRequests.add(ajax);
+      updateSubmitButtons();
+    },
+  );
+  document.addEventListener('drupal:ajax-complete', ({ detail: { ajax } }) => {
+    if (pendingRequests.delete(ajax)) {
+      updateSubmitButtons();
+    }
   });
 
   /**
@@ -290,9 +289,7 @@
             drupalSelector: null,
             scrollY: null,
           };
-          // Use jQuery on to listen as the mousedown event is propagated by
-          // jQuery trigger().
-          $(input).on('mousedown', () => {
+          input.addEventListener('mousedown', () => {
             returnFocus = {
               drupalSelector: document.activeElement.hasAttribute(
                 'data-drupal-selector',
@@ -320,7 +317,13 @@
             returnFocus = {};
           });
         });
-        $('input[data-drupal-selector="edit-refresh"]').trigger('mousedown');
+        document
+          .querySelectorAll('input[data-drupal-selector="edit-refresh"]')
+          .forEach((input) =>
+            input.dispatchEvent(
+              new MouseEvent('mousedown', { bubbles: true, cancelable: true }),
+            ),
+          );
 
         // Disabled elements do not appear in POST ajax data, so we mark the
         // elements disabled only after firing the request.
@@ -525,7 +528,9 @@
       $(clickToSelectEl).on('click', (event) => {
         const clickToSelect = event.target.closest('.js-click-to-select');
         this.selectHandler(clickToSelect, input);
-        $(input).trigger('updateOptions');
+        input.dispatchEvent(
+          new Event('updateOptions', { bubbles: true, cancelable: true }),
+        );
       });
     },
     // Handles adding and removing classes for the different states.

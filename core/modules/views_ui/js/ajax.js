@@ -40,29 +40,13 @@
     response,
     status,
   ) {
-    const $form = $('.js-views-ui-dialog form');
-    // Identify the button that was clicked so that .ajaxSubmit() can use it.
-    // We need to do this for both .click() and .mousedown() since JavaScript
-    // code might trigger either behavior.
-    const $submitButtons = $(
-      once(
-        'views-ajax-submit',
-        $form.find('input[type=submit].js-form-submit, button.js-form-submit'),
-      ),
-    );
-    $submitButtons.on('click mousedown', function () {
-      this.form.clk = this;
-    });
-    once('views-ajax-submit', $form).forEach((form) => {
-      const $form = $(form);
-      const elementSettings = {
+    once('views-ajax-submit', '.js-views-ui-dialog form').forEach((form) => {
+      Drupal.ajax({
         url: response.url,
         event: 'submit',
-        base: $form.attr('id'),
+        base: form.id,
         element: form,
-      };
-      const ajaxForm = Drupal.ajax(elementSettings);
-      ajaxForm.$form = $form;
+      }).form = form;
     });
   };
 

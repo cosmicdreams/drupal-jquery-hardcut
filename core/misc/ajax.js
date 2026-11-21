@@ -562,6 +562,20 @@
   // and requests whose default success callback ran.
   const preparedRequests = new WeakSet();
   const receivedRequests = new WeakSet();
+  const startedRequests = new WeakSet();
+
+  /**
+   * Publishes completion after the response queue or request cleanup.
+   */
+  function finishRequest(ajax) {
+    if (startedRequests.delete(ajax)) {
+      document.dispatchEvent(
+        new CustomEvent('drupal:ajax-complete', {
+          detail: { ajax },
+        }),
+      );
+    }
+  }
 
   /**
    * Undoes the state an Ajax request attempt changed on its element.
@@ -596,6 +610,7 @@
       const settings = ajax.settings || drupalSettings;
       Drupal.attachBehaviors(ajax.form, settings);
     }
+    finishRequest(ajax);
   }
 
   /**
@@ -1201,7 +1216,7 @@
     /**
      * @type {HTMLElement}
      */
-    this.element = element;
+    this.element = nativeElement(element);
 
     /**
      * The last focused element right before processing ajax response.
@@ -1230,7 +1245,7 @@
     if (!this.url) {
       if (this.element?.tagName === 'A') {
         this.url = this.element.getAttribute('href') ?? undefined;
-      } else if (this.element && element.form) {
+      } else if (this.form) {
         this.url = this.form.getAttribute('action') ?? undefined;
       }
     }
@@ -1314,6 +1329,12 @@
       beforeSend(xmlhttprequest, options) {
         ajax.ajaxing = true;
         const wasDisabled = ajax.element?.disabled;
+        startedRequests.add(ajax);
+        document.dispatchEvent(
+          new CustomEvent('drupal:ajax-before-send', {
+            detail: { ajax },
+          }),
+        );
         try {
           return ajax.beforeSend(nativeRequest(xmlhttprequest), options);
         } finally {
@@ -1561,6 +1582,7 @@
 
     // Create a synonym for this to reduce code confusion.
     const ajax = this;
+    const submitter = event.submitter?.form === ajax.form && event.submitter;
 
     // Do not perform another Ajax command if one is already in progress.
     if (ajax.ajaxing) {
@@ -1570,6 +1592,9 @@
     preparedRequests.delete(ajax);
     try {
       if (ajax.form) {
+        if (submitter) {
+          ajax.form.clk = submitter;
+        }
         // If setClick is set, we must set this to ensure that the button's
         // value is passed.
         if (ajax.setClick) {
@@ -1583,8 +1608,8 @@
         // A veto or cancellation undoes what this attempt changed, so it can
         // be retried.
         submitForm(ajax.form, ajax.options, (serialized) => {
-          if (ajax.setClick) {
-            element.form.clk = null;
+          if (ajax.setClick || submitter) {
+            ajax.form.clk = null;
           }
           restoreElement(ajax, serialized, true);
         });
@@ -1890,22 +1915,26 @@
 
     // A contributed success override may return a value or a promise. The
     // request is finished when it settles, even if a command failed.
+    const complete = (error) => {
+      this.ajaxing = false;
+      finishRequest(this);
+      onComplete?.(error);
+    };
     let result;
     try {
       result = this.success(response, status);
     } catch (error) {
-      this.ajaxing = false;
-      onComplete?.(error);
+      complete(error);
       throw error;
     }
-    return Promise.resolve(result).then(
-      () => {
-        this.ajaxing = false;
-        onComplete?.();
-      },
+    const commands = Promise.resolve(result);
+    const completed = this.afterSuccess
+      ? commands.then(() => this.afterSuccess(response, status))
+      : commands;
+    return completed.then(
+      () => complete(),
       (error) => {
-        this.ajaxing = false;
-        onComplete?.(error);
+        complete(error);
         throw error;
       },
     );

@@ -63,7 +63,7 @@
       // both text formats using CKEditor 5 and text formats in the process of
       // switching to CKEditor 5, but prevented from doing so by validation.
       if (
-        this.$form[0].querySelector('#edit-editor-editor').value !== 'ckeditor5'
+        this.form.querySelector('#edit-editor-editor').value !== 'ckeditor5'
       ) {
         return;
       }
