@@ -1337,16 +1337,16 @@ JS;
   }
 
   /**
-   * Tests the native default action of an unnamespaced keyboard activation.
+   * Tests the native default action of keyboard activation without a namespace.
    */
-  public function testUnnamespacedKeyboardActivation(): void {
+  public function testKeyboardActivationWithoutNamespace(): void {
     $this->drupalGet('ajax-test/global-events');
     $result = $this->getSession()->evaluateScript(<<<'JS'
       (() => {
         const checkbox = document.body.appendChild(document.createElement('input'));
         checkbox.type = 'checkbox';
         const trace = [];
-        const ajax = Drupal.ajax({ element: checkbox, event: 'click', url: location.href });
+        const ajax = Drupal.ajax({ element: checkbox, event: 'click', keypress: true, url: location.href });
         ajax.eventResponse = (element, event) => trace.push([element.checked, event.isTrigger]);
         checkbox.dispatchEvent(new KeyboardEvent('keypress', { key: 'Enter', bubbles: true, cancelable: true }));
         return [checkbox.checked, trace];

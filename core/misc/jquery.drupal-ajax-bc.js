@@ -518,7 +518,8 @@
   // A raw $.ajax() call can still carry Drupal Ajax settings, so keep delaying
   // its global completion events until the commands have run.
   ['ajaxSuccess', 'ajaxComplete'].forEach((type) => {
-    const special = (jQuery.event.special[type] ??= {});
+    const special =
+      jQuery.event.special[type] || (jQuery.event.special[type] = {});
     const previous = special.trigger;
     special.trigger = function (event, xhr, settings, data) {
       if (!facades.has(xhr) && commandsPending(xhr, settings)) {
@@ -1243,7 +1244,8 @@
         return;
       }
       removalTypes.add(type);
-      const special = (jQuery.event.special[type] ??= {});
+      const special =
+        jQuery.event.special[type] || (jQuery.event.special[type] = {});
       const previous = special.remove;
       special.remove = function (handle) {
         try {

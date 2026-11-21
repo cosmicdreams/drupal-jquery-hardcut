@@ -267,7 +267,7 @@
       Array.isArray(phase) ||
       (phase && Object.hasOwn(phase, 'value'))
     ) {
-      frame.defaultEvent ??= event;
+      frame.defaultEvent = frame.defaultEvent || event;
       return frame.defaultEvent === event;
     }
     return false;
@@ -314,7 +314,8 @@
   function initialize() {
     const registry = window.Drupal.eventBindings;
     registry.connectLegacy = registry.connectLegacy ?? connect;
-    registry.isForeignDefaultAction ??= isForeignDefaultAction;
+    registry.isForeignDefaultAction =
+      registry.isForeignDefaultAction || isForeignDefaultAction;
     registry.connectLegacy(instance);
   }
 
