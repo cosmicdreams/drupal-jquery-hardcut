@@ -47,7 +47,7 @@
           this.node,
           'summaryUpdated',
           undefined,
-          this.onSummaryUpdated.bind(this),
+          this.onSummaryUpdatedNative.bind(this),
         );
         Drupal.form.publish(this.node, 'summaryUpdated');
         if (this.summaryWrapper) {
@@ -58,9 +58,12 @@
       },
 
       /**
-       * Update summary.
+       * Updates the summary from a native summaryUpdated event.
+       *
+       * Assign a replacement to this method to register a native override.
+       * Each instance binds the method when it is constructed.
        */
-      onSummaryUpdated() {
+      onSummaryUpdatedNative() {
         const text = Drupal.form.getSummary(this.node);
         if (this.summaryWrapper) {
           this.summaryWrapper.innerHTML = Drupal.theme(

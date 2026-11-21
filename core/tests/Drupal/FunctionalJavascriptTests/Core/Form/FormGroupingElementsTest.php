@@ -448,6 +448,55 @@ class FormGroupingElementsTest extends WebDriverTestBase {
   }
 
   /**
+   * Tests that legacy summary overrides receive jQuery events.
+   */
+  public function testLegacySummaryUpdatedOverride(): void {
+    $this->drupalGet('form-test/group-details', ['query' => ['legacy-details' => 1]]);
+    $actual = $this->getSession()->evaluateScript(<<<'JS'
+      (() => {
+        const warnings = [];
+        const warn = Drupal.deprecationError;
+        Drupal.deprecationError = ({ message }) => warnings.push(message);
+        const prototype = Drupal.DetailsSummarizedContent.prototype;
+        const original = prototype.onSummaryUpdated;
+        const calls = [];
+        const container = document.body.appendChild(document.createElement('div'));
+        try {
+          prototype.onSummaryUpdated = function (event) {
+            calls.push([event instanceof jQuery.Event, event.isDefaultPrevented(), event.type, this.node.id]);
+            return original.call(this, event);
+          };
+          container.innerHTML = '<details id="override-details"><summary>Toggle</summary><input name="override"></details>';
+          // Initial summary rendering runs the override.
+          Drupal.attachBehaviors(container);
+          const details = container.querySelector('details');
+          Drupal.form.setSummary(details, () => 'Override summary');
+          const text = details.querySelector('summary .summary').textContent;
+          prototype.onSummaryUpdated = original;
+          const restored = prototype.onSummaryUpdatedNative.legacyCallback === undefined;
+          return [calls, text, restored, warnings];
+        }
+        finally {
+          prototype.onSummaryUpdated = original;
+          Drupal.deprecationError = warn;
+          container.remove();
+        }
+      })()
+      JS);
+    $this->assertSame([
+      [
+        [TRUE, FALSE, 'summaryUpdated', 'override-details'],
+        [TRUE, FALSE, 'summaryUpdated', 'override-details'],
+      ],
+      ' (Override summary)',
+      TRUE,
+      [
+        'Drupal.DetailsSummarizedContent#onSummaryUpdated is deprecated in drupal:12.0.0 and is removed from drupal:13.0.0. Use onSummaryUpdatedNative() with a native event. See https://www.drupal.org/node/CHANGE_RECORD.',
+      ],
+    ], $actual);
+  }
+
+  /**
    * Tests zero-jQuery native dispatch, return values, deprecations, and details accessors.
    */
   public function testFormBridgeContracts(): void {

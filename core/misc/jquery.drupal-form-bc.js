@@ -1033,6 +1033,45 @@
    */
   function installDetailsMembers() {
     const prototype = window.Drupal.DetailsSummarizedContent.prototype;
+    const native = prototype.onSummaryUpdatedNative;
+    const contract = 'Drupal.DetailsSummarizedContent#onSummaryUpdated';
+    const migration = 'Use onSummaryUpdatedNative() with a native event.';
+    const callDefault = function (event) {
+      warn(contract, migration);
+      return native.call(this, event?.originalEvent || event);
+    };
+    Object.defineProperty(prototype, 'onSummaryUpdated', {
+      configurable: true,
+      get() {
+        return this.onSummaryUpdatedNative?.legacyCallback || callDefault;
+      },
+      set(callback) {
+        if (!callback || callback === callDefault) {
+          if (this === prototype) {
+            prototype.onSummaryUpdatedNative = native;
+          } else {
+            delete this.onSummaryUpdatedNative;
+          }
+          return;
+        }
+        warn(contract, migration);
+        // The pinned listener received the jQuery event, including during the
+        // initial summary rendering.
+        const adapted = function (event) {
+          const legacy =
+            legacyEvents.get(event) ||
+            (event instanceof jquery.Event ? event : jquery.Event(event));
+          const result = callback.call(this, legacy);
+          if (result === false) {
+            legacy.preventDefault();
+            legacy.stopPropagation();
+          }
+          return result;
+        };
+        adapted.legacyCallback = callback;
+        this.onSummaryUpdatedNative = adapted;
+      },
+    });
     for (const [legacyName, nativeName] of [
       ['$node', 'node'],
       ['$detailsSummarizedContentWrapper', 'summaryWrapper'],
