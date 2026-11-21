@@ -50,13 +50,11 @@
 - core/misc/jquery.drupal-bc.js
 - core/misc/jquery.form.js
 - core/misc/jquery.no-conflict.js
+- core/misc/jquery.tabledrag.bc.js
 - core/misc/machine-name.js
 - core/misc/position.js
 - core/misc/states.js
 - core/misc/tabbingmanager.js
-- core/misc/tabledrag.js
-- core/misc/tableresponsive.js
-- core/misc/tableselect.js
 - core/misc/timezone.js
 - core/misc/vertical-tabs.js
 - core/modules/block/js/block.admin.js
@@ -108,8 +106,4 @@
 - core/themes/default_admin/js/details.js
 - core/themes/default_admin/js/media-library.ui.js
 - core/themes/default_admin/js/nav-tabs.js
-- core/themes/default_admin/js/tabledrag.js
-- core/themes/default_admin/js/tableselect.js
 - core/themes/default_admin/js/vertical-tabs.js
-- core/themes/default_admin/migration/js/tabledrag.js
-- core/themes/default_admin/migration/js/tableselect.js

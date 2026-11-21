@@ -3,7 +3,8 @@
  * tabledrag.js overrides and functionality extensions.
  */
 
-(($, Drupal) => {
+((Drupal, once) => {
+  const { tableDragConstructor } = Drupal.tableInteraction;
   /**
    * Extends core's Tabledrag functionality.
    *
@@ -11,6 +12,9 @@
    */
   Drupal.behaviors.adminTableDrag = {
     attach(context, settings) {
+      if (!context?.querySelectorAll) {
+        return;
+      }
       /**
        * Refactors the table row markup to improve item label text wrapping.
        *
@@ -66,61 +70,92 @@
        *    <!-- additional <td> -->
        *   </tr>
        *
-       * @param {number} index
-       *   The index in the loop, as provided by `jQuery.each`.
        * @param {HTMLElement} row
        *   A draggable table row.
        *
        * @todo this may be removable as part of https://drupal.org/node/3083044
        */
       const createItemWrapBoundaries = (row) => {
-        const $row = $(row);
-        const $firstCell = $row
-          .find('td:first-of-type')
-          .eq(0)
-          .wrapInner(Drupal.theme('tableDragCellContentWrapper'))
-          .wrapInner(
-            $(Drupal.theme('tableDragCellItemsWrapper')).addClass(
-              'js-tabledrag-cell-content',
+        Drupal.tableInteraction.own(row.closest('table'), row, () =>
+          once.remove('adminTabledrag', row),
+        );
+        const cell = row.querySelector('td:first-of-type');
+        if (
+          !cell ||
+          cell.querySelector(':scope > .js-tabledrag-cell-content')
+        ) {
+          return;
+        }
+        const { themeContent } = tableDragConstructor;
+        const content = themeContent(
+          Drupal.theme('tableDragCellContentWrapper'),
+        );
+        const labels =
+          content instanceof Element ? content : content?.firstElementChild;
+        if (labels) {
+          labels.append(...cell.childNodes);
+          cell.append(content);
+        }
+
+        const items = themeContent(Drupal.theme('tableDragCellItemsWrapper'));
+        const wrapper =
+          items instanceof Element ? items : items?.firstElementChild;
+        if (wrapper) {
+          wrapper.classList.add('js-tabledrag-cell-content');
+          wrapper.append(...cell.childNodes);
+          cell.append(items);
+          wrapper.prepend(
+            ...wrapper.querySelectorAll(
+              ':scope > .tabledrag-cell-content__item > :is(.js-tabledrag-handle, .js-indentation)',
             ),
           );
-
-        const $targetElem = $firstCell.find('.js-tabledrag-cell-content');
-
-        // Move handle into the '.js-tabledrag-cell-content' target.
-        $targetElem
-          .eq(0)
-          .find(
-            '> .tabledrag-cell-content__item > .js-tabledrag-handle, > .tabledrag-cell-content__item > .js-indentation',
-          )
-          .prependTo($targetElem);
+        }
       };
 
       // Find each row in a draggable table and process it with
       // createItemWrapBoundaries().
-      Object.keys(settings.tableDrag || {}).forEach((base) => {
+      Object.keys(settings?.tableDrag || {}).forEach((base) => {
         once(
           'adminTabledrag',
-          $(context)
-            .find(`#${base}`)
-            .find('> tr.draggable, > tbody > tr.draggable'),
+          [...context.querySelectorAll(`#${CSS.escape(base)}`)].flatMap(
+            (table) => [
+              ...table.querySelectorAll(
+                ':scope > tr.draggable, :scope > tbody > tr.draggable',
+              ),
+            ],
+          ),
         ).forEach(createItemWrapBoundaries);
       });
     },
   };
-  $.extend(Drupal.tableDrag.prototype.row.prototype, {
+  Object.assign(Drupal.tableDrag.prototype.row.prototype, {
     /**
      * Add an asterisk or other marker to the changed row.
      *
      * @todo this may be removable as part of https://drupal.org/node/3084910
      */
     markChanged() {
-      const marker = $(Drupal.theme('tableDragChangedMarker')).addClass(
-        'js-tabledrag-changed-marker',
-      );
-      const cell = $(this.element).find('td:first-of-type');
-      if (cell.find('.js-tabledrag-changed-marker').length === 0) {
-        cell.find('.js-tabledrag-handle').after(marker);
+      const cells = [
+        ...(this.element?.querySelectorAll('td:first-of-type') ?? []),
+      ];
+      if (
+        !cells.some((cell) =>
+          cell.querySelector('.js-tabledrag-changed-marker'),
+        )
+      ) {
+        cells
+          .flatMap((cell) => [...cell.querySelectorAll('.js-tabledrag-handle')])
+          .forEach((handle) => {
+            const marker = tableDragConstructor.themeContent(
+              Drupal.theme('tableDragChangedMarker'),
+            );
+            const element =
+              marker instanceof Element ? marker : marker?.firstElementChild;
+            element?.classList.add('js-tabledrag-changed-marker');
+            if (marker instanceof Node) {
+              handle.after(marker);
+            }
+          });
       }
       Drupal.tableDrag[this.table.id].changedRowIds.add(this.element.id);
     },
@@ -139,19 +174,17 @@
      * @todo this may be removable as part of https://drupal.org/node/3083044
      */
     onIndent() {
-      $(this.table)
-        .find('.tabledrag-cell > .js-indentation')
-        .each((index, indentToMove) => {
-          const $indentToMove = $(indentToMove);
-          const $cellContent = $indentToMove.siblings(
-            '.tabledrag-cell-content',
-          );
-          $indentToMove.prependTo($cellContent);
+      this.table
+        .querySelectorAll('.tabledrag-cell > .js-indentation')
+        .forEach((indent) => {
+          indent.parentElement
+            .querySelector(':scope > .tabledrag-cell-content')
+            ?.prepend(indent);
         });
     },
   });
 
-  $.extend(
+  Object.assign(
     Drupal.theme,
     /** @lends Drupal.theme */ {
       /**
@@ -224,7 +257,7 @@
           classes.push('action-link--icon-show');
           text = Drupal.t('Show row weights');
         }
-        return `<span class="${classes.join(' ')}">${text}</a>`;
+        return `<span class="${classes.join(' ')}">${text}</span>`;
       },
 
       /**
@@ -248,4 +281,5 @@
       },
     },
   );
-})(jQuery, Drupal);
+  document.dispatchEvent(new Event('drupal:admin-tabledrag-ready'));
+})(Drupal, once);

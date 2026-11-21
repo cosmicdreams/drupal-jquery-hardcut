@@ -540,6 +540,13 @@ drupal.tabbingmanager:
     - core/drupal
     - core/tabbable
 
+drupal.table_interaction:
+  version: VERSION
+  js:
+    misc/table-interaction.js: {}
+  dependencies:
+    - core/drupal
+
 drupal.tabledrag:
   version: VERSION
   js:
@@ -549,10 +556,10 @@ drupal.tabledrag:
       misc/components/tabledrag.module.css: {}
       misc/components/tree-child.module.css: {}
   dependencies:
-    - core/jquery
     - core/drupal
     - core/drupalSettings
     - core/once
+    - core/drupal.table_interaction
     - core/drupal.touchevents-test
 
 drupal.tabledrag.ajax:
@@ -574,9 +581,9 @@ drupal.tableresponsive:
   js:
     misc/tableresponsive.js: {}
   dependencies:
-    - core/jquery
     - core/drupal
     - core/once
+    - core/drupal.table_interaction
 
 drupal.tableselect:
   version: VERSION
@@ -585,8 +592,8 @@ drupal.tableselect:
   dependencies:
     - core/drupal
     - core/drupal.checkbox
-    - core/jquery
     - core/once
+    - core/drupal.table_interaction
 
 drupal.tablesort:
   version: VERSION
@@ -696,6 +703,7 @@ jquery:
     misc/jquery.no-conflict.js: { preprocess: false, minified: false }
     misc/jquery.drupal-bc.js: { preprocess: false, minified: false }
     misc/jquery.drupal-ajax-bc.js: { preprocess: false, minified: false }
+    misc/jquery.tabledrag.bc.js: { preprocess: false, minified: false }
 
 internal.jquery.form:
   # Drupal maintains this modified copy of jQuery Form.

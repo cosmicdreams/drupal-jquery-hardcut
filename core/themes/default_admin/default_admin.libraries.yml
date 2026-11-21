@@ -138,10 +138,10 @@ admin.tabledrag:
     migration/js/tabledrag.js: {}
     js/tabledrag.js: {}
   dependencies:
-    - core/jquery
     - core/drupal
     - core/drupalSettings
     - core/once
+    - core/drupal.table_interaction
     - core/drupal.touchevents-test
 
 drupal.dblog:
@@ -338,12 +338,12 @@ tableselect:
   js:
     js/tableselect.js: {}
   dependencies:
-    - core/jquery
     - core/drupal
     - core/drupal.announce
     - core/drupal.debounce
     - core/tabbable
     - core/once
+    - core/drupal.table_interaction
 
 # Init
 
