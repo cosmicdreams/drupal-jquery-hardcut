@@ -68,7 +68,7 @@ abstract class TokenizeAreaPluginBase extends AreaPluginBase {
         '#id' => 'edit-options-token-help',
         '#states' => [
           'visible' => [
-            ':is(input, select, textarea, button)[name="options[tokenize]"]' => ['checked' => TRUE],
+            '[name="options[tokenize]"]' => ['checked' => TRUE],
           ],
         ],
       ];

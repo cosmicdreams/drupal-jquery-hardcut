@@ -206,7 +206,7 @@ class DefaultSelection extends SelectionPluginBase implements ContainerFactoryPl
       if ($entity_type->hasKey('bundle')) {
         $form['sort']['field']['#states'] = [
           'visible' => [
-            ':is(input, select, textarea, button)[name^="settings[handler_settings][target_bundles]["]' => ['checked' => TRUE],
+            '[name^="settings[handler_settings][target_bundles]["]' => ['checked' => TRUE],
           ],
         ];
       }
@@ -228,7 +228,7 @@ class DefaultSelection extends SelectionPluginBase implements ContainerFactoryPl
         '#default_value' => $configuration['sort']['direction'],
         '#states' => [
           'visible' => [
-            ':is(input, select, textarea, button)[name="settings[handler_settings][sort][field]"]' => [
+            '[name="settings[handler_settings][sort][field]"]' => [
               '!value' => '_none',
             ],
           ],
@@ -236,7 +236,7 @@ class DefaultSelection extends SelectionPluginBase implements ContainerFactoryPl
       ];
       if ($entity_type->hasKey('bundle')) {
         $form['sort']['settings']['direction']['#states']['visible'][] = [
-          ':is(input, select, textarea, button)[name^="settings[handler_settings][target_bundles]["]' => [
+          '[name^="settings[handler_settings][target_bundles]["]' => [
             'checked' => TRUE,
           ],
         ];
@@ -260,7 +260,7 @@ class DefaultSelection extends SelectionPluginBase implements ContainerFactoryPl
         '#access' => count($selected_bundles) > 1,
         '#states' => [
           'visible' => [
-            ':is(input, select, textarea, button)[name="settings[handler_settings][auto_create]"]' => ['checked' => TRUE],
+            '[name="settings[handler_settings][auto_create]"]' => ['checked' => TRUE],
           ],
         ],
         '#weight' => -1,

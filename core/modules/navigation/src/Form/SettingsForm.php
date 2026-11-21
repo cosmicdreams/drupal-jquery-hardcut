@@ -109,7 +109,7 @@ final class SettingsForm extends ConfigFormBase {
       '#type' => 'container',
       '#states' => [
         'visible' => [
-          ':is(input, select, textarea, button)[name="logo_provider"]' => ['value' => NavigationRenderer::LOGO_PROVIDER_CUSTOM],
+          '[name="logo_provider"]' => ['value' => NavigationRenderer::LOGO_PROVIDER_CUSTOM],
         ],
       ],
     ];

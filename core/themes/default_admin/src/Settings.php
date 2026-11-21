@@ -260,7 +260,7 @@ final class Settings implements ContainerInjectionInterface {
       '#states' => [
         // Show if met.
         'visible' => [
-          ':is(input, select, textarea, button)[name="preset_accent_color"]' => ['value' => 'custom'],
+          '[name="preset_accent_color"]' => ['value' => 'custom'],
         ],
       ],
     ];
@@ -314,7 +314,7 @@ final class Settings implements ContainerInjectionInterface {
       '#states' => [
         // Show if met.
         'visible' => [
-          ':is(input, select, textarea, button)[name="preset_focus_color"]' => ['value' => 'custom'],
+          '[name="preset_focus_color"]' => ['value' => 'custom'],
         ],
       ],
     ];

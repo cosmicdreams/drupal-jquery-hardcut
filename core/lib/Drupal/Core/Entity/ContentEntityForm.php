@@ -425,7 +425,7 @@ class ContentEntityForm extends EntityForm implements ContentEntityFormInterface
         '#group' => 'revision_information',
         '#states' => [
           'visible' => [
-            ':is(input, select, textarea, button)[name="revision"]' => ['checked' => TRUE],
+            '[name="revision"]' => ['checked' => TRUE],
           ],
         ],
       ];

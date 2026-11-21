@@ -252,7 +252,7 @@ class StringFilter extends FilterPluginBase implements FilterOperatorsInterface 
     // render the form items we need.
     $which = 'all';
     if (!empty($form['operator'])) {
-      $source = ':is(input, select, textarea, button)[name="options[operator]"]';
+      $source = '[name="options[operator]"]';
     }
     if ($exposed = $form_state->get('exposed')) {
       $identifier = $this->options['expose']['identifier'];
@@ -262,7 +262,7 @@ class StringFilter extends FilterPluginBase implements FilterOperatorsInterface 
         $which = in_array($this->operator, $this->operatorValues(1)) ? 'value' : 'none';
       }
       else {
-        $source = ':is(input, select, textarea, button)[name="' . $this->options['expose']['operator_id'] . '"]';
+        $source = '[name="' . $this->options['expose']['operator_id'] . '"]';
       }
     }
 

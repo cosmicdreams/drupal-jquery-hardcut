@@ -98,14 +98,14 @@ class SystemMenuBlock extends BlockBase implements ContainerFactoryPluginInterfa
     $state_conditions = [
       // When the menu level starts at anything other than 1.
       [
-        ':is(input, select, textarea, button)[name="settings[level]"]' => ['!value' => '1'],
+        '[name="settings[level]"]' => ['!value' => '1'],
       ],
       'or',
       // When links aren't all expanded, and more than one level of links are
       // shown.
       [
         'input[name="settings[expand_all_items]"]' => ['checked' => FALSE],
-        ':is(input, select, textarea, button)[name="settings[depth]"]' => ['!value' => '1'],
+        '[name="settings[depth]"]' => ['!value' => '1'],
       ],
     ];
 

@@ -47,7 +47,7 @@ class Serialized extends FieldPluginBase {
       '#default_value' => $this->options['key'],
       '#states' => [
         'visible' => [
-          ':is(input, select, textarea, button)[name="options[format]"]' => ['value' => 'key'],
+          '[name="options[format]"]' => ['value' => 'key'],
         ],
       ],
     ];

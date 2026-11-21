@@ -85,7 +85,7 @@ class BasicSettingsForm extends ConfigFormBase {
       '#type' => 'container',
       '#states' => [
         'visible' => [
-          ':is(input, select, textarea, button)[name="ui_show_preview_information"]' => ['checked' => TRUE],
+          '[name="ui_show_preview_information"]' => ['checked' => TRUE],
         ],
       ],
     ];
@@ -100,7 +100,7 @@ class BasicSettingsForm extends ConfigFormBase {
       '#type' => 'radios',
       '#states' => [
         'visible' => [
-          ':is(input, select, textarea, button)[name="ui_show_sql_query_enabled"]' => ['checked' => TRUE],
+          '[name="ui_show_sql_query_enabled"]' => ['checked' => TRUE],
         ],
       ],
       '#title' => $this->t('Show SQL query'),

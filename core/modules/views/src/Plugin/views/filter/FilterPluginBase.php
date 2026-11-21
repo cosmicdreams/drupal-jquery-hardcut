@@ -696,7 +696,7 @@ abstract class FilterPluginBase extends HandlerBase implements CacheableDependen
           '#default_value' => !empty($this->options['expose']['operator_limit_selection']),
           '#states' => [
             'visible' => [
-              ':is(input, select, textarea, button)[name="options[expose][use_operator]"]' => ['checked' => TRUE],
+              '[name="options[expose][use_operator]"]' => ['checked' => TRUE],
             ],
           ],
         ];
@@ -709,8 +709,8 @@ abstract class FilterPluginBase extends HandlerBase implements CacheableDependen
           '#description' => $this->t('Selecting none will make all of them available.'),
           '#states' => [
             'visible' => [
-              ':is(input, select, textarea, button)[name="options[expose][operator_limit_selection]"]' => ['checked' => TRUE],
-              ':is(input, select, textarea, button)[name="options[expose][use_operator]"]' => ['checked' => TRUE],
+              '[name="options[expose][operator_limit_selection]"]' => ['checked' => TRUE],
+              '[name="options[expose][use_operator]"]' => ['checked' => TRUE],
             ],
           ],
         ];
@@ -724,7 +724,7 @@ abstract class FilterPluginBase extends HandlerBase implements CacheableDependen
         '#description' => $this->t('This will appear in the URL after the ? to identify this operator.'),
         '#states' => [
           'visible' => [
-            ':is(input, select, textarea, button)[name="options[expose][use_operator]"]' => ['checked' => TRUE],
+            '[name="options[expose][use_operator]"]' => ['checked' => TRUE],
           ],
         ],
       ];
@@ -760,7 +760,7 @@ abstract class FilterPluginBase extends HandlerBase implements CacheableDependen
       '#options' => $role_options,
       '#states' => [
         'invisible' => [
-          ':is(input, select, textarea, button)[name="options[expose][remember]"]' => ['checked' => FALSE],
+          '[name="options[expose][remember]"]' => ['checked' => FALSE],
         ],
       ],
     ];
@@ -1257,7 +1257,7 @@ abstract class FilterPluginBase extends HandlerBase implements CacheableDependen
         foreach ($children as $child) {
           if (!empty($row['value'][$child]['#states']['visible'])) {
             foreach ($row['value'][$child]['#states']['visible'] as $state) {
-              if (isset($state[':is(input, select, textarea, button)' . $operator_selector]) || isset($state[':input' . $operator_selector])) {
+              if (isset($state[$operator_selector]) || isset($state[':input' . $operator_selector])) {
                 $row['value'][$child]['#title'] = '';
 
                 // Exit this loop and process the next child element.

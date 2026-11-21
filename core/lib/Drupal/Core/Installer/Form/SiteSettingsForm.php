@@ -126,7 +126,7 @@ class SiteSettingsForm extends FormBase {
       $form['settings'][$key]['advanced_options']['#parents'] = [$key];
       $form['settings'][$key]['#states'] = [
         'visible' => [
-          ':is(input, select, textarea, button)[name=driver]' => ['value' => $key],
+          '[name=driver]' => ['value' => $key],
         ],
       ];
     }

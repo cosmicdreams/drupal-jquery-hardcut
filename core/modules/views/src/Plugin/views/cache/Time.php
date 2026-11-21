@@ -88,7 +88,7 @@ class Time extends CachePluginBase {
       '#default_value' => $this->options['results_lifespan_custom'],
       '#states' => [
         'visible' => [
-          ':is(input, select, textarea, button)[name="cache_options[results_lifespan]"]' => ['value' => 'custom'],
+          '[name="cache_options[results_lifespan]"]' => ['value' => 'custom'],
         ],
       ],
     ];
@@ -108,7 +108,7 @@ class Time extends CachePluginBase {
       '#default_value' => $this->options['output_lifespan_custom'],
       '#states' => [
         'visible' => [
-          ':is(input, select, textarea, button)[name="cache_options[output_lifespan]"]' => ['value' => 'custom'],
+          '[name="cache_options[output_lifespan]"]' => ['value' => 'custom'],
         ],
       ],
     ];

@@ -71,7 +71,7 @@ class ExportForm extends FormBase {
         '#tree' => TRUE,
         '#states' => [
           'invisible' => [
-            ':is(input, select, textarea, button)[name="langcode"]' => ['value' => LanguageInterface::LANGCODE_SYSTEM],
+            '[name="langcode"]' => ['value' => LanguageInterface::LANGCODE_SYSTEM],
           ],
         ],
       ];

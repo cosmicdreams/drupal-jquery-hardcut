@@ -85,7 +85,7 @@ class StringArgument extends ArgumentPluginBase {
       '#default_value' => $this->options['limit'],
       '#states' => [
         'visible' => [
-          ':is(input, select, textarea, button)[name="options[glossary]"]' => ['checked' => TRUE],
+          '[name="options[glossary]"]' => ['checked' => TRUE],
         ],
       ],
       '#group' => 'options][more',

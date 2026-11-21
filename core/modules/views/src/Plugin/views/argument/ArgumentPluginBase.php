@@ -304,7 +304,7 @@ abstract class ArgumentPluginBase extends HandlerBase implements CacheableDepend
       '#description' => $this->t('Override the view and other argument titles. You may use Twig syntax in this field as well as the "arguments" and "raw_arguments" arrays.'),
       '#states' => [
         'visible' => [
-          ':is(input, select, textarea, button)[name="options[exception][title_enable]"]' => ['checked' => TRUE],
+          '[name="options[exception][title_enable]"]' => ['checked' => TRUE],
         ],
       ],
     ];
@@ -342,7 +342,7 @@ abstract class ArgumentPluginBase extends HandlerBase implements CacheableDepend
       '#description' => $this->t('Override the view and other argument titles. You may use Twig syntax in this field.'),
       '#states' => [
         'visible' => [
-          ':is(input, select, textarea, button)[name="options[title_enable]"]' => ['checked' => TRUE],
+          '[name="options[title_enable]"]' => ['checked' => TRUE],
         ],
       ],
       '#fieldset' => 'argument_present',
@@ -356,10 +356,10 @@ abstract class ArgumentPluginBase extends HandlerBase implements CacheableDepend
       '#states' => [
         'visible' => [
           [
-            ':is(input, select, textarea, button)[name="options[title_enable]"]' => ['checked' => TRUE],
+            '[name="options[title_enable]"]' => ['checked' => TRUE],
           ],
           [
-            ':is(input, select, textarea, button)[name="options[exception][title_enable]"]' => ['checked' => TRUE],
+            '[name="options[exception][title_enable]"]' => ['checked' => TRUE],
           ],
         ],
       ],
@@ -384,7 +384,7 @@ abstract class ArgumentPluginBase extends HandlerBase implements CacheableDepend
       '#default_value' => static::encodeValidatorId($this->options['validate']['type']),
       '#states' => [
         'visible' => [
-          ':is(input, select, textarea, button)[name="options[specify_validation]"]' => ['checked' => TRUE],
+          '[name="options[specify_validation]"]' => ['checked' => TRUE],
         ],
       ],
     ];
@@ -425,8 +425,8 @@ abstract class ArgumentPluginBase extends HandlerBase implements CacheableDepend
               '#input' => TRUE,
               '#states' => [
                 'visible' => [
-                  ':is(input, select, textarea, button)[name="options[specify_validation]"]' => ['checked' => TRUE],
-                  ':is(input, select, textarea, button)[name="options[validate][type]"]' => ['value' => $sanitized_id],
+                  '[name="options[specify_validation]"]' => ['checked' => TRUE],
+                  '[name="options[validate][type]"]' => ['value' => $sanitized_id],
                 ],
               ],
               '#id' => 'edit-options-validate-options-' . $sanitized_id,
@@ -449,7 +449,7 @@ abstract class ArgumentPluginBase extends HandlerBase implements CacheableDepend
       '#options' => $validate_options,
       '#states' => [
         'visible' => [
-          ':is(input, select, textarea, button)[name="options[specify_validation]"]' => ['checked' => TRUE],
+          '[name="options[specify_validation]"]' => ['checked' => TRUE],
         ],
       ],
       '#fieldset' => 'argument_present',
@@ -662,7 +662,7 @@ abstract class ArgumentPluginBase extends HandlerBase implements CacheableDepend
       '#default_value' => $this->options['default_argument_type'],
       '#states' => [
         'visible' => [
-          ':is(input, select, textarea, button)[name="options[default_action]"]' => ['value' => 'default'],
+          '[name="options[default_action]"]' => ['value' => 'default'],
         ],
       ],
       // Views custom key, moves this element to the appropriate container
@@ -687,8 +687,8 @@ abstract class ArgumentPluginBase extends HandlerBase implements CacheableDepend
             '#input' => TRUE,
             '#states' => [
               'visible' => [
-                ':is(input, select, textarea, button)[name="options[default_action]"]' => ['value' => 'default'],
-                ':is(input, select, textarea, button)[name="options[default_argument_type]"]' => ['value' => $id],
+                '[name="options[default_action]"]' => ['value' => 'default'],
+                '[name="options[default_argument_type]"]' => ['value' => $id],
               ],
             ],
             '#default_value' => [],
@@ -731,7 +731,7 @@ abstract class ArgumentPluginBase extends HandlerBase implements CacheableDepend
       '#default_value' => $this->options['summary']['sort_order'],
       '#states' => [
         'visible' => [
-          ':is(input, select, textarea, button)[name="options[default_action]"]' => ['value' => 'summary'],
+          '[name="options[default_action]"]' => ['value' => 'summary'],
         ],
       ],
     ];
@@ -745,7 +745,7 @@ abstract class ArgumentPluginBase extends HandlerBase implements CacheableDepend
       ],
       '#states' => [
         'visible' => [
-          ':is(input, select, textarea, button)[name="options[default_action]"]' => ['value' => 'summary'],
+          '[name="options[default_action]"]' => ['value' => 'summary'],
         ],
       ],
     ];
@@ -757,7 +757,7 @@ abstract class ArgumentPluginBase extends HandlerBase implements CacheableDepend
       '#default_value' => $this->options['summary']['format'],
       '#states' => [
         'visible' => [
-          ':is(input, select, textarea, button)[name="options[default_action]"]' => ['value' => 'summary'],
+          '[name="options[default_action]"]' => ['value' => 'summary'],
         ],
       ],
     ];
@@ -777,8 +777,8 @@ abstract class ArgumentPluginBase extends HandlerBase implements CacheableDepend
           '#input' => TRUE,
           '#states' => [
             'visible' => [
-              ':is(input, select, textarea, button)[name="options[default_action]"]' => ['value' => 'summary'],
-              ':is(input, select, textarea, button)[name="options[summary][format]"]' => ['value' => $id],
+              '[name="options[default_action]"]' => ['value' => 'summary'],
+              '[name="options[summary][format]"]' => ['value' => $id],
             ],
           ],
           '#default_value' => [],

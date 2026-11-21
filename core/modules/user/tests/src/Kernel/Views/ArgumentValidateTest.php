@@ -71,7 +71,7 @@ class ArgumentValidateTest extends ViewsKernelTestBase {
     $form_state = new FormState();
     $view->argument['null']->buildOptionsForm($form, $form_state);
     $sanitized_id = ArgumentPluginBase::encodeValidatorId('entity:user');
-    $this->assertTrue($form['validate']['options'][$sanitized_id]['roles']['#states']['visible'][':is(input, select, textarea, button)[name="options[validate][options][' . $sanitized_id . '][restrict_roles]"]']['checked']);
+    $this->assertTrue($form['validate']['options'][$sanitized_id]['roles']['#states']['visible']['[name="options[validate][options][' . $sanitized_id . '][restrict_roles]"]']['checked']);
   }
 
   /**

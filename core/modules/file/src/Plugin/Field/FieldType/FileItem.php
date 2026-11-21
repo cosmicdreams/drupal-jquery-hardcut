@@ -158,7 +158,7 @@ class FileItem extends EntityReferenceItem {
       '#description' => $this->t('This setting only has an effect if the display option is enabled.'),
       '#states' => [
         'visible' => [
-          ':is(input, select, textarea, button)[name="field_storage[subform][settings][display_field]"]' => ['checked' => TRUE],
+          '[name="field_storage[subform][settings][display_field]"]' => ['checked' => TRUE],
         ],
       ],
     ];

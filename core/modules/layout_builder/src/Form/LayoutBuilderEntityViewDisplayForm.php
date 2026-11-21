@@ -93,10 +93,10 @@ class LayoutBuilderEntityViewDisplayForm extends EntityViewDisplayEditForm {
         '#default_value' => $this->entity->isOverridable(),
         '#states' => [
           'disabled' => [
-            ':is(input, select, textarea, button)[name="layout[enabled]"]' => ['checked' => FALSE],
+            '[name="layout[enabled]"]' => ['checked' => FALSE],
           ],
           'invisible' => [
-            ':is(input, select, textarea, button)[name="layout[enabled]"]' => ['checked' => FALSE],
+            '[name="layout[enabled]"]' => ['checked' => FALSE],
           ],
         ],
       ];

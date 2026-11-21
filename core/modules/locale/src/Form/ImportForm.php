@@ -115,7 +115,7 @@ class ImportForm extends FormBase {
       '#type' => 'checkbox',
       '#states' => [
         'checked' => [
-          ':is(input, select, textarea, button)[name="customized"]' => ['checked' => TRUE],
+          '[name="customized"]' => ['checked' => TRUE],
         ],
       ],
     ];

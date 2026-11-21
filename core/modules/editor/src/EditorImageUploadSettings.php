@@ -58,7 +58,7 @@ class EditorImageUploadSettings {
     ];
     $showIfImageUploadsEnabled = [
       'visible' => [
-        ':is(input, select, textarea, button)[data-editor-image-upload="status"]' => ['checked' => TRUE],
+        '[data-editor-image-upload="status"]' => ['checked' => TRUE],
       ],
     ];
 

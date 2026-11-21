@@ -184,7 +184,7 @@ abstract class AccountForm extends ContentEntityForm implements TrustedCallbackI
         '#description' => $this->t('Provide a password for the new account in both fields.'),
         '#states' => [
           'invisible' => [
-            ':is(input, select, textarea, button)[name="notify"]' => ['checked' => TRUE],
+            '[name="notify"]' => ['checked' => TRUE],
           ],
         ],
       ];
@@ -215,7 +215,7 @@ abstract class AccountForm extends ContentEntityForm implements TrustedCallbackI
       '#access' => $account->status->access('edit') && $user->id() !== $account->id(),
       '#states' => [
         'invisible' => [
-          ':is(input, select, textarea, button)[name="notify"]' => ['checked' => TRUE],
+          '[name="notify"]' => ['checked' => TRUE],
         ],
       ],
     ];

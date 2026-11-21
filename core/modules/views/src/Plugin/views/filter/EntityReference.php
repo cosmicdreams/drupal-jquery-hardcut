@@ -415,15 +415,15 @@ class EntityReference extends ManyToOne {
     else {
       $operator_field = 'options[operator]';
       $visible[] = [
-        ':is(input, select, textarea, button)[name="options[expose_button][checkbox][checkbox]"]' => ['checked' => TRUE],
-        ':is(input, select, textarea, button)[name="options[expose][use_operator]"]' => ['checked' => TRUE],
-        ':is(input, select, textarea, button)[name="options[expose][operator_id]"]' => ['empty' => FALSE],
+        '[name="options[expose_button][checkbox][checkbox]"]' => ['checked' => TRUE],
+        '[name="options[expose][use_operator]"]' => ['checked' => TRUE],
+        '[name="options[expose][operator_id]"]' => ['empty' => FALSE],
       ];
     }
     if ($operator_field) {
       foreach ($this->operatorValues(1) as $operator) {
         $visible[] = [
-          ':is(input, select, textarea, button)[name="' . $operator_field . '"]' => ['value' => $operator],
+          '[name="' . $operator_field . '"]' => ['value' => $operator],
         ];
       }
       $form['value']['#states'] = ['visible' => $visible];

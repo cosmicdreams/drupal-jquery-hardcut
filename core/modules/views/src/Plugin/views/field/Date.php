@@ -122,7 +122,7 @@ class Date extends FieldPluginBase {
       'time span',
     ] as $custom_date_possible) {
       $form['custom_date_format']['#states']['visible'][] = [
-        ':is(input, select, textarea, button)[name="options[date_format]"]' => ['value' => $custom_date_possible],
+        '[name="options[date_format]"]' => ['value' => $custom_date_possible],
       ];
     }
     $form['timezone'] = [
@@ -134,7 +134,7 @@ class Date extends FieldPluginBase {
     ];
     foreach (array_merge(['custom'], array_keys($date_formats)) as $timezone_date_formats) {
       $form['timezone']['#states']['visible'][] = [
-        ':is(input, select, textarea, button)[name="options[date_format]"]' => ['value' => $timezone_date_formats],
+        '[name="options[date_format]"]' => ['value' => $timezone_date_formats],
       ];
     }
 
