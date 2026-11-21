@@ -177,7 +177,12 @@ class TableDragTest extends WebDriverTestBase {
    * Tests deprecated table members, event callbacks and weight notifications.
    */
   public function testLegacyTableDrag(): void {
-    foreach (['Drupal.tableDrag#$table', 'Drupal.tableDrag#$toggleWeightButton', 'The legacy event argument for pointerCoords'] as $contract) {
+    $contracts = [
+      'Drupal.tableDrag#$table',
+      'Drupal.tableDrag#$toggleWeightButton',
+      'The legacy event argument for pointerCoords',
+    ];
+    foreach ($contracts as $contract) {
       $this->expectUserDeprecationMessage("Javascript Deprecation: $contract is deprecated in drupal:12.0.0 and is removed from drupal:13.0.0. Use the native table or row member, or native theme/interaction callback.");
     }
     $this->drupalGet('tabledrag_test', ['query' => ['legacy' => 1]]);
@@ -356,8 +361,8 @@ class TableDragTest extends WebDriverTestBase {
     ] as $path => $label) {
       $this->drupalGet($path);
       $this->assertOrder(["Drag test $label 0", "Drag test $label 1"]);
-      $page = $this->getSession()->getPage();
-      $row = $page->find('named', ['link', "Drag test $label 1"])->getParent();
+      $link = $this->assertSession()->linkExists("Drag test $label 1");
+      $row = $link->getParent();
       while ($row && $row->getTagName() !== 'tr') {
         $row = $row->getParent();
       }

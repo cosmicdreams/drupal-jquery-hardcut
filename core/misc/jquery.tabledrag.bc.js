@@ -31,6 +31,8 @@
    *
    * @param {object} owner
    *   The constructor declaring the member.
+   * @param {string} ownerName
+   *   The constructor's public name.
    * @param {string} name
    *   The native member name.
    * @param {boolean} [list]
@@ -39,10 +41,10 @@
    * @deprecated in drupal:12.0.0 and is removed from drupal:13.0.0. Use the
    *   native table or row member, or native theme/interaction callback.
    */
-  function collectionAlias(owner, name, list = false) {
+  function collectionAlias(owner, ownerName, name, list = false) {
     const wrapped = new WeakMap();
     const alias = `$${name}`;
-    const label = `${owner.name || 'Drupal.tableDrag'}#${alias}`;
+    const label = `${ownerName}#${alias}`;
     Object.defineProperty(owner.prototype, alias, {
       configurable: true,
       get() {
@@ -143,8 +145,9 @@
    */
   function installTableDrag() {
     const { tableDrag } = window.Drupal;
-    collectionAlias(tableDrag, 'table');
-    collectionAlias(tableDrag, 'toggleWeightButton');
+    ['table', 'toggleWeightButton'].forEach((name) =>
+      collectionAlias(tableDrag, 'Drupal.tableDrag', name),
+    );
 
     Object.keys(tableDrag.eventCallbacks).forEach((method) =>
       eventOverride(tableDrag, method, method === 'getPointerOffset' ? 1 : 0),
@@ -167,10 +170,12 @@
    */
   function installResponsive() {
     const { TableResponsive } = window.Drupal;
-    collectionAlias(TableResponsive, 'table');
-    collectionAlias(TableResponsive, 'headers', true);
-    collectionAlias(TableResponsive, 'link');
-    collectionAlias(TableResponsive, 'revealedCells', true);
+    ['table', 'link'].forEach((name) =>
+      collectionAlias(TableResponsive, 'Drupal.TableResponsive', name),
+    );
+    ['headers', 'revealedCells'].forEach((name) =>
+      collectionAlias(TableResponsive, 'Drupal.TableResponsive', name, true),
+    );
     [
       'eventhandlerEvaluateColumnVisibility',
       'eventhandlerToggleColumns',
@@ -194,7 +199,12 @@
    */
   function installBulkActions() {
     const { DefaultAdminBulkActions } = window.Drupal;
-    collectionAlias(DefaultAdminBulkActions, 'tabbable', true);
+    collectionAlias(
+      DefaultAdminBulkActions,
+      'Drupal.DefaultAdminBulkActions',
+      'tabbable',
+      true,
+    );
     [
       'blurHandler',
       'focusHandler',

@@ -131,16 +131,28 @@ class ElementsTableSelectTest extends WebDriverTestBase {
     $assert_row_disabled(2);
     $assert_row_enabled(3);
 
-    // Table select with checkboxes allow selection of all options.
+    // A select-all interaction delivers native changes for enabled rows.
+    $this->getSession()->executeScript(<<<'JS'
+      window.rowChanges = [];
+      document.querySelector('table tbody').addEventListener('change', (event) => {
+        window.rowChanges.push([event.target.value, event.target.checked]);
+      });
+      JS);
+
+    // Table select with checkboxes allows selection of all enabled options.
     $select_all_checkbox = $this->assertSession()->elementExists('xpath', '//table/thead/tr/th/input');
     $select_all_checkbox->check();
 
     // Check that the disabled option was not enabled or selected.
     $page = $this->getSession()->getPage();
-    $page->hasCheckedField('row1');
-    $page->hasUncheckedField('row2');
+    $this->assertTrue($page->hasCheckedField('row1'));
+    $this->assertTrue($page->hasUncheckedField('row2'));
     $assert_row_disabled(2);
-    $page->hasCheckedField('row3');
+    $this->assertTrue($page->hasCheckedField('row3'));
+    $this->assertSame(
+      [['row1', TRUE], ['row3', TRUE]],
+      $this->getSession()->evaluateScript('window.rowChanges'),
+    );
   }
 
 }
