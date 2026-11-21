@@ -4,30 +4,7 @@
  */
 
 ((Drupal) => {
-  /**
-   * Connects native dropbutton interactions to the event registry.
-   */
-  function listen(target, type, listener, namespace, selector) {
-    const binding = {
-      target,
-      type,
-      listener,
-      namespace,
-      selector,
-      formInteraction: true,
-      stop() {
-        target.removeEventListener(type, handle);
-        unregister();
-      },
-    };
-    const handle = (event) => {
-      if (!binding.handlesNativeEvent) {
-        listener(event);
-      }
-    };
-    target.addEventListener(type, handle);
-    const unregister = Drupal.eventBindings.register(binding);
-  }
+  const { listen } = Drupal.formEvents;
 
   /**
    * Presents a list as a primary button with optional secondary actions.
@@ -70,7 +47,7 @@
         focusin: this.focusInNative,
       };
       Object.entries(handlers).forEach(([type, handler]) => {
-        listen(dropbutton, type, handler.bind(this), 'dropbutton');
+        listen(dropbutton, type, 'dropbutton', handler.bind(this));
       });
     } else {
       dropbutton.classList.add('dropbutton-single');
@@ -80,16 +57,9 @@
   /**
    * Toggles a dropdown when a delegated toggle is activated.
    */
-  function toggleSecondaryActions(event) {
-    if (event.button >= 1) {
-      return;
-    }
-    const toggle = event.target.closest?.('.dropbutton-toggle');
-    const wrapper = toggle?.closest('.dropbutton-wrapper');
-    if (wrapper) {
-      event.preventDefault();
-      wrapper.classList.toggle('open');
-    }
+  function toggleSecondaryActions(event, toggle) {
+    event.preventDefault();
+    toggle.closest('.dropbutton-wrapper')?.classList.toggle('open');
   }
 
   Drupal.behaviors.dropButton = {
@@ -102,8 +72,8 @@
         listen(
           body,
           'click',
-          toggleSecondaryActions,
           undefined,
+          toggleSecondaryActions,
           '.dropbutton-toggle',
         );
       });

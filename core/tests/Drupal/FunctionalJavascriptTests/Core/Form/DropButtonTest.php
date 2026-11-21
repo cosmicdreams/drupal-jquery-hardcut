@@ -39,7 +39,6 @@ class DropButtonTest extends WebDriverTestBase {
       $this->assertSame('undefined', $this->getSession()->evaluateScript('typeof window.jQuery'));
     }
 
-
     $assert = $this->assertSession();
     $wrapper = $assert->elementExists('css', '.dropbutton-wrapper');
     $secondary = $assert->elementExists('named', ['link', 'Secondary action']);
