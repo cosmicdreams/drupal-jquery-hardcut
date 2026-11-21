@@ -69,7 +69,9 @@
       }
     }
 
-    originalAjaxEventResponse.apply(this, args);
+    return originalAjaxEventResponse.apply(this, args);
   };
-  Drupal.ajax.useNativeCallback(Drupal.Ajax.prototype.eventResponse);
+  if (Drupal.ajax.isNativeCallback(originalAjaxEventResponse)) {
+    Drupal.ajax.useNativeCallback(Drupal.Ajax.prototype.eventResponse);
+  }
 })(Drupal, once);

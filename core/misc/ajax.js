@@ -1535,19 +1535,26 @@
         }
         const target = ajax.element;
         const listener = (event) => operation(target, event);
-        const nativeListener = (event) => {
-          if (!Drupal.ajax.compatibility?.isSyntheticDefaultAction?.(event)) {
-            listener(event);
-          }
-        };
-        target.addEventListener(type, nativeListener);
-        const unregister = Drupal.eventBindings.register({
+        const binding = {
           target,
           type,
           namespace: namespaces.sort().join('.'),
           listener,
           ajax: true,
-        });
+        };
+        const nativeListener = (event) => {
+          const adapter = Drupal.ajax.compatibility;
+          if (
+            !adapter?.isSyntheticDefaultAction(event) &&
+            !adapter?.handlesNativeEvent(binding, event) &&
+            listener(event) === false
+          ) {
+            event.preventDefault();
+            event.stopPropagation();
+          }
+        };
+        target.addEventListener(type, nativeListener);
+        const unregister = Drupal.eventBindings.register(binding);
         removers.push(() => {
           unregister();
           target.removeEventListener(type, nativeListener);
@@ -1721,7 +1728,7 @@
 
     // Create a synonym for this to reduce code confusion.
     const ajax = this;
-    const submitter = event.submitter?.form === ajax.form && event.submitter;
+    const submitter = event.submitter ?? event.originalEvent?.submitter;
 
     // Do not perform another Ajax command if one is already in progress.
     if (ajax.ajaxing) {
@@ -1731,7 +1738,7 @@
     preparedRequests.delete(ajax);
     try {
       if (ajax.form) {
-        if (submitter) {
+        if (submitter?.form === ajax.form) {
           ajax.form.clk = submitter;
         }
         // If setClick is set, we must set this to ensure that the button's
@@ -3380,6 +3387,18 @@
    *   The registered override.
    */
   Drupal.ajax.useNativeCallback = Drupal.ajax.useNativeForm;
+
+  /**
+   * Checks whether a callback has opted into native arguments.
+   *
+   * Use when an override forwards its arguments to another callback.
+   *
+   * @param {Function} callback
+   *   The callback being wrapped.
+   * @return {boolean}
+   *   Whether the callback expects native arguments.
+   */
+  Drupal.ajax.isNativeCallback = (callback) => nativeCallbacks.has(callback);
 
   nativeCallbacks.add(Drupal.Ajax.prototype.eventResponse);
   nativeCallbacks.add(Drupal.Ajax.prototype.keypressResponse);

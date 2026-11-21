@@ -1229,6 +1229,97 @@ JS;
   }
 
   /**
+   * Tests jQuery handler order and physical cancellation by an override.
+   */
+  public function testLegacyPhysicalHandlerOrder(): void {
+    $this->drupalGet('ajax-test/global-events');
+    $result = $this->getSession()->evaluateScript(<<<'JS'
+      (() => {
+        const trace = [];
+        const container = document.body.appendChild(document.createElement('div'));
+        const button = container.appendChild(document.createElement('button'));
+        const $button = jQuery(button);
+        let earlierEvent;
+        jQuery(container).on('click', () => trace.push('bubble'));
+        $button.on('click', (event) => {
+          earlierEvent = event;
+          trace.push('before');
+        });
+        const ajax = Drupal.ajax({ element: button, event: 'click', url: location.href });
+        ajax.eventResponse = (target, event) => {
+          trace.push(['ajax', event === earlierEvent]);
+          return false;
+        };
+        $button.on('click', (event) => trace.push(['after', event.isDefaultPrevented()]));
+        const dispatched = button.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
+        const hover = container.appendChild(document.createElement('button'));
+        const $hover = jQuery(hover);
+        const hoverTrace = [];
+        $hover.on('mouseenter', () => hoverTrace.push('before'));
+        const hoverAjax = Drupal.ajax({ element: hover, event: 'mouseenter', url: location.href });
+        hoverAjax.eventResponse = (target, event) => hoverTrace.push(event.type);
+        $hover.on('mouseenter', () => hoverTrace.push('after'));
+        hover.dispatchEvent(new MouseEvent('mouseover', { bubbles: true, relatedTarget: container }));
+        return [dispatched, trace, hoverTrace];
+      })()
+      JS);
+    $this->assertSame([
+      FALSE,
+      ['before', ['ajax', TRUE], ['after', TRUE]],
+      ['before', 'mouseenter', 'after'],
+    ], $result);
+  }
+
+  /**
+   * Tests preserving the submitter through a legacy override.
+   */
+  public function testLegacyPhysicalSubmitter(): void {
+    $this->drupalGet('ajax-test/global-events');
+    $session = $this->getSession();
+    $session->executeScript(<<<'JS'
+      const result = document.body.appendChild(document.createElement('div'));
+      result.id = 'request-lane-echo';
+      const form = document.body.appendChild(document.createElement('form'));
+      form.innerHTML = '<button name="op" value="second">Submit</button>';
+      const ajax = Drupal.ajax({
+        element: form, event: 'submit', url: Drupal.url('ajax-test/echo-request'),
+      });
+      ajax.form = form;
+      const original = ajax.eventResponse;
+      ajax.eventResponse = function (element, event) {
+        return original.call(this, element, event);
+      };
+      form.requestSubmit(form.firstElementChild);
+      JS);
+    $this->assertSession()->assertExpectedAjaxRequest(1);
+    $result = json_decode($this->assertSession()->elementExists('css', '#request-lane-echo')->getText(), TRUE, flags: JSON_THROW_ON_ERROR);
+    $this->assertSame('second', $result['fields']['op'] ?? NULL);
+  }
+
+  /**
+   * Tests composing the CKEditor override with a legacy predecessor.
+   */
+  public function testEditorPreservesLegacyEventShape(): void {
+    $this->drupalGet('ajax-test/global-events');
+    $result = $this->getSession()->evaluateScript(<<<'JS'
+      (async () => {
+        const trace = [];
+        Drupal.Ajax.prototype.eventResponse = (element, event) => {
+          trace.push(event instanceof jQuery.Event);
+          return false;
+        };
+        await new Promise((success, error) => loadjs(
+          Drupal.url('core/modules/ckeditor5/js/ckeditor5.filter.admin.js'), { success, error },
+        ));
+        const button = document.body.appendChild(document.createElement('button'));
+        Drupal.ajax({ element: button, event: 'click', url: location.href });
+        return [button.dispatchEvent(new MouseEvent('click', { cancelable: true })), trace];
+      })()
+      JS);
+    $this->assertSame([FALSE, [TRUE]], $result);
+  }
+
+  /**
    * Tests global completion after a failed non-iframe legacy form.
    */
   #[IgnoreDeprecations]

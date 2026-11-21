@@ -1236,45 +1236,74 @@
     Drupal.eventBindings.observe({
       add(binding) {
         const { ajax, target, type, namespace, listener } = binding;
-        // The shared event adapter already covers these bindings.
-        if (
-          !ajax ||
-          (type === 'change' && target instanceof HTMLSelectElement) ||
-          (type === 'submit' && target instanceof HTMLFormElement)
-        ) {
+        if (!ajax) {
           return;
         }
         const name = namespace ? `${type}.${namespace}` : type;
+        const bindType = jQuery.event.special[type]?.bindType || type;
+        const selectChange =
+          type === 'change' && target instanceof HTMLSelectElement;
+        const directActivation =
+          (type === 'click' && target instanceof HTMLAnchorElement) ||
+          (type === 'submit' && target instanceof HTMLFormElement);
         const deliver = (event) => {
-          if (
-            event.isTrigger &&
-            !event.originalEvent &&
-            !delivering.has(event) &&
-            // The shared adapter handles synthetic clicks on the link itself.
-            !(
-              type === 'click' &&
-              target instanceof HTMLAnchorElement &&
-              event.target === target
-            )
-          ) {
-            delivering.add(event);
-            try {
-              return listener(event);
-            } finally {
-              delivering.delete(event);
+          const original = event.originalEvent;
+          if (original) {
+            const result = listener(event);
+            // Marked native callbacks may cancel the original DOM event.
+            if (original.defaultPrevented && !event.isDefaultPrevented()) {
+              event.preventDefault();
             }
+            if (original.cancelBubble && !event.isPropagationStopped()) {
+              event.stopPropagation();
+            }
+            return result;
+          }
+          // The shared event adapter already forwards these synthetic events.
+          if (
+            !event.isTrigger ||
+            delivering.has(event) ||
+            selectChange ||
+            (directActivation && event.target === target)
+          ) {
+            return;
+          }
+          delivering.add(event);
+          try {
+            return listener(event);
+          } finally {
+            delivering.delete(event);
           }
         };
         const element = jQuery(target);
         element.on(name, deliver);
-        subscriptions.set(binding, () => element.off(name, deliver));
+        subscriptions.set(binding, { name, bindType, deliver, element });
       },
       remove(binding) {
-        subscriptions.get(binding)?.();
+        const subscription = subscriptions.get(binding);
+        subscription?.element.off(subscription.name, subscription.deliver);
         subscriptions.delete(binding);
       },
     });
     Drupal.ajax.compatibility = {
+      handlesNativeEvent(binding, event) {
+        const subscription = subscriptions.get(binding);
+        if (
+          !subscription ||
+          jQuery.event.triggered === event.type ||
+          (subscription.bindType !== event.type && !event.isTrusted)
+        ) {
+          return false;
+        }
+        // Trust the installed handler's slot in jQuery's dispatch queue, even
+        // when jQuery maps the native event type (for example, mouseenter).
+        const handlers = jQuery._data(binding.target, 'events')?.[
+          subscription.bindType
+        ];
+        return handlers?.some(
+          ({ handler }) => handler === subscription.deliver,
+        );
+      },
       isSyntheticDefaultAction(event) {
         const frame = triggerFrames.at(-1);
         if (frame?.type !== event.type || frame?.target !== event.target) {
@@ -1302,11 +1331,14 @@
         if (event instanceof Event) {
           return event;
         }
-        if (event.originalEvent instanceof Event) {
+        if (
+          event.originalEvent instanceof Event &&
+          event.originalEvent.type === event.type
+        ) {
           return event.originalEvent;
         }
-        // A synthetic dispatch has no DOM event. Preserve cancellation of the
-        // active dispatch without dispatching another event.
+        // Project synthetic or mapped events without dispatching a second
+        // event. Cancellation still applies to the active dispatch.
         const native = new Event(event.type, { cancelable: true });
         Object.defineProperties(native, {
           target: { value: event.target },
