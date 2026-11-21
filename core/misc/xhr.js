@@ -31,6 +31,8 @@
    *   Configures the opened request, attaches listeners, or changes the
    *   headers. A header set on the request here replaces the prepared value.
    *   Return false, or call abort() on the request, to cancel sending it.
+   * @param {function(Error, XMLHttpRequest): void} [options.onSendError]
+   *   Handles an exception from send() after the request was prepared.
    * @param {XMLHttpRequest} [options.request]
    *   An unsent request to use instead of a new one.
    *
@@ -47,6 +49,7 @@
     crossDomain,
     body = null,
     beforeSend,
+    onSendError,
     request = new XMLHttpRequest(),
   }) {
     const target = new URL(url, document.baseURI);
@@ -91,7 +94,15 @@
     requestHeaders.forEach((value, name) => {
       request.setRequestHeader(name, value);
     });
-    request.send(typeof body === 'function' ? body() : body);
+    const payload = typeof body === 'function' ? body() : body;
+    try {
+      request.send(payload);
+    } catch (error) {
+      if (!onSendError) {
+        throw error;
+      }
+      onSendError(error, request);
+    }
     return request;
   };
 
@@ -122,6 +133,14 @@
     });
     const request = Drupal.xhr({
       ...options,
+      onSendError(error, xhr) {
+        // A transport failure completes the request unless it already reported
+        // a result, in which case the exception must propagate to the caller.
+        if (result) {
+          throw error;
+        }
+        finish({ status: 'error', error, xhr });
+      },
       beforeSend(xhr, headers) {
         const settle = (status, response, error) =>
           finish({ status, response, error, xhr });
