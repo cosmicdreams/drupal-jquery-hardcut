@@ -120,6 +120,45 @@
   }
 
   /**
+   * Calls a listener while the native payload shows the jQuery event's fields.
+   *
+   * A special.handle hook may edit the shared jQuery event before it calls the
+   * handler. The listener reads those edits, and the payload is restored after
+   * it returns so the bridge still writes back only the hook's final values.
+   * @param {Event} native
+   *   The native event the listener receives.
+   * @param {object} event
+   *   The jQuery event the handler was invoked with.
+   * @param {function(Event): unknown} listener
+   *   The States listener.
+   * @return {unknown}
+   *   The listener's return value.
+   */
+  function withLivePayload(native, event, listener) {
+    const { detail } = native;
+    const saved = [];
+    if (detail && typeof detail === 'object') {
+      for (const field of ['value', 'oldValue', 'trigger']) {
+        if (Object.hasOwn(event, field) && event[field] !== detail[field]) {
+          saved.push([field, Object.hasOwn(detail, field), detail[field]]);
+          detail[field] = event[field];
+        }
+      }
+    }
+    try {
+      return listener(native);
+    } finally {
+      saved.forEach(([field, had, value]) => {
+        if (had) {
+          detail[field] = value;
+        } else {
+          delete detail[field];
+        }
+      });
+    }
+  }
+
+  /**
    * Keeps legacy overrides callable with their pinned receiver and arguments.
    * @param {object} states
    *   The Drupal States namespace.
@@ -324,7 +363,7 @@
             }
             if (nativeOriginal && !event.originalEvent) {
               legacyEvents.set(nativeOriginal, event);
-              return listener(nativeOriginal);
+              return withLivePayload(nativeOriginal, event, listener);
             }
             return listener(nativeEvent(event));
           }

@@ -2078,4 +2078,54 @@ final class NativeStatesPublicationTest extends WebDriverTestBase {
     $this->assertSame($before['raw'], $rawAfter, 'An unrelated unload does not prune a dependee outside its context.');
   }
 
+  /**
+   * Tests that States reads payload edits a special.handle hook makes.
+   */
+  #[IgnoreDeprecations]
+  public function testSpecialHandleHookPayloadEdits(): void {
+    $session = $this->getSession();
+    $assert = $this->assertSession();
+
+    $this->drupalGet('jquery-bc-test/events');
+    $hadSpecial = $session->evaluateScript(<<<'JS'
+      (() => {
+        const had = Object.hasOwn(jQuery.event.special, 'state:checked');
+        window.r5Hook = { seen: [], after: [] };
+        // The hook edits the payload, calls the handler, then restores it.
+        jQuery.event.special['state:checked'] = {
+          handle(event, ...args) {
+            if (!event.value) {
+              return event.handleObj.handler.call(this, event, ...args);
+            }
+            event.value = false;
+            const result = event.handleObj.handler.call(this, event, ...args);
+            window.r5Hook.seen.push(event.value);
+            event.value = true;
+            return result;
+          },
+        };
+        const form = document.createElement('form');
+        form.innerHTML = `
+          <input type="checkbox" id="r5-hook-src" name="r5_hook_src">
+          <div id="r5-hook-dep" class="js-form-wrapper" data-drupal-states='{"visible":{"#r5-hook-src":{"checked":true}}}'>R5 hook dep</div>
+        `;
+        document.body.append(form);
+        Drupal.attachBehaviors(form);
+        // An external handler routes the States slot through jQuery.
+        jQuery('#r5-hook-src').on('state:checked', (event) => {
+          window.r5Hook.after.push(event.value);
+        });
+        return had;
+      })()
+      JS);
+    $this->assertFalse($hadSpecial, 'The hook exists before the projection.');
+
+    $assert->elementExists('css', '#r5-hook-src')->check();
+    $this->assertFalse($assert->elementExists('css', '#r5-hook-dep')->isVisible(), 'States reads the value the hook set before calling the handler.');
+    $hook = $session->evaluateScript('window.r5Hook');
+    $this->assertNotEmpty($hook['seen']);
+    $this->assertSame([], array_filter($hook['seen']), 'No handler changed the edited value.');
+    $this->assertSame([FALSE], $hook['after'], 'Every jQuery handler runs inside the hook.');
+  }
+
 }
