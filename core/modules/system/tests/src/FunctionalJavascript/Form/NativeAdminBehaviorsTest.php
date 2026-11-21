@@ -69,6 +69,29 @@ class NativeAdminBehaviorsTest extends WebDriverTestBase {
   }
 
   /**
+   * Tests filename detection from a legacy synthetic change event.
+   */
+  public function testLegacyLocaleFilenameDetection(): void {
+    $this->drupalGet('form-test/admin-behaviors');
+    $this->getSession()->executeScript(<<<'JS'
+      const input = document.querySelector('.file-import-input');
+      const files = new DataTransfer();
+      files.items.add(new File([''], 'example.fr.po'));
+      input.files = files.files;
+      const deprecation = Drupal.deprecationError;
+      try {
+        Drupal.deprecationError = () => {};
+        jQuery(input).trigger('change');
+      }
+      finally {
+        Drupal.deprecationError = deprecation;
+      }
+      JS);
+    $language = $this->assertSession()->elementExists('css', '.langcode-input');
+    $this->assertSame('fr', $language->getValue());
+  }
+
+  /**
    * Tests empty and populated summary toggles with optional full text labels.
    */
   public function testTextSummaries(): void {
