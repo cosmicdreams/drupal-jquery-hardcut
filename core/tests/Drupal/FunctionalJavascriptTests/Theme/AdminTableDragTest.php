@@ -133,11 +133,7 @@ class AdminTableDragTest extends TableDragTest {
   #[IgnoreDeprecations]
   public function testBulkActionsAjaxHandlerOrder(): void {
     $this->drupalGet('tabledrag_test', ['query' => ['tableselect' => 1, 'legacy_ajax' => 1]]);
-    $this->assertSame([TRUE, [
-      ['before', 'table', 'ajax', 'after'],
-      ['before', 'ajax', 'table', 'after'],
-      ['before', 'ajax'],
-    ]], $this->getSession()->evaluateScript(<<<'JS'
+    $result = $this->getSession()->evaluateScript(<<<'JS'
       (() => {
         const cases = [[false, false], [true, false], [true, true]].map(([ajaxFirst, cancel]) => {
           const trace = [];
@@ -164,7 +160,15 @@ class AdminTableDragTest extends TableDragTest {
         });
         return [Boolean(Drupal.ajax.commandCompatibility), cases];
       })()
-      JS));
+      JS);
+    $this->assertSame([
+      TRUE,
+      [
+        ['before', 'table', 'ajax', 'after'],
+        ['before', 'ajax', 'table', 'after'],
+        ['before', 'ajax'],
+      ],
+    ], $result);
   }
 
   /**

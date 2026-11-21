@@ -1593,7 +1593,12 @@ JS;
         return [ajax.ajaxing, button.disabled, Boolean(form.querySelector('.ajax-progress')), trace];
       })()
       JS);
-    $this->assertSame([FALSE, FALSE, FALSE, ['detach', ['send', TRUE, TRUE], ['error', 'Synchronous send failed'], 'attach', 'complete']], $result);
+    $this->assertSame([
+      FALSE,
+      FALSE,
+      FALSE,
+      ['detach', ['send', TRUE, TRUE], ['error', 'Synchronous send failed'], 'attach', 'complete'],
+    ], $result);
   }
 
   /**
