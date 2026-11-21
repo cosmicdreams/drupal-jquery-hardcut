@@ -132,7 +132,7 @@
           TableResponsive.tables.push(new TableResponsive(table));
         },
       );
-      if (TableResponsive.tables.length) {
+      if (TableResponsive.resizeHandlers.size) {
         TableResponsive.refresh();
       }
     },
@@ -147,9 +147,7 @@
       target: { value: window },
       currentTarget: { value: window },
     });
-    TableResponsive.tables.forEach((table) =>
-      TableResponsive.resizeHandlers.get(table)?.(event),
-    );
+    TableResponsive.resizeHandlers.forEach((evaluate) => evaluate(event));
   }
 
   /**
@@ -159,7 +157,7 @@
    */
   TableResponsive.tables = [];
   TableResponsive.refresh = refreshToggles;
-  TableResponsive.resizeHandlers = new WeakMap();
+  TableResponsive.resizeHandlers = new Map();
 
   TableResponsive.pegged = new WeakMap();
 

@@ -25,12 +25,11 @@
         binding.stop();
       }
     });
-    if (!pending.size) {
-      observer.disconnect();
-    }
   }
 
   Drupal.behaviors.tableInteraction = {
+    attach: releaseDisconnected,
+
     detach(context, settings, trigger) {
       if (trigger !== 'unload' || !context?.querySelectorAll) {
         return;
@@ -190,7 +189,9 @@
         owner,
         target,
         stop() {
-          pending.delete(binding);
+          if (pending.delete(binding) && !pending.size) {
+            observer.disconnect();
+          }
           if (listeners.delete(binding)) {
             stop();
           }

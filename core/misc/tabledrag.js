@@ -408,6 +408,13 @@
         tableInteraction.removeOrphanedControls(table, toggle.nodes);
       }
       once.remove('tabledrag', table);
+      const { id } = table;
+      // Allow a same-task replacement to inherit the changed-row state.
+      queueMicrotask(() => {
+        if (Drupal.tableDrag[id] === self) {
+          delete Drupal.tableDrag[id];
+        }
+      });
     });
 
     // Check for any rows marked as changed before this tabledrag was rerendered
