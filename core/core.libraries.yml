@@ -236,6 +236,15 @@ drupal.ajax:
     - core/drupal.message
     - core/drupal.xhr
 
+drupal.ajax.jquery:
+  version: VERSION
+  deprecated: "%library_id% is deprecated in drupal:12.0.0 and is removed from drupal:13.0.0. Use a native command or define an explicit command in your extension. See https://www.drupal.org/node/CHANGE_RECORD."
+  js:
+    misc/jquery.drupal-ajax-commands.js: {}
+  dependencies:
+    - core/jquery
+    - core/drupal.ajax
+
 drupal.announce:
   version: VERSION
   js:
