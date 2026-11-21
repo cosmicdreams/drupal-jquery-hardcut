@@ -32,9 +32,15 @@
     this.link.title = Drupal.t(
       'Show table cells that were hidden to make the table fit within a small screen.',
     );
-    this.link.addEventListener(
-      'click',
-      this.eventhandlerToggleColumns.bind(this),
+    const toggle = this.eventhandlerToggleColumns;
+    this.link.addEventListener('click', (event) =>
+      Drupal.tableInteraction.invokeEventCallback(
+        toggle,
+        this,
+        [event],
+        0,
+        'eventhandlerToggleColumns',
+      ),
     );
 
     const wrapper = document.createElement('div');
@@ -44,7 +50,15 @@
 
     // Capture the current handler, as a later assignment should only affect
     // newly created tables.
-    const evaluate = this.eventhandlerEvaluateColumnVisibility.bind(this);
+    const evaluateColumns = this.eventhandlerEvaluateColumnVisibility;
+    const evaluate = (event) =>
+      Drupal.tableInteraction.invokeEventCallback(
+        evaluateColumns,
+        this,
+        [event],
+        0,
+        'eventhandlerEvaluateColumnVisibility',
+      );
     window.addEventListener('resize', evaluate);
     TableResponsive.resizeHandlers.set(this, evaluate);
     const unregister = Drupal.eventBindings.register({
@@ -92,7 +106,7 @@
         },
       );
       if (TableResponsive.tables.length) {
-        refreshToggles();
+        TableResponsive.refresh();
       }
     },
   };
@@ -102,10 +116,13 @@
    */
   function refreshToggles() {
     const event = new Event('resize');
+    Object.defineProperties(event, {
+      target: { value: window },
+      currentTarget: { value: window },
+    });
     TableResponsive.tables.forEach((table) =>
       TableResponsive.resizeHandlers.get(table)?.(event),
     );
-    window.dispatchEvent(new Event('drupal:tableresponsive-refreshed'));
   }
 
   /**
@@ -114,6 +131,7 @@
    * @type {Drupal.TableResponsive[]}
    */
   TableResponsive.tables = [];
+  TableResponsive.refresh = refreshToggles;
   TableResponsive.resizeHandlers = new WeakMap();
 
   Object.assign(TableResponsive.prototype, {
@@ -124,10 +142,15 @@
      *   The resize event.
      */
     eventhandlerEvaluateColumnVisibility(event) {
-      const pegged = this.link.dataset.pegged === '1';
+      const pegged = parseInt(this.link.dataset.pegged, 10);
       const hiddenLength = hiddenPriorityHeaders(this.headers).length;
       if (hiddenLength > 0) {
-        this.link.style.display = '';
+        if (this.link.style.display === 'none') {
+          this.link.style.removeProperty('display');
+        }
+        if (window.getComputedStyle(this.link).display === 'none') {
+          this.link.style.display = 'inline-block';
+        }
         this.link.textContent = this.showText;
       }
       // Keep the toggle visible after a user interaction, even if the user
@@ -181,7 +204,7 @@
         );
         this.link.textContent = this.showText;
         this.link.dataset.pegged = '0';
-        refreshToggles();
+        TableResponsive.refresh();
       }
     },
   });
@@ -202,11 +225,9 @@
   }
 
   // Make the TableResponsive object available in the Drupal namespace.
-  TableResponsive.eventCallbacks = Object.freeze({
-    eventhandlerEvaluateColumnVisibility:
-      TableResponsive.prototype.eventhandlerEvaluateColumnVisibility,
-    eventhandlerToggleColumns:
-      TableResponsive.prototype.eventhandlerToggleColumns,
+  Drupal.tableInteraction.installEventOverrides(TableResponsive.prototype, {
+    eventhandlerEvaluateColumnVisibility: 0,
+    eventhandlerToggleColumns: 0,
   });
   Drupal.TableResponsive = TableResponsive;
   document.dispatchEvent(new Event('drupal:tableresponsive-ready'));

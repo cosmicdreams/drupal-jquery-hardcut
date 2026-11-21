@@ -14,6 +14,9 @@
    */
   Drupal.behaviors.tableSelect = {
     attach(context) {
+      if (!context?.querySelectorAll) {
+        return;
+      }
       // Select the inner-most table in case of nested tables.
       const tables = [
         ...new Set(
@@ -33,6 +36,7 @@
   };
 
   const selectionChanges = new WeakSet();
+  const { listen } = Drupal.tableInteraction;
 
   /**
    * Sets a checkbox state and notifies listeners when it changes.
@@ -45,7 +49,7 @@
   function setChecked(checkbox, state) {
     if (checkbox.checked !== state) {
       checkbox.checked = state;
-      const event = new Event('change', { bubbles: true, cancelable: true });
+      const event = new Event('change', { bubbles: true });
       selectionChanges.add(event);
       checkbox.dispatchEvent(event);
     }
@@ -118,12 +122,14 @@
     ];
     const headers = table.querySelectorAll('th.select-all');
     if (!table.querySelector('th.select-all input[type="checkbox"]')) {
-      headers.forEach((header) => {
-        const markup = Drupal.theme('checkbox');
+      const markup = Drupal.tableSelect.checkboxContent();
+      headers.forEach((header, index) => {
         if (typeof markup === 'string') {
           header.insertAdjacentHTML('afterbegin', markup.trim());
         } else {
-          header.prepend(markup);
+          header.prepend(
+            index === headers.length - 1 ? markup : markup.cloneNode(true),
+          );
         }
         header.querySelector('input[type="checkbox"]').title =
           strings.selectAll;
@@ -132,7 +138,7 @@
     table
       .querySelectorAll('th.select-all input[type="checkbox"]')
       .forEach((checkbox) => {
-        checkbox.addEventListener('click', (event) => {
+        listen(checkbox, 'click', (event) => {
           if (event.target.matches('input[type="checkbox"]')) {
             checkboxes.forEach((checkbox) => {
               setChecked(checkbox, event.target.checked);
@@ -146,7 +152,7 @@
       });
 
     checkboxes.forEach((checkbox) => {
-      checkbox.addEventListener('click', function (e) {
+      listen(checkbox, 'click', function (e) {
         // Either add or remove the selected class based on the state of the
         // check all checkbox.
 
@@ -219,5 +225,6 @@
    * @internal
    */
   Drupal.tableSelect.isSelectionChange = (event) => selectionChanges.has(event);
+  Drupal.tableSelect.checkboxContent = () => Drupal.theme('checkbox');
   document.dispatchEvent(new Event('drupal:tableselect-ready'));
 })(Drupal, once);

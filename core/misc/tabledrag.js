@@ -12,6 +12,8 @@
 (function (Drupal, drupalSettings, once) {
   const draggableRows = ':scope > tr.draggable, :scope > tbody > tr.draggable';
 
+  const { listen } = Drupal.tableInteraction;
+
   /**
    * Finds an adjacent element matching a row selector.
    *
@@ -82,6 +84,10 @@
    * overriding the .onDrag, .onDrop, .row.onSwap, and .row.onIndent methods.
    * See blocks.js for an example of adding additional functionality to
    * tableDrag.
+   *
+   * Event callbacks receive native events by default. An extension declaring
+   * core/jquery can set legacyTableEvent to true on an event override before
+   * assigning it to receive the deprecated event shape.
    *
    * @type {Drupal~behavior}
    */
@@ -315,21 +321,21 @@
      *   The document movement.
      */
     function move(event) {
-      const pointer = event.type === 'touchmove' ? event.touches[0] : event;
+      const pointer = event.type === 'touchmove' ? event.touches?.[0] : event;
       if (self.dragRow(pointer, self) === false) {
         event.preventDefault();
         event.stopPropagation();
       }
     }
-    document.addEventListener('touchmove', move, { passive: false });
+    listen(document, 'touchmove', move);
     ['mousemove', 'pointermove'].forEach((type) => {
-      document.addEventListener(type, move);
+      listen(document, type, move);
     });
-    document.addEventListener('touchend', (event) =>
-      self.dropRow(event.changedTouches[0], self),
+    listen(document, 'touchend', (event) =>
+      self.dropRow((event.changedTouches ?? event.touches)?.[0], self),
     );
     ['mouseup', 'pointerup'].forEach((type) => {
-      document.addEventListener(type, (event) => self.dropRow(event, self));
+      listen(document, type, (event) => self.dropRow(event, self));
     });
 
     // React to localStorage event showing or hiding weight columns.
@@ -586,33 +592,34 @@
     }
 
     ['mousedown', 'touchstart', 'pointerdown'].forEach((type) => {
-      handle.addEventListener(type, (event) => {
+      listen(handle, type, (event) => {
         event.preventDefault();
-        const pointer = event.type === 'touchstart' ? event.touches[0] : event;
+        const pointer =
+          event.type === 'touchstart' ? event.touches?.[0] : event;
         self.dragStart(pointer, self, item);
       });
     });
 
     // Prevent the anchor tag from jumping us to the top of the page.
-    handle.addEventListener('click', (e) => {
+    listen(handle, 'click', (e) => {
       e.preventDefault();
     });
 
     // Set blur cleanup when a handle is focused.
-    handle.addEventListener('focus', () => {
+    listen(handle, 'focus', () => {
       self.safeBlur = true;
     });
 
     // On blur, fire the same function as a touchend/mouseup. This is used to
     // update values after a row has been moved through the keyboard support.
-    handle.addEventListener('blur', (event) => {
+    listen(handle, 'blur', (event) => {
       if (self.rowObject && self.safeBlur) {
         self.dropRow(event, self);
       }
     });
 
     // Add arrow-key support to the handle.
-    handle.addEventListener('keydown', (event) => {
+    listen(handle, 'keydown', (event) => {
       // If a rowObject doesn't yet exist and this isn't the tab key.
       if (event.keyCode !== 9 && !self.rowObject) {
         self.rowObject = new self.row(
@@ -778,7 +785,7 @@
     // scrolling. IE and Safari will suppress scrolling on keydown, but all
     // other browsers need to return false on keypress.
     // http://www.quirksmode.org/js/keys.html
-    handle.addEventListener('keypress', (event) => {
+    listen(handle, 'keypress', (event) => {
       /* eslint-disable no-fallthrough */
 
       switch (event.keyCode) {
@@ -810,19 +817,23 @@
    *   The item that is being dragged.
    */
   Drupal.tableDrag.prototype.dragStart = function (event, self, item) {
+    // Commit keyboard changes before beginning the pointer drag. A handle
+    // that already lost focus needs an explicit blur to finish the drop.
+    if (self.rowObject?.method === 'keyboard') {
+      const row = self.rowObject;
+      const handle = row.element.querySelector('a.tabledrag-handle');
+      handle?.blur();
+      if (self.rowObject === row) {
+        handle?.dispatchEvent(new FocusEvent('blur'));
+      }
+    }
+
     // Create a new dragObject recording the pointer information.
     self.dragObject = {};
     self.dragObject.initOffset = self.getPointerOffset(item, event);
     self.dragObject.initPointerCoords = self.pointerCoords(event);
     if (self.indentEnabled) {
       self.dragObject.indentPointerPos = self.dragObject.initPointerCoords;
-    }
-
-    // If there's a lingering row object from the keyboard, remove its focus.
-    if (self.rowObject) {
-      self.rowObject.element
-        .querySelectorAll('a.tabledrag-handle')
-        .forEach((handle) => handle.blur());
     }
 
     // Create a new rowObject for manipulation of this row.
@@ -1844,13 +1855,12 @@
     }
     return markup;
   };
-  // Record the built-ins so a late adapter can distinguish existing overrides.
-  Drupal.tableDrag.eventCallbacks = Object.freeze({
-    dragStart: Drupal.tableDrag.prototype.dragStart,
-    dragRow: Drupal.tableDrag.prototype.dragRow,
-    dropRow: Drupal.tableDrag.prototype.dropRow,
-    pointerCoords: Drupal.tableDrag.prototype.pointerCoords,
-    getPointerOffset: Drupal.tableDrag.prototype.getPointerOffset,
+  Drupal.tableInteraction.installEventOverrides(Drupal.tableDrag.prototype, {
+    dragStart: 0,
+    dragRow: 0,
+    dropRow: 0,
+    pointerCoords: 0,
+    getPointerOffset: 1,
   });
   document.dispatchEvent(new Event('drupal:tabledrag-ready'));
 })(Drupal, drupalSettings, once);

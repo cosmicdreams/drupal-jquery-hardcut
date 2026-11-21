@@ -370,12 +370,14 @@
       );
     },
   };
-  Drupal.DefaultAdminBulkActions.eventCallbacks = Object.freeze({
-    blurHandler: Drupal.DefaultAdminBulkActions.prototype.blurHandler,
-    focusHandler: Drupal.DefaultAdminBulkActions.prototype.focusHandler,
-    rowCheckboxHandler:
-      Drupal.DefaultAdminBulkActions.prototype.rowCheckboxHandler,
-    selectAllHandler: Drupal.DefaultAdminBulkActions.prototype.selectAllHandler,
-  });
+  Drupal.tableInteraction.installEventOverrides(
+    Drupal.DefaultAdminBulkActions.prototype,
+    {
+      blurHandler: 0,
+      focusHandler: 0,
+      rowCheckboxHandler: 0,
+      selectAllHandler: 0,
+    },
+  );
   document.dispatchEvent(new Event('drupal:bulk-actions-ready'));
 })(Drupal, window.tabbable, once);

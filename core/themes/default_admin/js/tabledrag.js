@@ -11,6 +11,9 @@
    */
   Drupal.behaviors.adminTableDrag = {
     attach(context, settings) {
+      if (!context?.querySelectorAll) {
+        return;
+      }
       /**
        * Refactors the table row markup to improve item label text wrapping.
        *
@@ -99,7 +102,7 @@
 
       // Find each row in a draggable table and process it with
       // createItemWrapBoundaries().
-      Object.keys(settings.tableDrag || {}).forEach((base) => {
+      Object.keys(settings?.tableDrag || {}).forEach((base) => {
         once(
           'adminTabledrag',
           [...context.querySelectorAll(`#${CSS.escape(base)}`)].flatMap(
@@ -132,11 +135,12 @@
             const marker = Drupal.tableDrag.themeContent(
               Drupal.theme('tableDragChangedMarker'),
             );
-            (marker instanceof Element
-              ? marker
-              : marker.firstElementChild
-            ).classList.add('js-tabledrag-changed-marker');
-            handle.after(marker);
+            const element =
+              marker instanceof Element ? marker : marker?.firstElementChild;
+            element?.classList.add('js-tabledrag-changed-marker');
+            if (marker instanceof Node) {
+              handle.after(marker);
+            }
           });
       }
       Drupal.tableDrag[this.table.id].changedRowIds.add(this.element.id);
@@ -263,4 +267,5 @@
       },
     },
   );
+  document.dispatchEvent(new Event('drupal:admin-tabledrag-ready'));
 })(Drupal, once);
