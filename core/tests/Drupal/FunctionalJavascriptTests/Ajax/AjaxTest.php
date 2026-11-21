@@ -1070,6 +1070,59 @@ JS;
   }
 
   /**
+   * Tests upload progress when beforeSubmit opts into the form plugin.
+   */
+  #[IgnoreDeprecations]
+  public function testLegacyUploadProgressOption(): void {
+    $this->expectUserDeprecationMessage('Javascript Deprecation: Drupal.Ajax#$form is deprecated in drupal:12.0.0 and is removed from drupal:13.0.0. Use Drupal.Ajax#form. See https://www.drupal.org/node/CHANGE_RECORD.');
+    $this->expectUserDeprecationMessage('Javascript Deprecation: Submitting Drupal Ajax forms through the jQuery Form plugin is deprecated in drupal:12.0.0 and is removed from drupal:13.0.0. Use Drupal AJAX with native form options, or supply your own form plugin. See https://www.drupal.org/node/CHANGE_RECORD.');
+    $this->drupalGet('ajax-test/global-events', ['query' => ['legacy_overrides' => 1, 'legacy_plugin' => 1]]);
+    $session = $this->getSession();
+    $session->executeScript(<<<'JS'
+      const form = document.body.appendChild(document.createElement('form'));
+      form.enctype = 'multipart/form-data';
+      form.innerHTML = '<input type="file" name="upload">';
+      const files = new DataTransfer();
+      files.items.add(new File(['probe'], 'probe.txt', { type: 'text/plain' }));
+      form.querySelector('input').files = files.files;
+      const ajax = Drupal.ajax({
+        element: form,
+        event: 'submit',
+        url: Drupal.url('ajax-test/echo-request'),
+      });
+      ajax.form = form;
+      const updates = window.uploadProgressProbe = [];
+      const { beforeSubmit } = ajax.options;
+      ajax.options.beforeSubmit = function (values, collection, settings) {
+        settings.uploadProgress = (event, loaded, total, percent) => {
+          updates.push([event instanceof ProgressEvent, loaded, total, percent]);
+        };
+        return beforeSubmit.call(this, values, collection, settings);
+      };
+      const { send } = XMLHttpRequest.prototype;
+      XMLHttpRequest.prototype.send = function (body) {
+        if (body instanceof FormData && body.has('upload')) {
+          // Exercise the listener even if the browser coalesces upload events.
+          this.upload.dispatchEvent(new ProgressEvent('progress', {
+            lengthComputable: true, loaded: 3, total: 4,
+          }));
+        }
+        return send.call(this, body);
+      };
+      try {
+        form.requestSubmit();
+      }
+      finally {
+        XMLHttpRequest.prototype.send = send;
+      }
+      JS);
+    $this->assertSession()->assertExpectedAjaxRequest(1);
+    $result = json_decode($this->assertSession()->elementExists('css', '#request-lane-echo')->getText(), TRUE, flags: JSON_THROW_ON_ERROR);
+    $this->assertSame('probe.txt', $result['upload'][0]);
+    $this->assertContains([TRUE, 3, 4, 75], $session->evaluateScript('window.uploadProgressProbe'));
+  }
+
+  /**
    * Tests diagnostics for explicit legacy options on a jQuery-free page.
    */
   public function testCouncilLegacyFormMissing(): void {
