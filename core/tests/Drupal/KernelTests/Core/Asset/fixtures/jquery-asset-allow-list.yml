@@ -32,8 +32,6 @@
 - core/assets/vendor/jquery/jquery.min.js
 - core/assets/vendor/sortable/Sortable.min.js
 - core/misc/autocomplete.js
-- core/misc/details-summarized-content.js
-- core/misc/details.js
 - core/misc/dialog/dialog.ajax.js
 - core/misc/dialog/dialog.jquery-ui.js
 - core/misc/dialog/dialog.js
@@ -41,8 +39,6 @@
 - core/misc/dialog/off-canvas/js/off-canvas.js
 - core/misc/displace.js
 - core/misc/dropbutton/dropbutton.js
-- core/misc/entity-form.js
-- core/misc/form.js
 - core/misc/jquery.drupal-ajax-bc.js
 - core/misc/jquery.drupal-ajax-commands.js
 - core/misc/jquery.drupal-bc.js
@@ -62,7 +58,6 @@
 - core/modules/ckeditor5/js/ckeditor5.image.admin.js
 - core/modules/ckeditor5/js/ckeditor5.js
 - core/modules/ckeditor5/js/ckeditor5.style.admin.js
-- core/modules/comment/js/comment-entity-form.js
 - core/modules/content_translation/js/content_translation.admin.js
 - core/modules/contextual/js/contextual.js
 - core/modules/editor/js/editor.dialog.js
@@ -82,10 +77,7 @@
 - core/modules/media_library/js/media_library.widget.js
 - core/modules/menu_ui/js/menu_ui.admin.js
 - core/modules/menu_ui/js/menu_ui.js
-- core/modules/node/js/content_types.js
-- core/modules/node/js/node.js
 - core/modules/node/js/node.preview.js
-- core/modules/path/js/path.js
 - core/modules/system/js/system.date.js
 - core/modules/system/js/system.js
 - core/modules/system/js/system.modules.js
@@ -99,6 +91,5 @@
 - core/modules/views_ui/js/views_ui.listing.js
 - core/themes/default_admin/css/components/jquery.ui/theme.css
 - core/themes/default_admin/js/autocomplete.js
-- core/themes/default_admin/js/details.js
 - core/themes/default_admin/js/media-library.ui.js
 - core/themes/default_admin/js/vertical-tabs.js

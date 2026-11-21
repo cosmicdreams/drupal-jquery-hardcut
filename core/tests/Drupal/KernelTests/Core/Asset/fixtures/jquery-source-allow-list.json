@@ -8,14 +8,6 @@
       "owner": "C",
       "references": 1
     },
-    "misc/details-summarized-content.js": {
-      "owner": "U",
-      "references": 1
-    },
-    "misc/details.js": {
-      "owner": "U",
-      "references": 1
-    },
     "misc/dialog/dialog.ajax.js": {
       "owner": "D",
       "references": 1
@@ -41,14 +33,6 @@
       "references": 1
     },
     "misc/dropbutton/dropbutton.js": {
-      "owner": "U",
-      "references": 1
-    },
-    "misc/entity-form.js": {
-      "owner": "U",
-      "references": 1
-    },
-    "misc/form.js": {
       "owner": "U",
       "references": 1
     },
@@ -132,10 +116,6 @@
       "owner": "C",
       "references": 1
     },
-    "modules/comment/js/comment-entity-form.js": {
-      "owner": "U",
-      "references": 1
-    },
     "modules/content_translation/js/content_translation.admin.js": {
       "owner": "U",
       "references": 1
@@ -216,19 +196,7 @@
       "owner": "U",
       "references": 1
     },
-    "modules/node/js/content_types.js": {
-      "owner": "U",
-      "references": 1
-    },
-    "modules/node/js/node.js": {
-      "owner": "U",
-      "references": 1
-    },
     "modules/node/js/node.preview.js": {
-      "owner": "U",
-      "references": 1
-    },
-    "modules/path/js/path.js": {
       "owner": "U",
       "references": 1
     },
@@ -259,10 +227,6 @@
     "modules/system/tests/modules/css_disable_transitions_test/js/disable_transitions.theme.js": {
       "owner": "U",
       "references": 2
-    },
-    "modules/system/tests/modules/form_test/js/form_test.js": {
-      "owner": "U",
-      "references": 1
     },
     "modules/system/tests/modules/jquery_bc_test/js/event-bridge-dependent.js": {
       "owner": "B",
@@ -306,10 +270,6 @@
     },
     "themes/default_admin/js/autocomplete.js": {
       "owner": "C",
-      "references": 1
-    },
-    "themes/default_admin/js/details.js": {
-      "owner": "U",
       "references": 1
     },
     "themes/default_admin/js/media-library.ui.js": {

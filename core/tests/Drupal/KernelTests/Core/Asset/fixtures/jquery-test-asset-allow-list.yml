@@ -11,9 +11,6 @@
 - fixture: core/modules/system/tests/modules/css_disable_transitions_test/css_disable_transitions_test.libraries.yml:testing.css_disable_transitions_test
   removal: U
   assets: [js/disable_transitions.theme.js]
-- fixture: core/modules/system/tests/modules/form_test/form_test.libraries.yml:form_test
-  removal: U
-  assets: [js/form_test.js]
 # Explicit P1 fixture dependents.
 - fixture: core/modules/system/tests/modules/jquery_bc_test/jquery_bc_test.libraries.yml:event_bridge_early
   removal: Z
