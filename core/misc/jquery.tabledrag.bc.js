@@ -14,6 +14,15 @@
 
   const { Drupal } = window;
   const deprecated = new Set();
+  const documentGestures = [
+    'mousemove',
+    'mouseup',
+    'pointermove',
+    'pointerup',
+    'touchmove',
+    'touchend',
+  ];
+  const sharedHandlers = new WeakMap();
 
   /**
    * Reports the first use of a legacy member or callback.
@@ -205,6 +214,55 @@
   }
 
   /**
+   * Keeps jQuery handler order while switching the real event's entry point.
+   */
+  function installSharedDispatch() {
+    function observe(target, type) {
+      const special = jquery.event.special[type] ?? {};
+      jquery.event.special[type] = special;
+      const { add, remove } = special;
+
+      function update(added) {
+        // jQuery calls add before inserting the handler and remove after
+        // splicing it out. The stored order stays intact for synthetic events.
+        const existing = jquery._data(target, 'events')?.[type] ?? [];
+        const handlers = added ? [...existing, added] : existing;
+        const bindings = handlers.map(({ handler }) =>
+          sharedHandlers.get(handler),
+        );
+        if (!bindings.some(Boolean)) {
+          return;
+        }
+        const mixed = bindings.includes(undefined);
+        bindings.forEach((binding) => binding?.setNativeActive(!mixed));
+        const dispatch = jquery._data(target, 'handle');
+        if (mixed) {
+          target.addEventListener(type, dispatch);
+        } else {
+          target.removeEventListener(type, dispatch);
+        }
+      }
+
+      special.add = function (handle) {
+        add?.call(this, handle);
+        if (this === target) {
+          update(handle);
+        }
+      };
+      special.remove = function (handle) {
+        remove?.call(this, handle);
+        if (this === target) {
+          sharedHandlers.get(handle.handler)?.setNativeActive(true);
+          update();
+        }
+      };
+    }
+
+    documentGestures.forEach((type) => observe(document, type));
+    observe(window, 'resize');
+  }
+
+  /**
    * Observes table-owned gesture bindings for legacy synthetic delivery.
    */
   function installGestures() {
@@ -217,20 +275,29 @@
         }
         const anchorClick =
           type === 'click' && target instanceof HTMLAnchorElement;
+        const shared = target === document && documentGestures.includes(type);
         const element = jquery(target);
         const deliver = function (event) {
-          // The general Drupal bridge forwards direct anchor clicks.
-          if (!event.isTrigger || (anchorClick && event.target === target)) {
+          if (!event.isTrigger) {
+            return shared
+              ? listener.call(this, toNativeEvent(event))
+              : undefined;
+          }
+          const { originalEvent } = event;
+          // The general Drupal bridge forwards direct clicks without a source event.
+          if (anchorClick && event.target === target && !originalEvent) {
             return undefined;
           }
           warn(`The synthetic ${type} trigger for table interactions`);
-          const { originalEvent } = event;
           // A synthetic touch event can supply touch data without DOM methods.
           if (originalEvent && !(originalEvent instanceof Event)) {
             event.isSimulated = true;
           }
           return listener.call(this, toNativeEvent(event));
         };
+        if (shared) {
+          sharedHandlers.set(deliver, binding);
+        }
         element.on(type, deliver);
         subscriptions.set(binding, () => element.off(type, deliver));
       },
@@ -349,7 +416,6 @@
             jquery.removeData(link, 'pegged');
           }
         }
-        binding.removeNativeListener();
         const handler = (event) => {
           if (event.isTrigger && !refreshes.has(event)) {
             warn('The synthetic resize.tableresponsive trigger');
@@ -357,6 +423,7 @@
           return binding.listener(toNativeEvent(event));
         };
         bindings.set(handler, binding);
+        sharedHandlers.set(handler, binding);
         subscriptions.set(binding, handler);
         windowEvents.on('resize.tableresponsive', handler);
       },
@@ -380,7 +447,7 @@
   function adaptPeggedData(pegged) {
     const { data, removeData } = jquery.fn;
     jquery.fn.data = function (key, value) {
-      if (key === 'pegged' && value === undefined && pegged.has(this[0])) {
+      if (key === 'pegged' && arguments.length === 1 && pegged.has(this[0])) {
         return pegged.get(this[0]);
       }
       if (key === undefined && pegged.has(this[0])) {
@@ -507,6 +574,7 @@
     };
   }
 
+  installSharedDispatch();
   if (Drupal?.tableInteraction) {
     installEventAdapter();
   } else {

@@ -62,14 +62,19 @@
     // Capture the current handler, as a later assignment should only affect
     // newly created tables.
     const evaluate = this.eventhandlerEvaluateColumnVisibility.bind(this);
-    window.addEventListener('resize', evaluate);
+    const setNativeActive = (active) => {
+      if (active) {
+        window.addEventListener('resize', evaluate);
+      } else {
+        window.removeEventListener('resize', evaluate);
+      }
+    };
+    setNativeActive(true);
     TableResponsive.resizeHandlers.set(this, evaluate);
-    const removeNativeListener = () =>
-      window.removeEventListener('resize', evaluate);
     const stop = () => {
-      removeNativeListener();
       TableResponsive.resizeHandlers.delete(this);
       unregister();
+      setNativeActive(false);
     };
     const unregister = Drupal.eventBindings.register({
       target: window,
@@ -77,7 +82,7 @@
       namespace: 'tableresponsive',
       link: this.link,
       listener: evaluate,
-      removeNativeListener,
+      setNativeActive,
       stop,
     });
     Drupal.tableInteraction.own(table, window, () => {
