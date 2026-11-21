@@ -23,19 +23,13 @@
     disconnectIfIdle();
   }
 
-  const removalObserver = new MutationObserver((records) => {
+  // Settle a batch once the unload removes one of its targets. Unrelated
+  // insertions, such as an Ajax throbber before a delayed swap, keep it.
+  const removalObserver = new MutationObserver(() => {
     Array.from(pendingUnloads).forEach((batch) => {
-      const { context } = batch;
-      const mutated =
-        !context.isConnected ||
-        records.some(
-          (record) =>
-            context.contains(record.target) ||
-            Array.from(record.removedNodes).some((node) =>
-              node.contains?.(context),
-            ),
-        );
-      if (mutated) {
+      if (
+        Array.from(batch.bindings).some(({ target }) => !target.isConnected)
+      ) {
         settleBatch(batch);
       }
     });

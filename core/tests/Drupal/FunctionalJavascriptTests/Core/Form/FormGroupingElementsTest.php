@@ -448,6 +448,54 @@ class FormGroupingElementsTest extends WebDriverTestBase {
   }
 
   /**
+   * Tests that an unrelated insertion keeps an unload batch pending.
+   */
+  public function testUnloadBatchIgnoresUnrelatedMutations(): void {
+    $this->drupalGet('form-test/group-details');
+    $session = $this->getSession();
+    $this->assertSame('undefined', $session->evaluateScript('typeof window.jQuery'));
+    $session->executeScript(<<<'JS'
+      (async () => {
+        const region = document.body.appendChild(document.createElement('div'));
+        const inner = region.appendChild(document.createElement('div'));
+        const received = [];
+        const stop = Drupal.formEvents.listen(inner, 'testThrobber', undefined, () => received.push('inner'));
+        const count = () => {
+          let total = 0;
+          Drupal.eventBindings.observe({
+            add(binding) {
+              total += binding.type === 'testThrobber' ? 1 : 0;
+            },
+            remove() {},
+          })();
+          return total;
+        };
+        try {
+          Drupal.detachBehaviors(region, drupalSettings, 'unload');
+          // A throbber appears inside the region before the delayed swap.
+          const throbber = document.createElement('span');
+          throbber.className = 'ajax-progress';
+          region.append(throbber);
+          await Promise.resolve();
+          const pending = count();
+          await new Promise((resolve) => setTimeout(resolve, 0));
+          region.replaceChildren();
+          await Promise.resolve();
+          const released = count();
+          inner.dispatchEvent(new Event('testThrobber'));
+          window.unloadThrobberResult = [pending, released, received];
+        }
+        finally {
+          stop();
+          region.remove();
+        }
+      })();
+      JS);
+    $this->assertJsCondition('Array.isArray(window.unloadThrobberResult)');
+    $this->assertSame([1, 0, []], $session->evaluateScript('window.unloadThrobberResult'));
+  }
+
+  /**
    * Tests that legacy summary overrides receive jQuery events.
    */
   public function testLegacySummaryUpdatedOverride(): void {
