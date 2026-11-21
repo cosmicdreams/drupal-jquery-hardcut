@@ -2128,4 +2128,71 @@ final class NativeStatesPublicationTest extends WebDriverTestBase {
     $this->assertSame([FALSE], $hook['after'], 'Every jQuery handler runs inside the hook.');
   }
 
+  /**
+   * Tests native summary listeners on cancelled and uncancelled clicks.
+   */
+  #[IgnoreDeprecations]
+  public function testCancelledCollapsedClickSkipsNativeListeners(): void {
+    $session = $this->getSession();
+    $assert = $this->assertSession();
+
+    $this->drupalGet('jquery-bc-test/events');
+    $session->executeScript(<<<'JS'
+      const wrap = document.createElement('div');
+      wrap.innerHTML = `
+        <input type="checkbox" id="r5-col-src" name="r5_col_src">
+        <details id="r5-details" data-drupal-states='{"collapsed":{"#r5-col-src":{"checked":false}}}'><summary>R5 summary</summary><p>R5 body</p></details>
+      `;
+      document.body.append(wrap);
+      Drupal.attachBehaviors(wrap);
+      const summary = wrap.querySelector('summary');
+      window.r5Click = { legacy: [], native: 0, delegated: 0, mode: null };
+      // A native listener bound before the legacy handler.
+      summary.addEventListener('click', () => {
+        window.r5Click.native += 1;
+      });
+      jQuery(summary).on('click', (event) => {
+        window.r5Click.legacy.push([event.isTrigger ?? null, event.originalEvent === undefined]);
+        if (window.r5Click.mode === 'false') {
+          return false;
+        }
+        if (window.r5Click.mode === 'prevent') {
+          event.preventDefault();
+        }
+        return undefined;
+      });
+      document.addEventListener('click', (event) => {
+        if (event.target === summary) {
+          window.r5Click.delegated += 1;
+        }
+      });
+      JS);
+
+    $details = $assert->elementExists('css', '#r5-details');
+    $source = $assert->elementExists('css', '#r5-col-src');
+    $source->check();
+    $this->assertTrue($details->hasAttribute('open'), 'An uncancelled click opens the details element.');
+    $click = $session->evaluateScript('window.r5Click');
+    $this->assertSame([[3, TRUE]], $click['legacy']);
+    $this->assertSame(1, $click['native'], 'An uncancelled click reaches the native summary listener.');
+    $this->assertSame(1, $click['delegated'], 'An uncancelled click reaches a native document listener.');
+
+    $session->executeScript('window.r5Click.mode = "false";');
+    $source->uncheck();
+    $this->assertTrue($details->hasAttribute('open'), 'Returning false cancels the toggle.');
+    $click = $session->evaluateScript('window.r5Click');
+    $this->assertCount(2, $click['legacy']);
+    $this->assertSame(1, $click['native'], 'A click cancelled by returning false skips the native summary listener.');
+    $this->assertSame(1, $click['delegated'], 'A click cancelled by returning false skips a native document listener.');
+
+    $session->executeScript('window.r5Click.mode = "prevent";');
+    $source->check();
+    $source->uncheck();
+    $this->assertTrue($details->hasAttribute('open'), 'preventDefault() cancels the toggle.');
+    $click = $session->evaluateScript('window.r5Click');
+    $this->assertCount(3, $click['legacy']);
+    $this->assertSame(1, $click['native'], 'A click cancelled by preventDefault() skips the native summary listener.');
+    $this->assertSame(1, $click['delegated'], 'A click cancelled by preventDefault() skips a native document listener.');
+  }
+
 }

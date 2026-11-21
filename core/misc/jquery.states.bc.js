@@ -226,6 +226,13 @@
     };
     states.compatibility.warnSyntheticState = warnSyntheticState;
 
+    // Pinned state:collapsed called .trigger('click'). jQuery handlers run
+    // first, and the native click() follows only when none cancelled it.
+    states.compatibility.click = (summary) => {
+      jquery(summary).trigger('click');
+      return true;
+    };
+
     const subscriptions = new Map();
     const handlerToBinding = new WeakMap();
     const targetSubscriptions = new WeakMap();

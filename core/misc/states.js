@@ -1439,6 +1439,11 @@
     collapsed(target, value) {
       const summary = target.querySelector(':scope > summary');
       if (summary && target.hasAttribute('open') === value) {
+        // The bridge runs the pinned jQuery click, whose handlers can cancel
+        // the native click before any native listener receives it.
+        if (states.compatibility.click?.(summary)) {
+          return;
+        }
         // A dispatched click toggles the details element like click() does.
         // Publishing it lets the bridge give jQuery a synthetic click.
         const event = new MouseEvent('click', {
