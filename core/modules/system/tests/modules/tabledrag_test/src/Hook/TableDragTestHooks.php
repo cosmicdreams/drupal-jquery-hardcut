@@ -16,8 +16,15 @@ final class TableDragTestHooks {
    */
   #[Hook('library_info_alter')]
   public function libraryInfoAlter(array &$libraries, string $extension): void {
-    if ($extension === 'core' && \Drupal::state()->get('tabledrag_test.late_ajax_table_bridges')) {
-      $libraries['jquery']['js'] = [];
+    if (\Drupal::state()->get('tabledrag_test.late_ajax_table_bridges')) {
+      if ($extension === 'core') {
+        $libraries['jquery']['js'] = [];
+      }
+      elseif ($extension === 'default_admin') {
+        // Sticky layout depends on the jQuery-backed displace library.
+        $libraries['sticky']['js'] = [];
+        $libraries['sticky']['dependencies'] = [];
+      }
     }
     if ($extension === 'core' && \Drupal::state()->get('tabledrag_test.late_bridge')) {
       unset($libraries['jquery']['js']['misc/jquery.tabledrag.bc.js']);
