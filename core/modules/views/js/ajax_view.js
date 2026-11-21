@@ -3,7 +3,7 @@
  * Handles AJAX fetching of views, including filter submission and response.
  */
 
-(function ($, Drupal, drupalSettings) {
+((Drupal, drupalSettings) => {
   /**
    * Attaches the AJAX behavior to exposed filters forms and key View links.
    *
@@ -31,7 +31,7 @@
         } = settings;
         Object.keys(ajaxViews || {}).forEach((i) => {
           const selector = `.js-view-dom-id-${ajaxViews[i].view_dom_id}`;
-          if ($(selector, context).length) {
+          if (context.querySelector(selector)) {
             delete Drupal.views.instances[i];
             delete settings.views.ajaxViews[i];
           }
@@ -62,20 +62,22 @@
    */
   Drupal.views.ajaxView = function (settings) {
     const selector = `.js-view-dom-id-${settings.view_dom_id}`;
-    this.$view = $(selector);
-    this.$exposed_form = $(
-      `form#views-exposed-form-${settings.view_name.replace(
-        /_/g,
-        '-',
-      )}-${settings.view_display_id.replace(/_/g, '-')}`,
-    );
+    this.views = [...document.querySelectorAll(selector)];
+    this.exposedForms = [
+      ...document.querySelectorAll(
+        `form#views-exposed-form-${settings.view_name.replace(
+          /_/g,
+          '-',
+        )}-${settings.view_display_id.replace(/_/g, '-')}`,
+      ),
+    ];
 
     // Retrieve the path to use for views' ajax.
     let ajaxPath = drupalSettings.views.ajax_path;
 
     // If there are multiple views this might've ended up showing up multiple
     // times.
-    if (ajaxPath.constructor.toString().includes('Array')) {
+    if (Array.isArray(ajaxPath)) {
       ajaxPath = ajaxPath[0];
     }
 
@@ -91,10 +93,9 @@
       // `type[]`.
       const stripArraySuffix = (name) => name.replace(/\[.*$/, '');
       const exposedFieldBaseNames = new Set(
-        this.$exposed_form
-          .find('[name]')
-          .toArray()
-          .map((el) => stripArraySuffix(el.name)),
+        this.exposedForms
+          .flatMap((form) => [...form.querySelectorAll('[name]')])
+          .map((element) => stripArraySuffix(element.name)),
       );
 
       // Remove current exposed filters.
@@ -132,14 +133,14 @@
     this.settings = settings;
 
     // Add the ajax to exposed forms.
-    once('exposed-form', this.$exposed_form).forEach(
+    once('exposed-form', this.exposedForms).forEach(
       this.attachExposedFormAjax.bind(this),
     );
 
     // Add the ajax to pagers.
     once(
       'ajax-pager',
-      this.$view
+      this.views
         // Don't attach to nested views. Doing so would attach multiple behaviors
         // to a given element.
         .filter(this.filterNestedViews.bind(this)),
@@ -149,14 +150,15 @@
     // refresh use the following code.
     //
     // @code
-    // $('.view-name').trigger('RefreshView');
+    // document.querySelector('.view-name').dispatchEvent(new Event('RefreshView'));
     // @endcode
-    const selfSettings = $.extend({}, this.element_settings, {
+    const selfSettings = {
+      ...this.element_settings,
       event: 'RefreshView',
       base: this.selector,
       httpMethod: 'GET',
-      element: this.$view.get(0),
-    });
+      element: this.views[0],
+    };
     this.refreshViewAjax = Drupal.ajax(selfSettings);
   };
 
@@ -164,22 +166,18 @@
    * @method
    */
   Drupal.views.ajaxView.prototype.attachExposedFormAjax = function () {
-    const that = this;
-    this.exposedFormAjax = [];
-    // Exclude the reset buttons so no AJAX behaviors are bound. Many things
-    // break during the form reset phase if using AJAX.
-    $(
-      'input[type=submit], button[type=submit], input[type=image]',
-      this.$exposed_form,
-    )
-      .not('[data-drupal-selector=edit-reset]')
-      .each(function (index) {
-        const selfSettings = $.extend({}, that.element_settings, {
-          base: $(this).attr('id'),
-          element: this,
-        });
-        that.exposedFormAjax[index] = Drupal.ajax(selfSettings);
-      });
+    // Exclude reset buttons so AJAX does not interfere with form reset.
+    const selector =
+      ':is(input[type=submit], button[type=submit], input[type=image]):not([data-drupal-selector=edit-reset])';
+    this.exposedFormAjax = this.exposedForms
+      .flatMap((form) => [...form.querySelectorAll(selector)])
+      .map((element) =>
+        Drupal.ajax({
+          ...this.element_settings,
+          base: element.id,
+          element,
+        }),
+      );
   };
 
   /**
@@ -189,18 +187,19 @@
   Drupal.views.ajaxView.prototype.filterNestedViews = function () {
     // If there is at least one parent with a view class, this view
     // is nested (e.g., an attachment). Bail.
-    return !this.$view.parents('.view').length;
+    return this.views.every((view) => !view.parentElement?.closest('.view'));
   };
 
   /**
    * Attach the ajax behavior to each link.
    */
   Drupal.views.ajaxView.prototype.attachPagerAjax = function () {
-    this.$view
-      .find(
-        '.js-pager__items a, th.views-field a, .attachment .views-summary a',
-      )
-      .each(this.attachPagerLinkAjax.bind(this));
+    const selector =
+      '.js-pager__items a, th.views-field a, .attachment .views-summary a';
+    const links = new Set(
+      this.views.flatMap((view) => [...view.querySelectorAll(selector)]),
+    );
+    [...links].forEach((link, index) => this.attachPagerLinkAjax(index, link));
   };
 
   /**
@@ -212,25 +211,19 @@
    *   The link element.
    */
   Drupal.views.ajaxView.prototype.attachPagerLinkAjax = function (id, link) {
-    const $link = $(link);
-    const viewData = {};
-    const href = $link.attr('href');
-    // Construct an object using the settings defaults and then overriding
-    // with data specific to the link.
-    $.extend(
-      viewData,
-      this.settings,
-      Drupal.Views.parseQueryString(href),
-      // Extract argument data from the URL.
-      Drupal.Views.parseViewArgs(href, this.settings.view_base_path),
-    );
-
-    const selfSettings = $.extend({}, this.element_settings, {
+    const href = link.getAttribute('href');
+    const viewData = {
+      ...this.settings,
+      ...Drupal.Views.parseQueryString(href),
+      ...Drupal.Views.parseViewArgs(href, this.settings.view_base_path),
+    };
+    const selfSettings = {
+      ...this.element_settings,
       submit: viewData,
       base: false,
       element: link,
       httpMethod: 'GET',
-    });
+    };
     this.pagerAjax = Drupal.ajax(selfSettings);
   };
 
@@ -250,4 +243,5 @@
       window.history.replaceState(null, '', response.url);
     }
   };
-})(jQuery, Drupal, drupalSettings);
+  document.dispatchEvent(new CustomEvent('drupal:views-ajax-ready'));
+})(Drupal, drupalSettings);

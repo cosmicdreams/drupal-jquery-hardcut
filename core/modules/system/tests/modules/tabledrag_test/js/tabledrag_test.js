@@ -2,7 +2,7 @@
  * @file
  * Testing behaviors for tabledrag library.
  */
-(function ($, Drupal) {
+((Drupal, once) => {
   /**
    * @type {Drupal~behavior}
    *
@@ -12,12 +12,11 @@
    */
   Drupal.behaviors.tableDragTest = {
     attach(context) {
-      $(once('tabledrag-test', '.tabledrag-handle', context)).on(
-        'keydown.tabledrag-test',
-        (event) => {
-          $(event.currentTarget).removeClass('tabledrag-test-dragging');
-        },
-      );
+      once('tabledrag-test', '.tabledrag-handle', context).forEach((handle) => {
+        handle.addEventListener('keydown', () =>
+          handle.classList.remove('tabledrag-test-dragging'),
+        );
+      });
     },
   };
-})(jQuery, Drupal);
+})(Drupal, once);

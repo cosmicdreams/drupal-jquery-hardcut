@@ -52,7 +52,7 @@ final class JqueryEventBridgeTest extends WebDriverTestBase {
    * Tests explicit opt-in and teardown with two independent instances.
    */
   public function testIndependentInstances(): void {
-    $this->drupalGet('jquery-bc-test/bridge-events');
+    $this->drupalGet('jquery-bc-test/bridge-events', ['query' => ['ajax' => 1]]);
     $session = $this->getSession();
     $session->executeScript(<<<'JS'
       const vendor = Array.from(document.scripts).find(({ src }) => src.includes('/assets/vendor/jquery/jquery.min.js'));
@@ -90,22 +90,39 @@ final class JqueryEventBridgeTest extends WebDriverTestBase {
         const unregister = Drupal.eventBindings.register({ target, type, listener });
         const firstBeforeOptIn = first(target).triggerHandler(type);
         const secondBeforeOptIn = second(target).triggerHandler(type);
+        const ajaxTrace = [];
+        const checkableTrace = [];
+        const checkbox = target.appendChild(document.createElement('input'));
+        checkbox.type = 'checkbox';
+        const checkable = Drupal.ajax({ element: checkbox, event: 'click', url: location.href });
+        checkable.eventResponse = (element, event) => checkableTrace.push([element.checked, event.isTrigger]);
+        const ajax = Drupal.ajax({ element: target, event: 'RefreshView.view', url: location.href });
+        ajax.eventResponse = (element, event) => ajaxTrace.push([element === target, event.namespace, event.isTrigger]);
+        second(target).trigger('RefreshView.view');
         const before = publish();
         const stop = connect(second);
         const sameStop = connect(second) === stop;
         const secondAfterOptIn = second(target).triggerHandler(type);
+        second(target).trigger('RefreshView.other');
+        second(target).trigger('RefreshView.view');
+        second(checkbox).trigger('click');
         const connected = publish();
         stop();
         const secondAfterStop = second(target).triggerHandler(type);
+        second(target).trigger('RefreshView.view');
         const disconnected = publish();
         const resume = connect(second);
         stop();
         const secondAfterResume = second(target).triggerHandler(type);
+        second(target).trigger('RefreshView');
         const reconnected = publish();
         resume();
         const firstAfterStop = first(target).triggerHandler(type);
         target.dispatchEvent(new Event(type));
         unregister();
+        ajax.removeEventBindings();
+        checkable.removeEventBindings();
+        checkbox.remove();
         target.removeEventListener(type, listener);
         return [
           first !== second,
@@ -118,6 +135,8 @@ final class JqueryEventBridgeTest extends WebDriverTestBase {
           firstAfterStop,
           calls,
           [before, connected, disconnected, reconnected],
+          ajaxTrace,
+          checkableTrace,
         ];
       })()
       JS);
@@ -129,6 +148,8 @@ final class JqueryEventBridgeTest extends WebDriverTestBase {
         [['first', TRUE, [TRUE]], ['second', TRUE, []]],
         [['first', TRUE, [TRUE]], ['second', TRUE, [TRUE]]],
       ],
+      [[TRUE, 'view', 3], [TRUE, '', 3]],
+      [[TRUE, 3]],
     ], $trace);
   }
 
@@ -269,7 +290,7 @@ final class JqueryEventBridgeTest extends WebDriverTestBase {
             }
           });
           const listener = (event, value) => {
-            trace.push(['owned', event.target === target, event.currentTarget === target, value]);
+            trace.push(['owned', event.target === target, event.currentTarget === target, value, event.namespace, event.isTrigger, event.fixture]);
             if (tag === 'form') {
               event.preventDefault();
             }
@@ -298,7 +319,7 @@ final class JqueryEventBridgeTest extends WebDriverTestBase {
             disconnect = install();
           }
 
-          const triggered = jQuery.Event(type);
+          const triggered = jQuery.Event(type, { fixture: 42 });
           legacy.trigger(triggered, ['trigger']);
           const result = legacy.triggerHandler(`${type}.compat`, ['handler']);
           const blocked = jQuery.Event(type);
@@ -319,9 +340,9 @@ final class JqueryEventBridgeTest extends WebDriverTestBase {
 
     $trace = [
       'before',
-      ['owned', TRUE, TRUE, 'trigger'],
+      ['owned', TRUE, TRUE, 'trigger', '', 3, 42],
       'after',
-      ['owned', TRUE, TRUE, 'handler'],
+      ['owned', TRUE, TRUE, 'handler', 'compat', 2, NULL],
       'before',
     ];
     $expected = [
@@ -813,7 +834,7 @@ final class JqueryEventBridgeTest extends WebDriverTestBase {
    * Tests an explicit adapter load on a page with an independent vendor.
    */
   public function testStandaloneOptIn(): void {
-    $this->drupalGet('jquery-bc-test/native-events');
+    $this->drupalGet('jquery-bc-test/native-events', ['query' => ['ajax' => 1]]);
     $session = $this->getSession();
     $session->executeScript(<<<'JS'
       window.foreignAdapterTrace = null;
@@ -834,6 +855,21 @@ final class JqueryEventBridgeTest extends WebDriverTestBase {
         };
         target.addEventListener(type, listener);
         const unregister = Drupal.eventBindings.register({ target, type, listener });
+        const select = target.appendChild(document.createElement('select'));
+        select.add(new Option('Show', 'show'));
+        const result = target.appendChild(document.createElement('div'));
+        result.id = 'jquery-bc-test-result';
+        const ajax = Drupal.ajax({
+          element: select,
+          event: 'change',
+          url: Drupal.url('jquery-bc-test/link-response'),
+          progress: false,
+        });
+        const respond = ajax.eventResponse;
+        ajax.eventResponse = Drupal.ajax.useNativeCallback(function (element, event) {
+          trace.push(event instanceof Event ? 'native Ajax' : 'legacy Ajax');
+          return respond.call(this, element, event);
+        });
         const beforeVendor = typeof window.jQuery;
         await load('core/assets/vendor/jquery/jquery.min.js');
         const instance = window.jQuery;
@@ -847,12 +883,14 @@ final class JqueryEventBridgeTest extends WebDriverTestBase {
         unregister();
         collection.triggerHandler(type);
 
+        instance(select).trigger('change');
         window.foreignAdapterTrace = [
           beforeVendor,
           beforeOptIn ?? null,
           window.$ === instance,
           afterOptIn,
           trace,
+          Drupal.ajax.compatibility === null,
         ];
       })().catch((error) => {
         window.foreignAdapterTrace = String(error);
@@ -860,8 +898,10 @@ final class JqueryEventBridgeTest extends WebDriverTestBase {
       JS);
     $this->assertJsCondition('window.foreignAdapterTrace !== null');
     $this->assertSame([
-      'undefined', NULL, TRUE, 'handled', ['native', 'owned', 'dependent', 'dependent'],
+      'undefined', NULL, TRUE, 'handled', ['native', 'owned', 'dependent', 'dependent', 'native Ajax'], TRUE,
     ], $session->evaluateScript('window.foreignAdapterTrace'));
+    $this->assertJsCondition("document.getElementById('jquery-bc-test-result').textContent === 'Link response'");
+    $this->assertSession()->assertExpectedAjaxRequest(1);
   }
 
   /**

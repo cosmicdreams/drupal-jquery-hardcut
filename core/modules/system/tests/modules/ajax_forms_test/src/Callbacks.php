@@ -34,7 +34,7 @@ class Callbacks {
   public static function selectCallback($form, FormStateInterface $form_state): AjaxResponse {
     $response = new AjaxResponse();
     $response->addCommand(new HtmlCommand('#ajax_selected_color', $form_state->getValue('select')));
-    $response->addCommand(new DataCommand('#ajax_selected_color', 'form_state_value_select', $form_state->getValue('select')));
+    $response->addCommand(new DataCommand('#ajax_selected_color', 'form_state_value_select', $form_state->getValue('select'), native: TRUE));
     return $response;
   }
 
@@ -45,7 +45,7 @@ class Callbacks {
     $response = new AjaxResponse();
     $date = $form_state->getValue('date');
     $response->addCommand(new HtmlCommand('#ajax_date_value', sprintf('<div>%s</div>', $date)));
-    $response->addCommand(new DataCommand('#ajax_date_value', 'form_state_value_date', $form_state->getValue('date')));
+    $response->addCommand(new DataCommand('#ajax_date_value', 'form_state_value_date', $form_state->getValue('date'), native: TRUE));
     return $response;
   }
 
@@ -57,7 +57,7 @@ class Callbacks {
 
     $response = new AjaxResponse();
     $response->addCommand(new HtmlCommand('#ajax_datetime_value', sprintf('<div>%s</div>', $datetime)));
-    $response->addCommand(new DataCommand('#ajax_datetime_value', 'form_state_value_datetime', $datetime));
+    $response->addCommand(new DataCommand('#ajax_datetime_value', 'form_state_value_datetime', $datetime, native: TRUE));
     return $response;
   }
 
@@ -67,7 +67,7 @@ class Callbacks {
   public static function checkboxCallback($form, FormStateInterface $form_state): AjaxResponse {
     $response = new AjaxResponse();
     $response->addCommand(new HtmlCommand('#ajax_checkbox_value', $form_state->getValue('checkbox') ? 'checked' : 'unchecked'));
-    $response->addCommand(new DataCommand('#ajax_checkbox_value', 'form_state_value_select', (int) $form_state->getValue('checkbox')));
+    $response->addCommand(new DataCommand('#ajax_checkbox_value', 'form_state_value_select', (int) $form_state->getValue('checkbox'), native: TRUE));
     return $response;
   }
 
@@ -182,7 +182,7 @@ class Callbacks {
     $color = 'blue';
 
     $response = new AjaxResponse();
-    $response->addCommand(new CssCommand($selector, ['background-color' => $color]));
+    $response->addCommand(new CssCommand($selector, ['background-color' => $color], native: TRUE));
     return $response;
   }
 
@@ -192,7 +192,7 @@ class Callbacks {
   public static function advancedCommandsDataCallback($form, FormStateInterface $form_state): AjaxResponse {
     $selector = '#data_div';
     $response = new AjaxResponse();
-    $response->addCommand(new DataCommand($selector, 'test_key', 'test_value'));
+    $response->addCommand(new DataCommand($selector, 'test_key', 'test_value', native: TRUE));
     return $response;
   }
 
@@ -201,6 +201,7 @@ class Callbacks {
    */
   public static function advancedCommandsInvokeCallback($form, FormStateInterface $form_state): AjaxResponse {
     $response = new AjaxResponse();
+    $response->addAttachments(['library' => ['core/drupal.ajax.jquery']]);
     $response->addCommand(new InvokeCommand('#invoke_div', 'addClass', ['error']));
     return $response;
   }
