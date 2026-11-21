@@ -3,6 +3,7 @@
  * Progress bar.
  */
 
+// cspell:ignore nocontent notmodified
 ((Drupal) => {
   /**
    * Theme function for the progress bar.
