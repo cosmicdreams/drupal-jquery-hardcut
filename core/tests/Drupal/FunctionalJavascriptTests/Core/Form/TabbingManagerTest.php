@@ -178,9 +178,11 @@ class TabbingManagerTest extends WebDriverTestBase {
       $actions[] = ['type' => 'keyUp', 'value' => "\u{E008}"];
     }
     $driver = $this->getSession()->getDriver()->getWebDriverSession();
-    $driver->postActions(['actions' => [
-      ['type' => 'key', 'id' => 'keyboard', 'actions' => $actions],
-    ]]);
+    $driver->postActions([
+      'actions' => [
+        ['type' => 'key', 'id' => 'keyboard', 'actions' => $actions],
+      ],
+    ]);
   }
 
 }
