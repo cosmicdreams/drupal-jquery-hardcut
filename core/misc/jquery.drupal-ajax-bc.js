@@ -1232,7 +1232,29 @@
       return;
     }
     const subscriptions = new Map();
+    const handlers = new Map();
+    const removalTypes = new Set();
     const delivering = new Set();
+    const observeRemoval = (type) => {
+      if (removalTypes.has(type)) {
+        return;
+      }
+      removalTypes.add(type);
+      const special = (jQuery.event.special[type] ??= {});
+      const previous = special.remove;
+      special.remove = function (handle) {
+        try {
+          previous?.call(this, handle);
+        } finally {
+          const binding = handlers.get(handle.guid);
+          if (binding) {
+            handlers.delete(handle.guid);
+            subscriptions.delete(binding);
+            binding.remove();
+          }
+        }
+      };
+    };
     let adapter;
     Drupal.eventBindings.observe({
       add(binding) {
@@ -1242,6 +1264,8 @@
         }
         const name = namespace ? `${type}.${namespace}` : type;
         const bindType = jQuery.event.special[type]?.bindType || type;
+        observeRemoval(type);
+        observeRemoval(bindType);
         const deliver = (event) => {
           if (!adapter || Drupal.ajax.compatibility !== adapter) {
             return;
@@ -1273,12 +1297,16 @@
         };
         const element = jQuery(target);
         element.on(name, deliver);
+        handlers.set(deliver.guid, binding);
         subscriptions.set(binding, { name, bindType, deliver, element });
       },
       remove(binding) {
         const subscription = subscriptions.get(binding);
-        subscription?.element.off(subscription.name, subscription.deliver);
-        subscriptions.delete(binding);
+        if (subscription) {
+          handlers.delete(subscription.deliver.guid);
+          subscriptions.delete(binding);
+          subscription.element.off(subscription.name, subscription.deliver);
+        }
       },
     });
     adapter = {
@@ -1296,9 +1324,7 @@
         const handlers = jQuery._data(binding.target, 'events')?.[
           subscription.bindType
         ];
-        return handlers?.some(
-          ({ handler }) => handler === subscription.deliver,
-        );
+        return handlers?.some(({ guid }) => guid === subscription.deliver.guid);
       },
       isSyntheticDefaultAction(event) {
         if (Drupal.eventBindings.isForeignDefaultAction?.(event)) {

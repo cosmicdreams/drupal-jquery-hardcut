@@ -1543,7 +1543,7 @@
     }
     ajax.options.url += `${Drupal.ajax.WRAPPER_FORMAT}=${wrapper}`;
 
-    const removers = [];
+    const removers = new Set();
     const bind = (names, operation) => {
       eventNames(names).forEach((name) => {
         const [type, ...namespaces] = name.split('.');
@@ -1570,12 +1570,15 @@
             event.stopPropagation();
           }
         };
+        binding.remove = () => {
+          if (removers.delete(binding.remove)) {
+            target.removeEventListener(type, nativeListener);
+            unregister();
+          }
+        };
         target.addEventListener(type, nativeListener);
         const unregister = Drupal.eventBindings.register(binding);
-        removers.push(() => {
-          unregister();
-          target.removeEventListener(type, nativeListener);
-        });
+        removers.add(binding.remove);
       });
     };
     if (ajax.element) {
@@ -1602,8 +1605,7 @@
         event.stopPropagation();
         return false;
       });
-      ajax.removeEventBindings = () =>
-        removers.splice(0).forEach((remove) => remove());
+      ajax.removeEventBindings = () => removers.forEach((remove) => remove());
     }
   };
 
