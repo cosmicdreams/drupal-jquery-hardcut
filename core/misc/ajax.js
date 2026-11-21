@@ -2567,6 +2567,9 @@
     /^(?:border(?:-(?:top|right|bottom|left))?(?:-width)?|(?:margin|padding)(?:-(?:top|right|bottom|left))?|top|right|bottom|left|(?:(?:min|max)-)?(?:width|height))$/;
 
   const elementData = new WeakMap();
+  // These keys also had readers in the jQuery Ajax runtime.
+  const legacyDataKeys =
+    /^(?:dialog[A-Z].*|ajaxHttpMethod|refocusBlur|disableRefocus)$/;
   const normalizeDataKey = (key) =>
     key.replace(/-([a-z])/g, (_, letter) => letter.toUpperCase());
 
@@ -2583,9 +2586,13 @@
       if (value !== undefined) {
         return value;
       }
-      const legacy = Drupal.ajax.commandCompatibility?.getData?.(element, key);
-      if (legacy !== undefined) {
-        return legacy;
+      if (legacyDataKeys.test(key)) {
+        const adapter =
+          Drupal.ajax.commandCompatibility ?? Drupal.ajax.compatibility;
+        const legacy = adapter?.getData?.(element, key);
+        if (legacy !== undefined) {
+          return legacy;
+        }
       }
       const attribute = element.getAttribute(
         `data-${key.replace(/[A-Z]/g, '-$&').toLowerCase()}`,

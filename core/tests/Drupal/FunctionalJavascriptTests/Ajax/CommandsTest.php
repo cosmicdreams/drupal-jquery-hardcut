@@ -143,8 +143,8 @@ class CommandsTest extends WebDriverTestBase {
    */
   #[IgnoreDeprecations]
   public function testMixedUnmarkedCommands(): void {
-    $this->expectUserDeprecationMessage('Javascript Deprecation: Using jQuery Ajax selector, method or effect inputs is deprecated in drupal:12.0.0 and is removed from drupal:13.0.0. Use native: true with a CSS selector and absolute values. See https://www.drupal.org/node/CHANGE_RECORD.');
-    $this->expectUserDeprecationMessage("Javascript Deprecation: DataCommand's jQuery-data semantics is deprecated in drupal:12.0.0 and is removed from drupal:13.0.0. Use native: true with Drupal.ajax.elementData. See https://www.drupal.org/node/CHANGE_RECORD.");
+    $this->expectUserDeprecationMessage('Javascript Deprecation: Using jQuery Ajax selector, method or effect inputs is deprecated in drupal:12.0.0 and is removed from drupal:13.0.0. Use a CSS selector and supported native command options. See https://www.drupal.org/node/CHANGE_RECORD.');
+    $this->expectUserDeprecationMessage("Javascript Deprecation: DataCommand's jQuery-data semantics is deprecated in drupal:12.0.0 and is removed from drupal:13.0.0. Use Drupal's element data API. See https://www.drupal.org/node/CHANGE_RECORD.");
     $this->drupalGet('ajax-test/global-events');
     $result = $this->getSession()->evaluateScript(<<<'JS'
       (async () => {
@@ -168,6 +168,35 @@ class CommandsTest extends WebDriverTestBase {
     assert($driver instanceof DrupalSelenium2Driver);
     $driver->processJavascriptDeprecations();
     $this->assertSame(['undefined', 'hook', 'legacy', NULL, 'native'], $result);
+  }
+
+  /**
+   * Tests scoped data reads without the optional command adapter.
+   */
+  public function testMixedAjaxScopedDataReads(): void {
+    $this->drupalGet('ajax-test/global-events');
+    $result = $this->getSession()->evaluateScript(<<<'JS'
+      (async () => {
+        drupalSettings.suppressDeprecationErrors = true;
+        const selector = '#test_global_events_drupal_ajax_link';
+        const link = document.querySelector(selector);
+        const settings = { width: 640 };
+        jQuery(link).data({
+          'dialog-options': settings,
+          'ajax-http-method': 'GET',
+          'refocus-blur': false,
+          'private-value': 'legacy',
+        });
+        const ajax = Drupal.ajax({ url: location.href });
+        await ajax.commandExecutionQueue([
+          { command: 'data', selector, name: 'disable-refocus', value: true },
+        ]);
+        const keys = ['disable-refocus', 'dialog-options', 'ajax-http-method', 'refocus-blur', 'private-value'];
+        return [typeof Drupal.ajax.commandCompatibility, jQuery(link).data('disable-refocus'),
+          ...keys.map((key) => Drupal.ajax.elementData.get(link, key))];
+      })()
+      JS);
+    $this->assertSame(['undefined', TRUE, TRUE, ['width' => 640], 'GET', FALSE, NULL], $result);
   }
 
   /**

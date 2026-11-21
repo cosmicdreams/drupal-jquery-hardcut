@@ -1364,17 +1364,18 @@
       css(response) {
         warnLegacy(
           'Using jQuery Ajax selector, method or effect inputs',
-          'Use native: true with a CSS selector and absolute values.',
+          'Use a CSS selector and supported native command options.',
         );
         jQuery(response.selector).css(response.argument);
       },
       data(response) {
         warnLegacy(
           "DataCommand's jQuery-data semantics",
-          'Use native: true with Drupal.ajax.elementData.',
+          "Use Drupal's element data API.",
         );
         jQuery(response.selector).data(response.name, response.value);
       },
+      getData: (element, key) => jQuery.data(element, key),
       cloneContent(content) {
         return content?.jquery ? content.clone(true, true).get() : undefined;
       },

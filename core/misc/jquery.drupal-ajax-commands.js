@@ -116,14 +116,8 @@
     },
 
     getData(element, key) {
-      if (
-        /^(?:dialog[A-Z].*|ajaxHttpMethod|refocusBlur|disableRefocus)$/.test(
-          key,
-        )
-      ) {
-        projectData(element);
-        return data(element, key);
-      }
+      projectData(element);
+      return data(element, key);
     },
 
     insert(ajax, response) {
