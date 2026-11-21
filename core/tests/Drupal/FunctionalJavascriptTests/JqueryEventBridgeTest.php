@@ -963,7 +963,8 @@ final class JqueryEventBridgeTest extends WebDriverTestBase {
         second(dependent).trigger({ type: 'state:visible', value: false, trigger: true });
         const hiddenAfterSecondState = !isVisible();
 
-        // 3. Disconnecting and reconnecting connectLegacy(window.jQuery) hits
+        // 3. Attaching a States binding while connectLegacy(window.jQuery) is
+        // disconnected leaves it absent from legacySlots; reconnecting hits
         // Drupal.states.compatibility.ownsLegacyEvents and avoids duplicate
         // jQuery slots on window.jQuery.
         let triggerInvocations = 0;
@@ -981,13 +982,28 @@ final class JqueryEventBridgeTest extends WebDriverTestBase {
           <div id="reconnect-probe-dep" class="js-form-wrapper" data-drupal-states='{"visible":{"#reconnect-probe-src":{"reconnectProbe":"b"}}}'>Probe</div>
         `;
         document.body.append(probeWrap);
-        Drupal.attachBehaviors(probeWrap);
-
-        // Disconnect and reconnect primary jQuery while States owns its bindings.
-        Drupal.eventBindings.connectLegacy(primary)();
-        Drupal.eventBindings.connectLegacy(primary);
 
         const probeSrc = document.getElementById('reconnect-probe-src');
+        // Disconnect primary jQuery BEFORE attaching probeWrap so the new
+        // binding is not in legacySlots when primary reconnects.
+        Drupal.eventBindings.connectLegacy(primary)();
+        Drupal.attachBehaviors(probeWrap);
+
+        let ownsLegacyEventsHits = 0;
+        const origOwns = Drupal.states.compatibility.ownsLegacyEvents;
+        Drupal.states.compatibility.ownsLegacyEvents = (inst, binding) => {
+          const owned = origOwns(inst, binding);
+          if (owned && binding?.target === probeSrc) {
+            ownsLegacyEventsHits += 1;
+          }
+          return owned;
+        };
+        try {
+          Drupal.eventBindings.connectLegacy(primary);
+        } finally {
+          Drupal.states.compatibility.ownsLegacyEvents = origOwns;
+        }
+
         probeSrc.value = 'b';
         primary(probeSrc).trigger('change');
 
@@ -999,6 +1015,7 @@ final class JqueryEventBridgeTest extends WebDriverTestBase {
         return {
           visibleAfterSecondChange,
           hiddenAfterSecondState,
+          ownsLegacyEventsHits,
           triggerInvocations,
           trace,
         };
@@ -1007,6 +1024,7 @@ final class JqueryEventBridgeTest extends WebDriverTestBase {
 
     $this->assertTrue($result['visibleAfterSecondChange'], 'Second connected jQuery synthetic change updates States dependent.');
     $this->assertTrue($result['hiddenAfterSecondState'], 'Second connected jQuery synthetic state:visible with detail hides States dependent.');
+    $this->assertGreaterThan(0, $result['ownsLegacyEventsHits'], 'Drupal.states.compatibility.ownsLegacyEvents branch fires for bindings created while disconnected.');
     $this->assertSame(1, $result['triggerInvocations'], 'ownsLegacyEvents prevents duplicate window.jQuery slots after connectLegacy reconnect.');
     $this->assertContains('second-change', $result['trace']);
     $this->assertContains(['native-state', TRUE], $result['trace']);
