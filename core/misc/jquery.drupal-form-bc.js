@@ -135,13 +135,16 @@
                 detail:
                   type === fragmentEvent
                     ? (jquery(fragmentTarget)[0] ?? null)
-                    : undefined,
+                    : type === valueCopyEvent
+                      ? fragmentTarget
+                      : undefined,
               });
               Object.defineProperties(native, {
                 target: { value: event.target },
                 key: { value: event.key },
                 shiftKey: { value: event.shiftKey },
                 keyCode: { value: event.keyCode },
+                which: { value: event.which },
                 button: { value: event.button },
               });
               if (event.isDefaultPrevented()) {
@@ -197,6 +200,7 @@
   }
 
   const fragmentEvent = 'formFragmentLinkClickOrHashChange';
+  const valueCopyEvent = 'value:copy';
   const tabbingMigration = 'Use native context members and element lists.';
   const tabbingEvents = [
     'drupalTabbingConstrained',
@@ -260,7 +264,7 @@
    */
   function installPublications() {
     const publications = new WeakMap();
-    const legacyTypes = [...tabbingEvents, fragmentEvent];
+    const legacyTypes = [...tabbingEvents, fragmentEvent, valueCopyEvent];
     window.Drupal.eventBindings.observePublications((event) => {
       if (legacyTypes.includes(event.type)) {
         publications.set(event, [
@@ -284,6 +288,50 @@
         );
       };
     });
+  }
+
+  /**
+   * Adapts the legacy copy-field handlers and their positional value.
+   */
+  function installCopyFieldMethods() {
+    const behavior = window.Drupal.behaviors.copyFieldValue;
+    for (const name of ['valueTargetCopyHandler', 'valueSourceBlurHandler']) {
+      const nativeName = `${name}Native`;
+      const native = behavior[nativeName];
+      const targetHandler = name === 'valueTargetCopyHandler';
+      const contract = `Drupal.behaviors.copyFieldValue.${name}`;
+      const migration = `Use ${nativeName} with a native event.`;
+      const callDefault = function (event, value) {
+        warn(contract, migration);
+        return targetHandler
+          ? native.call(this, { target: event.target, detail: value })
+          : native.call(this, event.originalEvent || event);
+      };
+      let override = behavior[name];
+      Object.defineProperty(behavior, name, {
+        configurable: true,
+        get() {
+          return override || callDefault;
+        },
+        set(callback) {
+          override = callback === callDefault ? undefined : callback;
+          if (!override) {
+            behavior[nativeName] = native;
+            return;
+          }
+          warn(contract, migration);
+          behavior[nativeName] = function (event) {
+            const legacy = legacyEvents.get(event) || jquery.Event(event);
+            return targetHandler
+              ? callback.call(this, legacy, event.detail)
+              : callback.call(this, legacy);
+          };
+        },
+      });
+      if (override) {
+        behavior[name] = override;
+      }
+    }
   }
 
   /**
@@ -619,6 +667,15 @@
     document.addEventListener('drupal:form-ready', installSummaryMethods, {
       once: true,
     });
+  }
+  if (window.Drupal?.behaviors?.copyFieldValue) {
+    installCopyFieldMethods();
+  } else {
+    document.addEventListener(
+      'drupal:copy-field-value-ready',
+      installCopyFieldMethods,
+      { once: true },
+    );
   }
   if (window.Drupal?.DropButton) {
     installDropButton();
