@@ -703,6 +703,7 @@ jquery:
     misc/jquery.drupal-bc.js: { preprocess: false, minified: false }
     misc/jquery.drupal-ajax-bc.js: { preprocess: false, minified: false }
     misc/jquery.tabledrag.bc.js: { preprocess: false, minified: false }
+    misc/jquery.drupal-form-bc.js: { preprocess: false, minified: false }
 
 internal.jquery.form:
   # Drupal maintains this modified copy of jQuery Form.
