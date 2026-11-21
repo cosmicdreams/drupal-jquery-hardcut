@@ -3,7 +3,6 @@ drupal.filter.admin:
   js:
     js/filter.admin.js: {}
   dependencies:
-    - core/jquery
     - core/drupal
     - core/once
     - core/drupal.form

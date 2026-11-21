@@ -628,7 +628,6 @@ drupal.vertical-tabs:
     component:
       misc/vertical-tabs.css: {}
   dependencies:
-    - core/jquery
     - core/once
     - core/drupal
     - core/drupalSettings
