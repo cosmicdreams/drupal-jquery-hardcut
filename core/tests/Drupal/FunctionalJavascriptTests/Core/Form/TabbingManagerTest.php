@@ -80,6 +80,18 @@ class TabbingManagerTest extends WebDriverTestBase {
     $this->drupalGet('tabbingmanager-test');
     $session = $this->getSession();
     $this->assertSame('undefined', $session->evaluateScript('typeof window.jQuery'));
+    $this->assertSame(['none', 'none', FALSE], $session->evaluateScript(<<<'JS'
+      (() => {
+        const probe = document.body.appendChild(document.createElement('div'));
+        probe.style.transition = 'opacity 1s';
+        probe.style.animation = 'test-animation 1s';
+        const style = getComputedStyle(probe);
+        const legacyScript = Array.from(document.scripts).some(
+          (script) => script.src.includes('/disable_transitions.theme.js')
+        );
+        return [style.transitionProperty, style.animationName, legacyScript];
+      })()
+      JS));
     $this->assertTrue($session->evaluateScript(<<<'JS'
       !Array.from(document.querySelectorAll('script[src], link[href]')).some((asset) =>
         /[\/]jquery(?:[./-]|$)/i.test(asset.src || asset.href)
@@ -98,6 +110,7 @@ class TabbingManagerTest extends WebDriverTestBase {
    */
   public function testLegacyTabbingContext(): void {
     $this->drupalGet('tabbingmanager-test', ['query' => ['legacy' => 1]]);
+    $this->assertTrue($this->getSession()->evaluateScript('jQuery.fx.off === true'));
     $actual = $this->getSession()->evaluateScript(<<<'JS'
       (() => {
         const warnings = [];
