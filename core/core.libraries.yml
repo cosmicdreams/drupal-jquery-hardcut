@@ -321,7 +321,6 @@ drupal.batch:
   js:
     misc/batch.js: { cache: false }
   dependencies:
-    - core/jquery
     - core/drupal
     - core/drupalSettings
     - core/drupal.ajax
@@ -614,9 +613,9 @@ drupal.timezone:
   js:
     misc/timezone.js: {}
   dependencies:
-    - core/jquery
     - core/once
     - core/drupal
+    - core/drupal.xhr
 
 drupal.touchevents-test:
   header: true
