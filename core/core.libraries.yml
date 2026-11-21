@@ -507,7 +507,7 @@ drupal.progress:
 
   dependencies:
     - core/drupal
-    - core/jquery
+    - core/drupal.xhr
     - core/drupalSettings
 
 drupal.textarea-resize:
