@@ -780,6 +780,38 @@ class TableDragTest extends WebDriverTestBase {
   }
 
   /**
+   * Tests real resize ordering when the adapter loads after table attach.
+   */
+  public function testLateResponsiveBridgeKeepsNativeSlot(): void {
+    $this->openLateBridgeFixture();
+    $session = $this->getSession();
+    $session->executeScript(<<<'JS'
+      jQuery(window).off('resize');
+      const fixture = document.createElement('section');
+      fixture.innerHTML = '<table class="responsive-enabled"></table>';
+      document.body.append(fixture);
+      const evaluate = () => window.lateResizeOrder.push('table');
+      evaluate.nativeTableEvent = true;
+      window.lateResizeOrder = [];
+      Drupal.TableResponsive.prototype.eventhandlerEvaluateColumnVisibility = evaluate;
+      Drupal.behaviors.tableResponsive.attach(fixture);
+      window.addEventListener('resize', (event) => {
+        window.lateResizeOrder.push('native');
+        event.stopImmediatePropagation();
+      });
+      JS);
+    $this->loadLateBridge();
+    $this->assertSame(['table', 'native'], $session->evaluateScript(<<<'JS'
+      (() => {
+        jQuery(window).on('resize.tableresponsive', () => window.lateResizeOrder.push('legacy'));
+        window.lateResizeOrder.length = 0;
+        window.dispatchEvent(new Event('resize'));
+        return window.lateResizeOrder;
+      })()
+      JS));
+  }
+
+  /**
    * Tests responsive data stored before loading the adapter.
    */
   #[IgnoreDeprecations]

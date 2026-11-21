@@ -112,14 +112,31 @@ class AdminTableDragTest extends TableDragTest {
    */
   public function testEmptyTableDragCellItemsWrapper(): void {
     $this->drupalGet('tabledrag_test');
-    $this->assertSame([TRUE, TRUE, 2], $this->getSession()->evaluateScript(<<<'JS'
-      (() => {
-        Drupal.theme.tableDragCellItemsWrapper = () => '';
+    $this->assertEmptyWrapperParity('tableDragCellItemsWrapper', FALSE);
+  }
+
+  /**
+   * Tests a theme that omits the inner cell-content wrapper.
+   */
+  public function testEmptyTableDragCellContentWrapper(): void {
+    $this->drupalGet('tabledrag_test');
+    $this->assertEmptyWrapperParity('tableDragCellContentWrapper', TRUE);
+  }
+
+  /**
+   * Asserts that an omitted wrapper leaves the other wrapper and both rows.
+   */
+  private function assertEmptyWrapperParity(string $hook, bool $outer): void {
+    $this->getSession()->executeScript("window.emptyWrapperHook = '$hook';");
+    $this->assertSame(array_fill(0, 3, [TRUE, $outer ? 2 : 0, $outer ? 0 : 2, 2]), $this->getSession()->evaluateScript(<<<'JS'
+      ['', null, undefined].map((markup, index) => {
+        Drupal.theme[window.emptyWrapperHook] = () => markup;
         const fixture = document.createElement('section');
-        fixture.innerHTML = '<table id="unwrapped-drag"><tbody>' +
+        const id = 'unwrapped-drag-' + index;
+        fixture.innerHTML = '<table id="' + id + '"><tbody>' +
           '<tr class="draggable"><td>First</td></tr><tr class="draggable"><td>Second</td></tr></tbody></table>';
         document.body.append(fixture);
-        const tableDrag = { 'unwrapped-drag': {} };
+        const tableDrag = { [id]: {} };
         Drupal.behaviors.tableDrag.attach(fixture, { tableDrag });
         let attached = true;
         try {
@@ -128,11 +145,88 @@ class AdminTableDragTest extends TableDragTest {
           attached = false;
         }
         const rows = [...fixture.querySelectorAll('tr')];
-        return [attached, !fixture.querySelector('.js-tabledrag-cell-content'),
+        return [attached, fixture.querySelectorAll('.js-tabledrag-cell-content').length,
+          fixture.querySelectorAll('.tabledrag-cell-content__item').length,
           rows.filter((row) => row.querySelector('.js-tabledrag-handle') &&
             once.filter('adminTabledrag', [row]).length).length];
+      })
+      JS));
+  }
+
+  /**
+   * Tests synthetic changes with built-in and chained bulk handlers.
+   */
+  #[IgnoreDeprecations]
+  public function testBuiltInBulkActionsIgnoreSyntheticChange(): void {
+    $this->drupalGet('tabledrag_test', ['query' => ['legacy' => 1]]);
+    $this->assertSame([[TRUE, 'Initial', FALSE], [TRUE, NULL, FALSE], [2, 2]], $this->getSession()->evaluateScript(<<<'JS'
+      (() => {
+        const calls = [];
+        return [false, true].map((chain) => {
+          const fixture = document.createElement('div');
+          fixture.innerHTML = '<form><div data-drupal-views-bulk-actions>' +
+            (chain ? '' : '<span data-drupal-views-bulk-actions-status>Initial</span>') +
+            '</div><table><thead><tr><th class="select-all"><input type="checkbox" checked></th></tr></thead>' +
+            '<tbody><tr><td class="views-field-node-bulk-form"><input type="checkbox"></td></tr></tbody></table></form>';
+          document.body.append(fixture);
+          const actions = fixture.querySelector('[data-drupal-views-bulk-actions]');
+          const bulk = new Drupal.DefaultAdminBulkActions(actions);
+          if (chain) {
+            for (const method of ['rowCheckboxHandler', 'selectAllHandler']) {
+              const original = bulk[method];
+              bulk[method] = function (event) {
+                calls.push(event.isTrigger);
+                return original.call(this, event);
+              };
+            }
+          }
+          let succeeded = true;
+          for (const checkbox of fixture.querySelectorAll('th input, td input')) {
+            try {
+              jQuery(checkbox).triggerHandler('change');
+            } catch (error) {
+              succeeded = false;
+            }
+          }
+          return [succeeded,
+            actions.querySelector('[data-drupal-views-bulk-actions-status]')?.textContent ?? null,
+            bulk.bulkActionsSticky];
+        }).concat([calls]);
       })()
       JS));
+  }
+
+  /**
+   * Tests synthetic window events registered by bulk actions.
+   */
+  #[IgnoreDeprecations]
+  public function testBulkActionsSyntheticWindowEvents(): void {
+    $this->drupalGet('tabledrag_test', ['query' => ['legacy' => 1]]);
+    $session = $this->getSession();
+    $session->executeScript(<<<'JS'
+      const fixture = document.createElement('div');
+      fixture.innerHTML = '<form><div data-drupal-views-bulk-actions>' +
+        '<span data-drupal-views-bulk-actions-status></span></div>' +
+        '<table><tbody><tr><td class="views-field-node-bulk-form"><input type="checkbox" checked></td></tr></tbody></table></form>';
+      document.body.append(fixture);
+      const actions = fixture.querySelector('[data-drupal-views-bulk-actions]');
+      const bulk = new Drupal.DefaultAdminBulkActions(actions);
+      window.bulkWindowCalls = [];
+      bulk.scrollResizeHandler = () => window.bulkWindowCalls.push('layout');
+      const original = bulk.rowCheckboxHandler;
+      bulk.rowCheckboxHandler = function (event) {
+        window.bulkWindowCalls.push('load');
+        return original.call(this, event);
+      };
+      window.triggerBulkWindowEvent = (type) => jQuery(window).trigger(type);
+      window.triggerBulkWindowEvent('resize');
+      JS);
+    $this->assertJsCondition("window.bulkWindowCalls.includes('layout')");
+    $session->executeScript("window.bulkWindowCalls.length = 0; window.triggerBulkWindowEvent('scroll');");
+    $this->assertJsCondition("window.bulkWindowCalls.includes('layout')");
+    $session->executeScript("window.triggerBulkWindowEvent('load');");
+    $this->assertSame(['layout', 'load'], $session->evaluateScript('window.bulkWindowCalls'));
+    $this->assertSession()->elementTextContains('css', '[data-drupal-views-bulk-actions-status]', '1 item selected');
   }
 
   /**
