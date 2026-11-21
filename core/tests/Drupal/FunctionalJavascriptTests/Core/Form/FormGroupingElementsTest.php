@@ -142,7 +142,7 @@ class FormGroupingElementsTest extends WebDriverTestBase {
    * Tests the details summary update on a canceled legacy click.
    */
   public function testCanceledSummaryClick(): void {
-    $this->drupalGet('form-test/group-details');
+    $this->drupalGet('form-test/group-details', ['query' => ['legacy-details' => 1]]);
 
     $result = $this->getSession()->evaluateScript(<<<'JS'
       (() => {
@@ -176,6 +176,44 @@ class FormGroupingElementsTest extends WebDriverTestBase {
       ['false', TRUE, 0],
       ['true', TRUE, 0],
     ], $result);
+  }
+
+  /**
+   * Tests native details clicks, legacy click ordering and namespace removal.
+   */
+  public function testSummaryClickOrdering(): void {
+    $this->drupalGet('form-test/group-details', ['query' => ['legacy-details' => 1]]);
+    $result = $this->getSession()->evaluateScript(<<<'JS'
+      (() => {
+        const details = document.createElement('details');
+        const summary = details.appendChild(document.createElement('summary'));
+        const label = summary.appendChild(document.createElement('span'));
+        document.body.append(details);
+        const seen = [];
+        const body = jQuery(document.body);
+        body.on('click.test', 'summary', () => {
+          seen.push(summary.getAttribute('aria-expanded'));
+        });
+
+        label.click();
+        const native = [details.open, ...seen];
+        details.open = false;
+        summary.removeAttribute('aria-expanded');
+
+        body.on('click.test', 'span', (event) => {
+          event.stopImmediatePropagation();
+          event.preventDefault();
+        });
+        jQuery(label).trigger('click');
+        const cancelled = [details.open, summary.getAttribute('aria-expanded')];
+
+        body.off('.test');
+        body.off('click.detailsAria', 'summary');
+        label.click();
+        return [native, cancelled, [details.open, summary.getAttribute('aria-expanded')]];
+      })()
+      JS);
+    $this->assertSame([[TRUE, 'true'], [FALSE, NULL], [TRUE, NULL]], $result);
   }
 
   /**
