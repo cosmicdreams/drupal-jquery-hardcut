@@ -85,6 +85,83 @@ class FormHelperTest extends UnitTestCase {
     ];
     FormHelper::rewriteStatesSelector($form, 'menu', 'options');
     $this->assertSame($expected, $form, 'The #states selectors were properly rewritten.');
+
+    // Legacy search strings with a leading :input still match CSS selectors
+    // that no longer carry :input.
+    $legacy_form = [
+      'bare' => [
+        '#states' => [
+          'visible' => [
+            '[name="options[operator]"]' => ['value' => 'between'],
+          ],
+        ],
+      ],
+      'element' => [
+        '#states' => [
+          'visible' => [
+            'select[name="config_type"]' => ['value' => 'system.simple'],
+          ],
+        ],
+      ],
+      'is_group' => [
+        '#states' => [
+          'visible' => [
+            [
+              ':is(select, input)[name="op"]' => ['value' => 'contains'],
+            ],
+          ],
+        ],
+      ],
+      'bare_input_noop' => [
+        '#states' => [
+          'visible' => [
+            '[name="untouched"]' => ['checked' => TRUE],
+          ],
+        ],
+      ],
+    ];
+    FormHelper::rewriteStatesSelector(
+      $legacy_form['bare'],
+      ':input[name="options[operator]"]',
+      ':input[name="options[group_info][group_items][1][operator]"]',
+    );
+    $this->assertSame(
+      ['[name="options[group_info][group_items][1][operator]"]' => ['value' => 'between']],
+      $legacy_form['bare']['#states']['visible'],
+    );
+    FormHelper::rewriteStatesSelector(
+      $legacy_form['element'],
+      ':input[name="config_type"]',
+      ':input[name="wrapper[config_type]"]',
+    );
+    $this->assertSame(
+      ['select[name="wrapper[config_type]"]' => ['value' => 'system.simple']],
+      $legacy_form['element']['#states']['visible'],
+    );
+    FormHelper::rewriteStatesSelector(
+      $legacy_form['is_group'],
+      ':input[name="op"]',
+      '[name="exposed_op"]',
+    );
+    $this->assertSame(
+      [[':is(select, input)[name="exposed_op"]' => ['value' => 'contains']]],
+      $legacy_form['is_group']['#states']['visible'],
+    );
+    FormHelper::rewriteStatesSelector(
+      $legacy_form['element'],
+      ':input[name="wrapper[config_type]"]',
+      'select[name="replaced_config_type"]',
+    );
+    $this->assertSame(
+      ['select[name="replaced_config_type"]' => ['value' => 'system.simple']],
+      $legacy_form['element']['#states']['visible'],
+    );
+    // A bare :input search string must not fall back to matching empty string.
+    FormHelper::rewriteStatesSelector($legacy_form['bare_input_noop'], ':input', 'select');
+    $this->assertSame(
+      ['[name="untouched"]' => ['checked' => TRUE]],
+      $legacy_form['bare_input_noop']['#states']['visible'],
+    );
   }
 
   /**

@@ -59,10 +59,30 @@ class FormHelper {
     // order of an array.
     $keys = array_keys($conditions);
     $update_keys = FALSE;
+    $fallback_search = str_starts_with($search, ':input') && strlen($search) > strlen(':input')
+      ? substr($search, strlen(':input'))
+      : NULL;
+    $fallback_replace = $fallback_search !== NULL && str_starts_with($replace, ':input')
+      ? substr($replace, strlen(':input'))
+      : $replace;
+    $replace_is_attribute = str_starts_with($fallback_replace, '[');
     foreach ($conditions as $id => $values) {
-      if (str_contains($id, $search)) {
+      if (is_string($id) && str_contains($id, $search)) {
         $update_keys = TRUE;
         $new_id = str_replace($search, $replace, $id);
+        // Replace the key and keep the array in the same order.
+        $index = array_search($id, $keys, TRUE);
+        $keys[$index] = $new_id;
+      }
+      elseif (is_string($id) && $fallback_search !== NULL && str_contains($id, $fallback_search)) {
+        $update_keys = TRUE;
+        if ($replace_is_attribute) {
+          $new_id = str_replace($fallback_search, $fallback_replace, $id);
+        }
+        else {
+          $pattern = '/(?:(?:input|select|textarea|button|:is\([^)]+\)))?' . preg_quote($fallback_search, '/') . '/';
+          $new_id = preg_replace($pattern, str_replace(['\\', '$'], ['\\\\', '\$'], $fallback_replace), $id);
+        }
         // Replace the key and keep the array in the same order.
         $index = array_search($id, $keys, TRUE);
         $keys[$index] = $new_id;
