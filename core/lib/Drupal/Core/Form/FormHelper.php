@@ -16,7 +16,10 @@ class FormHelper {
    * Pinned jQuery pseudo-classes and the CSS that replaced them in core keys.
    *
    * A search string starting with one of these pseudo-classes also matches a
-   * #states key that starts with the mapped pattern instead.
+   * #states key that starts with the mapped pattern instead. The replacement
+   * is literal unless it starts with the same pseudo-class, in which case the
+   * matched CSS is kept in place of the pseudo-class. Text inside quoted
+   * attribute values is never rewritten by this fallback.
    *
    * @see self::processStatesArray()
    */
@@ -75,17 +78,20 @@ class FormHelper {
     $fallback_search = NULL;
     $fallback_prefix = '';
     $fallback_replace = $replace;
+    $keep_prefix = FALSE;
     foreach (static::LEGACY_STATES_PSEUDOS as $pseudo => $prefix) {
       if (str_starts_with($search, $pseudo) && strlen($search) > strlen($pseudo)) {
         $fallback_search = substr($search, strlen($pseudo));
         $fallback_prefix = $prefix;
+        // A replacement that keeps the pseudo-class keeps the CSS that
+        // replaced it. Any other replacement is literal, as on the pinned key.
         if (str_starts_with($replace, $pseudo)) {
           $fallback_replace = substr($replace, strlen($pseudo));
+          $keep_prefix = TRUE;
         }
         break;
       }
     }
-    $replace_is_attribute = str_starts_with($fallback_replace, '[');
     foreach ($conditions as $id => $values) {
       if (is_string($id) && str_contains($id, $search)) {
         $update_keys = TRUE;
@@ -95,10 +101,15 @@ class FormHelper {
         $keys[$index] = $new_id;
       }
       elseif (is_string($id) && $fallback_search !== NULL && str_contains($id, $fallback_search)) {
-        $pattern = '/(?:^|(?<=[\s>+~,(]))(' . $fallback_prefix . ')' . preg_quote($fallback_search, '/') . '/';
-        $escaped_replace = str_replace(['\\', '$'], ['\\\\', '\$'], $fallback_replace);
-        $replacement = $replace_is_attribute ? '${1}' . $escaped_replace : $escaped_replace;
-        $new_id = preg_replace($pattern, $replacement, $id);
+        // Quoted attribute values are matched first and returned unchanged, so
+        // text inside them is never rewritten.
+        $pattern = '/("(?:[^"\\\\]|\\\\.)*"|\'(?:[^\'\\\\]|\\\\.)*\')|(?:^|(?<=[\s>+~,(]))(' . $fallback_prefix . ')' . preg_quote($fallback_search, '/') . '/';
+        $new_id = preg_replace_callback($pattern, static function (array $matches) use ($keep_prefix, $fallback_replace): string {
+          if ($matches[1] !== '') {
+            return $matches[1];
+          }
+          return $keep_prefix ? $matches[2] . $fallback_replace : $fallback_replace;
+        }, $id);
         if ($new_id !== $id) {
           $update_keys = TRUE;
           // Replace the key and keep the array in the same order.

@@ -143,8 +143,9 @@ class FormHelperTest extends UnitTestCase {
       ':input[name="op"]',
       '[name="exposed_op"]',
     );
+    // An explicit replacement is literal, as it was on the pinned key.
     $this->assertSame(
-      [[':is(select, input)[name="exposed_op"]' => ['value' => 'contains']]],
+      [['[name="exposed_op"]' => ['value' => 'contains']]],
       $legacy_form['is_group']['#states']['visible'],
     );
     FormHelper::rewriteStatesSelector(
@@ -322,7 +323,37 @@ class FormHelperTest extends UnitTestCase {
         'input[type="radio"][name="image_toolkit"]',
         ':radio[name="image_toolkit"]',
         '[name="toolkit"]',
-        'input[type="radio"][name="toolkit"]',
+        '[name="toolkit"]',
+      ],
+      'ImageToolkitForm: radio pseudo moved to a select' => [
+        'input[type="radio"][name="image_toolkit"]',
+        ':radio[name="image_toolkit"]',
+        'select[name="toolkit"]',
+        'select[name="toolkit"]',
+      ],
+      'Input pseudo moved to a select' => [
+        'input[name="uid"]',
+        ':input[name="uid"]',
+        'select[name="owner"]',
+        'select[name="owner"]',
+      ],
+      'Input pseudo leaves a quoted attribute value alone' => [
+        '[data-label="see [name=foo]"]',
+        ':input[name=foo]',
+        ':input[name=bar]',
+        '[data-label="see [name=foo]"]',
+      ],
+      'Input pseudo rewrites outside a quoted attribute value only' => [
+        '[name="foo"][data-label=\'x [name="foo"]\']',
+        ':input[name="foo"]',
+        ':input[name="bar"]',
+        '[name="bar"][data-label=\'x [name="foo"]\']',
+      ],
+      'Radio pseudo leaves a quoted attribute value alone' => [
+        '[data-label=\'pick input[type="radio"][name="image_toolkit"]\']',
+        ':radio[name="image_toolkit"]',
+        '[name="toolkit"]',
+        '[data-label=\'pick input[type="radio"][name="image_toolkit"]\']',
       ],
       'Radio pseudo leaves a checkbox key alone' => [
         'input[type="checkbox"][name="image_toolkit"]',
