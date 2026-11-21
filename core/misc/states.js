@@ -368,15 +368,9 @@
     }
     let entry = elementCleanups.get(target);
     if (!entry) {
-      entry = {
-        target,
-        wasConnected: target.isConnected,
-        cleanups: new Set(),
-      };
+      entry = { target, cleanups: new Set() };
       elementCleanups.set(target, entry);
       trackedTargets.add(entry);
-    } else if (target.isConnected) {
-      entry.wasConnected = true;
     }
     entry.cleanups.add(cleanup);
     return () => {
@@ -402,34 +396,61 @@
   }
 
   /**
-   * Updates tracked connection state for dependees that joined the document.
-   */
-  function refreshConnectedTargets() {
-    trackedTargets.forEach((entry) => {
-      if (entry.target.isConnected) {
-        entry.wasConnected = true;
-      }
-    });
-  }
-
-  /**
    * Releases tracked dependee targets contained within an unloading context.
-   * @param {Document|Element} context
+   *
+   * Targets outside the context stay tracked, even when disconnected.
+   * @param {Document|Element|DocumentFragment} context
    *   The unloading context.
    */
   function unloadTargetsInContext(context) {
     Array.from(trackedTargets).forEach((entry) => {
-      if (entry.target.isConnected) {
-        entry.wasConnected = true;
-      }
       if (
         context === document ||
-        (context instanceof Node && context.contains(entry.target)) ||
-        (entry.wasConnected && !entry.target.isConnected)
+        (context instanceof Node && context.contains(entry.target))
       ) {
         unloadTarget(entry);
       }
     });
+  }
+
+  const awaitingRemoval = new Map();
+  let removalObserver = null;
+
+  /**
+   * Runs the release callbacks of watched elements that left the document.
+   */
+  function releaseRemoved() {
+    awaitingRemoval.forEach((releases, element) => {
+      if (!element.isConnected) {
+        awaitingRemoval.delete(element);
+        releases.forEach((release) => release());
+      }
+    });
+    if (!awaitingRemoval.size) {
+      removalObserver?.disconnect();
+      removalObserver = null;
+    }
+  }
+
+  /**
+   * Calls a release callback once an unloaded element leaves the document.
+   *
+   * Drupal detaches behaviors before it removes the old markup, so the
+   * element is usually still connected when its unload detach runs.
+   * @param {Element} element
+   *   The unloaded element.
+   * @param {function(): void} release
+   *   The release callback.
+   */
+  function releaseOnRemoval(element, release) {
+    if (!awaitingRemoval.has(element)) {
+      awaitingRemoval.set(element, new Set());
+    }
+    awaitingRemoval.get(element).add(release);
+    if (!removalObserver) {
+      removalObserver = new MutationObserver(releaseRemoved);
+      removalObserver.observe(document, { childList: true, subtree: true });
+    }
   }
 
   /**
@@ -437,7 +458,6 @@
    */
   Drupal.behaviors.states = {
     attach(context) {
-      refreshConnectedTargets();
       once('states', '[data-drupal-states]', context).forEach((element) => {
         const config = JSON.parse(element.getAttribute('data-drupal-states'));
         const dependents = Object.entries(config || {}).map(
@@ -999,9 +1019,10 @@
           const release = () => {
             if (this.permanent && element.isConnected) {
               // A permanent initializer's listeners stay on a connected
-              // element, so reattaching must not run it again. Keep tracking
-              // it so a later unload detach releases it once it is replaced.
+              // element, so reattaching must not run it again. Keep it until
+              // the unloaded element leaves the document.
               untrack = trackTargetCleanup(element, release);
+              releaseOnRemoval(element, release);
               return;
             }
             cleanup();

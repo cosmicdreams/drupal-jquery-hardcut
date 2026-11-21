@@ -1407,7 +1407,7 @@ final class NativeStatesPublicationTest extends WebDriverTestBase {
     $extra = $session->evaluateScript(<<<'JS'
       (() => {
         // 7b. A dependee temporarily removed around attachBehaviors keeps its
-        // triggers when re-inserted, and is pruned on an unload detach instead.
+        // triggers when re-inserted. An unrelated unload does not prune it.
         const rawWrap = document.createElement('div');
         rawWrap.innerHTML = `
           <input type="checkbox" id="raw-dependee">
@@ -1539,7 +1539,7 @@ final class NativeStatesPublicationTest extends WebDriverTestBase {
     $this->assertGreaterThan(0, $extra['rawBefore']);
     $this->assertSame($extra['rawBefore'], $extra['rawAfterAttach'], 'Temporarily removed dependee keeps its bindings across attachBehaviors.');
     $this->assertTrue($extra['rawWorksAfterReinsert'], 'Dependee removed and re-inserted around attachBehaviors still drives its dependent.');
-    $this->assertSame(0, $extra['rawAfterUnload'], 'Disconnected dependee bindings are pruned on unload detach.');
+    $this->assertSame($extra['rawBefore'], $extra['rawAfterUnload'], 'An unrelated unload detach does not prune a dependee outside its context.');
     $this->assertSame(1, $extra['mhStateEvents'], 'Marker handoff preserves active narrow trigger so later narrow dependent reuses it without duplicating state:checked.');
     $this->assertTrue($extra['mhBothVisible']);
     $this->assertSame([
@@ -1658,9 +1658,9 @@ final class NativeStatesPublicationTest extends WebDriverTestBase {
           return list.filter((b) => b.target === target).length;
         };
 
-        // Item 2: wasConnected updates when a dependee attached while
-        // disconnected is later inserted into the DOM, so a subsequent removal
-        // + unload detach prunes it.
+        // Item 2: a dependee attached while disconnected, then inserted and
+        // moved into a detached holder, is pruned by an unload of the holder.
+        // An unrelated unload leaves it alone.
         const offDomSrc = document.createElement('input');
         offDomSrc.type = 'checkbox';
         offDomSrc.id = 'r3-detached-src';
@@ -1675,15 +1675,18 @@ final class NativeStatesPublicationTest extends WebDriverTestBase {
         const offDomBeforeInsert = snapshotBindings(offDomSrc);
         document.body.append(offDomSrc);
         Drupal.attachBehaviors(document);
-        offDomSrc.remove();
+        const offDomHolder = document.createElement('div');
+        offDomHolder.append(offDomSrc);
         Drupal.detachBehaviors(document.createElement('div'), drupalSettings, 'unload');
+        const offDomAfterUnrelated = snapshotBindings(offDomSrc);
+        Drupal.detachBehaviors(offDomHolder, drupalSettings, 'unload');
         const offDomAfterUnload = snapshotBindings(offDomSrc);
         const offDomTriggerElements = offDomTrigger.elements.length;
 
         // Item 3: A function-style legacy initializer trigger registers
         // trackTargetCleanup. A replaced dependee (unloaded, then removed) is
-        // released from trigger.elements on the next unload detach. While it
-        // stays connected it keeps the trigger so the initializer runs once.
+        // released from trigger.elements once it leaves the document. While
+        // it stays connected it keeps the trigger so the initializer runs once.
         const capturedFnTriggers = [];
         const origInit = Drupal.states.Trigger.prototype.initialize;
         Drupal.states.Trigger.prototype.initialize = function (...args) {
@@ -1716,10 +1719,10 @@ final class NativeStatesPublicationTest extends WebDriverTestBase {
         Drupal.detachBehaviors(fnHost, drupalSettings, 'unload');
         const fnElementsWhileConnected = fnTrigger?.elements?.includes(fnSrc) ?? false;
         fnHost.remove();
-        Drupal.detachBehaviors(document.createElement('div'), drupalSettings, 'unload');
-        const fnElementsAfter = fnTrigger?.elements?.length ?? -1;
-        const fnBindingsAfter = snapshotBindings(fnSrc);
-        fnWrap.remove();
+        window.r3FnAfter = () => ({
+          fnElementsAfter: fnTrigger?.elements?.length ?? -1,
+          fnBindingsAfter: snapshotBindings(fnSrc),
+        });
 
         // Item 8a: checked handler leaves input.checked untouched when value is undefined.
         Drupal.states.registerTrigger('r3UndefChecked', {
@@ -1766,13 +1769,12 @@ final class NativeStatesPublicationTest extends WebDriverTestBase {
 
         return {
           offDomBeforeInsert: offDomBeforeInsert > 0,
+          offDomKeptByUnrelated: offDomAfterUnrelated === offDomBeforeInsert,
           offDomAfterUnload,
           offDomTriggerElements,
           fnElementsBefore,
           fnBindingsBefore: fnBindingsBefore > 0,
           fnElementsWhileConnected,
-          fnElementsAfter,
-          fnBindingsAfter,
           checkedWhenTrue,
           checkedWhenUndef,
           collapsedEmptyNative,
@@ -1780,6 +1782,7 @@ final class NativeStatesPublicationTest extends WebDriverTestBase {
         };
       })()
       JS);
+    $r3Result += $session->evaluateScript('window.r3FnAfter()');
 
     // Item 6: listen() splits whitespace-separated event names ('keyup change')
     // and per-name namespaces, tested with real user input.
@@ -1814,6 +1817,7 @@ final class NativeStatesPublicationTest extends WebDriverTestBase {
 
     $this->assertEquals([
       'offDomBeforeInsert' => TRUE,
+      'offDomKeptByUnrelated' => TRUE,
       'offDomAfterUnload' => 0,
       'offDomTriggerElements' => 0,
       'fnElementsBefore' => TRUE,
@@ -1983,6 +1987,91 @@ final class NativeStatesPublicationTest extends WebDriverTestBase {
     $session->executeScript('window.r4Click.cancel = true;');
     $assert->elementExists('css', '#r4-col-src')->uncheck();
     $this->assertTrue($details->hasAttribute('open'), 'A legacy summary handler returning false cancels the toggle.');
+  }
+
+  /**
+   * Tests unload-scoped release of replaced and unrelated dependees.
+   */
+  #[IgnoreDeprecations]
+  public function testRound4ReplacementReleasesPermanentTriggers(): void {
+    $session = $this->getSession();
+
+    $this->drupalGet('jquery-bc-test/events');
+    $session->executeScript(<<<'JS'
+      window.r4Bindings = (target) => {
+        const list = [];
+        const stop = Drupal.eventBindings.observe({
+          add(binding) {
+            list.push(binding);
+          },
+          remove() {},
+        });
+        stop();
+        return list.filter((b) => b.target === target).length;
+      };
+      const captured = [];
+      const initialize = Drupal.states.Trigger.prototype.initialize;
+      Drupal.states.Trigger.prototype.initialize = function (...args) {
+        if ((this.state?.name ?? String(this.state)) === 'r4FnState') {
+          captured.push(this);
+        }
+        return initialize.apply(this, args);
+      };
+      Drupal.states.Trigger.states.r4FnState = function ($elements) {
+        $elements.on('change.r4fn', () => {
+          $elements.trigger({ type: 'state:r4FnState', value: $elements[0].checked });
+        });
+      };
+      const wrap = document.createElement('div');
+      wrap.innerHTML = `
+        <form id="r4-replace-form"><input type="checkbox" id="r4-fn-src"></form>
+        <div id="r4-fn-dep" class="js-form-wrapper" data-drupal-states='{"visible":{"#r4-fn-src":{"r4FnState":true}}}'>Fn dep</div>
+        <div id="r4-raw-host"><input type="checkbox" id="r4-raw-src"></div>
+        <div id="r4-raw-dep" class="js-form-wrapper" data-drupal-states='{"visible":{"#r4-raw-src":{"checked":true}}}'>Raw dep</div>
+      `;
+      document.body.append(wrap);
+      try {
+        Drupal.attachBehaviors(wrap);
+      } finally {
+        Drupal.states.Trigger.prototype.initialize = initialize;
+      }
+      window.r4FnTrigger = captured[0];
+      window.r4FnSrc = document.getElementById('r4-fn-src');
+      window.r4RawSrc = document.getElementById('r4-raw-src');
+      window.r4Before = {
+        fn: window.r4FnTrigger.elements.includes(window.r4FnSrc),
+        fnBindings: window.r4Bindings(window.r4FnSrc) > 0,
+        raw: window.r4Bindings(window.r4RawSrc),
+      };
+
+      // One normal form replacement: detach while connected, then replace.
+      const form = document.getElementById('r4-replace-form');
+      Drupal.detachBehaviors(form, drupalSettings, 'unload');
+      const replacement = document.createElement('form');
+      replacement.id = 'r4-replace-form';
+      form.replaceWith(replacement);
+      JS);
+    $before = $session->evaluateScript('window.r4Before');
+    $replaced = $session->evaluateScript(<<<'JS'
+      ({
+        fn: window.r4FnTrigger.elements.includes(window.r4FnSrc),
+        fnBindings: window.r4Bindings(window.r4FnSrc),
+      })
+      JS);
+    // A dependee removed without a detach, then an unrelated unload.
+    $rawAfter = $session->evaluateScript(<<<'JS'
+      (() => {
+        document.getElementById('r4-raw-host').remove();
+        Drupal.detachBehaviors(document.createElement('div'), drupalSettings, 'unload');
+        return window.r4Bindings(window.r4RawSrc);
+      })()
+      JS);
+    $this->assertTrue($before['fn']);
+    $this->assertTrue($before['fnBindings']);
+    $this->assertGreaterThan(0, $before['raw']);
+    $this->assertFalse($replaced['fn'], 'A single replacement releases the permanent function trigger element.');
+    $this->assertSame(0, $replaced['fnBindings'], 'A single replacement releases the replaced dependee bindings.');
+    $this->assertSame($before['raw'], $rawAfter, 'An unrelated unload does not prune a dependee outside its context.');
   }
 
 }
