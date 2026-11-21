@@ -8,6 +8,7 @@ use Drupal\Component\Serialization\Json;
 use Drupal\Core\Asset\AttachedAssets;
 use Drupal\KernelTests\KernelTestBase;
 use PHPUnit\Framework\Attributes\Group;
+use PHPUnit\Framework\Attributes\IgnoreDeprecations;
 use PHPUnit\Framework\Attributes\RunTestsInSeparateProcesses;
 
 /**
@@ -76,6 +77,7 @@ class AttachedAssetsTest extends KernelTestBase {
   /**
    * Tests that a render attachment can add a legacy asset.
    */
+  #[IgnoreDeprecations]
   public function testExplicitLegacyAttachment(): void {
     $build['#attached']['library'][] = 'common_test/files';
     $build['#attached']['library'][] = 'core/drupal.states';
