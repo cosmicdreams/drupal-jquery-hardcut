@@ -115,6 +115,30 @@ class ElementsVerticalTabsWithSummaryTest extends WebDriverTestBase {
   }
 
   /**
+   * Tests that tab data removed before the first read stays removed.
+   */
+  public function testRemovedTabDataStaysRemoved(): void {
+    $this->drupalGet('form_test/vertical-tabs-with-summary', ['query' => ['legacy' => 1]]);
+    $actual = $this->getSession()->evaluateScript(<<<'JS'
+      (() => {
+        const detached = document.createElement('div');
+        detached.innerHTML = '<div class="js-form-type-vertical-tabs"><div data-vertical-tabs-panes><input type="hidden" class="vertical-tabs__active-tab" value=""><details id="removed-first"><summary>First</summary></details><details id="removed-second"><summary>Second</summary></details></div></div>';
+        Drupal.behaviors.verticalTabs.attach(detached);
+        const first = detached.querySelector('#removed-first');
+        const second = detached.querySelector('#removed-second');
+        jQuery(first).removeData('verticalTab');
+        jQuery.removeData(second, 'verticalTab');
+        return [
+          jQuery(first).data('verticalTab') === undefined,
+          jQuery.data(second, 'verticalTab') === undefined,
+          Boolean(Drupal.verticalTabs.get(first) && Drupal.verticalTabs.get(second)),
+        ];
+      })()
+      JS);
+    $this->assertSame([TRUE, TRUE, TRUE], $actual);
+  }
+
+  /**
    * Tests that constructor overrides keep the legacy settings consistent.
    *
    * A chaining override emits no #details deprecation, and an override that

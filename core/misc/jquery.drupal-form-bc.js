@@ -1003,6 +1003,48 @@
       return originalFnData.apply(this, arguments);
     };
 
+    /**
+     * Checks whether a jQuery removeData() call removes the tab data.
+     * @param {string|string[]|undefined} keys
+     *   The keys passed to removeData().
+     * @return {boolean}
+     *   Whether the call removes the verticalTab key.
+     */
+    function removesTabData(keys) {
+      if (keys === undefined) {
+        return true;
+      }
+      const list = Array.isArray(keys) ? keys : String(keys).match(/\S+/g);
+      return Boolean(list?.includes('verticalTab'));
+    }
+    /**
+     * Keeps an existing tab's data removed before its first read.
+     * @param {unknown} elem
+     *   The element whose data is removed.
+     * @param {string|string[]|undefined} keys
+     *   The keys passed to removeData().
+     */
+    function markRemoved(elem, keys) {
+      if (
+        elem &&
+        typeof elem === 'object' &&
+        removesTabData(keys) &&
+        Drupal.verticalTabs.get(elem)
+      ) {
+        migratedPanes.add(elem);
+      }
+    }
+    const originalRemoveData = jquery.removeData;
+    jquery.removeData = function (elem, keys) {
+      markRemoved(elem, keys);
+      return originalRemoveData.apply(this, arguments);
+    };
+    const originalFnRemoveData = jquery.fn.removeData;
+    jquery.fn.removeData = function (keys) {
+      Array.from(this).forEach((elem) => markRemoved(elem, keys));
+      return originalFnRemoveData.apply(this, arguments);
+    };
+
     jquery.data = function (elem, name) {
       if (
         (name === 'verticalTab' || name === undefined) &&
