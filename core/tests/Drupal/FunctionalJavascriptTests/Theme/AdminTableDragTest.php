@@ -191,7 +191,8 @@ class AdminTableDragTest extends TableDragTest {
   #[IgnoreDeprecations]
   public function testBulkActionsOwnership(): void {
     $this->drupalGet('tabledrag_test', ['query' => ['legacy' => 1, 'tableselect' => 1]]);
-    $this->assertSame([1, [1, 1], [1, 1]], $this->getSession()->evaluateScript(<<<'JS'
+    $session = $this->getSession();
+    $session->executeScript(<<<'JS'
       (() => {
         const fixture = document.createElement('div');
         fixture.innerHTML = '<form><div data-drupal-views-bulk-actions><span data-drupal-views-bulk-actions-status></span></div>' +
@@ -219,9 +220,12 @@ class AdminTableDragTest extends TableDragTest {
         };
         const before = trigger();
         Drupal.detachBehaviors(actions, drupalSettings, 'unload');
-        return [updates, before, trigger()];
+        const retained = trigger();
+        actions.remove();
+        window.checkReleasedBulkActions = () => [updates, before, retained, trigger()];
       })()
-      JS));
+      JS);
+    $this->assertSame([1, [1, 1], [2, 2], [2, 2]], $session->evaluateScript('window.checkReleasedBulkActions()'));
   }
 
 }

@@ -423,7 +423,7 @@ class TableDragTest extends WebDriverTestBase {
   #[IgnoreDeprecations]
   public function testLegacyDescendantClicks(): void {
     $this->drupalGet('tabledrag_test', ['query' => ['legacy' => 1]]);
-    $this->assertSame([TRUE, TRUE, 1], $this->getSession()->evaluateScript(<<<'JS'
+    $this->assertSame([TRUE, TRUE, TRUE, TRUE, 2], $this->getSession()->evaluateScript(<<<'JS'
       (() => {
         const drag = Drupal.tableDrag['tabledrag-test-table'];
         const handle = drag.table.querySelector('.tabledrag-handle');
@@ -447,24 +447,31 @@ class TableDragTest extends WebDriverTestBase {
         themed.toggleColumns = () => { toggles += 1; };
         const toggleClick = jQuery.Event('click');
         jQuery(label).trigger(toggleClick);
-        return [handleClick.isDefaultPrevented(), toggleClick.isDefaultPrevented(), toggles];
+        const wrappedHandleClick = jQuery.Event('click', { originalEvent: new MouseEvent('click') });
+        const wrappedToggleClick = jQuery.Event('click', { originalEvent: new MouseEvent('click') });
+        jQuery(handle).trigger(wrappedHandleClick);
+        jQuery(themed.toggleWeightButton).trigger(wrappedToggleClick);
+        return [handleClick.isDefaultPrevented(), toggleClick.isDefaultPrevented(),
+          wrappedHandleClick.isDefaultPrevented(), wrappedToggleClick.isDefaultPrevented(), toggles];
       })()
       JS));
   }
 
   /**
-   * Tests the return value of a synthetic arrow keypress.
+   * Tests the return values of synthetic arrow key events.
    */
   #[IgnoreDeprecations]
   public function testLegacyArrowKeypress(): void {
     $this->drupalGet('tabledrag_test', ['query' => ['legacy' => 1]]);
-    $this->assertSame([FALSE, TRUE], $this->getSession()->evaluateScript(<<<'JS'
+    $this->assertSame([FALSE, TRUE, FALSE, TRUE], $this->getSession()->evaluateScript(<<<'JS'
       (() => {
         const drag = Drupal.tableDrag['tabledrag-test-table'];
         const handle = drag.table.querySelector('.tabledrag-handle');
         const keypress = jQuery.Event('keypress', { keyCode: 40 });
         const result = jQuery(handle).triggerHandler(keypress);
-        return [result, keypress.isDefaultPrevented()];
+        const keydown = jQuery.Event('keydown', { keyCode: 38 });
+        const downResult = jQuery(handle).triggerHandler(keydown);
+        return [result, keypress.isDefaultPrevented(), downResult, keydown.isDefaultPrevented()];
       })()
       JS));
   }
@@ -788,11 +795,12 @@ class TableDragTest extends WebDriverTestBase {
       table.querySelector('th').style.display = '';
       JS);
     $this->loadLateBridge();
-    $this->assertSame([1, 1, TRUE], $session->evaluateScript(<<<'JS'
+    $this->assertSame([1, TRUE, TRUE], $session->evaluateScript(<<<'JS'
       (() => {
         const { link } = window.lateResponsive;
         jQuery(window).triggerHandler('resize.tableresponsive');
-        return [jQuery(link).data('pegged'), jQuery(link).data('pegged', undefined), link.style.display !== 'none'];
+        const button = jQuery(link);
+        return [button.data('pegged'), button.data('pegged', undefined) === button, link.style.display !== 'none'];
       })()
       JS));
   }
@@ -876,12 +884,29 @@ class TableDragTest extends WebDriverTestBase {
    */
   public function testResponsiveRefreshWithoutLegacyListeners(): void {
     $this->drupalGet('tabledrag_test', ['query' => ['legacy' => 1]]);
-    $this->assertSame([TRUE, TRUE], $this->getSession()->evaluateScript(<<<'JS'
+    $this->assertSame([TRUE, TRUE, 1, 0, 1, 3], $this->getSession()->evaluateScript(<<<'JS'
       (() => {
         const fixture = document.createElement('section');
         fixture.innerHTML = '<table class="responsive-enabled"><thead><tr><th class="priority-low" style="display: none">Detail</th></tr></thead></table>';
         document.body.append(fixture);
         const { trigger, triggerHandler } = jQuery.fn;
+        const { dispatch } = jQuery.event;
+        let realDispatches = 0;
+        let evaluations = 0;
+        const prototype = Drupal.TableResponsive.prototype;
+        const original = prototype.eventhandlerEvaluateColumnVisibility;
+        const evaluate = function (event) {
+          evaluations += 1;
+          return original.call(this, event);
+        };
+        evaluate.nativeTableEvent = true;
+        prototype.eventhandlerEvaluateColumnVisibility = evaluate;
+        jQuery.event.dispatch = function (event, ...args) {
+          if (this === window && event.type === 'resize') {
+            realDispatches += 1;
+          }
+          return dispatch.call(this, event, ...args);
+        };
         let resizeDispatches = 0;
         const record = (original) => function (event, ...args) {
           if ((event?.type ?? event)?.startsWith?.('resize')) {
@@ -894,8 +919,18 @@ class TableDragTest extends WebDriverTestBase {
         try {
           Drupal.behaviors.tableResponsive.attach(fixture);
           const toggle = fixture.querySelector('.tableresponsive-toggle');
-          return [resizeDispatches === 0, toggle.style.display !== 'none'];
+          evaluations = 0;
+          window.dispatchEvent(new Event('resize'));
+          const initial = [evaluations, realDispatches];
+          const external = () => {};
+          jQuery(window).on('resize.tableresponsive', external);
+          window.dispatchEvent(new Event('resize'));
+          jQuery(window).off('resize.tableresponsive', external);
+          window.dispatchEvent(new Event('resize'));
+          return [resizeDispatches === 0, toggle.style.display !== 'none', ...initial, realDispatches, evaluations];
         } finally {
+          jQuery.event.dispatch = dispatch;
+          prototype.eventhandlerEvaluateColumnVisibility = original;
           jQuery.fn.trigger = trigger;
           jQuery.fn.triggerHandler = triggerHandler;
         }
@@ -936,101 +971,186 @@ class TableDragTest extends WebDriverTestBase {
   }
 
   /**
-   * Tests that unloading tables and rows releases their event registrations.
+   * Tests real document drag events relative to other jQuery handlers.
    */
   #[IgnoreDeprecations]
-  public function testTableBindingsReleasedOnUnload(): void {
-    $this->drupalGet('tabledrag_test', ['query' => ['legacy' => 1, 'tableselect' => 1]]);
-    $this->assertSame([TRUE, TRUE, TRUE, TRUE, TRUE], $this->getSession()->evaluateScript(<<<'JS'
+  public function testRealDragEventOrdering(): void {
+    $this->drupalGet('tabledrag_test', ['query' => ['legacy' => 1]]);
+    $this->assertSame([['early', 'drag', 'late'], ['early'], ['drag'], 0], $this->getSession()->evaluateScript(<<<'JS'
       (() => {
-        const drag = Drupal.tableDrag['tabledrag-test-table'];
-        const dragContainer = drag.table.parentElement;
-        const initialHandles = drag.table.querySelectorAll('.tabledrag-handle').length;
-        const initialSpan = drag.table.tHead.rows[0].cells[0].colSpan;
-        let movements = 0;
-        drag.dragRow = () => { movements += 1; };
-        const mouseMove = () => document.dispatchEvent(new MouseEvent('mousemove'));
-        mouseMove();
-        Drupal.detachBehaviors(drag.table, drupalSettings, 'move');
-        mouseMove();
-        const handle = drag.table.querySelector('.tabledrag-handle');
-        handle.dispatchEvent(new MouseEvent('mousedown'));
-        const active = drag.dragObject !== null && document.body.classList.contains(drag.dragOrientation);
-        Drupal.detachBehaviors(drag.table, drupalSettings, 'unload');
-        const dragMarkupRetained = drag.table.contains(handle) && drag.toggleWeightButton.isConnected &&
-          drag.table.tHead.rows[0].cells[0].colSpan === initialSpan;
-        mouseMove();
-        jQuery(document).triggerHandler('mousemove');
-
-        const fixture = document.createElement('div');
-        fixture.innerHTML = '<table class="responsive-enabled"><thead><tr><th class="select-all priority-low"></th></tr></thead>' +
-          '<tbody><tr><td><input type="checkbox"></td></tr></tbody></table>';
-        document.body.append(fixture);
-        Drupal.behaviors.tableResponsive.attach(fixture);
-        Drupal.behaviors.tableSelect.attach(fixture);
-        const table = fixture.querySelector('table');
-        const responsive = Drupal.TableResponsive.tables.find((instance) => instance.table === table);
-        const originalHeader = table.querySelector('th input');
-        const row = table.tBodies[0].rows[0];
-        const checkbox = row.querySelector('input');
-        checkbox.checked = true;
-        jQuery(checkbox).triggerHandler('click');
-        const selected = row.classList.contains('selected');
-        Drupal.detachBehaviors(row, drupalSettings, 'unload');
-        row.remove();
-        checkbox.checked = false;
-        jQuery(checkbox).triggerHandler('click');
-        const previousSelection = row.classList.contains('selected');
-        Drupal.detachBehaviors(table, drupalSettings, 'unload');
-        const released = !Drupal.TableResponsive.tables.includes(responsive) && responsive.link.isConnected &&
-          table.querySelector('th input') === originalHeader;
-        table.tBodies[0].append(row);
-        Drupal.behaviors.tableResponsive.attach(fixture);
-        Drupal.behaviors.tableSelect.attach(fixture);
-        const header = table.querySelector('th input');
-        header.click();
-        const responsiveCount = fixture.querySelectorAll('.tableresponsive-toggle').length;
-        const nextResponsive = new Drupal.TableResponsive(table);
-
-        Drupal.attachBehaviors(dragContainer, drupalSettings);
-        const reattached = Drupal.tableDrag['tabledrag-test-table'];
-        let starts = 0;
-        reattached.dragStart = () => { starts += 1; };
-        handle.dispatchEvent(new MouseEvent('mousedown'));
-        return [
-          movements === 2 && active && drag.dragObject === null &&
-            !document.body.classList.contains(drag.dragOrientation) && dragMarkupRetained,
-          selected && previousSelection,
-          released,
-          responsiveCount === 1 && responsive.link.isConnected && nextResponsive.link !== responsive.link &&
-            table.querySelectorAll('th input').length === 1 && header === originalHeader && checkbox.checked,
-          reattached !== drag && starts === 1 && drag.dragObject === null &&
-            reattached.toggleWeightButton === drag.toggleWeightButton && drag.table.contains(handle) &&
-            drag.table.querySelectorAll('.tabledrag-handle').length === initialHandles &&
-            drag.table.tHead.rows[0].cells[0].colSpan === initialSpan,
-        ];
+        const order = [];
+        let cancel = false;
+        const early = (event) => {
+          order.push('early');
+          if (cancel) {
+            event.stopImmediatePropagation();
+          }
+        };
+        const late = (event) => {
+          order.push('late');
+          event.stopImmediatePropagation();
+        };
+        jQuery(document).on('mousemove', early);
+        const table = document.createElement('table');
+        document.body.append(table);
+        const drag = new Drupal.tableDrag(table, {});
+        const nativeMove = (event) => order.push(event instanceof MouseEvent ? 'drag' : 'unexpected');
+        nativeMove.nativeTableEvent = true;
+        drag.dragRow = nativeMove;
+        jQuery(document).on('mousemove', late);
+        const move = () => {
+          document.dispatchEvent(new MouseEvent('mousemove'));
+          return order.splice(0);
+        };
+        const active = move();
+        cancel = true;
+        const stopped = move();
+        jQuery(document).off('mousemove', early).off('mousemove', late);
+        const { dispatch } = jQuery.event;
+        let dispatches = 0;
+        jQuery.event.dispatch = function (event, ...args) {
+          if (this === document && event.type === 'mousemove') {
+            dispatches += 1;
+          }
+          return dispatch.call(this, event, ...args);
+        };
+        try {
+          return [active, stopped, move(), dispatches];
+        } finally {
+          jQuery.event.dispatch = dispatch;
+        }
       })()
       JS));
   }
 
   /**
-   * Tests removal of toggles left behind by a table-only replacement.
+   * Tests retained content across unload and moving a table within the page.
+   */
+  #[IgnoreDeprecations]
+  public function testTableBindingsReleasedOnUnload(): void {
+    $this->drupalGet('tabledrag_test', ['query' => ['legacy' => 1, 'tableselect' => 1]]);
+    $session = $this->getSession();
+    $session->executeScript(<<<'JS'
+      const drag = Drupal.tableDrag['tabledrag-test-table'];
+      const handle = drag.table.querySelector('.tabledrag-handle');
+      const initialSpan = drag.table.tHead.rows[0].cells[0].colSpan;
+      const toggle = drag.toggleWeightButton;
+      const rowWeights = () => [...drag.table.querySelectorAll('tbody tr')].map((row) =>
+        [row.id, row.querySelector('select')?.value]);
+      let drops = 0;
+      drag.onDrop = () => { drops += 1; };
+      handle.dispatchEvent(new MouseEvent('mousedown'));
+      Drupal.detachBehaviors(drag.table, drupalSettings, 'unload');
+
+      const dialog = document.createElement('dialog');
+      dialog.innerHTML = '<table class="responsive-enabled"><thead><tr><th class="select-all priority-low" style="display: none">Detail</th></tr></thead>' +
+        '<tbody><tr><td><input type="checkbox"></td></tr></tbody></table>';
+      document.body.append(dialog);
+      dialog.show();
+      Drupal.behaviors.tableResponsive.attach(dialog);
+      Drupal.behaviors.tableSelect.attach(dialog);
+      const table = dialog.querySelector('table');
+      const responsive = Drupal.TableResponsive.tables.find((instance) => instance.table === table);
+      const header = table.querySelector('th input');
+      dialog.close();
+      Drupal.detachBehaviors(dialog, drupalSettings, 'unload');
+
+      window.checkRetainedTables = () => {
+        const active = drag.dragObject !== null && document.body.classList.contains(drag.dragOrientation);
+        const expectedWeights = rowWeights();
+        document.dispatchEvent(new MouseEvent('mouseup'));
+        const completed = drops === 1 && drag.dragObject === null &&
+          JSON.stringify(rowWeights()) === JSON.stringify(expectedWeights);
+        dialog.showModal();
+        responsive.link.click();
+        dialog.close();
+        dialog.show();
+        const checkbox = table.querySelector('tbody input');
+        checkbox.checked = true;
+        jQuery(checkbox).triggerHandler('click');
+        const retained = Drupal.TableResponsive.tables.includes(responsive) &&
+          table.querySelector('th input') === header && header.checked &&
+          responsive.revealedCells.length > 0;
+        dialog.close();
+
+        const before = document.querySelectorAll('[data-drupal-selector="tabledrag-toggle-weight"]').length;
+        const destination = document.createElement('section');
+        document.body.append(destination);
+        destination.append(drag.table);
+        Drupal.attachBehaviors(destination, drupalSettings);
+        return [active, completed, retained,
+          toggle.isConnected && Drupal.tableDrag['tabledrag-test-table'] === drag &&
+          drag.table.contains(handle) && drag.table.tHead.rows[0].cells[0].colSpan === initialSpan &&
+          document.querySelectorAll('[data-drupal-selector="tabledrag-toggle-weight"]').length === before];
+      };
+      JS);
+    $this->assertSame([TRUE, TRUE, TRUE, TRUE], $session->evaluateScript('window.checkRetainedTables()'));
+  }
+
+  /**
+   * Tests cleanup after a table is removed in a later task.
    */
   public function testUnloadedTableRemovesOrphanedToggles(): void {
     $this->drupalGet('tabledrag_test');
     $session = $this->getSession();
     $session->executeScript(<<<'JS'
+      const fixture = document.createElement('section');
       const table = document.createElement('table');
-      document.body.append(table);
+      table.className = 'responsive-enabled';
+      fixture.append(table);
+      document.body.append(fixture);
       const drag = new Drupal.tableDrag(table, {});
-      const responsive = new Drupal.TableResponsive(table);
-      window.removedTableToggles = [drag.toggleWeightButton, responsive.link];
+      Drupal.behaviors.tableResponsive.attach(fixture);
+      const responsive = Drupal.TableResponsive.tables.find((instance) => instance.table === table);
+      let moves = 0;
+      drag.dragRow = () => { moves += 1; };
+      const listenerRuns = () => {
+        const before = moves;
+        document.dispatchEvent(new MouseEvent('mousemove'));
+        return moves !== before;
+      };
       Drupal.detachBehaviors(table, drupalSettings, 'unload');
-      table.remove();
+      window.unloadingTable = { table, drag, responsive, listenerRuns };
       JS);
-    $this->assertSame([FALSE, FALSE], $session->evaluateScript(<<<'JS'
-      window.removedTableToggles.map((toggle) => toggle.isConnected)
+    $this->assertSame([TRUE, TRUE], $session->evaluateScript(<<<'JS'
+      [unloadingTable.listenerRuns(), Drupal.TableResponsive.tables.includes(unloadingTable.responsive)]
       JS));
+    $session->executeScript('unloadingTable.table.remove()');
+    $this->assertJsCondition(<<<'JS'
+      !unloadingTable.drag.toggleWeightButton.isConnected &&
+      !unloadingTable.responsive.link.isConnected &&
+      !Drupal.TableResponsive.tables.includes(unloadingTable.responsive) &&
+      !unloadingTable.listenerRuns()
+      JS);
+  }
+
+  /**
+   * Tests that an empty weight toggle does not persist across a disconnection.
+   */
+  public function testEmptyWeightToggleThemeOnReattach(): void {
+    $this->drupalGet('tabledrag_test');
+    $session = $this->getSession();
+    $session->executeScript(<<<'JS'
+      const table = document.createElement('table');
+      const fixture = document.createElement('div');
+      fixture.append(table);
+      document.body.append(fixture);
+      table.id = 'empty-weight-toggle';
+      table.dataset.drupalTabledrag = table.id;
+      const settings = { tableDrag: { [table.id]: {} } };
+      const theme = Drupal.theme.tableDragToggle;
+      Drupal.theme.tableDragToggle = () => '';
+      Drupal.behaviors.tableDrag.attach(fixture, settings);
+      Drupal.theme.tableDragToggle = theme;
+      Drupal.detachBehaviors(table, settings, 'unload');
+      table.remove();
+      window.reattachWeightTable = () => {
+        fixture.append(table);
+        Drupal.behaviors.tableDrag.attach(fixture, settings);
+        return Drupal.tableDrag[table.id].toggleWeightButton?.isConnected === true;
+      };
+      JS);
+    $this->assertTrue($session->evaluateScript('window.reattachWeightTable()'));
   }
 
   /**
