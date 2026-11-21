@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Drupal\tabbingmanager_test\Controller;
 
 use Drupal\Core\Controller\ControllerBase;
+use Symfony\Component\HttpFoundation\Request;
 
 /**
  * For testing the Tabbing Manager.
@@ -14,10 +15,17 @@ class TabbingManagerTestController extends ControllerBase {
   /**
    * Provides a page with the tabbingManager library for testing tabbing manager.
    *
+   * @param \Symfony\Component\HttpFoundation\Request $request
+   *   The current request.
+   *
    * @return array
    *   The render array.
    */
-  public function build() {
+  public function build(Request $request): array {
+    $libraries = ['core/drupal.tabbingmanager'];
+    if ($request->query->getBoolean('legacy')) {
+      $libraries[] = 'core/jquery';
+    }
     return [
       'container' => [
         '#type' => 'container',
@@ -73,8 +81,8 @@ class TabbingManagerTestController extends ControllerBase {
           ],
         ],
       ],
-      '#attached' => ['library' => ['core/drupal.tabbingmanager']],
-
+      '#attached' => ['library' => $libraries],
+      '#cache' => ['contexts' => ['url.query_args:legacy']],
     ];
   }
 

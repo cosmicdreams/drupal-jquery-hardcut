@@ -31,6 +31,11 @@ class TabbingManagerTest extends WebDriverTestBase {
   public function testTabbingOrder(): void {
     $this->drupalGet('tabbingmanager-test');
     $session = $this->getSession();
+    $this->assertTrue($session->evaluateScript(<<<'JS'
+      !Array.from(document.querySelectorAll('link[rel="stylesheet"]')).some(
+        (asset) => asset.href.includes('/jquery.ui/')
+      )
+      JS));
     $focus = fn (): string => $session->evaluateScript('document.activeElement.id');
 
     $session->executeScript("document.getElementById('third').focus()");
@@ -64,6 +69,100 @@ class TabbingManagerTest extends WebDriverTestBase {
     $session->executeScript("document.getElementById('third').focus()");
     $this->tab();
     $this->assertSame('fourth', $focus());
+  }
+
+  /**
+   * Tests that tabbing works without the jQuery library.
+   */
+  public function testTabbingWithoutJquery(): void {
+    \Drupal::service('theme_installer')->install(['stark']);
+    $this->config('system.theme')->set('default', 'stark')->save();
+    $this->drupalGet('tabbingmanager-test');
+    $session = $this->getSession();
+    $this->assertSame('undefined', $session->evaluateScript('typeof window.jQuery'));
+    $this->assertTrue($session->evaluateScript(<<<'JS'
+      !Array.from(document.querySelectorAll('script[src], link[href]')).some((asset) =>
+        /[\/]jquery(?:[./-]|$)/i.test(asset.src || asset.href)
+      )
+      JS));
+    $session->executeScript(<<<'JS'
+      const root = document.getElementById('tabbingmanager-test-container');
+      Drupal.tabbingManager.constrainElements(root, { trapFocus: true });
+      JS);
+    $this->tab(TRUE);
+    $this->assertSame('third', $session->evaluateScript('document.activeElement.id'));
+  }
+
+  /**
+   * Tests the lifecycle and legacy inputs on an explicitly mixed page.
+   */
+  public function testLegacyTabbingContext(): void {
+    $this->drupalGet('tabbingmanager-test', ['query' => ['legacy' => 1]]);
+    $actual = $this->getSession()->evaluateScript(<<<'JS'
+      (() => {
+        const warnings = [];
+        const warn = Drupal.deprecationError;
+        Drupal.deprecationError = ({ message }) => warnings.push(message);
+        try {
+          const events = [
+            'drupalTabbingContextActivated',
+            'drupalTabbingConstrained',
+            'drupalTabbingContextDeactivated',
+            'drupalTabbingContextReleased',
+          ];
+          const native = [];
+          const legacy = [];
+          events.forEach((type) => {
+            document.addEventListener(type, (event) => native.push([type, event.detail]));
+            jQuery(document).on(type, (event, context) => legacy.push([type, context]));
+          });
+          const manager = Drupal.tabbingManager;
+          const record = manager.recordTabindex;
+          let legacyOverride = false;
+          manager.recordTabindex = function (element, level) {
+            legacyOverride = element instanceof jQuery && this === manager;
+            record.call(this, element, level);
+          };
+          const context = manager.constrain(
+            jQuery('#tabbingmanager-test-container'),
+            { trapFocus: true },
+          );
+          const collection = context.$tabbableElements;
+          const original = context.$disabledElements;
+          context.$disabledElements = original;
+          const first = document.getElementById('first');
+          const keyboard = jQuery.Event('keydown.focus-trap', { key: 'Tab', shiftKey: true });
+          jQuery(first).trigger(keyboard);
+          const reverse = [document.activeElement.id, keyboard.isDefaultPrevented()];
+          context.release();
+          return {
+            types: legacy.map(([type]) => type),
+            sameContext: native.length === events.length && native.every(
+              ([type, value], index) => value === context && legacy[index][0] === type && legacy[index][1] === value
+            ),
+            legacyOverride,
+            reverse,
+            collection: collection === context.$tabbableElements && collection[0] === first,
+            disabled: original === context.$disabledElements && original[0] === context.disabledElements[0],
+            warnings: warnings.length,
+          };
+        } finally {
+          Drupal.deprecationError = warn;
+        }
+      })()
+      JS);
+    $this->assertSame([
+      'drupalTabbingContextActivated',
+      'drupalTabbingConstrained',
+      'drupalTabbingContextDeactivated',
+      'drupalTabbingContextReleased',
+    ], $actual['types']);
+    $this->assertTrue($actual['sameContext']);
+    $this->assertTrue($actual['legacyOverride']);
+    $this->assertSame(['third', TRUE], $actual['reverse']);
+    $this->assertTrue($actual['collection']);
+    $this->assertTrue($actual['disabled']);
+    $this->assertSame(5, $actual['warnings']);
   }
 
   /**
