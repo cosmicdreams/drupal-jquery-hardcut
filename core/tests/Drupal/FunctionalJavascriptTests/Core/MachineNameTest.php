@@ -324,6 +324,33 @@ class MachineNameTest extends WebDriverTestBase {
   }
 
   /**
+   * Tests that dispatching one Event object twice runs core each time.
+   */
+  public function testRepeatedDispatchRunsCoreEachTime(): void {
+    $this->drupalGet('form-test/machine-name', ['query' => ['legacy-machine-name' => 1]]);
+    $session = $this->getSession();
+    $session->executeScript($this->widgetHelpers() . <<<'JS'
+      (() => {
+        const container = createWidget('again');
+        const source = container.querySelector('#again-source');
+        const target = container.querySelector('#again-target');
+        // A handler bound first makes core deliver real events from its slot.
+        jQuery(source).on('input.test', () => {});
+        attachWidget(container);
+        const event = new Event('input');
+        source.value = 'First Value';
+        source.dispatchEvent(event);
+        const first = target.value;
+        source.value = 'Second Value';
+        source.dispatchEvent(event);
+        jQuery(source).off('.test');
+        window.repeatedDispatchResult = [first, target.value];
+      })();
+      JS);
+    $this->assertSame(['first_value', 'second_value'], $session->evaluateScript('window.repeatedDispatchResult'));
+  }
+
+  /**
    * Tests an instance connected before the form adapter loads.
    */
   public function testForeignInstanceConnectedBeforeAdapter(): void {

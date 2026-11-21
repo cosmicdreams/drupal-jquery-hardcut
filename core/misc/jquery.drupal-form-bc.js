@@ -17,6 +17,7 @@
   const warned = new Set();
   const legacyEvents = new WeakMap();
   const nativeDeliveries = new WeakMap();
+  const dispatchResets = new Set();
   const bindingChecks = new WeakMap();
   // Maps each connected instance to the function that removes its adapter.
   const adapters = new Map();
@@ -124,8 +125,13 @@
     if (!checks) {
       checks = new Set();
       bindingChecks.set(binding, checks);
-      binding.handlesNativeEvent = (event) =>
-        Array.from(checks).some((check) => check(event));
+      binding.handlesNativeEvent = (event) => {
+        const handled = Array.from(checks).some((check) => check(event));
+        // Core's native listener follows every slot that could deliver this
+        // dispatch, so the next dispatch of the same event starts clear.
+        nativeDeliveries.get(event)?.delete(binding);
+        return handled;
+      };
     }
     checks.add(handles);
   }
@@ -155,6 +161,20 @@
     }
     delivered.add(binding);
     return true;
+  }
+
+  /**
+   * Starts each dispatch of a native event with no recorded deliveries.
+   *
+   * A page may dispatch the same Event object again after it settles.
+   */
+  function resetDeliveriesOnDispatch(type) {
+    if (!dispatchResets.has(type)) {
+      dispatchResets.add(type);
+      window.addEventListener(type, (event) => nativeDeliveries.delete(event), {
+        capture: true,
+      });
+    }
   }
 
   /**
@@ -351,6 +371,7 @@
         if (bindType !== type) {
           observeRemoval(bindType);
         }
+        resetDeliveriesOnDispatch(bindType);
         const name = namespace ? `${type}.${namespace}` : type;
         const entry = {
           binding,
