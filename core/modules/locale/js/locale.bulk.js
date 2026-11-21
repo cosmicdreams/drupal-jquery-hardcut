@@ -3,7 +3,7 @@
  * Locale behavior.
  */
 
-(function ($, Drupal) {
+(function (Drupal) {
   /**
    * Select the language code of an imported file based on its filename.
    *
@@ -27,20 +27,22 @@
             ),
           );
         const langcode = descendants('.langcode-input');
-        $(descendants('.file-import-input')).on('change', function () {
-          // If the filename is fully the language code or the filename
-          // ends with a language code, pre-select that one.
-          const matches = this.value.match(/([^.][.]*)([\w-]+)\.po$/);
-          if (
-            matches &&
-            langcode.some((element) =>
-              element.querySelector(`option[value="${matches[2]}"]`),
-            )
-          ) {
-            langcode[0].value = matches[2];
-          }
+        descendants('.file-import-input').forEach((input) => {
+          input.addEventListener('change', () => {
+            // If the filename is fully the language code or the filename
+            // ends with a language code, pre-select that one.
+            const matches = input.value.match(/([^.][.]*)([\w-]+)\.po$/);
+            if (
+              matches &&
+              langcode.some((element) =>
+                element.querySelector(`option[value="${matches[2]}"]`),
+              )
+            ) {
+              langcode[0].value = matches[2];
+            }
+          });
         });
       }
     },
   };
-})(jQuery, Drupal);
+})(Drupal);
