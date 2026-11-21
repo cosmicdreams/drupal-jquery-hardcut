@@ -1446,12 +1446,9 @@
         const targets = jQuery(response.selector);
         targets.data(name, value);
         if (value !== undefined && Drupal.ajax.elementData.isLegacyKey(name)) {
+          // The jQuery store remains authoritative after a legacy write.
           targets.each((index, element) => {
-            Drupal.ajax.elementData.set(
-              element,
-              name,
-              jQuery.data(element, name),
-            );
+            Drupal.ajax.elementData.forget(element, name);
           });
         }
       },

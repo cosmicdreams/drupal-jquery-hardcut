@@ -2643,6 +2643,9 @@
       data.set(normalizeDataKey(name), { value });
       elementData.set(element, data);
     },
+    forget(element, name) {
+      elementData.get(element)?.delete(normalizeDataKey(name));
+    },
     remove(element, name) {
       const key = normalizeDataKey(name);
       const data = elementData.get(element);

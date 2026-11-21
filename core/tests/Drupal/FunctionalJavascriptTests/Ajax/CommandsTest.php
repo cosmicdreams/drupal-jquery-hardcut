@@ -192,12 +192,14 @@ class CommandsTest extends WebDriverTestBase {
           { command: 'data', native: true, selector, name: 'disable-refocus', value: false },
           { command: 'data', selector, name: 'disable-refocus', value: true },
         ]);
+        const commandValue = Drupal.ajax.elementData.get(link, 'disable-refocus');
+        jQuery(link).data('disable-refocus', 'direct');
         const keys = ['disable-refocus', 'dialog-options', 'ajax-http-method', 'refocus-blur', 'private-value'];
-        return [typeof Drupal.ajax.commandCompatibility, jQuery(link).data('disable-refocus'),
+        return [typeof Drupal.ajax.commandCompatibility, commandValue, jQuery(link).data('disable-refocus'),
           ...keys.map((key) => Drupal.ajax.elementData.get(link, key))];
       })()
       JS);
-    $this->assertSame(['undefined', TRUE, TRUE, ['width' => 640], 'GET', FALSE, NULL], $result);
+    $this->assertSame(['undefined', TRUE, 'direct', 'direct', ['width' => 640], 'GET', FALSE, NULL], $result);
   }
 
   /**
