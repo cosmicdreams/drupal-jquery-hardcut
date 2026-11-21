@@ -7,8 +7,10 @@ namespace Drupal\form_test\Controller;
 use Drupal\Core\Controller\ControllerBase;
 use Drupal\Core\Form\FormState;
 use Drupal\Core\Language\LanguageInterface;
+use Drupal\Core\Url;
 use Drupal\form_test\FormTestObject;
 use Symfony\Component\HttpFoundation\JsonResponse;
+use Symfony\Component\HttpFoundation\Request;
 
 /**
  * Controller routines for form_test routes.
@@ -74,6 +76,26 @@ class FormTestController extends ControllerBase {
       ],
     ];
     return $return;
+  }
+
+  /**
+   * Renders a dropbutton with a primary and secondary action.
+   */
+  public function dropbutton(Request $request): array {
+    $build = [
+      'actions' => [
+        '#type' => 'dropbutton',
+        '#links' => [
+          'primary' => ['title' => 'Primary action', 'url' => Url::fromRoute('<front>')],
+          'secondary' => ['title' => 'Secondary action', 'url' => Url::fromRoute('<front>')],
+        ],
+      ],
+      '#cache' => ['contexts' => ['url.query_args:legacy']],
+    ];
+    if ($request->query->getBoolean('legacy')) {
+      $build['#attached']['library'][] = 'core/jquery';
+    }
+    return $build;
   }
 
 }
