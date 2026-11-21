@@ -287,7 +287,12 @@
     }
 
     const native = toNativeEvent(event);
-    const methods = ['stopPropagation', 'stopImmediatePropagation'].filter(
+    const flags = {
+      preventDefault: 'isDefaultPrevented',
+      stopPropagation: 'isPropagationStopped',
+      stopImmediatePropagation: 'isImmediatePropagationStopped',
+    };
+    const methods = Object.keys(flags).filter(
       (method) =>
         Object.isExtensible(native) &&
         Object.getOwnPropertyDescriptor(native, method)?.configurable !== false,
@@ -303,9 +308,9 @@
         writable: true,
         value() {
           original.call(this);
-          event.isPropagationStopped = stopped;
+          event[flags[method]] = stopped;
           if (method === 'stopImmediatePropagation') {
-            event.isImmediatePropagationStopped = stopped;
+            event.isPropagationStopped = stopped;
           }
         },
       });
