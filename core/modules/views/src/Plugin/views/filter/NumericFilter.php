@@ -251,7 +251,7 @@ class NumericFilter extends FilterPluginBase implements FilterOperatorsInterface
         $which = in_array($this->operator, $this->operatorValues(2)) ? 'minmax' : 'value';
       }
       else {
-        $source = '[name="' . $this->options['expose']['operator_id'] . '"]';
+        $source = ':is(select, input)[name="' . $this->options['expose']['operator_id'] . '"]';
       }
     }
 

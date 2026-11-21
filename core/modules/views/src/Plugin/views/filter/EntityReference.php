@@ -421,9 +421,12 @@ class EntityReference extends ManyToOne {
       ];
     }
     if ($operator_field) {
+      $operator_selector = $is_exposed
+        ? ':is(select, input)[name="' . $operator_field . '"]'
+        : '[name="' . $operator_field . '"]';
       foreach ($this->operatorValues(1) as $operator) {
         $visible[] = [
-          '[name="' . $operator_field . '"]' => ['value' => $operator],
+          $operator_selector => ['value' => $operator],
         ];
       }
       $form['value']['#states'] = ['visible' => $visible];

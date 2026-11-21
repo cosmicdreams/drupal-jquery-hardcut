@@ -145,10 +145,10 @@ class ConfigSingleImportForm extends ConfirmFormBase {
       '#type' => 'textfield',
       '#states' => [
         'required' => [
-          '[name="config_type"]' => ['value' => 'system.simple'],
+          'select[name="config_type"]' => ['value' => 'system.simple'],
         ],
         'visible' => [
-          '[name="config_type"]' => ['value' => 'system.simple'],
+          'select[name="config_type"]' => ['value' => 'system.simple'],
         ],
       ],
     ];

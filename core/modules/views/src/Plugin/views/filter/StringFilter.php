@@ -262,7 +262,7 @@ class StringFilter extends FilterPluginBase implements FilterOperatorsInterface 
         $which = in_array($this->operator, $this->operatorValues(1)) ? 'value' : 'none';
       }
       else {
-        $source = '[name="' . $this->options['expose']['operator_id'] . '"]';
+        $source = ':is(select, input)[name="' . $this->options['expose']['operator_id'] . '"]';
       }
     }
 
