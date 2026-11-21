@@ -479,7 +479,6 @@ drupal.machine-name:
   js:
     misc/machine-name.js: {}
   dependencies:
-    - core/jquery
     - core/once
     - core/drupal
     - core/drupalSettings
