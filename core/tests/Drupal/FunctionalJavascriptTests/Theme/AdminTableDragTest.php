@@ -120,12 +120,13 @@ class AdminTableDragTest extends TableDragTest {
       };
       override.legacyTableEvent = true;
       prototype.rowCheckboxHandler = override;
-      class BulkActions extends Drupal.DefaultAdminBulkActions {}
-      const originalFocus = BulkActions.prototype.focusHandler;
-      BulkActions.prototype.focusHandler = function (event) {
-        window.bulkFocus = event instanceof FocusEvent && event.currentTarget === document.activeElement;
-        return originalFocus.call(this, event);
-      };
+      class BulkActions extends Drupal.DefaultAdminBulkActions {
+        focusHandler(event) {
+          window.bulkFocus = event instanceof jQuery.Event && event.currentTarget === document.activeElement;
+          return super.focusHandler(event);
+        }
+      }
+      BulkActions.prototype.focusHandler.legacyTableEvent = true;
       window.bulkChanges = [];
       window.bulkInstance = new BulkActions(fixture.querySelector('[data-drupal-views-bulk-actions]'));
       JS);

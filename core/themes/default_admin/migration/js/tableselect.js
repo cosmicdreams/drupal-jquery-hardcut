@@ -36,7 +36,7 @@
   };
 
   const selectionChanges = new WeakSet();
-  const { listen } = Drupal.tableInteraction;
+  const { tableInteraction } = Drupal;
 
   /**
    * Sets a checkbox state and notifies listeners when it changes.
@@ -138,7 +138,7 @@
     table
       .querySelectorAll('th.select-all input[type="checkbox"]')
       .forEach((checkbox) => {
-        listen(checkbox, 'click', (event) => {
+        tableInteraction.listen(table, checkbox, 'click', (event) => {
           if (event.target.matches('input[type="checkbox"]')) {
             checkboxes.forEach((checkbox) => {
               setChecked(checkbox, event.target.checked);
@@ -152,7 +152,7 @@
       });
 
     checkboxes.forEach((checkbox) => {
-      listen(checkbox, 'click', function (e) {
+      tableInteraction.listen(table, checkbox, 'click', function (e) {
         // Either add or remove the selected class based on the state of the
         // check all checkbox.
 

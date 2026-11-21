@@ -367,11 +367,11 @@ class TableDragTest extends WebDriverTestBase {
     $session->executeScript(<<<'JS'
       jQuery(document.activeElement).trigger(jQuery.Event('keydown', { keyCode: 40 }));
       JS);
-    $second->blur();
+    $session->executeScript("jQuery(document.activeElement).trigger('blur');");
     $this->assertOrder(['Row with id 1', 'Row with id 2', 'Row with id 3']);
-    $this->assertTrue($session->evaluateScript(<<<'JS'
-      window.gestureEvents.some(([name, type, legacy]) =>
-        name === 'dropRow' && type === 'blur' && legacy)
+    $this->assertSame(1, $session->evaluateScript(<<<'JS'
+      window.gestureEvents.filter(([name, type, legacy]) =>
+        name === 'dropRow' && type === 'blur' && legacy).length
       JS));
 
     $this->assertSame([TRUE, TRUE], $session->evaluateScript(<<<'JS'
@@ -567,6 +567,53 @@ class TableDragTest extends WebDriverTestBase {
     $this->assertJsCondition(<<<'JS'
       '$table' in Drupal.tableDrag.prototype
       JS);
+  }
+
+  /**
+   * Tests that unloading tables and rows releases their event registrations.
+   */
+  #[IgnoreDeprecations]
+  public function testTableBindingsReleasedOnUnload(): void {
+    $this->drupalGet('tabledrag_test', ['query' => ['legacy' => 1, 'tableselect' => 1]]);
+    $this->assertSame([TRUE, TRUE, TRUE], $this->getSession()->evaluateScript(<<<'JS'
+      (() => {
+        const drag = Drupal.tableDrag['tabledrag-test-table'];
+        let movements = 0;
+        drag.dragRow = () => { movements += 1; };
+        const mouseMove = () => document.dispatchEvent(new MouseEvent('mousemove'));
+        mouseMove();
+        Drupal.detachBehaviors(drag.table, drupalSettings, 'move');
+        mouseMove();
+        Drupal.detachBehaviors(drag.table, drupalSettings, 'unload');
+        mouseMove();
+        jQuery(document).triggerHandler('mousemove');
+
+        const fixture = document.createElement('div');
+        fixture.innerHTML = '<table class="responsive-enabled"><thead><tr><th class="select-all priority-low"></th></tr></thead>' +
+          '<tbody><tr><td><input type="checkbox"></td></tr></tbody></table>';
+        document.body.append(fixture);
+        Drupal.behaviors.tableResponsive.attach(fixture);
+        Drupal.behaviors.tableSelect.attach(fixture);
+        const table = fixture.querySelector('table');
+        const responsive = Drupal.TableResponsive.tables.find((instance) => instance.table === table);
+        const row = table.tBodies[0].rows[0];
+        const checkbox = row.querySelector('input');
+        checkbox.checked = true;
+        jQuery(checkbox).triggerHandler('click');
+        const selected = row.classList.contains('selected');
+        Drupal.detachBehaviors(row, drupalSettings, 'unload');
+        row.remove();
+        checkbox.checked = false;
+        jQuery(checkbox).triggerHandler('click');
+        const previousSelection = row.classList.contains('selected');
+        Drupal.detachBehaviors(table, drupalSettings, 'unload');
+        return [
+          movements === 2,
+          selected && previousSelection,
+          !Drupal.TableResponsive.tables.includes(responsive) && !responsive.link.isConnected,
+        ];
+      })()
+      JS));
   }
 
   /**

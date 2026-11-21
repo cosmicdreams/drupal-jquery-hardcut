@@ -123,7 +123,9 @@
      * @todo this may be removable as part of https://drupal.org/node/3084910
      */
     markChanged() {
-      const cells = [...this.element.querySelectorAll('td:first-of-type')];
+      const cells = [
+        ...(this.element?.querySelectorAll('td:first-of-type') ?? []),
+      ];
       if (
         !cells.some((cell) =>
           cell.querySelector('.js-tabledrag-changed-marker'),

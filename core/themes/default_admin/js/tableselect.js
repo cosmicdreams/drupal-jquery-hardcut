@@ -4,8 +4,15 @@
  */
 
 ((Drupal, { tabbable }, once) => {
+  /**
+   * Adds sticky bulk actions. Overrides receive native events by default.
+   *
+   * Extensions declaring core/jquery can set legacyTableEvent to true on an
+   * event override before assigning it to receive the deprecated event shape.
+   */
   Drupal.DefaultAdminBulkActions = class {
     constructor(bulkActions) {
+      Drupal.DefaultAdminBulkActions.adoptEventOverrides(this);
       this.bulkActions = bulkActions;
       this.form = this.bulkActions.closest('form');
       this.form.querySelectorAll('tr').forEach((element) => {
@@ -370,14 +377,15 @@
       );
     },
   };
-  Drupal.tableInteraction.installEventOverrides(
-    Drupal.DefaultAdminBulkActions.prototype,
-    {
-      blurHandler: 0,
-      focusHandler: 0,
-      rowCheckboxHandler: 0,
-      selectAllHandler: 0,
-    },
-  );
+  Drupal.DefaultAdminBulkActions.adoptEventOverrides =
+    Drupal.tableInteraction.installEventOverrides(
+      Drupal.DefaultAdminBulkActions.prototype,
+      {
+        blurHandler: 0,
+        focusHandler: 0,
+        rowCheckboxHandler: 0,
+        selectAllHandler: 0,
+      },
+    );
   document.dispatchEvent(new Event('drupal:bulk-actions-ready'));
 })(Drupal, window.tabbable, once);

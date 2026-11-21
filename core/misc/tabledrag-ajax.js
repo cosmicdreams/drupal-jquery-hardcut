@@ -23,10 +23,6 @@ Drupal.AjaxCommands.prototype.tabledragChanged = function (
 
   const tableDrag = Drupal.tableDrag[response.tabledrag_instance];
   const row = document.getElementById(response.id);
-  if (tableDrag && !row) {
-    // Preserve the error historically raised when marking a missing row.
-    throw new TypeError("Cannot read properties of undefined (reading 'id')");
-  }
 
   const rowObject = new tableDrag.row(
     row,

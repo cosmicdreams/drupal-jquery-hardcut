@@ -14,12 +14,17 @@
    * likely break layouts, but it provides the user with a means to access
    * data, which is a guiding principle of responsive design.
    *
+   * Event callbacks receive native events by default. Extensions declaring
+   * core/jquery can set legacyTableEvent to true on an event override before
+   * assigning it to receive the deprecated event shape.
+   *
    * @constructor Drupal.TableResponsive
    *
    * @param {HTMLElement} table
    *   The table element to initialize the responsive table on.
    */
   function TableResponsive(table) {
+    TableResponsive.adoptEventOverrides(this);
     this.table = table;
     this.showText = Drupal.t('Show all columns');
     this.hideText = Drupal.t('Hide lower priority columns');
@@ -61,16 +66,25 @@
       );
     window.addEventListener('resize', evaluate);
     TableResponsive.resizeHandlers.set(this, evaluate);
+    const stop = () => {
+      window.removeEventListener('resize', evaluate);
+      TableResponsive.resizeHandlers.delete(this);
+      unregister();
+    };
     const unregister = Drupal.eventBindings.register({
       target: window,
       type: 'resize',
       namespace: 'tableresponsive',
       listener: evaluate,
-      stop: () => {
-        window.removeEventListener('resize', evaluate);
-        TableResponsive.resizeHandlers.delete(this);
-        unregister();
-      },
+      stop,
+    });
+    Drupal.tableInteraction.own(table, window, () => {
+      stop();
+      const index = TableResponsive.tables.indexOf(this);
+      if (index !== -1) {
+        TableResponsive.tables.splice(index, 1);
+      }
+      wrapper.remove();
     });
   }
 
@@ -225,10 +239,11 @@
   }
 
   // Make the TableResponsive object available in the Drupal namespace.
-  Drupal.tableInteraction.installEventOverrides(TableResponsive.prototype, {
-    eventhandlerEvaluateColumnVisibility: 0,
-    eventhandlerToggleColumns: 0,
-  });
+  TableResponsive.adoptEventOverrides =
+    Drupal.tableInteraction.installEventOverrides(TableResponsive.prototype, {
+      eventhandlerEvaluateColumnVisibility: 0,
+      eventhandlerToggleColumns: 0,
+    });
   Drupal.TableResponsive = TableResponsive;
   document.dispatchEvent(new Event('drupal:tableresponsive-ready'));
 })(Drupal, once, window);

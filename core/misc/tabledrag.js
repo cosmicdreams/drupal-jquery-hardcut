@@ -12,7 +12,7 @@
 (function (Drupal, drupalSettings, once) {
   const draggableRows = ':scope > tr.draggable, :scope > tbody > tr.draggable';
 
-  const { listen } = Drupal.tableInteraction;
+  const { tableInteraction } = Drupal;
 
   /**
    * Finds an adjacent element matching a row selector.
@@ -121,6 +121,7 @@
    */
   Drupal.tableDrag = function (table, tableSettings) {
     const self = this;
+    Drupal.tableDrag.adoptEventOverrides(this);
     /**
      *
      * @type {HTMLElement}
@@ -327,23 +328,30 @@
         event.stopPropagation();
       }
     }
-    listen(document, 'touchmove', move);
+    tableInteraction.listen(table, document, 'touchmove', move);
     ['mousemove', 'pointermove'].forEach((type) => {
-      listen(document, type, move);
+      tableInteraction.listen(table, document, type, move);
     });
-    listen(document, 'touchend', (event) =>
+    tableInteraction.listen(table, document, 'touchend', (event) =>
       self.dropRow((event.changedTouches ?? event.touches)?.[0], self),
     );
     ['mouseup', 'pointerup'].forEach((type) => {
-      listen(document, type, (event) => self.dropRow(event, self));
+      tableInteraction.listen(table, document, type, (event) =>
+        self.dropRow(event, self),
+      );
     });
 
     // React to localStorage event showing or hiding weight columns.
-    window.addEventListener('storage', (event) => {
+    const updateStoredWeights = (event) => {
       if (event.key === 'Drupal.tableDrag.showWeight') {
         showWeight = JSON.parse(event.newValue);
         this.displayColumns(showWeight);
       }
+    };
+    window.addEventListener('storage', updateStoredWeights);
+    tableInteraction.own(table, window, () => {
+      window.removeEventListener('storage', updateStoredWeights);
+      clearInterval(self.scrollInterval);
     });
 
     // Check for any rows marked as changed before this tabledrag was rerendered
@@ -592,7 +600,7 @@
     }
 
     ['mousedown', 'touchstart', 'pointerdown'].forEach((type) => {
-      listen(handle, type, (event) => {
+      tableInteraction.listen(self.table, handle, type, (event) => {
         event.preventDefault();
         const pointer =
           event.type === 'touchstart' ? event.touches?.[0] : event;
@@ -601,25 +609,25 @@
     });
 
     // Prevent the anchor tag from jumping us to the top of the page.
-    listen(handle, 'click', (e) => {
+    tableInteraction.listen(self.table, handle, 'click', (e) => {
       e.preventDefault();
     });
 
     // Set blur cleanup when a handle is focused.
-    listen(handle, 'focus', () => {
+    tableInteraction.listen(self.table, handle, 'focus', () => {
       self.safeBlur = true;
     });
 
     // On blur, fire the same function as a touchend/mouseup. This is used to
     // update values after a row has been moved through the keyboard support.
-    listen(handle, 'blur', (event) => {
+    tableInteraction.listen(self.table, handle, 'blur', (event) => {
       if (self.rowObject && self.safeBlur) {
         self.dropRow(event, self);
       }
     });
 
     // Add arrow-key support to the handle.
-    listen(handle, 'keydown', (event) => {
+    tableInteraction.listen(self.table, handle, 'keydown', (event) => {
       // If a rowObject doesn't yet exist and this isn't the tab key.
       if (event.keyCode !== 9 && !self.rowObject) {
         self.rowObject = new self.row(
@@ -785,7 +793,7 @@
     // scrolling. IE and Safari will suppress scrolling on keydown, but all
     // other browsers need to return false on keypress.
     // http://www.quirksmode.org/js/keys.html
-    listen(handle, 'keypress', (event) => {
+    tableInteraction.listen(self.table, handle, 'keypress', (event) => {
       /* eslint-disable no-fallthrough */
 
       switch (event.keyCode) {
@@ -1403,14 +1411,14 @@
     this.element = tableRow;
     this.method = method;
     this.group = [tableRow];
-    this.groupDepth = tableRow.querySelectorAll('.js-indentation').length;
+    this.groupDepth = tableRow?.querySelectorAll('.js-indentation').length ?? 0;
     this.changed = false;
-    this.table = tableRow.closest('table');
+    this.table = tableRow?.closest('table') ?? undefined;
     this.indentEnabled = indentEnabled;
     this.maxDepth = maxDepth;
     // Direction the row is being moved.
     this.direction = '';
-    if (this.indentEnabled) {
+    if (this.indentEnabled && tableRow) {
       this.indents = tableRow.querySelectorAll('.js-indentation').length;
       this.children = this.findChildren(addClasses);
       this.group = this.group.concat(this.children);
@@ -1729,7 +1737,9 @@
    * Add an asterisk or other marker to the changed row.
    */
   Drupal.tableDrag.prototype.row.prototype.markChanged = function () {
-    const cells = [...this.element.querySelectorAll('td:first-of-type')];
+    const cells = [
+      ...(this.element?.querySelectorAll('td:first-of-type') ?? []),
+    ];
     if (!cells.some((cell) => cell.querySelector('abbr.tabledrag-changed'))) {
       const marker = Drupal.tableDrag.themeContent(
         Drupal.theme('tableDragChangedMarker'),
@@ -1855,12 +1865,15 @@
     }
     return markup;
   };
-  Drupal.tableInteraction.installEventOverrides(Drupal.tableDrag.prototype, {
-    dragStart: 0,
-    dragRow: 0,
-    dropRow: 0,
-    pointerCoords: 0,
-    getPointerOffset: 1,
-  });
+  Drupal.tableDrag.adoptEventOverrides = tableInteraction.installEventOverrides(
+    Drupal.tableDrag.prototype,
+    {
+      dragStart: 0,
+      dragRow: 0,
+      dropRow: 0,
+      pointerCoords: 0,
+      getPointerOffset: 1,
+    },
+  );
   document.dispatchEvent(new Event('drupal:tabledrag-ready'));
 })(Drupal, drupalSettings, once);
