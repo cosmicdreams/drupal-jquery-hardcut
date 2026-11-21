@@ -180,6 +180,9 @@ class TableDragTestForm extends FormBase {
     if ($this->getRequest()->query->has('legacy')) {
       $form['#attached']['library'][] = 'tabledrag_test/legacy';
     }
+    if ($this->getRequest()->query->has('legacy_ajax')) {
+      $form['#attached']['library'][] = 'core/drupal.ajax.jquery';
+    }
     if ($this->getRequest()->query->has('ajax')) {
       $form['#attached']['library'][] = 'core/drupal.tabledrag.ajax';
       $form['actions']['mark_changed'] = [

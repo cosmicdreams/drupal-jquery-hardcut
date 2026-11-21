@@ -105,7 +105,11 @@
         tableInteraction: true,
       };
       const nativeListener = (event) => {
-        if (binding.nativeActive && this.allowNativeEvent(event)) {
+        if (
+          binding.nativeActive &&
+          this.allowNativeEvent(event) &&
+          !binding.handlesNativeEvent?.(event)
+        ) {
           return listener.call(target, event);
         }
       };

@@ -1313,6 +1313,17 @@
       },
     });
     adapter = {
+      hasEventBinding(target, type, event) {
+        if (
+          Drupal.ajax.compatibility !== adapter ||
+          adapter.isSyntheticDefaultAction(event)
+        ) {
+          return false;
+        }
+        return jQuery
+          ._data(target, 'events')
+          ?.[event.type]?.some(({ guid }) => handlers.get(guid)?.type === type);
+      },
       handlesNativeEvent(binding, event) {
         const subscription = subscriptions.get(binding);
         if (

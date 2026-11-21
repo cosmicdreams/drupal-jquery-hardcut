@@ -108,6 +108,66 @@ class AdminTableDragTest extends TableDragTest {
   }
 
   /**
+   * Tests inserting the original cell content into nested theme wrappers.
+   */
+  public function testNestedTableDragCellWrappers(): void {
+    $this->drupalGet('tabledrag_test');
+    $this->assertSame(['Row', TRUE], $this->getSession()->evaluateScript(<<<'JS'
+      (() => {
+        Drupal.theme.tableDragCellContentWrapper = () => '<div class="labels"><div class="label"><span></span></div></div>';
+        Drupal.theme.tableDragCellItemsWrapper = () => '<div class="items"><div class="item"><div></div></div></div>';
+        const fixture = document.body.appendChild(document.createElement('div'));
+        fixture.innerHTML = '<table id="nested-wrapper"><tbody><tr class="draggable"><td><strong>Row</strong></td></tr></tbody></table>';
+        Drupal.behaviors.adminTableDrag.attach(fixture, { tableDrag: { 'nested-wrapper': {} } });
+        return [
+          fixture.querySelector('td > .items > .item > div > .labels > .label > span > strong')?.textContent,
+          Boolean(fixture.querySelector('td > .items.js-tabledrag-cell-content')),
+        ];
+      })()
+      JS));
+  }
+
+  /**
+   * Tests shared Ajax and table handler order on a bulk-selection checkbox.
+   */
+  #[IgnoreDeprecations]
+  public function testBulkActionsAjaxHandlerOrder(): void {
+    $this->drupalGet('tabledrag_test', ['query' => ['tableselect' => 1, 'legacy_ajax' => 1]]);
+    $this->assertSame([TRUE, [
+      ['before', 'table', 'ajax', 'after'],
+      ['before', 'ajax', 'table', 'after'],
+      ['before', 'ajax'],
+    ]], $this->getSession()->evaluateScript(<<<'JS'
+      (() => {
+        const cases = [[false, false], [true, false], [true, true]].map(([ajaxFirst, cancel]) => {
+          const trace = [];
+          const fixture = document.body.appendChild(document.createElement('div'));
+          fixture.innerHTML = '<form><div data-drupal-views-bulk-actions></div>' +
+            '<table><thead><tr><th class="select-all"></th></tr></thead>' +
+            '<tbody><tr><td class="views-field-node-bulk-form"><input type="checkbox"></td></tr></tbody></table></form>';
+          const box = fixture.querySelector('td input');
+          jQuery(box).on('change', () => trace.push('before'));
+          const attachAjax = () => {
+            const ajax = Drupal.ajax({ element: box, event: 'change', url: location.href });
+            ajax.eventResponse = Drupal.ajax.useNativeCallback((element, event) => {
+              trace.push('ajax');
+              if (cancel) event.stopImmediatePropagation();
+            });
+          };
+          if (ajaxFirst) attachAjax();
+          const bulk = new Drupal.DefaultAdminBulkActions(fixture.querySelector('[data-drupal-views-bulk-actions]'));
+          bulk.rowCheckboxHandler = () => trace.push('table');
+          if (!ajaxFirst) attachAjax();
+          jQuery(box).on('change', () => trace.push('after'));
+          box.click();
+          return trace;
+        });
+        return [Boolean(Drupal.ajax.commandCompatibility), cases];
+      })()
+      JS));
+  }
+
+  /**
    * Tests a theme that omits the outer cell-items wrapper.
    */
   public function testEmptyTableDragCellItemsWrapper(): void {

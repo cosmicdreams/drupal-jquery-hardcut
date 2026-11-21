@@ -281,11 +281,13 @@
    *   The table's event binding.
    * @param {object} event
    *   The jQuery event for this dispatch.
+   * @param {boolean} nativeActive
+   *   Whether the native listener owns delivery.
    * @return {*}
    *   The table listener's result.
    */
-  function deliverShared(binding, event) {
-    if (binding.nativeActive) {
+  function deliverShared(binding, event, nativeActive = binding.nativeActive) {
+    if (nativeActive) {
       return undefined;
     }
 
@@ -353,6 +355,25 @@
           windowResize ||
           (target === document && documentGestures.includes(type));
         const element = jquery(target);
+        const sharesAjaxDispatch = (event) =>
+          target instanceof Element &&
+          window.Drupal.ajax?.compatibility?.hasEventBinding(
+            target,
+            type,
+            event,
+          );
+        const delivered = new WeakSet();
+        const yielded = new WeakSet();
+        binding.handlesNativeEvent = (event) => {
+          if (delivered.delete(event)) {
+            return true;
+          }
+          if (sharesAjaxDispatch(event)) {
+            yielded.add(event);
+            return true;
+          }
+          return false;
+        };
         const deliver = function (event) {
           const { originalEvent } = event;
           // The selection bridge marks native changes for legacy observers.
@@ -364,7 +385,19 @@
                 originalEvent,
               ))
           ) {
-            return shared ? deliverShared(binding, event) : undefined;
+            if (shared) {
+              return deliverShared(binding, event);
+            }
+            if (
+              originalEvent instanceof Event &&
+              sharesAjaxDispatch(originalEvent)
+            ) {
+              if (!yielded.delete(originalEvent)) {
+                delivered.add(originalEvent);
+              }
+              return deliverShared(binding, event, false);
+            }
+            return undefined;
           }
           // The general Drupal bridge forwards direct clicks without a source event.
           if (anchorClick && event.target === target && !originalEvent) {
@@ -388,7 +421,9 @@
       },
       remove(binding) {
         subscriptions.get(binding)?.();
-        subscriptions.delete(binding);
+        if (subscriptions.delete(binding)) {
+          delete binding.handlesNativeEvent;
+        }
       },
     });
     replaying = false;
