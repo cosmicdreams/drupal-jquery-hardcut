@@ -2,81 +2,116 @@
  * @file
  * Responsive navigation tabs.
  *
- * This also supports collapsible navigable is the 'is-collapsible' class is
- * added to the main element, and a target element is included.
+ * Tabs with the is-collapsible class can collapse into a menu.
  */
-(($, Drupal) => {
+((Drupal) => {
+  /**
+   * Initializes one responsive tabs menu.
+   *
+   * @param {HTMLElement} tab
+   *   The navigation element.
+   */
   function init(tab) {
-    const $tab = $(tab);
-    const $target = $tab.find('[data-drupal-nav-tabs-target]');
-    const $active = $target.find('.js-active-tab');
-
-    const openMenu = () => {
-      $target.toggleClass('is-open');
-      $target.find('button').attr('aria-expanded', $target.hasClass('is-open'));
-    };
+    const target = tab.querySelector('[data-drupal-nav-tabs-target]');
+    if (!target) {
+      return;
+    }
+    const active = target.querySelector('.js-active-tab');
 
     const toggleOrder = (reset) => {
-      const current = $active.index();
-      const original = $active.data('original-order');
+      if (!active) {
+        return;
+      }
+      const current = Array.from(active.parentElement.children).indexOf(active);
+      const original = Number(active.dataset.originalOrder);
 
       // Do not change order if already first or if already reset.
       if (original === 0 || reset === (current === original)) {
         return;
       }
 
-      const siblings = {
-        first: '[data-original-order="0"]',
-        previous: `[data-original-order="${original - 1}"]`,
-      };
-
-      const $first = $target.find(siblings.first);
-      const $previous = $target.find(siblings.previous);
-
       if (reset && current !== original) {
-        $active.insertAfter($previous);
+        target
+          .querySelector(`[data-original-order="${original - 1}"]`)
+          ?.after(active);
       } else if (!reset && current === original) {
-        $active.insertBefore($first);
+        target.querySelector('[data-original-order="0"]')?.before(active);
       }
     };
 
     const toggleCollapsed = ({ matches }) => {
+      const buttons = tab.querySelectorAll('button');
       if (matches) {
-        if ($tab.hasClass('is-horizontal') && !$tab.attr('data-width')) {
+        if (
+          tab.classList.contains('is-horizontal') &&
+          !tab.hasAttribute('data-width')
+        ) {
           let width = 0;
-
-          $target.find('.js-tabs-link').each((index, value) => {
-            width += $(value).outerWidth();
+          target.querySelectorAll('.js-tabs-link').forEach((link) => {
+            width += link.getBoundingClientRect().width;
           });
-          $tab.attr('data-width', width);
+          tab.dataset.width = width;
         }
 
-        // Collapse the tabs if the combined width of the tabs is greater than
-        // the width of the parent container.
-        const isHorizontal = $tab.attr('data-width') <= $tab.outerWidth();
-        $tab.toggleClass('is-horizontal', isHorizontal);
-        $tab.find('button').attr('aria-expanded', null);
+        // Collapse when the tabs are wider than the navigation container.
+        const isHorizontal =
+          Number(tab.dataset.width) <= tab.getBoundingClientRect().width;
+        tab.classList.toggle('is-horizontal', isHorizontal);
+        buttons.forEach((button) => button.removeAttribute('aria-expanded'));
         toggleOrder(isHorizontal);
       } else {
         toggleOrder(false);
-        $tab.find('button').attr('aria-expanded', 'false');
+        buttons.forEach((button) =>
+          button.setAttribute('aria-expanded', 'false'),
+        );
       }
     };
 
-    $tab.addClass('is-horizontal-enabled');
+    tab.classList.add('is-horizontal-enabled');
 
-    $target.find('.js-tab').each((index, element) => {
-      const $item = $(element);
-      $item.attr('data-original-order', $item.index());
+    target.querySelectorAll('.js-tab').forEach((item) => {
+      item.dataset.originalOrder = Array.from(
+        item.parentElement.children,
+      ).indexOf(item);
     });
 
-    $tab.on('click.tabs', '[data-drupal-nav-tabs-trigger]', openMenu);
+    const binding = {
+      target: tab,
+      type: 'click',
+      namespace: 'tabs',
+      selector: '[data-drupal-nav-tabs-trigger]',
+      navTabs: true,
+      listener() {
+        const expanded = target.classList.toggle('is-open');
+        target.querySelectorAll('button').forEach((button) => {
+          button.setAttribute('aria-expanded', String(expanded));
+        });
+      },
+      stop() {
+        tab.removeEventListener('click', onClick);
+        unregister();
+      },
+    };
+
+    function onClick(event) {
+      if (binding.handlesNativeEvent || event.button >= 1) {
+        return;
+      }
+      const trigger = event.target.closest?.(binding.selector);
+      if (trigger && trigger !== tab && tab.contains(trigger)) {
+        binding.listener();
+      }
+    }
+
+    tab.addEventListener('click', onClick);
+    const unregister = Drupal.eventBindings.register(binding);
     const mql = window.matchMedia('(min-width: 48em)');
     mql.addEventListener('change', toggleCollapsed);
     toggleCollapsed(mql);
   }
+
   /**
-   * Initialize the tabs JS.
+   * Initialize the tabs.
    */
   Drupal.behaviors.navTabs = {
     attach(context) {
@@ -87,4 +122,4 @@
       ).forEach(init);
     },
   };
-})(jQuery, Drupal);
+})(Drupal);

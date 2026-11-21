@@ -61,23 +61,26 @@
     Drupal.eventBindings.observe({
       add(binding) {
         const { target, selector, type, namespace, listener } = binding;
-        const { detailsAria, tabbingFocusTrap } = binding;
-        if (!detailsAria && !tabbingFocusTrap) {
+        const { detailsAria, tabbingFocusTrap, navTabs } = binding;
+        if (!detailsAria && !tabbingFocusTrap && !navTabs) {
           return;
         }
+        const contract = detailsAria
+          ? 'details summary clicks'
+          : navTabs
+            ? 'navigation tabs'
+            : 'tabbing focus traps';
         observeRemoval(type);
         const element = jquery(target);
         const name = `${type}.${namespace}`;
         const deliver = function (event) {
           if (event.isTrigger) {
             warn(
-              detailsAria
-                ? 'The jQuery synthetic trigger for details summary clicks'
-                : 'The jQuery synthetic trigger for tabbing focus traps',
+              `The jQuery synthetic trigger for ${contract}`,
               `Use the native ${type} event.`,
             );
           }
-          if (detailsAria) {
+          if (type === 'click') {
             listener(this);
           } else {
             const native =
@@ -163,7 +166,7 @@
    */
   function installTabbingMembers() {
     const manager = window.Drupal?.tabbingManager;
-    if (!manager) {
+    if (!manager?.contextPrototype) {
       return;
     }
 
@@ -177,7 +180,7 @@
           warn(contract, tabbingMigration);
           const value = this[name];
           let entry = cached.get(this);
-          if (entry?.value !== value) {
+          if (!entry || entry.value !== value) {
             entry = { value, collection: jquery(value) };
             cached.set(this, entry);
           }
