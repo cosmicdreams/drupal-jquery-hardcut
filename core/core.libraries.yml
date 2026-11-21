@@ -527,6 +527,7 @@ drupal.states:
     misc/states.js: {}
   dependencies:
     - core/drupal
+    - core/once
 
 drupal.states.jquery:
   version: VERSION
