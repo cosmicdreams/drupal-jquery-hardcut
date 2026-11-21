@@ -64,7 +64,6 @@ global-styling:
   dependencies:
     - system/admin
     - core/font
-    - core/jquery
     - core/drupal
     # Admin has small and extra small variation for most control elements
     # such as inputs, action links, buttons, dropbuttons. For usability and
@@ -325,7 +324,7 @@ progress:
 tabbingmanager:
   version: VERSION
   dependencies:
-    - default_admin/admin.jquery.ui
+    - default_admin/global-styling
 
 filter:
   version: VERSION

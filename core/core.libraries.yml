@@ -535,7 +535,6 @@ drupal.tabbingmanager:
   js:
     misc/tabbingmanager.js: {}
   dependencies:
-    - core/jquery
     - core/drupal
     - core/tabbable
 
