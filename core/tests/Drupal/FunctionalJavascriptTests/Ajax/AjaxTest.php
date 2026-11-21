@@ -7,6 +7,7 @@ namespace Drupal\FunctionalJavascriptTests\Ajax;
 use Drupal\Component\Utility\UrlHelper;
 use Drupal\FunctionalJavascriptTests\WebDriverTestBase;
 use PHPUnit\Framework\Attributes\Group;
+use PHPUnit\Framework\Attributes\IgnoreDeprecations;
 use PHPUnit\Framework\Attributes\RunTestsInSeparateProcesses;
 
 // cspell:ignore Completeajax handleajax jqxhr nocontent prefilter prefilters Successajax
@@ -106,7 +107,9 @@ class AjaxTest extends WebDriverTestBase {
    * reattached and all top-level elements of type Node.ELEMENT_NODE need to be
    * part of the context.
    */
+  #[IgnoreDeprecations]
   public function testInsertAjaxResponse(): void {
+    $this->expectUserDeprecationMessage('Javascript Deprecation: Using jQuery Ajax selector, method or effect inputs is deprecated in drupal:12.0.0 and is removed from drupal:13.0.0. Use a CSS selector and supported native command options.');
     $render_single_root = [
       'pre-wrapped-div' => '<div class="pre-wrapped">pre-wrapped<script> var test;</script></div>',
       'pre-wrapped-span' => '<span class="pre-wrapped">pre-wrapped<script> var test;</script></span>',

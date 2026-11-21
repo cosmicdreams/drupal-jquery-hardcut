@@ -4,7 +4,8 @@ namespace Drupal\media_library;
 
 use Drupal\Core\Access\AccessResult;
 use Drupal\Core\Ajax\AjaxResponse;
-use Drupal\Core\Ajax\InvokeCommand;
+use Drupal\Core\Ajax\DispatchEventCommand;
+use Drupal\Core\Ajax\SetValueCommand;
 use Drupal\Core\Cache\RefinableCacheableDependencyInterface;
 use Drupal\Core\Entity\EntityTypeManagerInterface;
 use Drupal\Core\Entity\FieldableEntityInterface;
@@ -122,11 +123,17 @@ class MediaLibraryFieldWidgetOpener implements MediaLibraryOpenerInterface {
     // Create a comma-separated list of media IDs, insert them in the hidden
     // field of the widget, and trigger the field update via the hidden submit
     // button.
-    $widget_id = $parameters['field_widget_id'];
+    $widget_id = strtr($parameters['field_widget_id'], [
+      "\\" => "\\\\",
+      '"' => '\"',
+      "\n" => '\a ',
+      "\r" => '\d ',
+      "\f" => '\c ',
+    ]);
     $ids = implode(',', $selected_ids);
     $response
-      ->addCommand(new InvokeCommand("[data-media-library-widget-value=\"$widget_id\"]", 'val', [$ids]))
-      ->addCommand(new InvokeCommand("[data-media-library-widget-update=\"$widget_id\"]", 'trigger', ['mousedown']));
+      ->addCommand(new SetValueCommand("[data-media-library-widget-value=\"$widget_id\"]", $ids))
+      ->addCommand(new DispatchEventCommand("[data-media-library-widget-update=\"$widget_id\"]", 'mousedown'));
 
     return $response;
   }

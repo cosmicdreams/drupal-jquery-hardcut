@@ -1923,6 +1923,7 @@
     const focusChanged = Object.keys(response || {}).some((key) => {
       const { command, method } = response[key];
       return (
+        command === 'focus' ||
         command === 'focusFirst' ||
         command === 'openDialog' ||
         (command === 'invoke' && method === 'focus')
@@ -2047,57 +2048,254 @@
   };
 
   /**
-   * Provide a wrapper for new content via Ajax.
+   * Wraps multiple visible roots when the response uses an effect.
    *
-   * Wrap the inserted markup when inserting multiple root elements with an
-   * ajax effect.
-   *
-   * @param {jQuery} $newContent
-   *   Response elements after parsing.
+   * @param {Node[]} nodes
+   *   Parsed response content.
    * @param {Drupal.Ajax} ajax
-   *   {@link Drupal.Ajax} object created by {@link Drupal.ajax}.
+   *   The Ajax instance.
    * @param {object} response
-   *   The response from the Ajax request.
+   *   The Ajax response.
    *
-   * @deprecated in drupal:8.6.0 and is removed from drupal:13.0.0.
-   *   Use data with desired wrapper.
-   *
-   * @see https://www.drupal.org/node/2940704
-   *
-   * @todo Add deprecation warning after it is possible. For more information
-   *   see: https://www.drupal.org/project/drupal/issues/2973400
+   * @return {Node[]}
+   *   The nodes to insert.
    */
-  Drupal.theme.ajaxWrapperNewContent = ($newContent, ajax, response) =>
+  const wrapNewContent = (nodes, ajax, response) =>
     (response.effect || ajax.effect) !== 'none' &&
-    $newContent.filter(
-      (i) =>
-        !(
-          // We can not consider HTML comments or whitespace text as separate
-          // roots, since they do not cause visual regression with effect.
-          $newContent[i].nodeName === '#comment' ||
-          ($newContent[i].nodeName === '#text' &&
-            /^(\s|\n|\r)*$/.test($newContent[i].textContent))
-        ),
+    Array.from(nodes).filter(
+      (node) =>
+        node.nodeType !== Node.COMMENT_NODE &&
+        (node.nodeType !== Node.TEXT_NODE || node.textContent.trim() !== ''),
     ).length > 1
-      ? Drupal.theme('ajaxWrapperMultipleRootElements', $newContent)
-      : $newContent;
+      ? Drupal.theme('ajaxWrapperMultipleRootElements', nodes)
+      : nodes;
+
+  Drupal.theme.ajaxWrapperNewContent = wrapNewContent;
 
   /**
-   * Provide a wrapper for multiple root elements via Ajax.
+   * Provides a wrapper for multiple roots in an Ajax response.
    *
-   * @param {jQuery} $elements
-   *   Response elements after parsing.
+   * @param {Node[]} nodes
+   *   The nodes to wrap.
+   *
+   * @return {Node[]}
+   *   The wrapper.
    *
    * @deprecated in drupal:8.6.0 and is removed from drupal:13.0.0.
-   *   Use data with desired wrapper.
+   *   Use data with the desired wrapper.
    *
    * @see https://www.drupal.org/node/2940704
-   *
-   * @todo Add deprecation warning after it is possible. For more information
-   *   see: https://www.drupal.org/project/drupal/issues/2973400
    */
-  Drupal.theme.ajaxWrapperMultipleRootElements = ($elements) =>
-    $('<div></div>').append($elements);
+  const wrapMultipleRoots = (nodes) => {
+    // Preserve the input type when a legacy override calls its predecessor.
+    if (!Array.isArray(nodes)) {
+      return Drupal.ajax.commandCompatibility.wrapMultipleRoots(nodes);
+    }
+    const wrapper = document.createElement('div');
+    wrapper.append(...nodes);
+    return [wrapper];
+  };
+
+  Drupal.theme.ajaxWrapperMultipleRootElements = wrapMultipleRoots;
+
+  // An unmarked command can use this CSS subset without invoking a legacy
+  // pseudo, attribute hook or selector extension. Marked native commands can
+  // use the full browser selector grammar.
+  const cssSelector = /^(?:[\w.#* ,>+~\t\n-]|\[[-\w]+(?:="[^"\\]*")?\])+$/;
+  const isNativeSelector = (selector) =>
+    !selector || cssSelector.test(selector);
+  const standardEffect = Drupal.Ajax.prototype.getEffect;
+
+  function commandTargets(selector) {
+    if (!selector) {
+      return [];
+    }
+    if (/^#[\w-]+$/.test(selector)) {
+      const target = document.getElementById(selector.slice(1));
+      return target ? [target] : [];
+    }
+    return [...document.querySelectorAll(selector)];
+  }
+
+  function legacyCommand(name, ajax, response, status) {
+    if (!Drupal.ajax.commandCompatibility) {
+      throw new Error(
+        `The Ajax command "${name}" requires the core/drupal.ajax.jquery library.`,
+      );
+    }
+    return Drupal.ajax.commandCompatibility[name](ajax, response, status);
+  }
+
+  const insertMethods = {
+    html: (target, nodes) => target.replaceChildren(...nodes),
+    replaceWith: (target, nodes) => target.replaceWith(...nodes),
+    append: (target, nodes) => target.append(...nodes),
+    prepend: (target, nodes) => target.prepend(...nodes),
+    before: (target, nodes) => target.before(...nodes),
+    after: (target, nodes) => target.after(...nodes),
+  };
+
+  function runInsertedScript(script) {
+    if (
+      !script.isConnected ||
+      !/^$|^module$|\/(?:java|ecma)script/i.test(script.type || '')
+    ) {
+      return;
+    }
+    const executable = document.createElement('script');
+    const { src, type, nonce, noModule, crossOrigin } = script;
+    if (src && (type || '').toLowerCase() !== 'module') {
+      if (noModule) {
+        return;
+      }
+      if (new URL(src).origin !== window.location.origin || crossOrigin) {
+        executable.src = src;
+        if (crossOrigin) {
+          executable.crossOrigin = crossOrigin;
+        }
+        executable.addEventListener('load', () => executable.remove());
+        executable.addEventListener('error', () => executable.remove());
+        document.head.append(executable);
+        return;
+      }
+      // Classic same-origin scripts execute in response order. Modules and
+      // cross-origin scripts follow the browser's asynchronous script path.
+      const request = Drupal.xhr({
+        url: src,
+        async: false,
+        headers: { Accept: `${accepts.script}, */*; q=0.01` },
+      });
+      if (
+        !(request.status >= 200 && request.status < 300) &&
+        request.status !== 304
+      ) {
+        return;
+      }
+      executable.text = request.responseText;
+    } else {
+      executable.text = script.textContent;
+      if (src) {
+        executable.src = src;
+      }
+      if (type) {
+        executable.type = type;
+      }
+      executable.noModule = noModule;
+    }
+    if (nonce) {
+      executable.nonce = nonce;
+    }
+    document.head.append(executable);
+    executable.remove();
+  }
+
+  const defaultDisplays = new Map();
+
+  function showInsertedElement(element) {
+    if (element.style.display === 'none') {
+      element.style.removeProperty('display');
+    }
+    if (element.isConnected && getComputedStyle(element).display === 'none') {
+      const tagName = element.localName;
+      if (!defaultDisplays.has(tagName)) {
+        const sample = document.createElement(tagName);
+        document.body.append(sample);
+        const display = getComputedStyle(sample).display;
+        defaultDisplays.set(tagName, display === 'none' ? 'block' : display);
+        sample.remove();
+      }
+      element.style.display = defaultDisplays.get(tagName);
+    }
+  }
+
+  function fadeIn(element, speed) {
+    showInsertedElement(element);
+    const duration =
+      typeof speed === 'number'
+        ? Math.max(0, speed)
+        : ({ fast: 200, slow: 600 }[speed] ?? 400);
+    if (duration) {
+      element.animate(
+        [{ opacity: 0 }, { opacity: getComputedStyle(element).opacity }],
+        {
+          duration,
+          easing: 'ease-in-out',
+        },
+      );
+    }
+  }
+
+  const pixelProperties =
+    /^(?:border(?:-(?:top|right|bottom|left))?(?:-width)?|(?:margin|padding)(?:-(?:top|right|bottom|left))?|top|right|bottom|left|(?:(?:min|max)-)?(?:width|height))$/;
+
+  const elementData = new WeakMap();
+  const normalizeDataKey = (key) =>
+    key.replace(/-([a-z])/g, (_, letter) => letter.toUpperCase());
+
+  /**
+   * Stores Ajax command data on elements without retaining detached elements.
+   *
+   * @namespace
+   */
+  Drupal.ajax.elementData = {
+    get(element, name) {
+      const key = normalizeDataKey(name);
+      const data = elementData.get(element);
+      const value = data?.get(key)?.value;
+      if (value !== undefined) {
+        return value;
+      }
+      const attribute = element.getAttribute(
+        `data-${key.replace(/[A-Z]/g, '-$&').toLowerCase()}`,
+      );
+      if (attribute === null) {
+        return;
+      }
+      if (
+        attribute === 'true' ||
+        attribute === 'false' ||
+        attribute === 'null'
+      ) {
+        return JSON.parse(attribute);
+      }
+      if (String(Number(attribute)) === attribute) {
+        return Number(attribute);
+      }
+      if (/^(?:\{[\s\S]*\}|\[[\s\S]*\])$/.test(attribute)) {
+        try {
+          return JSON.parse(attribute);
+        } catch (error) {
+          // A malformed JSON attribute is a string value.
+        }
+      }
+      return attribute;
+    },
+    set(element, name, value) {
+      const data = elementData.get(element) ?? new Map();
+      data.set(normalizeDataKey(name), { value });
+      elementData.set(element, data);
+    },
+    remove(element, name) {
+      const key = normalizeDataKey(name);
+      const data = elementData.get(element);
+      if (data?.has(key)) {
+        data.set(key, { value: undefined });
+      }
+    },
+    // Scope the adapter to keys previously written through this API.
+    entries(element) {
+      return elementData.get(element)?.entries() ?? [];
+    },
+  };
+
+  function clearElementData(element) {
+    const reset = (node) => {
+      const data = elementData.get(node);
+      data?.forEach((value, key) => data.set(key, { value: undefined }));
+    };
+    reset(element);
+    element.querySelectorAll('*').forEach(reset);
+  }
 
   /**
    * @typedef {object} Drupal.AjaxCommands~commandDefinition
@@ -2114,6 +2312,10 @@
    * @prop {object} [argument]
    * @prop {string} [name]
    * @prop {string} [value]
+   * @prop {boolean} [native]
+   *   Selects native semantics for a command with ambiguous legacy inputs.
+   * @prop {boolean} [legacy]
+   *   Selects the legacy implementation when explicitly attached.
    * @prop {string} [old]
    * @prop {string} [new]
    * @prop {boolean} [merge]
@@ -2137,95 +2339,95 @@
      * @param {object} response
      *   The response from the Ajax request.
      * @param {string} response.data
-     *   The data to use with the jQuery method.
+     *   The HTML to insert.
      * @param {string} [response.method]
-     *   The jQuery DOM manipulation method to be used.
+     *   The DOM insertion method.
      * @param {string} [response.selector]
-     *   An optional jQuery selector string.
+     *   An optional selector string.
      * @param {object} [response.settings]
      *   An optional array of settings that will be used.
      */
-    insert(ajax, response) {
-      // Get information from the response. If it is not there, default to
-      // our presets.
-      const $wrapper = response.selector
-        ? $(response.selector)
-        : $(ajax.wrapper);
+    insert(ajax, response, status) {
+      const selector = response.selector || ajax.wrapper;
       const method = response.method || ajax.method;
-      const effect = ajax.getEffect(response);
+      const effect = response.effect || ajax.effect;
+      if (
+        response.legacy ||
+        !Object.hasOwn(insertMethods, method) ||
+        !['none', 'fade'].includes(effect) ||
+        (ajax.getEffect && ajax.getEffect !== standardEffect) ||
+        (!response.native &&
+          (!isNativeSelector(selector) ||
+            (Drupal.ajax.commandCompatibility &&
+              (Drupal.theme.ajaxWrapperNewContent !== wrapNewContent ||
+                Drupal.theme.ajaxWrapperMultipleRootElements !==
+                  wrapMultipleRoots ||
+                Drupal.ajax.commandCompatibility.overrides(method)))))
+      ) {
+        return legacyCommand('insert', ajax, response, status);
+      }
 
-      // Apply any settings from the returned JSON if available.
+      const targets = commandTargets(selector);
       const settings = response.settings || ajax.settings || drupalSettings;
-
-      // Parse response.data into an element collection.
-      const parseHTML = (htmlString) => {
-        const fragment = document.createDocumentFragment();
-        // Create a temporary template element.
-        const template = fragment.appendChild(
-          document.createElement('template'),
-        );
-
-        // Set the innerHTML of the template to the provided HTML string.
-        template.innerHTML = htmlString;
-
-        // Return the contents of the temporary template.
-        return template.content.childNodes;
-      };
-
-      let $newContent = $(parseHTML(response.data));
-
-      // For backward compatibility, in some cases a wrapper will be added. This
-      // behavior will be removed before Drupal 9.0.0. If different behavior is
-      // needed, the theme functions can be overridden.
-      // @see https://www.drupal.org/node/2940704
-      $newContent = Drupal.theme(
+      const template = document.createElement('template');
+      template.innerHTML = response.data;
+      const nodes = Drupal.theme(
         'ajaxWrapperNewContent',
-        $newContent,
+        [...template.content.childNodes],
         ajax,
         response,
       );
-
-      // If removing content from the wrapper, detach behaviors first.
-      switch (method) {
-        case 'html':
-        case 'replaceWith':
-        case 'replaceAll':
-        case 'empty':
-        case 'remove':
-          Drupal.detachBehaviors($wrapper.get(0), settings);
-          break;
-        default:
-          break;
+      if (method === 'html' || method === 'replaceWith') {
+        // Retain the original detach context, including the missing-wrapper
+        // fallback to document.
+        Drupal.detachBehaviors(targets[0], settings);
       }
-
-      // Add the new content to the page.
-      $wrapper[method]($newContent);
-
-      // Immediately hide the new content if we're using any effects.
-      if (effect.showEffect !== 'show') {
-        $newContent.hide();
-      }
-
-      // Determine which effect to use and what content will receive the
-      // effect, then show the new content.
-      const $ajaxNewContent = $newContent.find('.ajax-new-content');
-      if ($ajaxNewContent.length) {
-        $ajaxNewContent.hide();
-        $newContent.show();
-        $ajaxNewContent[effect.showEffect](effect.showSpeed);
-      } else if (effect.showEffect !== 'show') {
-        $newContent[effect.showEffect](effect.showSpeed);
-      }
-
-      // Attach behaviors to all element nodes.
-      $newContent.each((index, element) => {
-        if (
-          element.nodeType === Node.ELEMENT_NODE &&
-          // Attach all JavaScript behaviors to the new content, if it was
-          // successfully added to the page, this condition allows
-          // `#ajax['wrapper']` to be optional.
-          document.documentElement.contains(element)
+      targets.forEach((target, index) => {
+        const children =
+          index === targets.length - 1
+            ? nodes
+            : nodes.map((node) => node.cloneNode(true));
+        let destination = target;
+        if (method === 'html' || method === 'replaceWith') {
+          if (method === 'replaceWith') {
+            clearElementData(target);
+          } else {
+            Array.from(target.children).forEach(clearElementData);
+          }
+        } else if (
+          (method === 'append' || method === 'prepend') &&
+          target.localName === 'table' &&
+          children[0]?.localName === 'tr'
         ) {
+          destination = target.tBodies[0] ?? target;
+        }
+        insertMethods[method](destination, children);
+      });
+      const elements = nodes.filter(
+        (node) => node.nodeType === Node.ELEMENT_NODE,
+      );
+      // Parsed scripts are inert. Run the originals once, after inserting all
+      // targets, as the legacy insertion did. Response verification precedes
+      // this command in receiveResponse().
+      elements.forEach((element) => {
+        if (element.localName === 'script') {
+          runInsertedScript(element);
+        }
+        element.querySelectorAll('script').forEach(runInsertedScript);
+      });
+      const effectTargets = elements.flatMap((element) => [
+        ...element.querySelectorAll('.ajax-new-content'),
+      ]);
+      if (effect === 'fade') {
+        (effectTargets.length ? effectTargets : elements).forEach(
+          (fadeInElement) =>
+            fadeIn(fadeInElement, response.speed || ajax.speed),
+        );
+      } else {
+        effectTargets.forEach((element) => fadeIn(element, 0));
+      }
+      elements.forEach((element) => {
+        if (element.isConnected) {
           Drupal.attachBehaviors(element, settings);
         }
       });
@@ -2239,19 +2441,28 @@
      * @param {object} response
      *   The response from the Ajax request.
      * @param {string} response.selector
-     *   A jQuery selector string.
+     *   A selector string.
      * @param {object} [response.settings]
      *   An optional array of settings that will be used.
      * @param {number} [status]
      *   The XMLHttpRequest status.
      */
     remove(ajax, response, status) {
+      if (
+        response.legacy ||
+        (!response.native &&
+          (!isNativeSelector(response.selector) ||
+            Drupal.ajax.commandCompatibility?.overrides('remove')))
+      ) {
+        return legacyCommand('remove', ajax, response, status);
+      }
       const settings = response.settings || ajax.settings || drupalSettings;
-      $(response.selector)
-        .each(function () {
-          Drupal.detachBehaviors(this, settings);
-        })
-        .remove();
+      const targets = commandTargets(response.selector);
+      targets.forEach((element) => Drupal.detachBehaviors(element, settings));
+      targets.forEach((element) => {
+        clearElementData(element);
+        element.remove();
+      });
     },
 
     /**
@@ -2262,7 +2473,7 @@
      * @param {object} response
      *   The JSON response object from the Ajax request.
      * @param {string} response.selector
-     *   A jQuery selector string.
+     *   A selector string.
      * @param {string} [response.asterisk]
      *   An optional CSS selector. If specified, an asterisk will be
      *   appended to the HTML inside the provided selector.
@@ -2270,18 +2481,34 @@
      *   The request status.
      */
     changed(ajax, response, status) {
-      const $element = $(response.selector);
-      if (!$element.hasClass('ajax-changed')) {
-        $element.addClass('ajax-changed');
-        if (response.asterisk) {
-          $element
-            .find(response.asterisk)
-            .append(
-              ` <abbr class="ajax-changed" title="${Drupal.t(
-                'Changed',
-              )}">*</abbr> `,
-            );
-        }
+      if (
+        response.legacy ||
+        (!response.native &&
+          (!isNativeSelector(response.selector) ||
+            !isNativeSelector(response.asterisk)))
+      ) {
+        return legacyCommand('changed', ajax, response, status);
+      }
+      const targets = commandTargets(response.selector);
+      if (
+        !targets.some((element) => element.classList.contains('ajax-changed'))
+      ) {
+        const markers = new Set();
+        targets.forEach((element) => {
+          element.classList.add('ajax-changed');
+          if (response.asterisk) {
+            element
+              .querySelectorAll(response.asterisk)
+              .forEach((marker) => markers.add(marker));
+          }
+        });
+        markers.forEach((marker) => {
+          const abbr = document.createElement('abbr');
+          abbr.className = 'ajax-changed';
+          abbr.title = Drupal.t('Changed');
+          abbr.textContent = '*';
+          marker.append(' ', abbr, ' ');
+        });
       }
     },
 
@@ -2338,22 +2565,49 @@
     },
 
     /**
-     * Command to provide the jQuery css() function.
+     * Command to set inline CSS properties.
      *
      * @param {Drupal.Ajax} [ajax]
      *   {@link Drupal.Ajax} object created by {@link Drupal.ajax}.
      * @param {object} response
      *   The response from the Ajax request.
      * @param {string} response.selector
-     *   A jQuery selector string.
+     *   A selector string.
      * @param {object} response.argument
      *   An array of key/value pairs to set in the CSS for the selector.
      * @param {number} [status]
      *   The XMLHttpRequest status.
      */
     css(ajax, response, status) {
-      // eslint-disable-next-line no-jquery/no-css
-      $(response.selector).css(response.argument);
+      if (response.legacy || !response.native) {
+        return legacyCommand('css', ajax, response, status);
+      }
+      const properties = Object.entries(response.argument || {});
+      if (
+        properties.some(
+          ([, value]) => typeof value === 'string' && /^[+-]=/.test(value),
+        )
+      ) {
+        return legacyCommand('css', ajax, response, status);
+      }
+      commandTargets(response.selector).forEach(({ style }) => {
+        properties.forEach(([name, value]) => {
+          if (value == null || Number.isNaN(value)) {
+            return;
+          }
+          const property = name.startsWith('--')
+            ? name
+            : name
+                .replace(/[A-Z]/g, '-$&')
+                .toLowerCase()
+                .replace(/^ms-/, '-ms-');
+          const units =
+            typeof value === 'number' && pixelProperties.test(property)
+              ? 'px'
+              : '';
+          style.setProperty(property, `${value}${units}`);
+        });
+      });
     },
 
     /**
@@ -2394,14 +2648,14 @@
       }
 
       if (response.merge) {
-        $.extend(true, drupalSettings, response.settings);
+        extendDeep(drupalSettings, response.settings);
       } else {
         ajax.settings = response.settings;
       }
     },
 
     /**
-     * Command to attach data using jQuery's data API.
+     * Command to attach data to an element.
      *
      * @param {Drupal.Ajax} [ajax]
      *   {@link Drupal.Ajax} object created by {@link Drupal.ajax}.
@@ -2411,14 +2665,19 @@
      *   The name or key (in the key value pair) of the data attached to this
      *   selector.
      * @param {string} response.selector
-     *   A jQuery selector string.
+     *   A selector string.
      * @param {string|object} response.value
      *   The value of to be attached.
      * @param {number} [status]
      *   The XMLHttpRequest status.
      */
     data(ajax, response, status) {
-      $(response.selector).data(response.name, response.value);
+      if (response.legacy || !response.native) {
+        return legacyCommand('data', ajax, response, status);
+      }
+      commandTargets(response.selector).forEach((element) => {
+        Drupal.ajax.elementData.set(element, response.name, response.value);
+      });
     },
 
     /**
@@ -2474,13 +2733,61 @@
      * @param {string} response.method
      *   The jQuery method to invoke.
      * @param {string} response.selector
-     *   A jQuery selector string.
+     *   A selector string.
      * @param {number} [status]
      *   The XMLHttpRequest status.
      */
     invoke(ajax, response, status) {
-      const $element = $(response.selector);
-      $element[response.method](...response.args);
+      return legacyCommand('invoke', ajax, response, status);
+    },
+
+    /**
+     * Focuses each matched element in document order.
+     */
+    focus(ajax, response, status) {
+      commandTargets(response.selector).forEach((element) => element.focus());
+    },
+
+    /**
+     * Sets the value of each matched form control.
+     */
+    setValue(ajax, response, status) {
+      commandTargets(response.selector).forEach((element) => {
+        element.value = response.value;
+      });
+    },
+
+    /**
+     * Dispatches a bubbling, cancelable event on each matched element.
+     */
+    dispatchEvent(ajax, response, status) {
+      commandTargets(response.selector).forEach((element) =>
+        element.dispatchEvent(
+          new Event(response.event, { bubbles: true, cancelable: true }),
+        ),
+      );
+    },
+
+    /**
+     * Applies a class state on each matched element.
+     */
+    toggleClass(ajax, response, status) {
+      commandTargets(response.selector).forEach((element) =>
+        element.classList.toggle(response.className, response.enabled),
+      );
+    },
+
+    /**
+     * Sets an attribute, or removes it when the value is null.
+     */
+    setAttribute(ajax, response, status) {
+      commandTargets(response.selector).forEach((element) => {
+        if (response.value === null) {
+          element.removeAttribute(response.name);
+        } else {
+          element.setAttribute(response.name, response.value);
+        }
+      });
     },
 
     /**
@@ -2491,17 +2798,25 @@
      * @param {object} response
      *   The response from the Ajax request.
      * @param {string} response.selector
-     *   A jQuery selector string.
+     *   A selector string.
      * @param {number} [status]
      *   The XMLHttpRequest status.
      */
     restripe(ajax, response, status) {
-      // Resolve legacy selectors as before. Include rows of the selected
-      // tables, with or without a tbody, and skip rows of nested tables.
-      const rows = $(response.selector)
-        .find('> tbody > tr, > tr')
-        .toArray()
-        .filter(Drupal.elementIsVisible);
+      // Include rows with or without a tbody. Skip nested tables.
+      const selector = ':scope > tbody > tr, :scope > tr';
+      const rows = (
+        !response.legacy &&
+        (response.native || isNativeSelector(response.selector))
+          ? [
+              ...new Set(
+                commandTargets(response.selector).flatMap((table) => [
+                  ...table.querySelectorAll(selector),
+                ]),
+              ),
+            ]
+          : legacyCommand('restripe', ajax, response, status)
+      ).filter(Drupal.elementIsVisible);
       rows.forEach((row) => row.classList.remove('odd', 'even'));
 
       // Row indices are zero-based, but the first visible row is odd.

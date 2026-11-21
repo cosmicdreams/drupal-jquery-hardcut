@@ -27,6 +27,9 @@ class AjaxFormsTestCommandsForm extends FormBase {
    */
   public function buildForm(array $form, FormStateInterface $form_state) {
     $form = [];
+    if (\Drupal::request()->query->getBoolean('legacy_commands')) {
+      $form['#attached']['library'][] = 'core/drupal.ajax.jquery';
+    }
 
     // Shows the 'after' command with a callback generating commands.
     $form['after_command_example'] = [

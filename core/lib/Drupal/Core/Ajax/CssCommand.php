@@ -3,15 +3,13 @@
 namespace Drupal\Core\Ajax;
 
 /**
- * An AJAX command for calling the jQuery css() method.
+ * An AJAX command for setting inline CSS properties.
  *
- * The 'css' command will instruct the client to use the jQuery css() method to
- * apply the CSS arguments to elements matched by the given selector.
+ * Set $native to TRUE to use CSS selectors and absolute property values.
+ * Relative values and the default jQuery CSS behavior require the
+ * core/drupal.ajax.jquery compatibility library.
  *
- * This command is implemented by Drupal.AjaxCommands.prototype.css() defined
- * in misc/ajax.js.
- *
- * @see http://docs.jquery.com/CSS/css#properties
+ * @see Drupal.AjaxCommands.prototype.css()
  *
  * @ingroup ajax
  */
@@ -24,10 +22,13 @@ class CssCommand implements CommandInterface {
    *   A CSS selector for elements to which the CSS will be applied.
    * @param array $css
    *   An array of CSS property/value pairs to set.
+   * @param bool $native
+   *   Whether to use native selectors and command semantics.
    */
   public function __construct(
     protected $selector,
     protected array $css = [],
+    protected bool $native = FALSE,
   ) {
   }
 
@@ -55,7 +56,7 @@ class CssCommand implements CommandInterface {
       'command' => 'css',
       'selector' => $this->selector,
       'argument' => $this->css,
-    ];
+    ] + ($this->native ? ['native' => TRUE] : []);
   }
 
 }

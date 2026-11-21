@@ -998,6 +998,19 @@
     return ajaxTransport.apply(this, args);
   };
 
+  // Record the original methods before dependent scripts can override them.
+  const originalDomMethods = new Map(
+    [
+      'html',
+      'replaceWith',
+      'append',
+      'prepend',
+      'before',
+      'after',
+      'remove',
+    ].map((method) => [method, jQuery.fn[method]]),
+  );
+
   const wrappedForms = new WeakMap();
 
   /**
@@ -1023,6 +1036,8 @@
       native: (xhr) => nativeRequests.get(xhr) || xhr,
       received: (xhr) => received.add(xhr),
       defaults: () => jQuery.ajaxSettings,
+      hasDomMethodOverride: (method) =>
+        originalDomMethods.get(method) !== jQuery.fn[method],
       wrap: (form) => jQuery(form),
       trigger(form, type, args) {
         jQuery(form).trigger(type, args);
