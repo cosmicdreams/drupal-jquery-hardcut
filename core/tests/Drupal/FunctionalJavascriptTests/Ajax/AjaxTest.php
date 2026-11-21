@@ -1889,7 +1889,10 @@ const textfield2 = document.querySelector('#edit-textfield-2');
 textfield2.value = 'Llamas say hi';
 textfield2.dispatchEvent(new Event('change', { bubbles: true }));
 JS);
-    $this->assertTrue($this->getSession()->wait(10000, "document.activeElement.id === 'edit-textfield-2'"));
+    // Wait for the replaced form group to finish attaching its behaviors
+    // before trying to change another field in that group.
+    $this->assertSession()->assertWaitOnAjaxRequest();
+    $this->assertSame('edit-textfield-2', $this->getSession()->evaluateScript('document.activeElement.id'));
 
     // Test textfield with 'change' event.
     $textfield3->focus();
