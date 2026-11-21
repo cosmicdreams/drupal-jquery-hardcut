@@ -5,6 +5,14 @@
 
 ((Drupal) => {
   const bindings = new Set();
+  const pendingRemoval = new Set();
+  const removalObserver = new MutationObserver(() => {
+    pendingRemoval.forEach((binding) => {
+      if (!binding.target.isConnected) {
+        binding.stop();
+      }
+    });
+  });
 
   /**
    * Binds a form interaction with an optional delegation selector.
@@ -22,6 +30,9 @@
       stop() {
         target.removeEventListener(type, handle);
         bindings.delete(binding);
+        if (pendingRemoval.delete(binding) && !pendingRemoval.size) {
+          removalObserver.disconnect();
+        }
         unregister();
       },
     };
@@ -55,19 +66,20 @@
       if (trigger !== 'unload' || context.nodeType !== Node.ELEMENT_NODE) {
         return;
       }
-      const contained = Array.from(bindings).filter(
-        ({ target }) => target instanceof Node && context.contains(target),
-      );
-      if (contained.length) {
-        // Drupal detaches before updating the DOM. Check after an Ajax insert
-        // so a wrapper whose contents were replaced keeps its own listeners.
-        queueMicrotask(() => {
-          contained.forEach((binding) => {
-            if (!binding.target.isConnected) {
-              binding.stop();
-            }
-          });
-        });
+      // Detach runs before a DOM update. Keep listeners on any retained wrapper
+      // and release removed targets even when a swap is delayed.
+      bindings.forEach((binding) => {
+        const { target } = binding;
+        if (target instanceof Node && context.contains(target)) {
+          if (target.isConnected) {
+            pendingRemoval.add(binding);
+          } else {
+            binding.stop();
+          }
+        }
+      });
+      if (pendingRemoval.size) {
+        removalObserver.observe(document, { childList: true, subtree: true });
       }
     },
   };

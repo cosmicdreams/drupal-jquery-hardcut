@@ -379,6 +379,9 @@ class FormGroupingElementsTest extends WebDriverTestBase {
           snapshot();
 
           Drupal.detachBehaviors(region, drupalSettings, 'unload');
+          // htmx can defer the swap past the current task.
+          await new Promise((resolve) => setTimeout(resolve, 0));
+          snapshot();
           region.remove();
           await Promise.resolve();
           snapshot();
@@ -394,7 +397,13 @@ class FormGroupingElementsTest extends WebDriverTestBase {
       JS);
     $this->assertJsCondition('Boolean(window.formEventDetachResult)');
     $this->assertSame([
-      [[0, 1, 2, 3, 4, 5], [0, 1, 2, 3, 4, 5], [0, 2, 3, 4, 5], [2, 3, 4, 5]],
+      [
+        [0, 1, 2, 3, 4, 5],
+        [0, 1, 2, 3, 4, 5],
+        [0, 2, 3, 4, 5],
+        [0, 2, 3, 4, 5],
+        [2, 3, 4, 5],
+      ],
       [2, 3, 4, 5],
     ], $session->evaluateScript('window.formEventDetachResult'));
   }
