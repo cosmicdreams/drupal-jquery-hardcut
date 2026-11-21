@@ -86,7 +86,11 @@ final class NativeStatesPublicationTest extends WebDriverTestBase {
     $native = $assert->elementExists('css', '#states-test-native');
     $this->assertFalse($native->isVisible());
     $this->assertSame('undefined', $session->evaluateScript('typeof window.jQuery'));
-    $this->assertSame([], $session->evaluateScript("performance.getEntriesByType('resource').filter(({ name }) => name.includes('/assets/vendor/jquery/') || new URL(name).pathname.endsWith('/misc/jquery.states.bc.js'))"));
+    $this->assertSame([], $session->evaluateScript(<<<'JS'
+      performance.getEntriesByType('resource')
+        .map(({ name }) => new URL(name).pathname)
+        .filter((path) => /\/assets\/vendor\/jquery\/|\/misc\/(jquery\.states\.bc|states\.jquery)\.js$/.test(path))
+      JS));
     $session->executeScript(<<<'JS'
       document.querySelector('input[name="choice[1]"]').classList.add('colon:choice');
       const dependent = document.querySelector('#states-test-native').cloneNode(true);
