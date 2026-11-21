@@ -188,20 +188,61 @@
       resizeRefreshes.add(event);
       jquery(window).trigger(event);
     });
-    jquery(window).on('resize.tableresponsive', (event) => {
-      if (
-        event.isTrigger &&
-        !event.originalEvent &&
-        !resizeRefreshes.has(event)
-      ) {
-        warn('The synthetic resize.tableresponsive trigger');
-        const nativeEvent = new Event('resize', { cancelable: true });
-        events.set(nativeEvent, event);
-        nativeEvents.set(event, nativeEvent);
-        TableResponsive.tables.forEach((table) =>
-          TableResponsive.resizeHandlers.get(table)(nativeEvent),
-        );
+    const subscriptions = new Map();
+    const bindings = new WeakMap();
+    const windowEvents = jquery(window);
+    const resize = jquery.event.special.resize ?? {};
+    jquery.event.special.resize = resize;
+    const previousRemove = resize.remove;
+    resize.remove = function (handle) {
+      previousRemove?.call(this, handle);
+      const binding = bindings.get(handle.handler);
+      if (binding) {
+        bindings.delete(handle.handler);
+        subscriptions.delete(binding);
+        warn('The legacy resize.tableresponsive removal');
+        binding.stop();
       }
+    };
+
+    window.Drupal.eventBindings.observe({
+      add(binding) {
+        if (
+          binding.target !== window ||
+          binding.type !== 'resize' ||
+          binding.namespace !== 'tableresponsive'
+        ) {
+          return;
+        }
+        const handler = (event) => {
+          if (
+            !event.isTrigger ||
+            event.originalEvent ||
+            resizeRefreshes.has(event)
+          ) {
+            return;
+          }
+          warn('The synthetic resize.tableresponsive trigger');
+          let nativeEvent = nativeEvents.get(event);
+          if (!nativeEvent) {
+            nativeEvent = new Event('resize', { cancelable: true });
+            nativeEvents.set(event, nativeEvent);
+            events.set(nativeEvent, event);
+          }
+          binding.listener(nativeEvent);
+        };
+        bindings.set(handler, binding);
+        subscriptions.set(binding, handler);
+        windowEvents.on('resize.tableresponsive', handler);
+      },
+      remove(binding) {
+        const handler = subscriptions.get(binding);
+        if (handler) {
+          bindings.delete(handler);
+          subscriptions.delete(binding);
+          windowEvents.off('resize.tableresponsive', handler);
+        }
+      },
     });
   }
 

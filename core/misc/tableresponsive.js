@@ -47,6 +47,17 @@
     const evaluate = this.eventhandlerEvaluateColumnVisibility.bind(this);
     window.addEventListener('resize', evaluate);
     TableResponsive.resizeHandlers.set(this, evaluate);
+    const unregister = Drupal.eventBindings.register({
+      target: window,
+      type: 'resize',
+      namespace: 'tableresponsive',
+      listener: evaluate,
+      stop: () => {
+        window.removeEventListener('resize', evaluate);
+        TableResponsive.resizeHandlers.delete(this);
+        unregister();
+      },
+    });
   }
 
   /**
@@ -92,7 +103,7 @@
   function refreshToggles() {
     const event = new Event('resize');
     TableResponsive.tables.forEach((table) =>
-      TableResponsive.resizeHandlers.get(table)(event),
+      TableResponsive.resizeHandlers.get(table)?.(event),
     );
     window.dispatchEvent(new Event('drupal:tableresponsive-refreshed'));
   }

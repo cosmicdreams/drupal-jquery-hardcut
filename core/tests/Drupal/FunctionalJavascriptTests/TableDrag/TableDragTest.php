@@ -183,6 +183,8 @@ class TableDragTest extends WebDriverTestBase {
       'Drupal.tableDrag#$table',
       'Drupal.tableDrag#$toggleWeightButton',
       'The legacy event argument for pointerCoords',
+      'The synthetic resize.tableresponsive trigger',
+      'The legacy resize.tableresponsive removal',
     ];
     foreach ($contracts as $contract) {
       $this->expectUserDeprecationMessage("Javascript Deprecation: $contract is deprecated in drupal:12.0.0 and is removed from drupal:13.0.0. Use the native table or row member, or native theme/interaction callback.");
@@ -229,10 +231,28 @@ class TableDragTest extends WebDriverTestBase {
       jQuery(window).on('resize.tableresponsive', () => { resizeRefreshes += 1; });
       const responsiveTable = document.createElement('table');
       responsiveTable.classList.add('responsive-enabled');
+      responsiveTable.innerHTML = '<thead><tr><th class="priority-low" style="display: none">Detail</th></tr></thead>';
       document.body.append(responsiveTable);
       Drupal.behaviors.tableResponsive.attach(document);
+      const refreshesAfterAttach = resizeRefreshes;
+
+      const responsive = Drupal.TableResponsive.tables.find(({ table }) => table === responsiveTable);
+      const header = responsive.headers[0];
+      const visible = () => responsive.link.style.display !== 'none';
+      const initialVisibility = visible();
+      header.style.display = 'table-cell';
+      jQuery(window).trigger('resize.tableresponsive');
+      const syntheticResizeHidToggle = !visible();
+      header.style.display = 'none';
+      window.dispatchEvent(new Event('resize'));
+      const nativeResizeShowedToggle = visible();
+      jQuery(window).off('resize.tableresponsive');
+      header.style.display = 'table-cell';
+      window.dispatchEvent(new Event('resize'));
+      const removedResizeLeftToggleVisible = visible();
       window.readTableDrag = () => [
-        members, callbacks, drag.pointerCoords(pointer), resizeRefreshes,
+        members, callbacks, drag.pointerCoords(pointer), refreshesAfterAttach,
+        [initialVisibility, syntheticResizeHidToggle, nativeResizeShowedToggle, removedResizeLeftToggleVisible],
         nativeEvents.map((event) => event.detail.displayWeight),
         legacyEvents.map(({ displayWeight }) => displayWeight),
         nativeEvents.every((event, index) => event === legacyEvents[index]?.event &&
@@ -243,7 +263,7 @@ class TableDragTest extends WebDriverTestBase {
     $this->findWeightsToggle('Show row weights')->click();
     $this->findWeightsToggle('Hide row weights')->click();
     $this->assertSame(
-      [TRUE, TRUE, TRUE, 1, [TRUE, FALSE], [TRUE, FALSE], TRUE],
+      [TRUE, TRUE, TRUE, 1, [TRUE, TRUE, TRUE, TRUE], [TRUE, FALSE], [TRUE, FALSE], TRUE],
       $session->evaluateScript('window.readTableDrag()'),
     );
   }
