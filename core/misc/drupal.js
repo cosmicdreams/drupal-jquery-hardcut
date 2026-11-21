@@ -204,6 +204,35 @@ window.Drupal = { behaviors: {}, locale: {} };
         eventPublicationObservers.delete(prepare);
       };
     },
+
+    /**
+     * Reports bindings that a dedicated adapter delivers itself.
+     *
+     * Optional. An adapter for one jQuery instance may define this member.
+     * The jQuery bridge reserves no slot for a binding it reports.
+     * @name Drupal.eventBindings.ownsLegacyEvents
+     * @param {object} instance
+     *   The connected jQuery instance.
+     * @param {object} binding
+     *   The owned binding descriptor.
+     * @return {boolean}
+     *   Whether the adapter delivers the binding on that instance.
+     * @internal
+     */
+
+    /**
+     * Observes connected jQuery instances and subsequent changes.
+     *
+     * Defined by the jQuery bridge. Each observer receives connect(instance)
+     * for current and later connections, after the bridge has reserved that
+     * instance's slots, and disconnect(instance) before the bridge stops.
+     * @name Drupal.eventBindings.observeLegacyConnections
+     * @param {object} observer
+     *   An adapter with connect and disconnect methods for one instance.
+     * @return {() => void}
+     *   Stops observing and disconnects the adapter from every instance.
+     * @internal
+     */
   };
 
   /**
