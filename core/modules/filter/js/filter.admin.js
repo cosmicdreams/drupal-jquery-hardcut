@@ -3,70 +3,51 @@
  * Attaches administration-specific behavior for the Filter module.
  */
 
-(function ($, Drupal) {
+((Drupal) => {
   /**
    * Displays and updates the status of filters on the admin page.
-   *
-   * @type {Drupal~behavior}
-   *
-   * @prop {Drupal~behaviorAttach} attach
-   *   Attaches behaviors to the filter admin view.
    */
   Drupal.behaviors.filterStatus = {
-    attach(context, settings) {
-      const $context = $(context);
+    attach(context) {
       once(
         'filter-status',
         '#filters-status-wrapper input.form-checkbox',
         context,
       ).forEach((checkbox) => {
-        const $checkbox = $(checkbox);
-        // Retrieve the tabledrag row belonging to this filter.
-        const $row = $context
-          .find(`#${$checkbox.attr('id').replace(/-status$/, '-weight')}`)
-          .closest('tr');
-        // Retrieve the vertical tab belonging to this filter.
-        const $filterSettings = $context.find(
-          `[data-drupal-selector='${$checkbox
-            .attr('id')
-            .replace(/-status$/, '-settings')}']`,
+        const row = context
+          .querySelector(
+            `#${CSS.escape(checkbox.id.replace(/-status$/, '-weight'))}`,
+          )
+          ?.closest('tr');
+        const settingsSelector = checkbox.id.replace(/-status$/, '-settings');
+        const pane = context.querySelector(
+          `[data-drupal-selector="${CSS.escape(settingsSelector)}"]`,
         );
-        const filterSettingsTab = $filterSettings.data('verticalTab');
+        const tab = pane && Drupal.verticalTabs?.get(pane);
 
-        // Bind click handler to this checkbox to conditionally show and hide
-        // the filter's tableDrag row and vertical tab pane.
-        $checkbox.on('click.filterUpdate', () => {
-          if (checkbox.checked) {
-            $row.show();
-            if (filterSettingsTab) {
-              filterSettingsTab.tabShow().updateSummary();
-            } else {
-              // On very narrow viewports, Vertical Tabs are disabled.
-              $filterSettings.show();
-            }
-          } else {
-            $row.hide();
-            if (filterSettingsTab) {
-              filterSettingsTab.tabHide().updateSummary();
-            } else {
-              // On very narrow viewports, Vertical Tabs are disabled.
-              $filterSettings.hide();
-            }
+        const update = () => {
+          const display = checkbox.checked ? '' : 'none';
+          if (row) {
+            row.style.display = display;
           }
-          // Restripe table after toggling visibility of table row.
+          if (tab) {
+            const activeTab = checkbox.checked ? tab.tabShow() : tab.tabHide();
+            activeTab.updateSummary();
+          } else if (pane) {
+            // On narrow viewports the settings are ordinary details elements.
+            pane.style.display = display;
+          }
           Drupal.tableDrag['filter-order'].restripeTable();
-        });
+        };
 
-        // Attach summary for configurable filters (only for screen readers).
-        if (filterSettingsTab) {
-          Drupal.form.setSummary(filterSettingsTab.details[0], () =>
+        Drupal.form.listen(checkbox, 'click', 'filterUpdate', update);
+        if (tab) {
+          Drupal.form.setSummary(pane, () =>
             checkbox.checked ? Drupal.t('Enabled') : Drupal.t('Disabled'),
           );
         }
-
-        // Trigger our bound click handler to update elements to initial state.
-        $checkbox.triggerHandler('click.filterUpdate');
+        update();
       });
     },
   };
-})(jQuery, Drupal);
+})(Drupal);

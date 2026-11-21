@@ -128,6 +128,7 @@
                 target: { value: event.target },
                 key: { value: event.key },
                 shiftKey: { value: event.shiftKey },
+                keyCode: { value: event.keyCode },
               });
               if (event.isDefaultPrevented()) {
                 native.preventDefault();
@@ -330,6 +331,85 @@
   }
 
   /**
+   * Keeps legacy tab collections, constructor inputs and theme overrides.
+   */
+  function installVerticalTabs() {
+    const { Drupal } = window;
+    const NativeTab = Drupal.verticalTab;
+    const migration =
+      'Use Drupal.verticalTabs.get(pane) and native tab elements.';
+    const markup = ['item', 'link', 'title', 'summary'];
+    [...markup, 'details'].forEach((name) => {
+      collectionAccessor(
+        NativeTab.prototype,
+        'Drupal.verticalTab',
+        name,
+        `${name}Element`,
+        migration,
+      );
+    });
+
+    Drupal.verticalTab = function (settings) {
+      if (!settings.detailsElement) {
+        const { details, ...remaining } = settings;
+        warn('The jQuery input to Drupal.verticalTab', migration);
+        settings = { ...remaining, detailsElement: jquery(details)[0] };
+      }
+      return Reflect.construct(NativeTab, [settings], new.target || NativeTab);
+    };
+    Drupal.verticalTab.prototype = NativeTab.prototype;
+
+    document.addEventListener('drupal:vertical-tab-created', (event) => {
+      jquery(event.target).data('verticalTab', event.detail);
+    });
+    document.querySelectorAll('.vertical-tabs__pane').forEach((pane) => {
+      const tab = Drupal.verticalTabs.get(pane);
+      if (tab) {
+        jquery(pane).data('verticalTab', tab);
+      }
+    });
+
+    const nativeMarkup = Drupal.verticalTabs.createMarkup;
+    const themeMigration =
+      'Use Drupal.theme.verticalTabElements with native elements.';
+    const legacyTheme = (settings) => {
+      warn('Drupal.theme.verticalTab', themeMigration);
+      const { details, ...remaining } = settings;
+      const elements = nativeMarkup({
+        ...remaining,
+        detailsElement: jquery(details)[0],
+      });
+      return Object.fromEntries(
+        markup.map((name) => [name, jquery(elements[`${name}Element`])]),
+      );
+    };
+    let override = Drupal.theme.verticalTab;
+    Object.defineProperty(Drupal.theme, 'verticalTab', {
+      configurable: true,
+      get() {
+        return override || legacyTheme;
+      },
+      set(callback) {
+        override = callback === legacyTheme ? undefined : callback;
+      },
+    });
+    Drupal.verticalTabs.createMarkup = (settings) => {
+      if (!override) {
+        return nativeMarkup(settings);
+      }
+      warn('Drupal.theme.verticalTab', themeMigration);
+      const { detailsElement, ...remaining } = settings;
+      const result = override({
+        ...remaining,
+        details: jquery(detailsElement),
+      });
+      return Object.fromEntries(
+        markup.map((name) => [`${name}Element`, jquery(result[name])[0]]),
+      );
+    };
+  }
+
+  /**
    * Supplies the collection accessors used by legacy details overrides.
    */
   function installDetailsMembers() {
@@ -451,6 +531,15 @@
     document.addEventListener('drupal:form-ready', installSummaryMethods, {
       once: true,
     });
+  }
+  if (window.Drupal?.verticalTabs) {
+    installVerticalTabs();
+  } else {
+    document.addEventListener(
+      'drupal:vertical-tabs-ready',
+      installVerticalTabs,
+      { once: true },
+    );
   }
   if (window.Drupal?.DetailsSummarizedContent) {
     installDetailsMembers();
