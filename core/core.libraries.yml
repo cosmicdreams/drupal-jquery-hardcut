@@ -698,6 +698,7 @@ jquery:
     misc/jquery.drupal-ajax-bc.js: { preprocess: false, minified: false }
 
 internal.jquery.form:
+  # Drupal maintains this modified copy of jQuery Form.
   version: "4.3.0"
   deprecated: "%library_id% is deprecated in drupal:12.0.0 and is removed from drupal:13.0.0. Use Drupal AJAX with native form options, or supply your own form plugin. See https://www.drupal.org/node/CHANGE_RECORD."
   license:
