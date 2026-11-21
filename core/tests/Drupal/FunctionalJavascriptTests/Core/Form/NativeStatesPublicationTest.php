@@ -291,6 +291,8 @@ final class NativeStatesPublicationTest extends WebDriverTestBase {
       const visible = () => field.closest('.js-form-item').style.display !== 'none';
       const jquery = window.jQuery;
       const trace = [];
+      const notices = [];
+      Drupal.deprecationError = ({ message }) => notices.push(message);
       const send = (type, value) => jquery(field).trigger({ type, value, trigger: true });
 
       jquery(document).on('state:visible.statesFixture', '[name="dependent"]', (event) => {
@@ -306,10 +308,15 @@ final class NativeStatesPublicationTest extends WebDriverTestBase {
       trace.push(visible());
       send('state:visible', true);
       trace.push(visible());
+      send('state:visible', true);
       window.stateOrder = trace;
+      window.stateOrderNotices = notices;
       JS);
 
-    $this->assertSame([FALSE, FALSE, FALSE, FALSE, TRUE, TRUE], $session->evaluateScript('window.stateOrder'));
+    $this->assertSame([FALSE, FALSE, FALSE, FALSE, TRUE, TRUE, TRUE], $session->evaluateScript('window.stateOrder'));
+    $this->assertSame([
+      'The jQuery synthetic trigger for state:visible is deprecated in drupal:12.0.0 and is removed from drupal:13.0.0. Use the same native event name and its documented payload. See https://www.drupal.org/node/CHANGE_RECORD.',
+    ], $session->evaluateScript('window.stateOrderNotices'));
   }
 
 }
