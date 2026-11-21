@@ -79,6 +79,22 @@ class JavascriptStatesTest extends WebDriverTestBase {
   }
 
   /**
+   * Tests a number control's native change event.
+   */
+  public function testNumberTrigger(): void {
+    $this->drupalGet('form-test/javascript-states-form');
+    $dependent = $this->assertSession()->elementExists('css', '#edit-item-visible-when-number-trigger-filled-by-spinner');
+    $this->assertFalse($dependent->isVisible());
+
+    $this->getSession()->executeScript(<<<'JS'
+      const number = document.querySelector('input[name="number_trigger"]');
+      number.stepUp();
+      number.dispatchEvent(new Event('change', { bubbles: true }));
+      JS);
+    $this->assertTrue($dependent->isVisible());
+  }
+
+  /**
    * Tests states of elements triggered by a checkbox element.
    */
   protected function doCheckboxTriggerTests(): void {

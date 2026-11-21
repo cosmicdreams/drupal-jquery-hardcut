@@ -50,7 +50,10 @@ final class NativeStatesPublicationTest extends WebDriverTestBase {
       }
       jQuery('select[name="choice"]').val('show').trigger('change');
       window.statePublications = [
-        native.map((event) => [event.type, event.target.name, event.detail]),
+        native.map((event) => [
+          event.type, event.target.name, event.detail.value,
+          event.detail.oldValue ?? null, event.detail.trigger ?? null,
+        ]),
         legacy.map((event) => [
           event.type, event.target.name, event.value, event.oldValue ?? null,
           event.trigger ?? null, native.includes(event.originalEvent),
@@ -62,8 +65,8 @@ final class NativeStatesPublicationTest extends WebDriverTestBase {
     $this->assertTrue($field->isVisible());
     $this->assertSame([
       [
-        ['state:visible', 'dependent', ['value' => TRUE, 'trigger' => TRUE]],
-        ['state:value', 'choice', ['value' => 'show', 'oldValue' => 'hide']],
+        ['state:visible', 'dependent', TRUE, NULL, TRUE],
+        ['state:value', 'choice', 'show', 'hide', NULL],
       ],
       [
         ['state:visible', 'dependent', TRUE, NULL, TRUE, TRUE],
