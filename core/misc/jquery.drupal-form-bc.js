@@ -17,6 +17,9 @@
   const warned = new Set();
   const legacyEvents = new WeakMap();
   const nativeDeliveries = new WeakMap();
+  // Maps a native event to the entries whose core listener left this dispatch
+  // to the slot.
+  const slotDeliveries = new WeakMap();
   const dispatchResets = new Set();
   const bindingChecks = new WeakMap();
   // Maps each connected instance to the function that removes its adapter.
@@ -171,9 +174,14 @@
   function resetDeliveriesOnDispatch(type) {
     if (!dispatchResets.has(type)) {
       dispatchResets.add(type);
-      window.addEventListener(type, (event) => nativeDeliveries.delete(event), {
-        capture: true,
-      });
+      window.addEventListener(
+        type,
+        (event) => {
+          nativeDeliveries.delete(event);
+          slotDeliveries.delete(event);
+        },
+        { capture: true },
+      );
     }
   }
 
@@ -401,12 +409,20 @@
         };
         entry.deliver = function (event, fragmentTarget) {
           if (!event.isTrigger) {
+            // A handler queued ahead of the slot may leave jQuery's lists
+            // before the slot runs, such as one bound with .one(). Core's
+            // listener already left this event to the slot, and the pinned
+            // queue still ran core, so that decision stands.
+            const leftToSlot = slotDeliveries
+              .get(event.originalEvent)
+              ?.has(entry);
             if (
-              hasNativeOrder(entry) ||
+              (!leftToSlot &&
+                (hasNativeOrder(entry) ||
+                  !hasExternalHandler(target, bindType))) ||
               Drupal.eventBindings.isForeignDefaultAction?.(
                 event.originalEvent,
               ) ||
-              !hasExternalHandler(target, bindType) ||
               (event.originalEvent &&
                 !claimNativeDelivery(event.originalEvent, binding))
             ) {
@@ -487,11 +503,19 @@
           if (
             !entry.attached ||
             hasNativeOrder(entry) ||
-            !hasExternalHandler(target, bindType)
+            !hasExternalHandler(target, bindType) ||
+            (bindType !== event.type && !event.isTrusted)
           ) {
+            slotDeliveries.get(event)?.delete(entry);
             return false;
           }
-          return bindType === event.type || event.isTrusted;
+          let entries = slotDeliveries.get(event);
+          if (!entries) {
+            entries = new WeakSet();
+            slotDeliveries.set(event, entries);
+          }
+          entries.add(entry);
+          return true;
         };
 
         entries.set(binding, entry);
