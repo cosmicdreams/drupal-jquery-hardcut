@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Drupal\Tests\system\FunctionalJavascript\Form;
 
+use Drupal\FunctionalJavascriptTests\JqueryCallCounterTrait;
 use Drupal\FunctionalJavascriptTests\WebDriverTestBase;
 use PHPUnit\Framework\Attributes\Group;
 use PHPUnit\Framework\Attributes\RunTestsInSeparateProcesses;
@@ -14,6 +15,8 @@ use PHPUnit\Framework\Attributes\RunTestsInSeparateProcesses;
 #[Group('Form')]
 #[RunTestsInSeparateProcesses]
 class ElementsVerticalTabsWithSummaryTest extends WebDriverTestBase {
+
+  use JqueryCallCounterTrait;
 
   /**
    * {@inheritdoc}
@@ -368,6 +371,55 @@ class ElementsVerticalTabsWithSummaryTest extends WebDriverTestBase {
       $this->assertJsCondition('Array.isArray(window.summaryPairResult)');
       $this->assertSame([[' (Pair summary)', 'Pair summary']], $session->evaluateScript('window.summaryPairResult'), "Loading mode: $mode.");
     }
+  }
+
+  /**
+   * Tests that a late jQuery load on a vertical tabs page makes no calls.
+   *
+   * Plan section 6.4: loading the bridges after core attached the tabs,
+   * switching tabs and updating a summary make no jQuery calls when nothing
+   * uses jQuery. Counting starts before the bridges load.
+   */
+  public function testLateLoadMakesNoJqueryCalls(): void {
+    $this->drupalGet('form_test/vertical-tabs-with-summary');
+    $session = $this->getSession();
+    $this->assertSame('undefined', $session->evaluateScript('typeof window.jQuery'));
+    $session->executeScript($this->jqueryCallCounter());
+    $scripts = array_column(
+      \Drupal::service('library.discovery')->getLibraryByName('core', 'jquery')['js'],
+      'data',
+    );
+    $vendor = json_encode(array_slice($scripts, 0, 1));
+    $bridges = json_encode(array_slice($scripts, 1));
+    $session->executeScript(<<<JS
+      (async () => {
+        const load = async (paths) => {
+          for (const path of paths) {
+            await new Promise((resolve, reject) => {
+              const script = document.createElement('script');
+              script.src = drupalSettings.path.baseUrl + path;
+              script.onload = resolve;
+              script.onerror = reject;
+              document.head.append(script);
+            });
+          }
+        };
+        await load($vendor);
+        jqueryCalls.start();
+        await load($bridges);
+        window.lateScriptsLoaded = true;
+      })();
+      JS);
+    $this->assertJsCondition('window.lateScriptsLoaded === true');
+    $page = $session->getPage();
+    $page->find('css', '.vertical-tabs__menu-item.last a')->click();
+    $this->assertJsCondition("document.getElementById('edit-tab2').open");
+    $page->fillField('Field 2', 'Typed');
+    $session->executeScript(<<<'JS'
+      Drupal.form.setSummary(document.getElementById('edit-tab2'), () => 'Late summary');
+      JS);
+    $this->assertSession()->elementTextEquals('css', '.vertical-tabs__menu-item.last .vertical-tabs__menu-item-summary', 'Late summary');
+    $this->assertNoJqueryCalls($session->evaluateScript('jqueryCalls.stop()'));
   }
 
 }

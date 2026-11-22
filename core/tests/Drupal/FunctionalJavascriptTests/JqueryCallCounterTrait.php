@@ -9,6 +9,7 @@ namespace Drupal\FunctionalJavascriptTests;
  *
  * Plan section 6.4 instruments jQuery dispatch, $.fn.init and selectors. A
  * mixed page with no legacy use must make none of these calls from core code.
+ * The counter also covers event construction and the data API.
  */
 trait JqueryCallCounterTrait {
 
@@ -16,8 +17,9 @@ trait JqueryCallCounterTrait {
    * Returns JavaScript that defines window.jqueryCalls.
    *
    * Call jqueryCalls.start() before the measured code and
-   * jqueryCalls.stop() after it. stop() restores the instance and returns
-   * the counts keyed by dispatch, init, find and data.
+   * jqueryCalls.stop() after it. stop() restores each member that nothing
+   * wrapped since, and returns the counts keyed by member name. A member a
+   * later script wrapped keeps the counter, which stops counting.
    *
    * @return string
    *   A JavaScript statement.
@@ -26,38 +28,41 @@ trait JqueryCallCounterTrait {
     return <<<'JS'
       window.jqueryCalls = {
         start(instance = window.jQuery) {
-          const counts = { dispatch: 0, init: 0, find: 0, data: 0 };
-          const originals = {
-            dispatch: instance.event.dispatch,
-            init: instance.fn.init,
-            find: instance.find,
-            data: instance._data,
+          const counts = {};
+          const restores = [];
+          let active = true;
+          const count = (owner, name, key, construct = false) => {
+            const original = owner[name];
+            counts[key] = 0;
+            const wrapper = function (...args) {
+              if (active) {
+                counts[key] += 1;
+              }
+              return construct
+                ? new original(...args)
+                : original.apply(this, args);
+            };
+            Object.assign(wrapper, original);
+            wrapper.prototype = original.prototype;
+            owner[name] = wrapper;
+            restores.push(() => {
+              if (owner[name] === wrapper) {
+                owner[name] = original;
+              }
+            });
           };
-          instance.event.dispatch = function (...args) {
-            counts.dispatch += 1;
-            return originals.dispatch.apply(this, args);
-          };
-          const init = function (...args) {
-            counts.init += 1;
-            return new originals.init(...args);
-          };
-          init.prototype = originals.init.prototype;
-          instance.fn.init = init;
-          const find = function (...args) {
-            counts.find += 1;
-            return originals.find.apply(this, args);
-          };
-          Object.assign(find, originals.find);
-          instance.find = find;
-          instance._data = function (...args) {
-            counts.data += 1;
-            return originals.data.apply(this, args);
-          };
+          count(instance.event, 'dispatch', 'dispatch');
+          count(instance.fn, 'init', 'init', true);
+          count(instance, 'find', 'find');
+          count(instance, '_data', '_data');
+          count(instance, 'Event', 'Event', true);
+          count(instance, 'data', 'data');
+          count(instance.fn, 'data', 'fn.data');
+          count(instance, 'hasData', 'hasData');
           this.stop = () => {
-            instance.event.dispatch = originals.dispatch;
-            instance.fn.init = originals.init;
-            instance.find = originals.find;
-            instance._data = originals.data;
+            active = false;
+            restores.forEach((restore) => restore());
+            this.stop = () => null;
             return counts;
           };
         },
@@ -78,8 +83,10 @@ trait JqueryCallCounterTrait {
    */
   protected function assertNoJqueryCalls(mixed $counts, string $message = ''): void {
     $this->assertIsArray($counts, $message);
+    $expected = array_fill_keys(['Event', '_data', 'data', 'dispatch', 'find', 'fn.data', 'hasData', 'init'], 0);
+    ksort($expected);
     ksort($counts);
-    $this->assertSame(['data' => 0, 'dispatch' => 0, 'find' => 0, 'init' => 0], $counts, $message);
+    $this->assertSame($expected, $counts, $message);
   }
 
 }
