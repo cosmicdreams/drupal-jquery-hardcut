@@ -1284,6 +1284,36 @@ class FormGroupingElementsTest extends WebDriverTestBase {
   }
 
   /**
+   * Tests States behind another core slot and a form binding.
+   *
+   * The bridge binds a slot for an owned select change, a form binding
+   * follows, and then States watches the select. No contrib handler exists,
+   * so the other slot is not legacy use and States runs from its own native
+   * listener, after the form binding, in registration order.
+   */
+  public function testStatesIgnoresOtherCoreSlots(): void {
+    $this->drupalGet('form-test/group-details', ['query' => ['legacy-details' => 1, 'states' => 1]]);
+    $actual = $this->getSession()->evaluateScript(<<<'JS'
+      (() => {
+        const container = document.body.appendChild(document.createElement('div'));
+        container.innerHTML = `<div class="js-form-item"><select id="order-dependee"><option value="a">A</option><option value="b">B</option></select></div><div class="js-form-item"><input type="checkbox" id="order-target" data-drupal-states='{"checked":{"#order-dependee":{"value":"b"}}}'></div>`;
+        const select = document.getElementById('order-dependee');
+        const target = document.getElementById('order-target');
+        const calls = [];
+        const owned = () => calls.push('owned');
+        select.addEventListener('change', owned);
+        Drupal.eventBindings.register({ target: select, type: 'change', listener: owned });
+        Drupal.formEvents.listen(select, 'change', 'order', () => calls.push(`core:${target.checked}`));
+        Drupal.attachBehaviors(container);
+        select.value = 'b';
+        select.dispatchEvent(new Event('change', { bubbles: true }));
+        return [target.checked, calls];
+      })()
+      JS);
+    $this->assertSame([TRUE, ['owned', 'core:false']], $actual);
+  }
+
+  /**
    * Tests a form binding behind an earlier core slot and a later handler.
    *
    * The bridge binds a slot for an owned select change at registration, so
