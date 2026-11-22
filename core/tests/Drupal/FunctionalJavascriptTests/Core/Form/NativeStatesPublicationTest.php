@@ -2353,4 +2353,53 @@ final class NativeStatesPublicationTest extends WebDriverTestBase {
     $this->assertGreaterThan(0, $session->evaluateScript('window.r6Alone.calls'), 'The hook wraps the States handler.');
   }
 
+  /**
+   * Tests that a hook installed after the first publication gets the event.
+   */
+  #[IgnoreDeprecations]
+  public function testLateSpecialHandleHookGetsPinnedEvent(): void {
+    $session = $this->getSession();
+    $assert = $this->assertSession();
+
+    $this->drupalGet('jquery-bc-test/events');
+    $session->executeScript(<<<'JS'
+      const form = document.createElement('form');
+      form.innerHTML = `
+        <input type="checkbox" id="r6-late-src" name="r6_late_src">
+        <div id="r6-late-dep" class="js-form-wrapper" data-drupal-states='{"visible":{"#r6-late-src":{"checked":true}}}'>R6 late dep</div>
+      `;
+      document.body.append(form);
+      Drupal.attachBehaviors(form);
+      JS);
+    $source = $assert->elementExists('css', '#r6-late-src');
+    $source->check();
+    $source->uncheck();
+    $this->assertFalse($assert->elementExists('css', '#r6-late-dep')->isVisible());
+
+    // A library loaded later, for example through Ajax, installs the hook.
+    $session->executeScript(<<<'JS'
+      window.r6Late = [];
+      jQuery.event.special['state:checked'] = {
+        handle(event, ...args) {
+          if (event.target.id === 'r6-late-src') {
+            window.r6Late.push([
+              event.isTrigger ?? null,
+              event.value ?? null,
+              event.oldValue ?? null,
+              event.originalEvent === undefined,
+            ]);
+          }
+          return event.handleObj.handler.call(this, event, ...args);
+        },
+      };
+      JS);
+    $source->check();
+    $this->assertTrue($assert->elementExists('css', '#r6-late-dep')->isVisible());
+    $late = $session->evaluateScript('window.r6Late');
+    $this->assertNotEmpty($late, 'The late hook wraps the States handler.');
+    foreach ($late as $entry) {
+      $this->assertSame([3, TRUE, FALSE, TRUE], $entry, 'The late hook receives the pinned synthetic event.');
+    }
+  }
+
 }
