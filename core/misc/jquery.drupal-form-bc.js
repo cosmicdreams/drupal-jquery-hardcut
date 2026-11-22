@@ -21,7 +21,9 @@
   // to the slot.
   const slotDeliveries = new WeakMap();
   // Maps a native event to the entries whose slot jQuery's ordinary dispatch
-  // queued while the slot delivered real events.
+  // queued while the slot delivered real events. Known gap: like the claims,
+  // these records are not cleared per dispatch for a target outside the
+  // document.
   const queuedSlots = new WeakMap();
   const dispatchResets = new Set();
   const bindingChecks = new WeakMap();

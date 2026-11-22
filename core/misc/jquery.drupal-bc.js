@@ -290,6 +290,8 @@
      *   Whether a dispatch of that type is at the target.
      */
     function isDispatching(target, bindType) {
+      // Known gap: window.event is undefined inside a shadow tree, so a
+      // release there does not wait for the dispatch to end.
       const current = window.event;
       return current?.type === bindType && current.currentTarget === target;
     }
@@ -486,6 +488,8 @@
         declined = result !== false;
         return result;
       }
+      // Known gap: on a frozen special object this wrapper is not installed,
+      // so a setup that declines jQuery's listener is not detected.
       if (setup) {
         special.setup = observeSetup;
       }
