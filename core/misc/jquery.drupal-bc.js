@@ -500,7 +500,9 @@
     const activeSynthetic = new WeakMap();
     const projections = new Map();
     // A state:* event dispatched natively, outside the registry, carries its
-    // payload in detail. Legacy hooks receive it like a registry publication.
+    // payload in detail. A legacy hook receives it like a registry
+    // publication. Without one, jQuery handlers get the plain event, as the
+    // pinned jQuery dispatch gave them.
     const projectedPayloads = {
       get(event) {
         if (payloads.has(event)) {
@@ -509,7 +511,8 @@
         if (
           event instanceof CustomEvent &&
           event.type.startsWith('state:') &&
-          !activeSynthetic.has(event)
+          !activeSynthetic.has(event) &&
+          hasLegacySpecialHandle(jquery, event.type)
         ) {
           return { properties: stateProperties(event.detail) };
         }
