@@ -1084,7 +1084,7 @@ class FormGroupingElementsTest extends WebDriverTestBase {
    * stays queued there, so the pinned queue still ran details-aria. The slot
    * releases after that dispatch, and a later click makes no jQuery calls.
    */
-  public function testPreboundOneKeepsDetailsAriaQueued(): void {
+  public function testEarlyOneKeepsDetailsAriaQueued(): void {
     $this->drupalGet('form-test/group-details', ['query' => ['legacy-details' => 1]]);
     $session = $this->getSession();
     $session->executeScript($this->jqueryCallCounter() . <<<'JS'
@@ -1128,7 +1128,7 @@ class FormGroupingElementsTest extends WebDriverTestBase {
    * ordinary dispatch. Core's slot still delivers there, so core's native
    * listener after it skips that click. The next click runs core natively.
    */
-  public function testPreboundOneRunsCoreOnce(): void {
+  public function testEarlyOneRunsCoreOnce(): void {
     $this->drupalGet('form-test/group-details', ['query' => ['legacy-details' => 1]]);
     $session = $this->getSession();
     $session->executeScript(<<<'JS'
