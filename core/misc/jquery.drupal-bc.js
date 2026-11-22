@@ -13,6 +13,9 @@
   const coreHandles = new WeakMap();
   // The special.handle hooks this bridge installs for its projections.
   const projectionHandles = new WeakSet();
+  // Flags the handler of every slot as core code. The dedicated bridges skip
+  // flagged handlers when they look for legacy use.
+  const coreHandler = Symbol.for('Drupal.eventBindings.coreHandler');
 
   /**
    * Records a special.handle hook that core owns.
@@ -923,6 +926,7 @@
           },
         };
         slotHandlers.add(slot.handler);
+        Object.defineProperty(slot.handler, coreHandler, { value: true });
         subscriptions.set(binding, slot);
         const followsHandlers = Boolean(
           list?.some(
