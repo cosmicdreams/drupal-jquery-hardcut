@@ -324,6 +324,59 @@ class MachineNameTest extends WebDriverTestBase {
   }
 
   /**
+   * Tests that core's slot exists only while another jQuery handler does.
+   *
+   * With no other handler, a real event makes no jQuery dispatch. A later
+   * handler still runs after core, also after the slot was released.
+   */
+  public function testSlotFollowsLegacyHandlers(): void {
+    $this->drupalGet('form-test/machine-name', ['query' => ['legacy-machine-name' => 1]]);
+    $actual = $this->getSession()->evaluateScript(<<<'JS'
+      (() => {
+        const source = document.getElementById('edit-machine-name-1-label');
+        const target = document.getElementById('edit-machine-name-1');
+        const dispatch = jQuery.event.dispatch;
+        let calls = 0;
+        jQuery.event.dispatch = function (...args) {
+          calls += 1;
+          return dispatch.apply(this, args);
+        };
+        const input = (value) => {
+          calls = 0;
+          source.value = value;
+          source.dispatchEvent(new Event('input'));
+          return [target.value, calls];
+        };
+        const seen = [];
+        try {
+          const before = input('Before Contrib');
+          jQuery(source).on('input.first', (event) => {
+            seen.push([event.isTrigger ? 'synthetic' : 'native', target.value]);
+          });
+          input('With Contrib');
+          jQuery(source).off('.first');
+          const released = input('Released');
+          jQuery(source).on('input.second', (event) => {
+            seen.push([event.isTrigger ? 'synthetic' : 'native', target.value]);
+          });
+          jQuery(source).val('Synthetic Again').trigger('input');
+          jQuery(source).off('.second');
+          return [before, released, seen, input('Released Again')];
+        }
+        finally {
+          jQuery.event.dispatch = dispatch;
+        }
+      })()
+      JS);
+    $this->assertSame([
+      ['before_contrib', 0],
+      ['released', 0],
+      [['native', 'with_contrib'], ['synthetic', 'synthetic_again']],
+      ['released_again', 0],
+    ], $actual);
+  }
+
+  /**
    * Tests that dispatching one Event object twice runs core each time.
    */
   public function testRepeatedDispatchRunsCoreEachTime(): void {
@@ -394,7 +447,7 @@ class MachineNameTest extends WebDriverTestBase {
   }
 
   /**
-   * Tests that a nested synthetic trigger leaves single native delivery.
+   * Tests that a nested synthetic trigger leaves native delivery to core.
    */
   public function testNestedTriggerReleasesBindings(): void {
     $this->drupalGet('form-test/machine-name', ['query' => ['legacy-machine-name' => 1]]);
@@ -417,17 +470,24 @@ class MachineNameTest extends WebDriverTestBase {
           calls += 1;
           return show.apply(this, args);
         };
+        const dispatch = jQuery.event.dispatch;
+        let dispatchCalls = 0;
+        jQuery.event.dispatch = function (...args) {
+          dispatchCalls += 1;
+          return dispatch.apply(this, args);
+        };
         try {
           source.value = 'After Nested';
           source.dispatchEvent(new Event('input'));
         }
         finally {
           behavior.showMachineNameNative = show;
+          jQuery.event.dispatch = dispatch;
         }
-        return [nested, target.value, calls];
+        return [nested, target.value, calls, dispatchCalls];
       })()
       JS);
-    $this->assertSame(['nested_value', 'after_nested', 1], $actual);
+    $this->assertSame(['nested_value', 'after_nested', 1, 0], $actual);
   }
 
   /**

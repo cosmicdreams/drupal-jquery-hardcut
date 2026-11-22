@@ -639,7 +639,7 @@ class FormGroupingElementsTest extends WebDriverTestBase {
   }
 
   /**
-   * Tests single core delivery, return values, deprecations, and details accessors.
+   * Tests zero-jQuery native dispatch, return values, deprecations, and details accessors.
    */
   public function testFormBridgeContracts(): void {
     $this->drupalGet('form-test/group-details', ['query' => ['legacy-details' => 1]]);
@@ -654,6 +654,12 @@ class FormGroupingElementsTest extends WebDriverTestBase {
           ariaWrites += name === 'aria-expanded' && this.localName === 'summary' ? 1 : 0;
           return originalSetAttribute.call(this, name, ...args);
         };
+        const originalDispatch = jQuery.event.dispatch;
+        let dispatchCalls = 0;
+        jQuery.event.dispatch = function (...args) {
+          dispatchCalls += 1;
+          return originalDispatch.apply(this, args);
+        };
 
         const container = document.body.appendChild(document.createElement('div'));
         container.innerHTML = '<details id="bridge-details"><summary>Toggle</summary><form id="bridge-form" method="post"><input name="field" value="one"></form></details>';
@@ -664,13 +670,16 @@ class FormGroupingElementsTest extends WebDriverTestBase {
         Drupal.attachBehaviors(container);
 
         try {
-          // With no legacy subscriber, core's slot leaves a real click to the
-          // native listener, which runs once.
+          // Mixed page with no legacy subscribers makes zero jQuery dispatch
+          // calls, and the native listener runs once.
           ariaWrites = 0;
+          dispatchCalls = 0;
           summary.click();
           const summaryExpanded = summary.getAttribute('aria-expanded');
           const nativeDeliveries = ariaWrites;
+          const nativeDispatchCalls = dispatchCalls;
           Element.prototype.setAttribute = originalSetAttribute;
+          jQuery.event.dispatch = originalDispatch;
 
           // Legacy return false prevents default and stops propagation.
           const bubbleContainer = document.body.appendChild(document.createElement('div'));
@@ -716,6 +725,7 @@ class FormGroupingElementsTest extends WebDriverTestBase {
           return {
             summaryExpanded,
             nativeDeliveries,
+            nativeDispatchCalls,
             returnFalse: [returnEvent.result, returnEvent.isDefaultPrevented(), returnEvent.isPropagationStopped(), bubbled],
             singleSubmit: [submitSecond.isDefaultPrevented()],
             standardTriggerWarnings,
@@ -725,6 +735,7 @@ class FormGroupingElementsTest extends WebDriverTestBase {
           };
         } finally {
           Element.prototype.setAttribute = originalSetAttribute;
+          jQuery.event.dispatch = originalDispatch;
           Drupal.deprecationError = originalWarn;
           container.remove();
         }
@@ -733,6 +744,7 @@ class FormGroupingElementsTest extends WebDriverTestBase {
 
     $this->assertSame('true', $actual['summaryExpanded']);
     $this->assertSame(1, $actual['nativeDeliveries']);
+    $this->assertSame(0, $actual['nativeDispatchCalls']);
     $this->assertSame([FALSE, TRUE, TRUE, FALSE], $actual['returnFalse']);
     $this->assertSame([TRUE], $actual['singleSubmit']);
     $this->assertSame([], $actual['standardTriggerWarnings']);
@@ -744,6 +756,43 @@ class FormGroupingElementsTest extends WebDriverTestBase {
       'The jQuery synthetic trigger for summaryUpdated is deprecated in drupal:12.0.0 and is removed from drupal:13.0.0. Use the same native event name and its documented payload. See https://www.drupal.org/node/CHANGE_RECORD.',
     ], $actual['customAndPluginWarnings']);
     $this->assertSame([TRUE, TRUE, TRUE], $actual['detailsAccessors']);
+  }
+
+  /**
+   * Tests that a form binding without a reserved legacy slot is reported.
+   */
+  public function testFormBindingRequiresLegacySlot(): void {
+    $this->drupalGet('form-test/group-details', ['query' => ['legacy-details' => 1]]);
+    $actual = $this->getSession()->evaluateScript(<<<'JS'
+      (() => {
+        const errors = [];
+        const throwError = Drupal.throwError;
+        Drupal.throwError = (error) => errors.push(error.message);
+        const target = document.body.appendChild(document.createElement('button'));
+        const calls = [];
+        const binding = {
+          target,
+          type: 'click',
+          formInteraction: true,
+          listener: () => calls.push('core'),
+        };
+        target.addEventListener('click', binding.listener);
+        const unregister = Drupal.eventBindings.register(binding);
+        try {
+          jQuery(target).trigger('click');
+          return [errors, calls];
+        }
+        finally {
+          unregister();
+          target.remove();
+          Drupal.throwError = throwError;
+        }
+      })()
+      JS);
+    $this->assertSame([
+      ['The form binding for "click" must set reservesLegacySlot.'],
+      ['core'],
+    ], $actual);
   }
 
   /**

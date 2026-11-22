@@ -59,7 +59,7 @@ class CopyFieldValueTest extends WebDriverTestBase {
   }
 
   /**
-   * Tests that a synthetic blur leaves one core delivery per native blur.
+   * Tests that a synthetic blur leaves later native blurs to core alone.
    */
   public function testSyntheticBlurReleasesJquery(): void {
     $this->drupalGet('/system-test/copy-field-value-test-form');
@@ -93,17 +93,24 @@ class CopyFieldValueTest extends WebDriverTestBase {
           calls += 1;
           return blur.apply(this, args);
         };
+        const dispatch = jQuery.event.dispatch;
+        let dispatchCalls = 0;
+        jQuery.event.dispatch = function (...args) {
+          dispatchCalls += 1;
+          return dispatch.apply(this, args);
+        };
         try {
           source.dispatchEvent(new FocusEvent('blur'));
         }
         finally {
           behavior.valueSourceBlurHandlerNative = blur;
+          jQuery.event.dispatch = dispatch;
         }
-        window.syntheticBlurResult = [synthetic, target.value, calls];
+        window.syntheticBlurResult = [synthetic, target.value, calls, dispatchCalls];
       })();
       JS);
     $this->assertJsCondition('Array.isArray(window.syntheticBlurResult)');
-    $this->assertSame(['synthetic', 'native', 1], $session->evaluateScript('window.syntheticBlurResult'));
+    $this->assertSame(['synthetic', 'native', 1, 0], $session->evaluateScript('window.syntheticBlurResult'));
   }
 
 }
