@@ -363,6 +363,11 @@
         return;
       }
       anchor.count -= 1;
+      // Known gap: when the hosting binding is unregistered during a dispatch,
+      // before its position listener runs, the browser skips that removed
+      // listener and every listener added now. The remaining contrib handlers
+      // then miss that one event, where the pinned jQuery dispatch ran its
+      // queued handlers. The registry has no hook to run them in place.
       if (anchor.count > 0) {
         if (anchor.host === binding) {
           // The position left with the binding; the last one remaining hosts.
@@ -379,7 +384,7 @@
         return;
       }
       const handle = jquery._data(target, 'handle');
-      if (handle && getHandlers(target, bindType)) {
+      if (handle && getHandlers(target, bindType)?.length) {
         // Known gap: the position left with core's last binding, so remaining
         // contrib handlers keep a jQuery listener after the other listeners.
         target.addEventListener(bindType, handle);
@@ -1089,9 +1094,10 @@
           connectionObservers.forEach((observer) =>
             notifyConnection(observer, 'disconnect', jquery),
           );
-          stopTriggers();
-          stopBindings();
+          // Unwrap in the reverse order of wrapping.
           stopPublications();
+          stopBindings();
+          stopTriggers();
           connections.delete(jquery);
         }
       };
