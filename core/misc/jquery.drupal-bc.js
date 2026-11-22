@@ -67,10 +67,13 @@
     // verify it.
     const external = new WeakMap();
     // jQuery adds its own native listener unless a special setup() declines.
-    // The setups present at connection are jQuery's built-ins, which do not.
+    // jQuery 4 defines setup() only for click, focus and blur, and none of
+    // them declines. A contrib setup for another type counts as declining,
+    // whenever it was installed. Accepted gap A also covers a contrib setup
+    // that replaced one of these three before this instance connected.
     const builtinSetups = new Set(
-      Object.values(jquery.event.special)
-        .map((special) => special?.setup)
+      ['click', 'focus', 'blur']
+        .map((type) => jquery.event.special[type]?.setup)
         .filter(Boolean),
     );
     let replaying = true;
