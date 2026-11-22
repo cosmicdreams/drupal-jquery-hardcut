@@ -17,6 +17,8 @@
   const deprecated = new Set();
   const collections = new WeakMap();
   const legacyEvents = new WeakMap();
+  // The jQuery bridge flags the handler of every slot it binds as core code.
+  const coreHandler = Symbol.for('Drupal.eventBindings.coreHandler');
 
   /**
    * Reports each deprecated contract once.
@@ -254,7 +256,7 @@
      *
      * Pinned States bound and dispatched every event through jQuery, so a
      * special.handle hook for any type it uses wrapped the States handler.
-     * Hooks that core owns do not count.
+     * Hooks and slot handlers that core owns do not count.
      * @param {EventTarget} target
      *   The event target.
      * @param {string} type
@@ -266,7 +268,8 @@
       return (
         Boolean(eventBindings.hasLegacySpecialHandle?.(jquery, type)) ||
         jqueryHandlers(target, type).some(
-          ({ handler }) => !handlerToBinding.has(handler),
+          ({ handler }) =>
+            !handlerToBinding.has(handler) && !handler[coreHandler],
         )
       );
     }
