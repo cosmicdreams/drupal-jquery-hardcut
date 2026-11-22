@@ -438,14 +438,16 @@
             // A handler queued ahead of the slot may leave jQuery's lists
             // before the slot runs, such as one bound with .one(). Core's
             // listener already left this event to the slot, and the pinned
-            // queue still ran core, so that decision stands.
+            // queue still ran core, so that decision stands. A claimed slot
+            // reports its own state: the base bridge keeps it bound for the
+            // rest of a dispatch that queued it.
             const leftToSlot = slotDeliveries
               .get(event.originalEvent)
               ?.has(entry);
             if (
               (!leftToSlot &&
                 (hasNativeOrder(entry) ||
-                  !hasExternalHandler(target, bindType))) ||
+                  (!entry.slot && !hasExternalHandler(target, bindType)))) ||
               Drupal.eventBindings.isForeignDefaultAction?.(
                 event.originalEvent,
               ) ||
