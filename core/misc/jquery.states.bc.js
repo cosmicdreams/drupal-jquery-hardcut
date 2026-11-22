@@ -122,9 +122,10 @@
   /**
    * Calls a listener while the native payload shows the jQuery event's fields.
    *
-   * A special.handle hook may edit the shared jQuery event before it calls the
-   * handler. The listener reads those edits, and the payload is restored after
-   * it returns so the bridge still writes back only the hook's final values.
+   * A special.handle hook may edit or delete fields of the shared jQuery event
+   * before it calls the handler. The listener reads those changes, and the
+   * payload is restored after it returns so the bridge still writes back only
+   * the hook's final values.
    * @param {Event} native
    *   The native event the listener receives.
    * @param {object} event
@@ -139,9 +140,17 @@
     const saved = [];
     if (detail && typeof detail === 'object') {
       for (const field of ['value', 'oldValue', 'trigger']) {
-        if (Object.hasOwn(event, field) && event[field] !== detail[field]) {
-          saved.push([field, Object.hasOwn(detail, field), detail[field]]);
-          detail[field] = event[field];
+        const had = Object.hasOwn(detail, field);
+        if (Object.hasOwn(event, field)) {
+          if (event[field] !== detail[field]) {
+            saved.push([field, had, detail[field]]);
+            detail[field] = event[field];
+          }
+        } else if (had) {
+          // The bridge copies defined payload fields to the shared event, so
+          // a missing one was deleted by a hook or was undefined.
+          saved.push([field, had, detail[field]]);
+          delete detail[field];
         }
       }
     }

@@ -2402,4 +2402,50 @@ final class NativeStatesPublicationTest extends WebDriverTestBase {
     }
   }
 
+  /**
+   * Tests that States sees a payload field a special.handle hook deletes.
+   */
+  #[IgnoreDeprecations]
+  public function testSpecialHandleHookPayloadDeletion(): void {
+    $session = $this->getSession();
+    $assert = $this->assertSession();
+
+    $this->drupalGet('jquery-bc-test/events');
+    $session->executeScript(<<<'JS'
+      window.r6Delete = { seen: [], after: [] };
+      // The hook deletes the field, calls the handler, then restores it.
+      jQuery.event.special['state:visible'] = {
+        handle(event, ...args) {
+          if (!event.value || event.target.id !== 'r6-del-dep') {
+            return event.handleObj.handler.call(this, event, ...args);
+          }
+          delete event.trigger;
+          const result = event.handleObj.handler.call(this, event, ...args);
+          window.r6Delete.seen.push(Object.hasOwn(event, 'trigger'));
+          event.trigger = true;
+          return result;
+        },
+      };
+      const form = document.createElement('form');
+      form.innerHTML = `
+        <input type="checkbox" id="r6-del-src" name="r6_del_src">
+        <div id="r6-del-dep" class="js-form-wrapper" data-drupal-states='{"visible":{"#r6-del-src":{"checked":true}}}'>R6 delete dep</div>
+      `;
+      document.body.append(form);
+      Drupal.attachBehaviors(form);
+      document.addEventListener('state:visible', (event) => {
+        if (event.target.id === 'r6-del-dep' && event.detail.value) {
+          window.r6Delete.after.push(event.detail.trigger ?? null);
+        }
+      });
+      JS);
+
+    $assert->elementExists('css', '#r6-del-src')->check();
+    $this->assertFalse($assert->elementExists('css', '#r6-del-dep')->isVisible(), 'States sees the trigger field the hook deleted.');
+    $hook = $session->evaluateScript('window.r6Delete');
+    $this->assertNotEmpty($hook['seen']);
+    $this->assertSame([], array_filter($hook['seen']), 'No handler restored the deleted field.');
+    $this->assertSame([TRUE], $hook['after'], 'A later native listener sees the value the hook restored.');
+  }
+
 }
