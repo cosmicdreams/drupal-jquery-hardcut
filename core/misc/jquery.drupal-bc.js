@@ -66,16 +66,6 @@
     // needs no jQuery call. An entry may be stale after a removal; readers
     // verify it.
     const external = new WeakMap();
-    // jQuery adds its own native listener unless a special setup() declines.
-    // jQuery 4 defines setup() only for click, focus and blur, and none of
-    // them declines. A contrib setup for another type counts as declining,
-    // whenever it was installed. Accepted gap A also covers a contrib setup
-    // that replaced one of these three before this instance connected.
-    const builtinSetups = new Set(
-      ['click', 'focus', 'blur']
-        .map((type) => jquery.event.special[type]?.setup)
-        .filter(Boolean),
-    );
     let replaying = true;
     let internal = 0;
     let triggerDepth = 0;
@@ -199,18 +189,6 @@
         external.get(target)?.delete(bindType);
       }
       return found;
-    }
-
-    /**
-     * Checks whether jQuery added its own native listener for a list type.
-     * @param {string} bindType
-     *   The handler list type.
-     * @return {boolean}
-     *   Whether no contrib special setup() replaced it.
-     */
-    function hasNativeListener(bindType) {
-      const setup = jquery.event.special[bindType]?.setup;
-      return !setup || builtinSetups.has(setup);
     }
 
     /**
@@ -457,19 +435,34 @@
     function bindSlot(slot, followsHandlers) {
       const { target, bindType, name, selector } = slot;
       const created = !getHandlers(target, bindType);
+      // jQuery adds its own native listener unless the list type's special
+      // setup() returns a value other than false when the list is created.
+      // Such a setup delivers the events itself, so the anchor stays idle.
+      const special = created ? jquery.event.special[bindType] : undefined;
+      const setup = special?.setup;
+      let declined = false;
+      function observeSetup(...args) {
+        const result = setup.apply(this, args);
+        declined = result !== false;
+        return result;
+      }
+      if (setup) {
+        special.setup = observeSetup;
+      }
       internal += 1;
       try {
         jquery(target).on(name, selector, slot.handler);
       } finally {
         internal -= 1;
+        if (setup && special.setup === observeSetup) {
+          special.setup = setup;
+        }
       }
       slot.bound = true;
       slot.followsHandlers = followsHandlers;
       const anchor = anchors.get(target)?.get(bindType);
       const handle = jquery._data(target, 'handle');
-      // A contrib special setup() that declines jQuery's listener delivers
-      // the events itself, so the anchor stays idle.
-      if (created && anchor && handle && hasNativeListener(bindType)) {
+      if (created && anchor && handle && !declined) {
         target.removeEventListener(bindType, handle);
         anchor.active = true;
       }
