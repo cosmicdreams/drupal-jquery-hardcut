@@ -1122,7 +1122,7 @@ class FormGroupingElementsTest extends WebDriverTestBase {
   }
 
   /**
-   * Tests a prebound delegated .one() handler that stops propagation.
+   * Tests an early delegated .one() handler that stops propagation.
    *
    * Bound before details-aria, it runs in jQuery's ordinary dispatch ahead of
    * core's native listener, removes itself and stops propagation on a span.
