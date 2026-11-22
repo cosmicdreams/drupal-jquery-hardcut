@@ -157,7 +157,8 @@ class DropButtonTest extends WebDriverTestBase {
             document.head.append(script);
           });
         }
-        // Native hover and toggle clicks make no jQuery calls at all.
+        // Native hover and toggle clicks make no jQuery calls beyond the event
+        // each legacy override receives.
         jqueryCalls.start();
         try {
           const wrapper = document.querySelector('.dropbutton-wrapper');
@@ -175,6 +176,9 @@ class DropButtonTest extends WebDriverTestBase {
     [$calls, $open, $counts] = $session->evaluateScript('window.dropButtonPreBridgeResult');
     $this->assertSame([['hoverIn', TRUE], ['hoverOut', TRUE]], $calls);
     $this->assertTrue($open);
+    // The two legacy overrides each receive one jQuery event.
+    $this->assertSame(2, $counts['Event'] ?? NULL);
+    $counts['Event'] = 0;
     $this->assertNoJqueryCalls($counts);
   }
 
