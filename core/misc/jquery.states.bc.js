@@ -252,19 +252,19 @@
     /**
      * Reports whether legacy jQuery code handles the target and type.
      *
-     * Pinned States always dispatched state:* events through jQuery, so a
-     * special.handle hook for one wrapped the States handler.
+     * Pinned States bound and dispatched every event through jQuery, so a
+     * special.handle hook for any type it uses wrapped the States handler.
+     * Hooks that core owns do not count.
      * @param {EventTarget} target
      *   The event target.
      * @param {string} type
      *   The base event type.
      * @return {boolean}
-     *   Whether a non-States jQuery handler or state:* hook is present.
+     *   Whether a non-States jQuery handler or a legacy hook is present.
      */
     function hasExternalLegacyHandler(target, type) {
       return (
-        (type.startsWith('state:') &&
-          Boolean(eventBindings.hasLegacySpecialHandle?.(jquery, type))) ||
+        Boolean(eventBindings.hasLegacySpecialHandle?.(jquery, type)) ||
         jqueryHandlers(target, type).some(
           ({ handler }) => !handlerToBinding.has(handler),
         )

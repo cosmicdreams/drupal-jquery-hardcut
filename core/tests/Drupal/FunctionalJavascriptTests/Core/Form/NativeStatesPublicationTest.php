@@ -2448,4 +2448,221 @@ final class NativeStatesPublicationTest extends WebDriverTestBase {
     $this->assertSame([TRUE], $hook['after'], 'A later native listener sees the value the hook restored.');
   }
 
+  /**
+   * Tests that a special.handle hook on a trigger event wraps States.
+   */
+  #[IgnoreDeprecations]
+  public function testTriggerEventSpecialHandleHook(): void {
+    $session = $this->getSession();
+    $assert = $this->assertSession();
+
+    $this->drupalGet('jquery-bc-test/events');
+    $hadSpecial = $session->evaluateScript(<<<'JS'
+      (() => {
+        const had = Object.hasOwn(jQuery.event.special, 'keyup');
+        window.r7Key = { calls: 0, published: 0 };
+        // The hook never calls the handler for the test input.
+        jQuery.event.special.keyup = {
+          handle(event, ...args) {
+            if (event.target.id === 'r7-key-src') {
+              window.r7Key.calls++;
+              return undefined;
+            }
+            return event.handleObj.handler.call(this, event, ...args);
+          },
+        };
+        const form = document.createElement('form');
+        form.innerHTML = `
+          <input type="text" id="r7-key-src" name="r7_key_src">
+          <div id="r7-key-dep" class="js-form-wrapper" data-drupal-states='{"visible":{"#r7-key-src":{"value":"go"}}}'>R7 key dep</div>
+        `;
+        document.body.append(form);
+        Drupal.attachBehaviors(form);
+        document.addEventListener('state:value', (event) => {
+          if (event.target.id === 'r7-key-src') {
+            window.r7Key.published++;
+          }
+        });
+        return had;
+      })()
+      JS);
+    $this->assertFalse($hadSpecial, 'No keyup special hook existed before the test installed one.');
+
+    $keyup = <<<'JS'
+      (() => {
+        const input = document.getElementById('r7-key-src');
+        input.value = 'go';
+        input.dispatchEvent(new KeyboardEvent('keyup', { bubbles: true }));
+        return [window.r7Key.calls > 0, window.r7Key.published];
+      })()
+      JS;
+    $this->assertSame([TRUE, 0], $session->evaluateScript($keyup), 'A keyup hook that suppresses its handler prevents the state:value publication.');
+    $this->assertFalse($assert->elementExists('css', '#r7-key-dep')->isVisible());
+
+    $session->executeScript('delete jQuery.event.special.keyup;');
+    $this->assertSame([TRUE, 1], $session->evaluateScript($keyup), 'Without the hook, the keyup publishes state:value.');
+    $this->assertTrue($assert->elementExists('css', '#r7-key-dep')->isVisible());
+  }
+
+  /**
+   * Tests that special hooks core owns leave States on its native path.
+   */
+  #[IgnoreDeprecations]
+  public function testCoreSpecialHooksStayNative(): void {
+    $this->drupalGet('states-test/core-hooks');
+    $result = $this->getSession()->evaluateScript(<<<'JS'
+      (() => {
+        const jquery = window.jQuery;
+        const checkbox = document.querySelector('input[name="choice[1]"]');
+        const dependent = document.getElementById('states-test-native');
+        const toggle = () => {
+          checkbox.checked = !checkbox.checked;
+          checkbox.dispatchEvent(new Event('change', { bubbles: true }));
+          return dependent.style.display !== 'none';
+        };
+        // Publish once so the bridge installs its state:checked projection.
+        toggle();
+        toggle();
+        const types = ['change', 'state:checked', 'mouseenter'];
+        const hooks = Object.fromEntries(
+          types.map((type) => [type, typeof jquery.event.special[type]?.handle === 'function']),
+        );
+        const legacy = Object.fromEntries(
+          types.map((type) => [type, Drupal.eventBindings.hasLegacySpecialHandle(jquery, type)]),
+        );
+        let initCalls = 0;
+        let triggerCalls = 0;
+        const origInit = jquery.fn.init;
+        const origTrigger = jquery.event.trigger;
+        jquery.fn.init = function (...args) {
+          initCalls += 1;
+          return new origInit(...args);
+        };
+        jquery.fn.init.prototype = jquery.fn;
+        jquery.event.trigger = function (...args) {
+          triggerCalls += 1;
+          return origTrigger.apply(this, args);
+        };
+        let shown;
+        let hidden;
+        try {
+          shown = toggle();
+          hidden = !toggle();
+        } finally {
+          jquery.fn.init = origInit;
+          jquery.event.trigger = origTrigger;
+        }
+        return { hooks, legacy, initCalls, triggerCalls, shown, hidden };
+      })()
+      JS);
+    $this->assertSame(['change' => TRUE, 'mouseenter' => TRUE, 'state:checked' => TRUE], $result['hooks'], 'The table bridge, the States projection and jQuery itself installed special.handle hooks.');
+    $this->assertSame(['change' => FALSE, 'mouseenter' => FALSE, 'state:checked' => FALSE], $result['legacy'], 'No core-owned hook counts as legacy code.');
+    $this->assertSame(0, $result['initCalls'], 'States makes zero jQuery init calls with only core hooks.');
+    $this->assertSame(0, $result['triggerCalls'], 'States makes zero jQuery trigger calls with only core hooks.');
+    $this->assertTrue($result['shown']);
+    $this->assertTrue($result['hidden']);
+  }
+
+  /**
+   * Tests that a native state:* dispatch gives a legacy hook its payload.
+   */
+  #[IgnoreDeprecations]
+  public function testNativeStateDispatchReachesHookWithPayload(): void {
+    $session = $this->getSession();
+    $assert = $this->assertSession();
+
+    $this->drupalGet('jquery-bc-test/events');
+    $session->executeScript(<<<'JS'
+      const form = document.createElement('form');
+      form.innerHTML = `
+        <input type="checkbox" id="r7-nat-src" name="r7_nat_src">
+        <div id="r7-nat-dep" class="js-form-wrapper" data-drupal-states='{"visible":{"#r7-nat-src":{"checked":true}}}'>R7 native dep</div>
+      `;
+      document.body.append(form);
+      Drupal.attachBehaviors(form);
+      window.r7Native = [];
+      // The hook forwards only events that carry the trigger flag.
+      jQuery.event.special['state:visible'] = {
+        handle(event, ...args) {
+          if (event.target.id === 'r7-nat-dep' && !event.isTrigger) {
+            window.r7Native.push([event.value ?? null, event.oldValue ?? null, event.trigger ?? null]);
+          }
+          if (event.trigger !== true) {
+            return undefined;
+          }
+          return event.handleObj.handler.call(this, event, ...args);
+        },
+      };
+      JS);
+    $this->assertFalse($assert->elementExists('css', '#r7-nat-dep')->isVisible());
+
+    $session->executeScript(<<<'JS'
+      document.getElementById('r7-nat-dep').dispatchEvent(new CustomEvent('state:visible', {
+        bubbles: true,
+        cancelable: true,
+        detail: { value: true, oldValue: false, trigger: true },
+      }));
+      JS);
+    $seen = $session->evaluateScript('window.r7Native');
+    $this->assertNotEmpty($seen, 'The native dispatch reaches the legacy hook.');
+    foreach ($seen as $entry) {
+      $this->assertSame([TRUE, FALSE, TRUE], $entry, 'The hook reads value, oldValue and trigger from the native detail.');
+    }
+    $this->assertTrue($assert->elementExists('css', '#r7-nat-dep')->isVisible(), 'The hook forwards the event, so States shows the dependent.');
+  }
+
+  /**
+   * Tests that alternating publications keep the hook chain depth constant.
+   */
+  #[IgnoreDeprecations]
+  public function testAlternatingPublicationsKeepChainDepth(): void {
+    $this->drupalGet('jquery-bc-test/events');
+    $depths = $this->getSession()->evaluateScript(<<<'JS'
+      (() => {
+        const form = document.createElement('form');
+        form.innerHTML = `
+          <input type="checkbox" id="r7-depth-src" name="r7_depth_src">
+          <div id="r7-depth-dep" class="js-form-wrapper" data-drupal-states='{"visible":{"#r7-depth-src":{"checked":true}}}'>R7 depth dep</div>
+        `;
+        document.body.append(form);
+        Drupal.attachBehaviors(form);
+        const source = document.getElementById('r7-depth-src');
+        const depths = { states: [], publish: [] };
+        let kind = null;
+        const limit = Error.stackTraceLimit;
+        Error.stackTraceLimit = Infinity;
+        jQuery(document).on('state:checked.r7depth', (event) => {
+          if (kind && event.target === source) {
+            depths[kind].push(new Error().stack.split('\n').length);
+          }
+        });
+        try {
+          // The first round installs both projections and is not measured.
+          for (let i = 0; i < 7; i++) {
+            // A States transition publishes state:checked from the trigger.
+            kind = i ? 'states' : null;
+            source.checked = !source.checked;
+            source.dispatchEvent(new Event('change', { bubbles: true }));
+            // A registry publication of the same type outside States.
+            kind = i ? 'publish' : null;
+            Drupal.eventBindings.publish(source, new CustomEvent('state:checked', {
+              bubbles: true,
+              cancelable: true,
+              detail: { value: source.checked, oldValue: !source.checked, trigger: false },
+            }));
+          }
+        } finally {
+          kind = null;
+          Error.stackTraceLimit = limit;
+          jQuery(document).off('.r7depth');
+        }
+        return depths;
+      })()
+      JS);
+    $this->assertCount(6, $depths['states']);
+    $this->assertCount(6, $depths['publish']);
+    $this->assertCount(1, array_unique($depths['states']), 'The States transition runs through a constant hook chain.');
+    $this->assertCount(1, array_unique($depths['publish']), 'The registry publication runs through a constant hook chain.');
+  }
+
 }

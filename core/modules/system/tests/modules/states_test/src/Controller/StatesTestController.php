@@ -80,6 +80,18 @@ final class StatesTestController {
   }
 
   /**
+   * Builds the States fixture with the jQuery bridges and table select.
+   *
+   * Table select makes the table bridge install its change special hook.
+   */
+  public function coreHooks(): array {
+    $build = $this->form();
+    $build['#attached']['library'][] = 'core/jquery';
+    $build['#attached']['library'][] = 'core/drupal.tableselect';
+    return $build;
+  }
+
+  /**
    * Removes the native dependent element itself via Ajax.
    */
   public function removeDependent(): AjaxResponse {
