@@ -203,10 +203,26 @@
     const handlers = new Map();
     const observed = new Map();
     const triggerFrames = [];
-    // jQuery exposes its internal returnTrue only on a prevented event.
-    const probe = jquery.Event('drupal:form-probe');
-    probe.preventDefault();
-    const returnTrue = probe.isDefaultPrevented;
+    let returnTrue;
+
+    /**
+     * Checks for jQuery's internal returnTrue stub.
+     *
+     * jQuery exposes returnTrue only on a prevented event. The probe event is
+     * built on first use, so a page without legacy use makes no jQuery call.
+     * @param {function(...unknown): unknown} callback
+     *   A handler.
+     * @return {boolean}
+     *   Whether the handler is jQuery's returnTrue.
+     */
+    function isReturnTrue(callback) {
+      if (!returnTrue) {
+        const probe = jquery.Event('drupal:form-probe');
+        probe.preventDefault();
+        returnTrue = probe.isDefaultPrevented;
+      }
+      return callback === returnTrue;
+    }
 
     function getBindType(type, selector) {
       const special = jquery.event.special[type];
@@ -215,7 +231,7 @@
 
     // The leverageNative controller and its trigger stub are jQuery's own.
     function isInternalHandler(handleObj) {
-      return handleObj.namespace === false || handleObj.handler === returnTrue;
+      return handleObj.namespace === false || isReturnTrue(handleObj.handler);
     }
 
     function hasExternalHandler(target, bindType) {
@@ -1040,9 +1056,6 @@
     }
 
     const originalData = jquery.data;
-    document.querySelectorAll('.vertical-tabs__pane').forEach((pane) => {
-      ensureTabData(pane);
-    });
 
     const originalFnData = jquery.fn.data;
     jquery.fn.data = function (key) {
