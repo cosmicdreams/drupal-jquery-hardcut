@@ -445,6 +445,13 @@
       const special = created ? jquery.event.special[bindType] : undefined;
       const setup = special?.setup;
       let declined = false;
+      /**
+       * Records whether the setup declines jQuery's native listener.
+       * @param {...unknown} args
+       *   The arguments jQuery passes to setup().
+       * @return {unknown}
+       *   The setup's return value.
+       */
       function observeSetup(...args) {
         const result = setup.apply(this, args);
         declined = result !== false;
