@@ -273,7 +273,7 @@ abstract class Tasks {
       '#required' => TRUE,
       '#states' => [
         'required' => [
-          '[name=driver]' => ['value' => $driver],
+          'input[name=driver]' => ['value' => $driver],
         ],
       ],
     ];
@@ -286,7 +286,7 @@ abstract class Tasks {
       '#required' => TRUE,
       '#states' => [
         'required' => [
-          '[name=driver]' => ['value' => $driver],
+          'input[name=driver]' => ['value' => $driver],
         ],
       ],
     ];

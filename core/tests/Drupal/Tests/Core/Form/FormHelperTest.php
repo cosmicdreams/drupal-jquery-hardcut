@@ -278,12 +278,24 @@ class FormHelperTest extends UnitTestCase {
   public static function providerConvertedStatesKeys(): array {
     return [
       'Install Tasks: unquoted attribute' => [
-        '[name=driver]',
+        'input[name=driver]',
         ':input[name=driver]',
         ':input[name=database_driver]',
-        '[name=database_driver]',
+        'input[name=database_driver]',
       ],
-      'ContentEntityForm: bare attribute' => [
+      'ContentEntityForm: input element' => [
+        'input[name="revision"]',
+        ':input[name="revision"]',
+        ':input[name="wrapper[revision]"]',
+        'input[name="wrapper[revision]"]',
+      ],
+      'ExportForm: select element' => [
+        'select[name="langcode"]',
+        ':input[name="langcode"]',
+        ':input[name="wrapper[langcode]"]',
+        'select[name="wrapper[langcode]"]',
+      ],
+      'Bare attribute key, as contributed forms may write it' => [
         '[name="revision"]',
         ':input[name="revision"]',
         ':input[name="wrapper[revision]"]',

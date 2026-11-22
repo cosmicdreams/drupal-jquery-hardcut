@@ -260,7 +260,7 @@ final class Settings implements ContainerInjectionInterface {
       '#states' => [
         // Show if met.
         'visible' => [
-          '[name="preset_accent_color"]' => ['value' => 'custom'],
+          'input[name="preset_accent_color"]' => ['value' => 'custom'],
         ],
       ],
     ];
@@ -314,7 +314,7 @@ final class Settings implements ContainerInjectionInterface {
       '#states' => [
         // Show if met.
         'visible' => [
-          '[name="preset_focus_color"]' => ['value' => 'custom'],
+          'select[name="preset_focus_color"]' => ['value' => 'custom'],
         ],
       ],
     ];
