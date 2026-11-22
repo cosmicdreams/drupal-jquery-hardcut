@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Drupal\FunctionalJavascriptTests\Core\Form;
 
+use Drupal\FunctionalJavascriptTests\JqueryCallCounterTrait;
 use Drupal\FunctionalJavascriptTests\WebDriverTestBase;
 use PHPUnit\Framework\Attributes\Group;
 use PHPUnit\Framework\Attributes\RunTestsInSeparateProcesses;
@@ -15,6 +16,8 @@ use PHPUnit\Framework\Attributes\TestWith;
 #[Group('form')]
 #[RunTestsInSeparateProcesses]
 class DropButtonTest extends WebDriverTestBase {
+
+  use JqueryCallCounterTrait;
 
   /**
    * {@inheritdoc}
@@ -135,6 +138,7 @@ class DropButtonTest extends WebDriverTestBase {
       \Drupal::service('library.discovery')->getLibraryByName('core', 'jquery')['js'],
       'data',
     ));
+    $session->executeScript($this->jqueryCallCounter());
     $session->executeScript(<<<JS
       (async () => {
         const calls = [];
@@ -153,27 +157,25 @@ class DropButtonTest extends WebDriverTestBase {
             document.head.append(script);
           });
         }
-        const originalDispatch = jQuery.event.dispatch;
-        let dispatchCalls = 0;
-        jQuery.event.dispatch = function (...args) {
-          dispatchCalls += 1;
-          return originalDispatch.apply(this, args);
-        };
+        // Native hover and toggle clicks make no jQuery calls at all.
+        jqueryCalls.start();
         try {
           const wrapper = document.querySelector('.dropbutton-wrapper');
           wrapper.dispatchEvent(new MouseEvent('mouseenter'));
           wrapper.dispatchEvent(new MouseEvent('mouseleave'));
-          window.dropButtonPreBridgeResult = [calls, dispatchCalls];
+          wrapper.querySelector('.dropbutton-toggle button').click();
+          const open = wrapper.classList.contains('open');
+          window.dropButtonPreBridgeResult = [calls, open, jqueryCalls.stop()];
         } finally {
-          jQuery.event.dispatch = originalDispatch;
+          jqueryCalls.stop();
         }
       })();
       JS);
     $this->assertJsCondition('Array.isArray(window.dropButtonPreBridgeResult)');
-    $this->assertSame([
-      [['hoverIn', TRUE], ['hoverOut', TRUE]],
-      0,
-    ], $session->evaluateScript('window.dropButtonPreBridgeResult'));
+    [$calls, $open, $counts] = $session->evaluateScript('window.dropButtonPreBridgeResult');
+    $this->assertSame([['hoverIn', TRUE], ['hoverOut', TRUE]], $calls);
+    $this->assertTrue($open);
+    $this->assertNoJqueryCalls($counts);
   }
 
   /**

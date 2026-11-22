@@ -324,4 +324,50 @@ class ElementsVerticalTabsWithSummaryTest extends WebDriverTestBase {
     $this->assertSession()->elementTextEquals('css', '.vertical-tabs__menu-item.last .vertical-tabs__menu-link-summary', 'Summary 2');
   }
 
+  /**
+   * Tests the two core summaryUpdated bindings before a later contrib one.
+   *
+   * The details summary and the vertical tab summary both update before a
+   * contrib handler bound later, whether jQuery loads before or after.
+   */
+  public function testSummaryBindingsPrecedeLaterContrib(): void {
+    foreach (['early' => ['legacy' => 1], 'late' => []] as $mode => $query) {
+      $this->drupalGet('form_test/vertical-tabs-with-summary', ['query' => $query]);
+      $session = $this->getSession();
+      $late = json_encode($query ? [] : array_column(
+        \Drupal::service('library.discovery')->getLibraryByName('core', 'jquery')['js'],
+        'data',
+      ));
+      $session->executeScript(<<<JS
+        (async () => {
+          const context = document.body.appendChild(document.createElement('div'));
+          context.innerHTML = '<div class="js-form-type-vertical-tabs"><div data-vertical-tabs-panes><input type="hidden" class="vertical-tabs__active-tab" value="pair-first"><details id="pair-first"><summary>First</summary><input name="pair"></details><details id="pair-second"><summary>Second</summary></details></div></div>';
+          Drupal.attachBehaviors(context);
+          for (const path of $late) {
+            await new Promise((resolve, reject) => {
+              const script = document.createElement('script');
+              script.src = drupalSettings.path.baseUrl + path;
+              script.onload = resolve;
+              script.onerror = reject;
+              document.head.append(script);
+            });
+          }
+          const details = document.getElementById('pair-first');
+          const order = [];
+          jQuery(details).on('summaryUpdated.pair', () => {
+            order.push([
+              details.querySelector('summary .summary')?.textContent ?? null,
+              context.querySelector('.vertical-tabs__menu-item-summary').textContent,
+            ]);
+          });
+          Drupal.form.setSummary(details, () => 'Pair summary');
+          jQuery(details).off('.pair');
+          window.summaryPairResult = order;
+        })();
+        JS);
+      $this->assertJsCondition('Array.isArray(window.summaryPairResult)');
+      $this->assertSame([[' (Pair summary)', 'Pair summary']], $session->evaluateScript('window.summaryPairResult'), "Loading mode: $mode.");
+    }
+  }
+
 }

@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Drupal\FunctionalJavascriptTests\Core\Form;
 
+use Drupal\FunctionalJavascriptTests\JqueryCallCounterTrait;
 use Drupal\FunctionalJavascriptTests\WebDriverTestBase;
 use PHPUnit\Framework\Attributes\Group;
 use PHPUnit\Framework\Attributes\RunTestsInSeparateProcesses;
@@ -14,6 +15,8 @@ use PHPUnit\Framework\Attributes\RunTestsInSeparateProcesses;
 #[Group('form')]
 #[RunTestsInSeparateProcesses]
 class FormGroupingElementsTest extends WebDriverTestBase {
+
+  use JqueryCallCounterTrait;
 
   /**
    * Required modules.
@@ -448,7 +451,7 @@ class FormGroupingElementsTest extends WebDriverTestBase {
   }
 
   /**
-   * Tests that an unrelated insertion keeps an unload batch pending.
+   * Tests that an unrelated insertion or removal keeps an unload batch pending.
    */
   public function testUnloadBatchIgnoresUnrelatedMutations(): void {
     $this->drupalGet('form-test/group-details');
@@ -478,12 +481,16 @@ class FormGroupingElementsTest extends WebDriverTestBase {
           region.append(throbber);
           await Promise.resolve();
           const pending = count();
+          // The throbber leaves again, which removes no tracked target.
+          throbber.remove();
+          await Promise.resolve();
+          const afterThrobber = count();
           await new Promise((resolve) => setTimeout(resolve, 0));
           region.replaceChildren();
           await Promise.resolve();
           const released = count();
           inner.dispatchEvent(new Event('testThrobber'));
-          window.unloadThrobberResult = [pending, released, received];
+          window.unloadThrobberResult = [pending, afterThrobber, released, received];
         }
         finally {
           stop();
@@ -492,7 +499,7 @@ class FormGroupingElementsTest extends WebDriverTestBase {
       })();
       JS);
     $this->assertJsCondition('Array.isArray(window.unloadThrobberResult)');
-    $this->assertSame([1, 0, []], $session->evaluateScript('window.unloadThrobberResult'));
+    $this->assertSame([1, 1, 0, []], $session->evaluateScript('window.unloadThrobberResult'));
   }
 
   /**
@@ -643,6 +650,7 @@ class FormGroupingElementsTest extends WebDriverTestBase {
    */
   public function testFormBridgeContracts(): void {
     $this->drupalGet('form-test/group-details', ['query' => ['legacy-details' => 1]]);
+    $this->getSession()->executeScript($this->jqueryCallCounter());
     $actual = $this->getSession()->evaluateScript(<<<'JS'
       (() => {
         const warnings = [];
@@ -654,12 +662,8 @@ class FormGroupingElementsTest extends WebDriverTestBase {
           ariaWrites += name === 'aria-expanded' && this.localName === 'summary' ? 1 : 0;
           return originalSetAttribute.call(this, name, ...args);
         };
-        const originalDispatch = jQuery.event.dispatch;
-        let dispatchCalls = 0;
-        jQuery.event.dispatch = function (...args) {
-          dispatchCalls += 1;
-          return originalDispatch.apply(this, args);
-        };
+        // Attaching and a native toggle make no jQuery calls at all.
+        jqueryCalls.start();
 
         const container = document.body.appendChild(document.createElement('div'));
         container.innerHTML = '<details id="bridge-details"><summary>Toggle</summary><form id="bridge-form" method="post"><input name="field" value="one"></form></details>';
@@ -673,13 +677,11 @@ class FormGroupingElementsTest extends WebDriverTestBase {
           // Mixed page with no legacy subscribers makes zero jQuery dispatch
           // calls, and the native listener runs once.
           ariaWrites = 0;
-          dispatchCalls = 0;
           summary.click();
           const summaryExpanded = summary.getAttribute('aria-expanded');
           const nativeDeliveries = ariaWrites;
-          const nativeDispatchCalls = dispatchCalls;
+          const nativeCalls = jqueryCalls.stop();
           Element.prototype.setAttribute = originalSetAttribute;
-          jQuery.event.dispatch = originalDispatch;
 
           // Legacy return false prevents default and stops propagation.
           const bubbleContainer = document.body.appendChild(document.createElement('div'));
@@ -725,7 +727,7 @@ class FormGroupingElementsTest extends WebDriverTestBase {
           return {
             summaryExpanded,
             nativeDeliveries,
-            nativeDispatchCalls,
+            nativeCalls,
             returnFalse: [returnEvent.result, returnEvent.isDefaultPrevented(), returnEvent.isPropagationStopped(), bubbled],
             singleSubmit: [submitSecond.isDefaultPrevented()],
             standardTriggerWarnings,
@@ -735,7 +737,7 @@ class FormGroupingElementsTest extends WebDriverTestBase {
           };
         } finally {
           Element.prototype.setAttribute = originalSetAttribute;
-          jQuery.event.dispatch = originalDispatch;
+          jqueryCalls.stop();
           Drupal.deprecationError = originalWarn;
           container.remove();
         }
@@ -744,7 +746,7 @@ class FormGroupingElementsTest extends WebDriverTestBase {
 
     $this->assertSame('true', $actual['summaryExpanded']);
     $this->assertSame(1, $actual['nativeDeliveries']);
-    $this->assertSame(0, $actual['nativeDispatchCalls']);
+    $this->assertNoJqueryCalls($actual['nativeCalls']);
     $this->assertSame([FALSE, TRUE, TRUE, FALSE], $actual['returnFalse']);
     $this->assertSame([TRUE], $actual['singleSubmit']);
     $this->assertSame([], $actual['standardTriggerWarnings']);
@@ -931,6 +933,112 @@ class FormGroupingElementsTest extends WebDriverTestBase {
     $this->assertTrue($textfield->isVisible(), 'Text field is visible');
     $this->assertTrue($textarea->isVisible(), 'Text area field is visible');
     $this->assertTrue($select->isVisible(), 'Select field is visible');
+  }
+
+  /**
+   * Tests two core click bindings on body before a later contrib handler.
+   *
+   * The pinned details-aria and dropbutton bindings both ran before a contrib
+   * handler bound later, whether jQuery loads before or after they bind.
+   */
+  public function testCoreBodyBindingsPrecedeLaterContrib(): void {
+    foreach (['early' => ['legacy-details' => 1], 'late' => []] as $mode => $query) {
+      $this->drupalGet('form-test/group-details', ['query' => $query]);
+      $session = $this->getSession();
+      $late = json_encode($query ? [] : $this->jqueryScripts());
+      $session->executeScript($this->loadHelper() . <<<JS
+        (async () => {
+          await load(['core/misc/dropbutton/dropbutton.js']);
+          const container = document.body.appendChild(document.createElement('div'));
+          container.innerHTML = '<div class="dropbutton-wrapper" id="combo-wrapper"><details><summary class="dropbutton-toggle" id="combo-toggle">Combo</summary><ul class="dropbutton"><li>One</li></ul></details></div>';
+          // Details-aria bound on page load; the dropbutton binding follows.
+          Drupal.attachBehaviors(container);
+          await load($late);
+          const summary = document.getElementById('combo-toggle');
+          const wrapper = document.getElementById('combo-wrapper');
+          window.comboOrder = [];
+          jQuery(document.body).on('click.combo', () => {
+            window.comboOrder.push([summary.getAttribute('aria-expanded'), wrapper.classList.contains('open')]);
+          });
+          window.comboReady = true;
+        })();
+        JS);
+      $this->assertJsCondition('window.comboReady === true');
+      $session->getPage()->findById('combo-toggle')->click();
+      $this->assertSame([['true', TRUE]], $session->evaluateScript('window.comboOrder'), "Loading mode: $mode.");
+    }
+  }
+
+  /**
+   * Tests a later contrib delegate on a summary descendant.
+   *
+   * jQuery ran delegates on deeper elements before the pinned details-aria
+   * delegate, so a contrib delegate that cancels a real click leaves
+   * aria-expanded and the open state untouched.
+   */
+  public function testLaterDelegateCancelsDetailsAria(): void {
+    foreach (['early' => ['legacy-details' => 1], 'late' => []] as $mode => $query) {
+      $this->drupalGet('form-test/group-details', ['query' => $query]);
+      $session = $this->getSession();
+      $late = json_encode($query ? [] : $this->jqueryScripts());
+      $session->executeScript($this->loadHelper() . <<<JS
+        (async () => {
+          await load($late);
+          const container = document.body.appendChild(document.createElement('div'));
+          container.innerHTML = '<details id="delegate-details"><summary id="delegate-summary"><span id="delegate-span">Toggle</span></summary><input name="delegate"></details>';
+          Drupal.attachBehaviors(container);
+          jQuery(document.body).on('click.delegateTest', '#delegate-span', (event) => {
+            event.preventDefault();
+            event.stopImmediatePropagation();
+          });
+          window.delegateInitial = document.getElementById('delegate-summary').getAttribute('aria-expanded');
+          window.delegateReady = true;
+        })();
+        JS);
+      $this->assertJsCondition('window.delegateReady === true');
+      $initial = $session->evaluateScript('window.delegateInitial');
+      $session->getPage()->findById('delegate-span')->click();
+      $this->assertSame(
+        [$initial, FALSE],
+        $session->evaluateScript("[document.getElementById('delegate-summary').getAttribute('aria-expanded'), document.getElementById('delegate-details').open]"),
+        "Loading mode: $mode.",
+      );
+    }
+  }
+
+  /**
+   * Returns JavaScript that defines load() for script paths.
+   *
+   * @return string
+   *   A JavaScript statement.
+   */
+  private function loadHelper(): string {
+    return <<<'JS'
+      var load = async (paths) => {
+        for (const path of paths) {
+          await new Promise((resolve, reject) => {
+            const script = document.createElement('script');
+            script.src = drupalSettings.path.baseUrl + path;
+            script.onload = resolve;
+            script.onerror = reject;
+            document.head.append(script);
+          });
+        }
+      };
+      JS;
+  }
+
+  /**
+   * Returns the core/jquery script paths in load order.
+   *
+   * @return string[]
+   *   The script paths relative to the base URL.
+   */
+  private function jqueryScripts(): array {
+    return array_column(
+      \Drupal::service('library.discovery')->getLibraryByName('core', 'jquery')['js'],
+      'data',
+    );
   }
 
 }

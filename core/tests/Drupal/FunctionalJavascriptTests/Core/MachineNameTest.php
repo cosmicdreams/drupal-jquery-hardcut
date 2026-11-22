@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Drupal\FunctionalJavascriptTests\Core;
 
+use Drupal\FunctionalJavascriptTests\JqueryCallCounterTrait;
 use Drupal\FunctionalJavascriptTests\WebDriverTestBase;
 use PHPUnit\Framework\Attributes\Group;
 use PHPUnit\Framework\Attributes\RunTestsInSeparateProcesses;
@@ -15,6 +16,8 @@ use PHPUnit\Framework\Attributes\RunTestsInSeparateProcesses;
 #[Group('#slow')]
 #[RunTestsInSeparateProcesses]
 class MachineNameTest extends WebDriverTestBase {
+
+  use JqueryCallCounterTrait;
 
   /**
    * Required modules.
@@ -447,10 +450,160 @@ class MachineNameTest extends WebDriverTestBase {
   }
 
   /**
+   * Tests a native listener added before the bridge loads late.
+   *
+   * The pinned binding created jQuery's listener when core bound, so a
+   * contrib jQuery handler bound later still ran before a native listener
+   * added in between.
+   */
+  public function testLateReplayKeepsCorePosition(): void {
+    $this->drupalGet('form-test/machine-name');
+    $session = $this->getSession();
+    $this->assertSame('undefined', $session->evaluateScript('typeof window.jQuery'));
+    $scripts = json_encode($this->jqueryScripts());
+    $session->executeScript($this->widgetHelpers() . <<<JS
+      (async () => {
+        const { source, target } = attachWidget(createWidget('replay'));
+        const order = [];
+        source.addEventListener('input', () => order.push(['native', target.value]));
+        await load($scripts);
+        jQuery(source).on('input', () => order.push(['contrib', target.value]));
+        source.value = 'Replay Order';
+        source.dispatchEvent(new Event('input'));
+        window.lateReplayResult = order;
+      })();
+      JS);
+    $this->assertJsCondition('Array.isArray(window.lateReplayResult)');
+    $this->assertSame([
+      ['contrib', 'replay_order'],
+      ['native', 'replay_order'],
+    ], $session->evaluateScript('window.lateReplayResult'));
+  }
+
+  /**
+   * Tests a .one() handler that removes itself during a trigger.
+   *
+   * Core's slot is released once the trigger ends, so later native input
+   * makes no jQuery calls.
+   */
+  public function testOneHandlerReleasesSlot(): void {
+    $this->drupalGet('form-test/machine-name', ['query' => ['legacy-machine-name' => 1]]);
+    $session = $this->getSession();
+    $session->executeScript($this->jqueryCallCounter());
+    $actual = $session->evaluateScript(<<<'JS'
+      (() => {
+        const source = document.getElementById('edit-machine-name-1-label');
+        const target = document.getElementById('edit-machine-name-1');
+        let once = 0;
+        jQuery(source).one('input', () => {
+          once += 1;
+        });
+        jQuery(source).val('One Value').trigger('input');
+        const synthetic = target.value;
+        jqueryCalls.start();
+        source.value = 'After One';
+        source.dispatchEvent(new Event('input'));
+        return [once, synthetic, target.value, jqueryCalls.stop()];
+      })()
+      JS);
+    [$once, $synthetic, $value, $counts] = $actual;
+    $this->assertSame([1, 'one_value', 'after_one'], [$once, $synthetic, $value]);
+    $this->assertNoJqueryCalls($counts);
+  }
+
+  /**
+   * Tests a contrib special event whose setup() forwards natively.
+   *
+   * jQuery adds no listener of its own then, so the contrib handler receives
+   * each native event once.
+   */
+  public function testContribSpecialSetupDeliversOnce(): void {
+    $this->drupalGet('form-test/machine-name', ['query' => ['legacy-machine-name' => 1]]);
+    $session = $this->getSession();
+    $session->executeScript($this->widgetHelpers() . <<<'JS'
+      (() => {
+        const previous = jQuery.event.special.input;
+        function forward(event) {
+          return jQuery.event.dispatch.call(this, event);
+        }
+        jQuery.event.special.input = {
+          setup() {
+            this.addEventListener('input', forward);
+            return true;
+          },
+          teardown() {
+            this.removeEventListener('input', forward);
+            return true;
+          },
+        };
+        try {
+          const { source, target } = attachWidget(createWidget('special'));
+          const seen = [];
+          jQuery(source).on('input.special', () => seen.push(target.value));
+          source.value = 'Special Value';
+          source.dispatchEvent(new Event('input'));
+          jQuery(source).off('.special');
+          window.specialSetupResult = seen;
+        }
+        finally {
+          if (previous) {
+            jQuery.event.special.input = previous;
+          }
+          else {
+            delete jQuery.event.special.input;
+          }
+        }
+      })();
+      JS);
+    $this->assertSame(['special_value'], $session->evaluateScript('window.specialSetupResult'));
+  }
+
+  /**
+   * Tests that a mixed page with no legacy use makes no jQuery calls.
+   *
+   * Plan section 6.4 instruments jQuery dispatch, $.fn.init and selectors.
+   * Attaching machine-name, typing into it and clicking a fragment link make
+   * none of these calls, whether jQuery loads before or after core binds.
+   */
+  public function testMixedPageMakesNoJqueryCalls(): void {
+    foreach (['early', 'late'] as $mode) {
+      $this->drupalGet('form-test/machine-name', $mode === 'early' ? ['query' => ['legacy-machine-name' => 1]] : []);
+      $session = $this->getSession();
+      if ($mode === 'late') {
+        $this->assertSame('undefined', $session->evaluateScript('typeof window.jQuery'));
+        $scripts = json_encode($this->jqueryScripts());
+        $session->executeScript($this->widgetHelpers() . "load($scripts).then(() => { window.lateScriptsLoaded = true; });");
+        $this->assertJsCondition('window.lateScriptsLoaded === true');
+      }
+      $session->executeScript($this->jqueryCallCounter() . $this->widgetHelpers() . <<<'JS'
+        jqueryCalls.start();
+        const container = createWidget('calls');
+        attachWidget(container);
+        const link = document.createElement('a');
+        link.id = 'calls-link';
+        link.href = '#calls-target';
+        link.textContent = 'Fragment';
+        container.prepend(link);
+        window.fragmentPublications = 0;
+        document.body.addEventListener('formFragmentLinkClickOrHashChange', () => {
+          window.fragmentPublications += 1;
+        });
+        JS);
+      $page = $session->getPage();
+      $page->findById('calls-source')->setValue('Typed Name');
+      $this->assertJsCondition("document.getElementById('calls-target').value === 'typed_name'");
+      $page->findById('calls-link')->click();
+      $this->assertJsCondition('window.fragmentPublications > 0');
+      $this->assertNoJqueryCalls($session->evaluateScript('jqueryCalls.stop()'), "Loading mode: $mode.");
+    }
+  }
+
+  /**
    * Tests that a nested synthetic trigger leaves native delivery to core.
    */
   public function testNestedTriggerReleasesBindings(): void {
     $this->drupalGet('form-test/machine-name', ['query' => ['legacy-machine-name' => 1]]);
+    $this->getSession()->executeScript($this->jqueryCallCounter());
     $actual = $this->getSession()->evaluateScript(<<<'JS'
       (() => {
         const behavior = Drupal.behaviors.machineName;
@@ -470,24 +623,22 @@ class MachineNameTest extends WebDriverTestBase {
           calls += 1;
           return show.apply(this, args);
         };
-        const dispatch = jQuery.event.dispatch;
-        let dispatchCalls = 0;
-        jQuery.event.dispatch = function (...args) {
-          dispatchCalls += 1;
-          return dispatch.apply(this, args);
-        };
+        jqueryCalls.start();
+        let counts;
         try {
           source.value = 'After Nested';
           source.dispatchEvent(new Event('input'));
         }
         finally {
           behavior.showMachineNameNative = show;
-          jQuery.event.dispatch = dispatch;
+          counts = jqueryCalls.stop();
         }
-        return [nested, target.value, calls, dispatchCalls];
+        return [nested, target.value, calls, counts];
       })()
       JS);
-    $this->assertSame(['nested_value', 'after_nested', 1, 0], $actual);
+    [$nested, $value, $calls, $counts] = $actual;
+    $this->assertSame(['nested_value', 'after_nested', 1], [$nested, $value, $calls]);
+    $this->assertNoJqueryCalls($counts);
   }
 
   /**

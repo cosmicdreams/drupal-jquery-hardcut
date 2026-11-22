@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Drupal\Tests\system\FunctionalJavascript;
 
+use Drupal\FunctionalJavascriptTests\JqueryCallCounterTrait;
 use Drupal\FunctionalJavascriptTests\WebDriverTestBase;
 use PHPUnit\Framework\Attributes\Group;
 use PHPUnit\Framework\Attributes\RunTestsInSeparateProcesses;
@@ -16,6 +17,8 @@ use PHPUnit\Framework\Attributes\RunTestsInSeparateProcesses;
 #[Group('system')]
 #[RunTestsInSeparateProcesses]
 class CopyFieldValueTest extends WebDriverTestBase {
+
+  use JqueryCallCounterTrait;
 
   /**
    * {@inheritdoc}
@@ -69,6 +72,7 @@ class CopyFieldValueTest extends WebDriverTestBase {
       \Drupal::service('library.discovery')->getLibraryByName('core', 'jquery')['js'],
       'data',
     ));
+    $session->executeScript($this->jqueryCallCounter());
     $session->executeScript(<<<JS
       (async () => {
         for (const path of $scripts) {
@@ -93,24 +97,22 @@ class CopyFieldValueTest extends WebDriverTestBase {
           calls += 1;
           return blur.apply(this, args);
         };
-        const dispatch = jQuery.event.dispatch;
-        let dispatchCalls = 0;
-        jQuery.event.dispatch = function (...args) {
-          dispatchCalls += 1;
-          return dispatch.apply(this, args);
-        };
+        jqueryCalls.start();
+        let counts;
         try {
           source.dispatchEvent(new FocusEvent('blur'));
         }
         finally {
           behavior.valueSourceBlurHandlerNative = blur;
-          jQuery.event.dispatch = dispatch;
+          counts = jqueryCalls.stop();
         }
-        window.syntheticBlurResult = [synthetic, target.value, calls, dispatchCalls];
+        window.syntheticBlurResult = [synthetic, target.value, calls, counts];
       })();
       JS);
     $this->assertJsCondition('Array.isArray(window.syntheticBlurResult)');
-    $this->assertSame(['synthetic', 'native', 1, 0], $session->evaluateScript('window.syntheticBlurResult'));
+    [$synthetic, $value, $calls, $counts] = $session->evaluateScript('window.syntheticBlurResult');
+    $this->assertSame(['synthetic', 'native', 1], [$synthetic, $value, $calls]);
+    $this->assertNoJqueryCalls($counts);
   }
 
 }
