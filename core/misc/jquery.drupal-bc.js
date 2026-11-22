@@ -82,15 +82,19 @@
   function observeLegacyEvents(jquery, registry) {
     const subscriptions = legacySlots.get(jquery) || new Map();
     legacySlots.set(jquery, subscriptions);
+    // Every slot's handler is core code, never a contrib handler.
     const slotHandlers = new WeakSet();
     // Marked slots bind only while this instance needs them. Each target maps
     // to its marked slots in registration order.
     const markedSlots = new WeakMap();
     const markedHandlers = new WeakSet();
+    // Maps each target to the slots bound when core registers them, such as
+    // the States and Ajax slots, in registration order.
+    const boundSlots = new WeakMap();
     const anchors = new WeakMap();
     const temporary = new Set();
     // Maps each target to the handler list types that may hold handlers other
-    // than jQuery's own and the marked slots. The add hook below records every
+    // than jQuery's own and the slots. The add hook below records every
     // binding made after this observer connected, so a target missing here
     // needs no jQuery call. An entry may be stale after a removal; readers
     // verify it.
@@ -195,7 +199,7 @@
     }
 
     /**
-     * Checks for handlers other than jQuery's own and the marked slots.
+     * Checks for handlers other than jQuery's own and the slots.
      * @param {EventTarget} target
      *   The target.
      * @param {string} bindType
@@ -210,7 +214,7 @@
         getTrackedHandlers(target, bindType)?.some(
           (handleObj) =>
             !isInternalHandler(handleObj) &&
-            !markedHandlers.has(handleObj.handler) &&
+            !slotHandlers.has(handleObj.handler) &&
             (!delegated || handleObj.selector),
         ),
       );
@@ -629,7 +633,12 @@
       const bound = [];
       markedSlots.get(target)?.forEach((slot) => {
         if (!slot.bound && (!bindTypes || bindTypes.has(slot.bindType))) {
-          bindSlot(slot, false);
+          // Behind an earlier slot that is still bound, core keeps its place
+          // in jQuery's queue, as when the slot binds at registration.
+          bindSlot(
+            slot,
+            slot.precedingSlots.some((preceding) => preceding.bound),
+          );
           bound.push(slot);
         }
       });
@@ -662,7 +671,9 @@
         elem &&
         typeof elem === 'object' &&
         handleObj?.namespace !== false &&
-        !markedHandlers.has(callback) &&
+        // A slot, such as States' own, is core code: it neither binds a
+        // marked slot in front of it nor counts as an external binding.
+        !slotHandlers.has(callback) &&
         !isReturnTrue(callback)
           ? bindTypesFor(types, handleObj?.selector ?? selector)
           : null;
@@ -892,6 +903,8 @@
           remove(unbind = true) {
             subscriptions.delete(binding);
             if (!legacySlot) {
+              slot.bound = false;
+              boundSlots.get(target)?.delete(slot);
               if (unbind) {
                 jquery(target).off(name, selector, slot.handler);
               }
@@ -922,13 +935,21 @@
           jquery(target).on(name, selector, slot.handler);
           slot.bound = true;
           slot.followsHandlers = followsHandlers;
+          if (!boundSlots.has(target)) {
+            boundSlots.set(target, new Set());
+          }
+          boundSlots.get(target).add(slot);
           return;
         }
 
-        // A marked slot binds now only behind existing handlers. Otherwise it
-        // binds right before the first later handler, a synthetic trigger, or
-        // an .off() call that could match it.
+        // A marked slot binds now only behind existing handlers other than
+        // slots. Otherwise it binds right before the first later handler, a
+        // synthetic trigger, or an .off() call that could match it.
         markedHandlers.add(slot.handler);
+        // The earlier slots in this list, which precede the binding.
+        slot.precedingSlots = Array.from(boundSlots.get(target) ?? []).filter(
+          (preceding) => preceding.bindType === bindType,
+        );
         if (!markedSlots.has(target)) {
           markedSlots.set(target, new Set());
         }
@@ -938,7 +959,13 @@
         // file runs first, with an unknown order relative to core.
         // Accepted gap B: a foreign handler bound before connectLegacy() has
         // no pinned equivalent; it also stays ahead of core's slot.
-        if (list?.some((handleObj) => !isInternalHandler(handleObj))) {
+        if (
+          list?.some(
+            (handleObj) =>
+              !isInternalHandler(handleObj) &&
+              !slotHandlers.has(handleObj.handler),
+          )
+        ) {
           bindSlot(slot, followsHandlers);
         }
       },
