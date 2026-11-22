@@ -129,10 +129,20 @@
       checks = new Set();
       bindingChecks.set(binding, checks);
       binding.handlesNativeEvent = (event) => {
-        const handled = Array.from(checks).some((check) => check(event));
-        // Core's native listener follows every slot that could deliver this
-        // dispatch, so the next dispatch of the same event starts clear.
-        nativeDeliveries.get(event)?.delete(binding);
+        // A slot of any connected instance that already ran core in this
+        // dispatch keeps the claim until the dispatch ends, so neither core's
+        // listener nor a slot after it runs core again.
+        const handled =
+          Boolean(nativeDeliveries.get(event)?.has(binding)) ||
+          Array.from(checks).some((check) => check(event));
+        // Known gap: the window listener that clears claims per dispatch
+        // never sees an event on a target outside the document. There the
+        // claim ends at core's listener, so the same Event object can run
+        // core again on its next dispatch. A second instance whose slot
+        // dispatches after core's listener may then run core twice.
+        if (!event.composedPath().includes(window)) {
+          nativeDeliveries.get(event)?.delete(binding);
+        }
         return handled;
       };
     }

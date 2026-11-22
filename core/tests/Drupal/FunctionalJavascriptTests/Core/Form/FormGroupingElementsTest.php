@@ -1076,6 +1076,72 @@ class FormGroupingElementsTest extends WebDriverTestBase {
   }
 
   /**
+   * Tests two connected instances with slots on both sides of core.
+   *
+   * The page's instance queues core's slot before core's native listener.
+   * A second instance dispatches at core's position, after that listener,
+   * and its contrib delegate makes its slot deliver too. Core runs once.
+   */
+  public function testTwoInstancesRunCoreOnce(): void {
+    $this->drupalGet('form-test/group-details', ['query' => ['legacy-details' => 1]]);
+    $session = $this->getSession();
+    $vendor = json_encode(array_slice($this->jqueryScripts(), 0, 1));
+    $session->executeScript($this->loadHelper() . <<<JS
+      (async () => {
+        await load($vendor);
+        const foreign = window.jQuery.noConflict(true);
+        Drupal.eventBindings.connectLegacy(foreign);
+        const container = document.body.appendChild(document.createElement('div'));
+        container.innerHTML = '<button type="button" id="pair-button"><span id="pair-span">Pair</span></button>';
+        window.pairCalls = [];
+        jQuery(container).on('click.pair', 'button', () => window.pairCalls.push('first'));
+        Drupal.formEvents.listen(container, 'click', 'pair', () => window.pairCalls.push('core'), 'button');
+        foreign(container).on('click.pair', 'button', () => window.pairCalls.push('second'));
+        window.pairReady = true;
+      })();
+      JS);
+    $this->assertJsCondition('window.pairReady === true');
+    $session->getPage()->findById('pair-span')->click();
+    $this->assertSame(['first', 'core', 'second'], $session->evaluateScript('window.pairCalls'));
+  }
+
+  /**
+   * Tests one Event object dispatched twice while core delivers from its slot.
+   *
+   * Core runs on each dispatch, also on a target outside the document.
+   */
+  public function testReusedEventRunsCoreFromSlot(): void {
+    $this->drupalGet('form-test/group-details', ['query' => ['legacy-details' => 1]]);
+    $actual = $this->getSession()->evaluateScript(<<<'JS'
+      (() => {
+        const run = (connected) => {
+          const container = document.createElement('div');
+          container.innerHTML = '<button type="button"><span>Reuse</span></button>';
+          if (connected) {
+            document.body.append(container);
+          }
+          let calls = 0;
+          // A handler bound first makes core deliver real events from its slot.
+          jQuery(container).on('click.reuse', 'button', () => {});
+          const stop = Drupal.formEvents.listen(container, 'click', 'reuse', () => {
+            calls += 1;
+          }, 'button');
+          const event = new MouseEvent('click', { bubbles: true });
+          const span = container.querySelector('span');
+          span.dispatchEvent(event);
+          span.dispatchEvent(event);
+          jQuery(container).off('.reuse');
+          stop();
+          container.remove();
+          return calls;
+        };
+        return [run(true), run(false)];
+      })()
+      JS);
+    $this->assertSame([2, 2], $actual);
+  }
+
+  /**
    * Returns JavaScript that defines load() for script paths.
    *
    * @return string
