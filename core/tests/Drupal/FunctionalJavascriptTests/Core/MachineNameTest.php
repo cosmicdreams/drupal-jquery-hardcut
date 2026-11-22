@@ -588,6 +588,64 @@ class MachineNameTest extends WebDriverTestBase {
   }
 
   /**
+   * Tests that a contrib setup()'s return decides jQuery's dispatch position.
+   *
+   * A setup that returns false lets jQuery add its own listener, so a contrib
+   * handler bound later runs at core's position, before a native listener
+   * added in between, as pinned. A setup that returns another value delivers
+   * the events itself, so each one reaches the contrib handler once.
+   */
+  public function testContribSetupReturnDecidesPosition(): void {
+    $this->drupalGet('form-test/machine-name', ['query' => ['legacy-machine-name' => 1]]);
+    $session = $this->getSession();
+    $session->executeScript($this->widgetHelpers() . <<<'JS'
+      (() => {
+        const run = (id, declines) => {
+          const previous = jQuery.event.special.input;
+          function forward(event) {
+            return jQuery.event.dispatch.call(this, event);
+          }
+          jQuery.event.special.input = {
+            setup() {
+              if (declines) {
+                this.addEventListener('input', forward);
+              }
+              return declines;
+            },
+            teardown() {
+              this.removeEventListener('input', forward);
+              return declines;
+            },
+          };
+          try {
+            const { source, target } = attachWidget(createWidget(id));
+            const order = [];
+            source.addEventListener('input', () => order.push('native'));
+            jQuery(source).on('input.setup', () => order.push(['contrib', target.value]));
+            source.value = `${id} Value`;
+            source.dispatchEvent(new Event('input'));
+            jQuery(source).off('.setup');
+            return order;
+          }
+          finally {
+            if (previous) {
+              jQuery.event.special.input = previous;
+            }
+            else {
+              delete jQuery.event.special.input;
+            }
+          }
+        };
+        window.setupReturnResult = [run('False', false), run('True', true)];
+      })();
+      JS);
+    $this->assertSame([
+      [['contrib', 'false_value'], 'native'],
+      ['native', ['contrib', 'true_value']],
+    ], $session->evaluateScript('window.setupReturnResult'));
+  }
+
+  /**
    * Tests that a mixed page with no legacy use makes no jQuery calls.
    *
    * Plan section 6.4 instruments jQuery dispatch, $.fn.init and selectors.
