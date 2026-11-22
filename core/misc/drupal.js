@@ -102,6 +102,7 @@ window.Drupal = { behaviors: {}, locale: {} };
 
   const ownedEventBindings = new Set();
   const eventBindingObservers = new Set();
+  const positionListeners = new WeakMap();
   const eventPublicationObservers = new Set();
 
   /**
@@ -125,10 +126,31 @@ window.Drupal = { behaviors: {}, locale: {} };
     register(binding) {
       if (!ownedEventBindings.has(binding)) {
         ownedEventBindings.add(binding);
+        const { target, type } = binding;
+        if (binding.reservesLegacySlot && target?.addEventListener) {
+          // An idle listener right after the owner's own, so an adapter that
+          // connects later can still dispatch at the binding's position.
+          const listener = (event) => {
+            eventBindingObservers.forEach((observer) => {
+              try {
+                observer.dispatchAt?.(binding, event);
+              } catch (error) {
+                Drupal.throwError(error);
+              }
+            });
+          };
+          target.addEventListener(type, listener);
+          positionListeners.set(binding, listener);
+        }
         eventBindingObservers.forEach((observer) => observer.add(binding));
       }
       return () => {
         if (ownedEventBindings.delete(binding)) {
+          const listener = positionListeners.get(binding);
+          if (listener) {
+            positionListeners.delete(binding);
+            binding.target.removeEventListener(binding.type, listener);
+          }
           eventBindingObservers.forEach((observer) => observer.remove(binding));
         }
       };
@@ -136,6 +158,10 @@ window.Drupal = { behaviors: {}, locale: {} };
 
     /**
      * Observes bindings already installed and subsequent changes.
+     *
+     * A binding that sets reservesLegacySlot also gets a position listener
+     * right after the owner's listener, for its own event type. It calls the
+     * optional dispatchAt(binding, event) method of every observer.
      *
      * @param {object} observer
      *   An adapter with add and remove methods for an owned binding.
