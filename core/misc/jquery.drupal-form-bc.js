@@ -531,11 +531,12 @@
    *   Stops supplying the arguments.
    */
   function installPublications(jquery) {
-    const publications = new WeakSet();
+    // Maps each publication to its positional value, once a handler needs it.
+    const publications = new WeakMap();
     const legacyTypes = [...tabbingEvents, fragmentEvent, valueCopyEvent];
     const stop = window.Drupal.eventBindings.observePublications((event) => {
       if (legacyTypes.includes(event.type)) {
-        publications.add(event);
+        publications.set(event, undefined);
         return () => publications.delete(event);
       }
       return undefined;
@@ -547,17 +548,21 @@
       const hadHandle = Object.hasOwn(special, 'handle');
       const previous = special.handle;
       // Only a jQuery handler wraps the fragment target, so a publication
-      // without legacy receivers makes no jQuery call.
+      // without legacy receivers makes no jQuery call. Every handler of one
+      // publication receives the same collection, as pinned.
       const handle = function (event, ...args) {
         const native = event.originalEvent;
-        const positional =
-          !event.isTrigger && publications.has(native)
-            ? [
-                native.type === fragmentEvent
-                  ? jquery(native.detail)
-                  : native.detail,
-              ]
-            : args;
+        let positional = args;
+        if (!event.isTrigger && publications.has(native)) {
+          if (publications.get(native) === undefined) {
+            publications.set(native, [
+              native.type === fragmentEvent
+                ? jquery(native.detail)
+                : native.detail,
+            ]);
+          }
+          positional = publications.get(native);
+        }
         return (previous || event.handleObj.handler).call(
           this,
           event,
