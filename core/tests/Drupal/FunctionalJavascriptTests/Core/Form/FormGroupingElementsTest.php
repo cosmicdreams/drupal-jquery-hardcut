@@ -1188,6 +1188,32 @@ class FormGroupingElementsTest extends WebDriverTestBase {
   }
 
   /**
+   * Tests a States change on an element with a form binding.
+   *
+   * States dispatches a native change, which core's listener receives. The
+   * bridge then gives jQuery the pinned synthetic event, with isTrigger set.
+   * That projection must not run core again before the later jQuery handler.
+   */
+  public function testStatesChangeRunsFormBindingOnce(): void {
+    $this->drupalGet('form-test/group-details', ['query' => ['legacy-details' => 1, 'states' => 1]]);
+    $session = $this->getSession();
+    $session->executeScript(<<<'JS'
+      const container = document.body.appendChild(document.createElement('div'));
+      container.innerHTML = `<div class="js-form-item"><input type="checkbox" id="states-dependee"></div><div class="js-form-item"><input type="checkbox" id="states-target" data-drupal-states='{"checked":{"#states-dependee":{"checked":true}}}'></div>`;
+      Drupal.attachBehaviors(container);
+      const target = document.getElementById('states-target');
+      window.statesCalls = [];
+      Drupal.formEvents.listen(target, 'change', 'statesOnce', () => window.statesCalls.push('core'));
+      jQuery(target).on('change', () => window.statesCalls.push('legacy'));
+      JS);
+    $session->getPage()->findById('states-dependee')->click();
+    $this->assertSame(
+      [TRUE, ['core', 'legacy']],
+      $session->evaluateScript("[document.getElementById('states-target').checked, window.statesCalls]"),
+    );
+  }
+
+  /**
    * Tests two connected instances with slots on both sides of core.
    *
    * The page's instance queues core's slot before core's native listener.

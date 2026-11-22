@@ -427,6 +427,27 @@
     };
     jquery.event.handlers = queueHandlers;
 
+    /**
+     * Returns the native event that a States projection stands for.
+     *
+     * States dispatches its events natively. The bridge then gives jQuery
+     * handlers one synthetic event, with isTrigger set and no originalEvent,
+     * as the pinned .trigger() did.
+     * @param {object} event
+     *   The active jQuery event.
+     * @return {Event|undefined}
+     *   The projected native event, if States published it.
+     */
+    function statesOriginal(event) {
+      const original = Drupal.eventBindings.getProjectedOriginal?.(event);
+      const compatibility = Drupal.states?.compatibility;
+      return original instanceof Event &&
+        (compatibility?.isSyntheticTrigger?.(original) ||
+          compatibility?.isStateEvent?.(original))
+        ? original
+        : undefined;
+    }
+
     const originalTrigger = jquery.event.trigger;
     const trigger = function (event, data, elem) {
       const rawType = (typeof event === 'string' ? event : event.type).split(
@@ -465,7 +486,11 @@
           handler: undefined,
         };
         entry.deliver = function (event, fragmentTarget) {
-          if (!event.isTrigger) {
+          // A States projection stands for a native event that core's
+          // listener already received, so it is not a new trigger.
+          const projected = event.isTrigger ? statesOriginal(event) : undefined;
+          const original = projected ?? event.originalEvent;
+          if (!event.isTrigger || projected) {
             // A handler queued ahead of the slot may leave jQuery's lists
             // before the slot runs, such as one bound with .one(). Core's
             // listener already left this event to the slot, and the pinned
@@ -473,17 +498,14 @@
             // reports its own state: the base bridge keeps it bound for the
             // rest of a dispatch that queued it.
             const leftToSlot =
-              Boolean(slotDeliveries.get(event.originalEvent)?.has(entry)) ||
-              Boolean(queuedSlots.get(event.originalEvent)?.has(entry));
+              Boolean(slotDeliveries.get(original)?.has(entry)) ||
+              Boolean(queuedSlots.get(original)?.has(entry));
             if (
               (!leftToSlot &&
                 (hasNativeOrder(entry) ||
                   (!entry.slot && !hasExternalHandler(target, bindType)))) ||
-              Drupal.eventBindings.isForeignDefaultAction?.(
-                event.originalEvent,
-              ) ||
-              (event.originalEvent &&
-                !claimNativeDelivery(event.originalEvent, binding))
+              Drupal.eventBindings.isForeignDefaultAction?.(original) ||
+              (original && !claimNativeDelivery(original, binding))
             ) {
               return undefined;
             }
@@ -494,8 +516,8 @@
             );
           }
           if (formInteraction) {
-            let native = event.originalEvent;
-            if (event.isTrigger || !(native instanceof Event)) {
+            let native = original;
+            if ((event.isTrigger && !projected) || !(native instanceof Event)) {
               native = new CustomEvent(type, {
                 cancelable: true,
                 detail:
@@ -542,8 +564,8 @@
             return listener(this);
           }
           const native =
-            !event.isTrigger && event.originalEvent instanceof Event
-              ? event.originalEvent
+            (!event.isTrigger || projected) && original instanceof Event
+              ? original
               : new KeyboardEvent(type, {
                   cancelable: true,
                   key: event.key,
