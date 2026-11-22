@@ -308,12 +308,13 @@
      * that differs from the binding type, such as mouseover for mouseenter,
      * uses a listener of its own, added now.
      *
-     * Known gap: a slot that delivers from jQuery's queue, such as core's
-     * delegate next to a contrib delegate, waits for this position. A native
-     * listener added between two core bindings that stops immediate
-     * propagation then suppresses the first one too. The pinned listener ran
-     * every core binding before it. Neither anchor position keeps both
-     * orders, because core's bindings now have one native listener each.
+     * Known ordering gap: a native listener added between two core bindings
+     * runs before every core binding that delivers from jQuery's queue here,
+     * such as core's delegate next to a contrib delegate. The pinned shared
+     * listener ran all of them before it. The listener's own effects, and a
+     * stopImmediatePropagation() call that now suppresses those bindings,
+     * follow from that order. Neither anchor position keeps both orders,
+     * because core's bindings now have one native listener each.
      * @param {object} anchor
      *   The anchor.
      * @param {object|undefined} binding
@@ -397,11 +398,12 @@
         return;
       }
       anchor.count -= 1;
-      // Known gap: when the hosting binding is unregistered during a dispatch,
-      // before its position listener runs, the browser skips that removed
-      // listener and every listener added now. The remaining contrib handlers
-      // then miss that one event, where the pinned jQuery dispatch ran its
-      // queued handlers. The registry has no hook to run them in place.
+      // Known ordering gap: when the host binding is unregistered during a
+      // dispatch, before its position listener runs, the browser skips that
+      // removed listener and every listener added now. The remaining contrib
+      // handlers lose their place in that event and miss it, where the pinned
+      // jQuery dispatch ran its queued handlers in order. The registry has no
+      // hook to run them in place.
       if (anchor.count > 0) {
         if (anchor.host === binding) {
           // The position left with the binding; the last one remaining hosts.
@@ -419,8 +421,10 @@
       }
       const handle = jquery._data(target, 'handle');
       if (handle && getHandlers(target, bindType)?.length) {
-        // Known gap: the position left with core's last binding, so remaining
-        // contrib handlers keep a jQuery listener after the other listeners.
+        // Known ordering gap: the position left with core's last binding.
+        // The remaining contrib handlers get a jQuery listener after every
+        // native listener on the target, where the pinned listener stayed at
+        // the first core binding's position.
         target.addEventListener(bindType, handle);
       }
     }
@@ -511,7 +515,14 @@
      * Releases a target's marked slots once no other jQuery handler remains.
      *
      * A later handler materializes them again in front of it, which is the
-     * position an unreleased slot would have, so releasing reorders nothing.
+     * position an unreleased slot would have within jQuery's queue.
+     *
+     * Known ordering gap: jQuery's listener leaves with the last handler.
+     * If it ran before core's native listener, core now runs from its own
+     * listener, and a later contrib handler runs at the anchor after it.
+     * Both then follow native listeners added between jQuery's old listener
+     * and core's, which the pinned shared listener preceded. Such a listener
+     * that stops immediate propagation now suppresses core.
      * @param {EventTarget} target
      *   The target.
      * @param {string} bindType
