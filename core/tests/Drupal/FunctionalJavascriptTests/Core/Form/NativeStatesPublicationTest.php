@@ -2118,7 +2118,7 @@ final class NativeStatesPublicationTest extends WebDriverTestBase {
         return had;
       })()
       JS);
-    $this->assertFalse($hadSpecial, 'The hook exists before the projection.');
+    $this->assertFalse($hadSpecial, 'No state:checked special hook existed before the test installed one.');
 
     $assert->elementExists('css', '#r5-hook-src')->check();
     $this->assertFalse($assert->elementExists('css', '#r5-hook-dep')->isVisible(), 'States reads the value the hook set before calling the handler.');
