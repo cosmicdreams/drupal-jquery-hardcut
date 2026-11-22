@@ -241,17 +241,24 @@
     const removing = new WeakSet();
 
     /**
-     * Reports whether another jQuery listener exists on the target and type.
+     * Reports whether legacy jQuery code handles the target and type.
+     *
+     * Pinned States always dispatched state:* events through jQuery, so a
+     * special.handle hook for one wrapped the States handler.
      * @param {EventTarget} target
      *   The event target.
      * @param {string} type
      *   The base event type.
      * @return {boolean}
-     *   Whether a non-States jQuery handler is attached.
+     *   Whether a non-States jQuery handler or state:* hook is present.
      */
     function hasExternalLegacyHandler(target, type) {
-      return jqueryHandlers(target, type).some(
-        ({ handler }) => !handlerToBinding.has(handler),
+      return (
+        (type.startsWith('state:') &&
+          Boolean(eventBindings.hasLegacySpecialHandle?.(jquery, type))) ||
+        jqueryHandlers(target, type).some(
+          ({ handler }) => !handlerToBinding.has(handler),
+        )
       );
     }
 

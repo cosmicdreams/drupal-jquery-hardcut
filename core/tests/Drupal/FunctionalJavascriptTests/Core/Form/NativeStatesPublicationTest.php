@@ -2306,4 +2306,51 @@ final class NativeStatesPublicationTest extends WebDriverTestBase {
     $this->assertTrue($session->evaluateScript('window.r5Ns("go", (input) => input.trigger("change"))'), 'A trigger without a namespace reaches the States listener.');
   }
 
+  /**
+   * Tests that a special.handle hook alone wraps the States handler.
+   */
+  #[IgnoreDeprecations]
+  public function testSpecialHandleHookAloneWrapsStates(): void {
+    $session = $this->getSession();
+    $assert = $this->assertSession();
+
+    $this->drupalGet('jquery-bc-test/events');
+    $hadSpecial = $session->evaluateScript(<<<'JS'
+      (() => {
+        const had = Object.hasOwn(jQuery.event.special, 'state:checked');
+        window.r6Alone = { calls: 0 };
+        // The hook is the only legacy code for this type: no jQuery handler.
+        jQuery.event.special['state:checked'] = {
+          handle(event, ...args) {
+            window.r6Alone.calls++;
+            if (event.value && event.target.id === 'r6-skip-src') {
+              return undefined;
+            }
+            if (event.value && event.target.id === 'r6-edit-src') {
+              event.value = false;
+            }
+            return event.handleObj.handler.call(this, event, ...args);
+          },
+        };
+        const form = document.createElement('form');
+        form.innerHTML = `
+          <input type="checkbox" id="r6-edit-src" name="r6_edit_src">
+          <div id="r6-edit-dep" class="js-form-wrapper" data-drupal-states='{"visible":{"#r6-edit-src":{"checked":true}}}'>R6 edit dep</div>
+          <input type="checkbox" id="r6-skip-src" name="r6_skip_src">
+          <div id="r6-skip-dep" class="js-form-wrapper" data-drupal-states='{"visible":{"#r6-skip-src":{"checked":true}}}'>R6 skip dep</div>
+        `;
+        document.body.append(form);
+        Drupal.attachBehaviors(form);
+        return had;
+      })()
+      JS);
+    $this->assertFalse($hadSpecial, 'No state:checked special hook existed before the test installed one.');
+
+    $assert->elementExists('css', '#r6-edit-src')->check();
+    $assert->elementExists('css', '#r6-skip-src')->check();
+    $this->assertFalse($assert->elementExists('css', '#r6-edit-dep')->isVisible(), 'A hook that sets value to false prevents the visibility change.');
+    $this->assertFalse($assert->elementExists('css', '#r6-skip-dep')->isVisible(), 'A hook that never calls the handler prevents the visibility change.');
+    $this->assertGreaterThan(0, $session->evaluateScript('window.r6Alone.calls'), 'The hook wraps the States handler.');
+  }
+
 }
