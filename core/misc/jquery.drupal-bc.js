@@ -468,18 +468,22 @@
     }
 
     /**
-     * Binds a marked slot through jQuery.
-     * @param {object} slot
-     *   The marked slot.
-     * @param {boolean} followsHandlers
-     *   Whether the handlers ahead of the slot precede the binding.
+     * Binds through jQuery and reports whether jQuery added its listener.
+     *
+     * jQuery adds its own native listener unless the list type's special
+     * setup() returns a value other than false when the list is created.
+     * Such a setup delivers the events itself, so an anchor stays idle.
+     * @param {EventTarget} target
+     *   The target.
+     * @param {string} bindType
+     *   The handler list type.
+     * @param {function(): void} bind
+     *   Makes the jQuery binding.
+     * @return {boolean}
+     *   Whether this call created the list with jQuery's native listener.
      */
-    function bindSlot(slot, followsHandlers) {
-      const { target, bindType, name, selector } = slot;
+    function bindObserved(target, bindType, bind) {
       const created = !getHandlers(target, bindType);
-      // jQuery adds its own native listener unless the list type's special
-      // setup() returns a value other than false when the list is created.
-      // Such a setup delivers the events itself, so the anchor stays idle.
       const special = created ? jquery.event.special[bindType] : undefined;
       const setup = special?.setup;
       let declined = false;
@@ -500,22 +504,53 @@
       if (setup) {
         special.setup = observeSetup;
       }
-      internal += 1;
       try {
-        jquery(target).on(name, selector, slot.handler);
+        bind();
       } finally {
-        internal -= 1;
         if (setup && special.setup === observeSetup) {
           special.setup = setup;
         }
       }
-      slot.bound = true;
-      slot.followsHandlers = followsHandlers;
+      return created && !declined;
+    }
+
+    /**
+     * Runs jQuery's dispatch from the anchor in place of its own listener.
+     * @param {EventTarget} target
+     *   The target.
+     * @param {string} bindType
+     *   The handler list type.
+     */
+    function activateAnchor(target, bindType) {
       const anchor = anchors.get(target)?.get(bindType);
       const handle = jquery._data(target, 'handle');
-      if (created && anchor && handle && !declined) {
+      if (anchor && !anchor.active && handle) {
         target.removeEventListener(bindType, handle);
         anchor.active = true;
+      }
+    }
+
+    /**
+     * Binds a marked slot through jQuery.
+     * @param {object} slot
+     *   The marked slot.
+     * @param {boolean} followsHandlers
+     *   Whether the handlers ahead of the slot precede the binding.
+     */
+    function bindSlot(slot, followsHandlers) {
+      const { target, bindType, name, selector } = slot;
+      const added = bindObserved(target, bindType, () => {
+        internal += 1;
+        try {
+          jquery(target).on(name, selector, slot.handler);
+        } finally {
+          internal -= 1;
+        }
+      });
+      slot.bound = true;
+      slot.followsHandlers = followsHandlers;
+      if (added) {
+        activateAnchor(target, bindType);
       }
     }
 
@@ -947,7 +982,18 @@
           ),
         );
         if (!legacySlot) {
-          jquery(target).on(name, selector, slot.handler);
+          const bind = () => jquery(target).on(name, selector, slot.handler);
+          // During a replay, jQuery's listener for a list this binding creates
+          // follows every native listener on the target. A marked slot behind
+          // this one moves it to its anchor. Outside a replay, the binding
+          // reads no jQuery data.
+          if (replaying) {
+            slot.addedListener =
+              bindObserved(target, bindType, bind) &&
+              !anchors.get(target)?.get(bindType)?.active;
+          } else {
+            bind();
+          }
           slot.bound = true;
           slot.followsHandlers = followsHandlers;
           if (!boundSlots.has(target)) {
@@ -974,10 +1020,13 @@
         // file runs first, with an unknown order relative to core.
         // Accepted gap B: a foreign handler bound before connectLegacy() has
         // no pinned equivalent; it also stays ahead of core's slot.
-        // During a replay, jQuery's listener follows every native listener,
-        // so core binds behind an earlier slot, such as Ajax's, which
-        // delivers real events from jQuery's queue. That target already has
-        // core's jQuery binding, and the check reads no jQuery data.
+        // During a replay, core binds behind an earlier slot, such as Ajax's,
+        // which delivers real events from jQuery's queue. That target already
+        // has core's jQuery binding, and the check reads no jQuery data.
+        // Accepted cost: with no contrib handler, binding this slot calls
+        // jQuery() and jQuery._data() on a target that Ajax or States already
+        // binds through jQuery. The Ajax/States eager-slot follow-up removes
+        // these calls.
         const behindSlot =
           replaying && slot.precedingSlots.some((preceding) => preceding.bound);
         if (
@@ -990,6 +1039,18 @@
         ) {
           bindSlot(slot, followsHandlers || behindSlot);
           slot.replayBound = behindSlot;
+          if (
+            behindSlot &&
+            slot.precedingSlots.some((preceding) => preceding.addedListener)
+          ) {
+            // The earlier slot's jQuery listener follows every native
+            // listener on the target. The pinned listener sat at core's first
+            // binding, ahead of native listeners added later. The anchor
+            // after this binding runs the queue, earlier slot first, ahead of
+            // them. Known ordering gap: a native listener added between the
+            // earlier slot's binding and this one still runs first.
+            activateAnchor(target, bindType);
+          }
         }
       },
       remove(binding) {
