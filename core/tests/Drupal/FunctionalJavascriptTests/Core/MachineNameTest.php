@@ -422,6 +422,7 @@ class MachineNameTest extends WebDriverTestBase {
       (async () => {
         await load($vendor);
         const foreign = window.jQuery.noConflict(true);
+        const originalTrigger = foreign.event.trigger;
         await load($early);
         const disconnect = Drupal.eventBindings.connectLegacy(foreign);
         await load($late);
@@ -438,7 +439,8 @@ class MachineNameTest extends WebDriverTestBase {
         foreign(document.body).off('.test');
         disconnect();
         foreign(source).val('After Disconnect').trigger('input.machineName');
-        window.earlyForeignResult = [synthetic, payloads, target.value];
+        // Disconnecting unwraps in reverse order and leaves no wrapper behind.
+        window.earlyForeignResult = [synthetic, payloads, target.value, foreign.event.trigger === originalTrigger];
       })();
       JS);
     $this->assertJsCondition('Array.isArray(window.earlyForeignResult)');
@@ -446,6 +448,7 @@ class MachineNameTest extends WebDriverTestBase {
       'foreign_early',
       [[TRUE, TRUE]],
       'foreign_early',
+      TRUE,
     ], $session->evaluateScript('window.earlyForeignResult'));
   }
 
@@ -515,13 +518,37 @@ class MachineNameTest extends WebDriverTestBase {
    * Tests a contrib special event whose setup() forwards natively.
    *
    * Then jQuery adds no listener of its own, so the contrib handler receives
-   * each native event once.
+   * each native event once, also when the setup exists before the bridge
+   * connects the instance.
    */
   public function testContribSpecialSetupDeliversOnce(): void {
-    $this->drupalGet('form-test/machine-name', ['query' => ['legacy-machine-name' => 1]]);
+    $scripts = $this->jqueryScripts();
+    $modes = [
+      'early' => [[], []],
+      // The setup exists before the bridge connects the instance.
+      'before connection' => [array_slice($scripts, 0, 1), array_slice($scripts, 1)],
+    ];
+    foreach ($modes as $mode => [$vendor, $bridges]) {
+      $this->drupalGet('form-test/machine-name', $mode === 'early' ? ['query' => ['legacy-machine-name' => 1]] : []);
+      $this->assertContribSpecialSetupDeliversOnce(json_encode($vendor), json_encode($bridges), $mode);
+    }
+  }
+
+  /**
+   * Asserts that a contrib special setup() receives each native event once.
+   *
+   * @param string $vendor
+   *   JSON script paths to load before the setup is installed.
+   * @param string $bridges
+   *   JSON script paths to load after the setup is installed.
+   * @param string $mode
+   *   The loading mode, for the failure message.
+   */
+  private function assertContribSpecialSetupDeliversOnce(string $vendor, string $bridges, string $mode): void {
     $session = $this->getSession();
-    $session->executeScript($this->widgetHelpers() . <<<'JS'
-      (() => {
+    $session->executeScript($this->widgetHelpers() . <<<JS
+      (async () => {
+        await load($vendor);
         const previous = jQuery.event.special.input;
         function forward(event) {
           return jQuery.event.dispatch.call(this, event);
@@ -537,6 +564,7 @@ class MachineNameTest extends WebDriverTestBase {
           },
         };
         try {
+          await load($bridges);
           const { source, target } = attachWidget(createWidget('special'));
           const seen = [];
           jQuery(source).on('input.special', () => seen.push(target.value));
@@ -555,7 +583,8 @@ class MachineNameTest extends WebDriverTestBase {
         }
       })();
       JS);
-    $this->assertSame(['special_value'], $session->evaluateScript('window.specialSetupResult'));
+    $this->assertJsCondition('Array.isArray(window.specialSetupResult)');
+    $this->assertSame(['special_value'], $session->evaluateScript('window.specialSetupResult'), "Loading mode: $mode.");
   }
 
   /**
@@ -563,20 +592,33 @@ class MachineNameTest extends WebDriverTestBase {
    *
    * Plan section 6.4 instruments jQuery dispatch, $.fn.init and selectors.
    * Attaching machine-name, typing into it and clicking a fragment link make
-   * none of these calls, whether jQuery loads before or after core binds.
+   * none of these calls, whether jQuery loads before or after core binds. A
+   * late load counts from before the bridge replays the page's bindings.
    */
   public function testMixedPageMakesNoJqueryCalls(): void {
     foreach (['early', 'late'] as $mode) {
       $this->drupalGet('form-test/machine-name', $mode === 'early' ? ['query' => ['legacy-machine-name' => 1]] : []);
       $session = $this->getSession();
+      $session->executeScript($this->jqueryCallCounter());
       if ($mode === 'late') {
         $this->assertSame('undefined', $session->evaluateScript('typeof window.jQuery'));
-        $scripts = json_encode($this->jqueryScripts());
-        $session->executeScript($this->widgetHelpers() . "load($scripts).then(() => { window.lateScriptsLoaded = true; });");
+        $scripts = $this->jqueryScripts();
+        $vendor = json_encode(array_slice($scripts, 0, 1));
+        $bridges = json_encode(array_slice($scripts, 1));
+        $session->executeScript($this->widgetHelpers() . <<<JS
+          (async () => {
+            await load($vendor);
+            jqueryCalls.start();
+            await load($bridges);
+            window.lateScriptsLoaded = true;
+          })();
+          JS);
         $this->assertJsCondition('window.lateScriptsLoaded === true');
       }
-      $session->executeScript($this->jqueryCallCounter() . $this->widgetHelpers() . <<<'JS'
-        jqueryCalls.start();
+      else {
+        $session->executeScript('jqueryCalls.start();');
+      }
+      $session->executeScript($this->widgetHelpers() . <<<'JS'
         const container = createWidget('calls');
         attachWidget(container);
         const link = document.createElement('a');

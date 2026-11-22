@@ -1007,6 +1007,75 @@ class FormGroupingElementsTest extends WebDriverTestBase {
   }
 
   /**
+   * Tests jQuery's position after a contrib handler leaves and another binds.
+   *
+   * The pinned core bindings shared the jQuery listener created by the first
+   * one, so every core binding ran before a contrib handler bound later.
+   */
+  public function testIdleAnchorFollowsLastCoreBinding(): void {
+    $this->drupalGet('form-test/group-details', ['query' => ['legacy-details' => 1]]);
+    $session = $this->getSession();
+    $session->executeScript(<<<'JS'
+      const button = document.body.appendChild(document.createElement('button'));
+      button.id = 'anchor-button';
+      button.type = 'button';
+      button.textContent = 'Anchor';
+      window.anchorOrder = [];
+      const core = (name) => {
+        const target = document.body;
+        const listener = () => window.anchorOrder.push(name);
+        target.addEventListener('click', listener);
+        Drupal.eventBindings.register({
+          target,
+          type: 'click',
+          namespace: name,
+          reservesLegacySlot: true,
+          listener,
+          stop() {},
+        });
+      };
+      core('core1');
+      const contribA = () => window.anchorOrder.push('contribA');
+      jQuery(document.body).on('click', contribA);
+      core('core2');
+      jQuery(document.body).off('click', contribA);
+      jQuery(document.body).on('click', () => window.anchorOrder.push('contribB'));
+      JS);
+    $session->getPage()->findById('anchor-button')->click();
+    $this->assertSame(['core1', 'core2', 'contribB'], $session->evaluateScript('window.anchorOrder'));
+  }
+
+  /**
+   * Tests a delegated .one() handler that is the only contrib handler.
+   *
+   * It runs before details-aria and removes itself. The pinned jQuery queue
+   * still ran details-aria for that click. Afterwards core's native listener
+   * sets aria-expanded again.
+   */
+  public function testDelegatedOneKeepsDetailsAria(): void {
+    $this->drupalGet('form-test/group-details', ['query' => ['legacy-details' => 1]]);
+    $session = $this->getSession();
+    $session->executeScript(<<<'JS'
+      const container = document.body.appendChild(document.createElement('div'));
+      container.innerHTML = '<details id="one-details"><summary id="one-summary"><span id="one-span">Toggle</span></summary><input name="one"></details>';
+      Drupal.attachBehaviors(container);
+      window.oneCalls = 0;
+      jQuery(document.body).one('click', '#one-span', () => {
+        window.oneCalls += 1;
+      });
+      JS);
+    $state = "[document.getElementById('one-summary').getAttribute('aria-expanded'), document.getElementById('one-details').open, window.oneCalls]";
+    $span = $session->getPage()->findById('one-span');
+    $span->click();
+    $this->assertSame(['true', TRUE, 1], $session->evaluateScript($state));
+    // A browser toggle sets open to an empty value. Like the pinned jQuery 4
+    // attr(), details-aria does not read that as "open".
+    $session->executeScript("document.getElementById('one-summary').removeAttribute('aria-expanded');");
+    $span->click();
+    $this->assertSame(['true', FALSE, 1], $session->evaluateScript($state));
+  }
+
+  /**
    * Returns JavaScript that defines load() for script paths.
    *
    * @return string
