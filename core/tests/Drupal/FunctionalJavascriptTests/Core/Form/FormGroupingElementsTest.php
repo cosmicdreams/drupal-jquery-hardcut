@@ -1076,6 +1076,76 @@ class FormGroupingElementsTest extends WebDriverTestBase {
   }
 
   /**
+   * Tests a delegated .one() handler bound before details-aria.
+   *
+   * jQuery's own listener then runs before core's native listener, and a
+   * native listener in between stops immediate propagation. The .one()
+   * handler removes itself during jQuery's ordinary dispatch, but core's slot
+   * stays queued there, so the pinned queue still ran details-aria. The slot
+   * releases after that dispatch, and a later click makes no jQuery calls.
+   */
+  public function testPreboundOneKeepsDetailsAriaQueued(): void {
+    $this->drupalGet('form-test/group-details', ['query' => ['legacy-details' => 1]]);
+    $session = $this->getSession();
+    $session->executeScript($this->jqueryCallCounter() . <<<'JS'
+      // Bind details-aria again after the contrib handler and the native one.
+      let aria;
+      Drupal.eventBindings.observe({
+        add(binding) {
+          aria = binding.detailsAria ? binding : aria;
+        },
+        remove() {},
+      })();
+      aria.stop();
+      once.remove('detailsAria', document.body);
+      const container = document.body.appendChild(document.createElement('div'));
+      container.innerHTML = '<details id="pre-details"><summary id="pre-summary"><span id="pre-span">Toggle</span></summary><input name="pre"></details>';
+      window.preOneCalls = 0;
+      jQuery(document.body).one('click', 'summary', () => {
+        window.preOneCalls += 1;
+      });
+      document.body.addEventListener('click', (event) => {
+        if (event.target.closest('#pre-summary')) {
+          event.stopImmediatePropagation();
+        }
+      });
+      Drupal.behaviors.detailsAria.attach(document);
+      JS);
+    $session->getPage()->findById('pre-span')->click();
+    $this->assertSame(
+      ['true', TRUE, 1],
+      $session->evaluateScript("[document.getElementById('pre-summary').getAttribute('aria-expanded'), document.getElementById('pre-details').open, window.preOneCalls]"),
+    );
+    $session->executeScript('jqueryCalls.start();');
+    $session->getPage()->findById('pre-span')->click();
+    $this->assertNoJqueryCalls($session->evaluateScript('jqueryCalls.stop()'));
+  }
+
+  /**
+   * Tests that a queued slot and core's later native listener run core once.
+   *
+   * A delegated .one() handler bound before core removes itself in jQuery's
+   * ordinary dispatch. Core's slot still delivers there, so core's native
+   * listener after it skips that click. The next click runs core natively.
+   */
+  public function testPreboundOneRunsCoreOnce(): void {
+    $this->drupalGet('form-test/group-details', ['query' => ['legacy-details' => 1]]);
+    $session = $this->getSession();
+    $session->executeScript(<<<'JS'
+      const container = document.body.appendChild(document.createElement('div'));
+      container.innerHTML = '<button type="button" id="once-button"><span id="once-span">Once</span></button>';
+      window.onceCalls = [];
+      jQuery(container).one('click', 'button', () => window.onceCalls.push('contrib'));
+      Drupal.formEvents.listen(container, 'click', 'preOnce', () => window.onceCalls.push('core'), 'button');
+      JS);
+    $span = $session->getPage()->findById('once-span');
+    $span->click();
+    $this->assertSame(['contrib', 'core'], $session->evaluateScript('window.onceCalls'));
+    $span->click();
+    $this->assertSame(['contrib', 'core', 'core'], $session->evaluateScript('window.onceCalls'));
+  }
+
+  /**
    * Tests two connected instances with slots on both sides of core.
    *
    * The page's instance queues core's slot before core's native listener.
