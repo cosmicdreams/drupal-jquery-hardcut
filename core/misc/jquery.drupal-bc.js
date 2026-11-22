@@ -725,8 +725,12 @@
           : null;
       if (bindTypes && markedSlots.has(elem)) {
         // Core precedes a later handler, as the pinned binding did. A later
-        // slot, such as Ajax's, binds at registration and is already a
-        // jQuery call, so the earlier slots keep their place in front of it.
+        // slot, such as Ajax's or States', binds at registration and is
+        // already a jQuery call, so the earlier slots keep their place in
+        // front of it. Accepted cost: with no contrib handler, binding the
+        // earlier form slot adds 1 jQuery() and 4 jQuery._data() calls on a
+        // target that Ajax or States already binds through jQuery. The
+        // Ajax/States eager-slot follow-up removes them.
         materialize(elem, bindTypes);
       }
       const result = originalAdd.apply(this, arguments);
