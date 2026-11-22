@@ -1053,6 +1053,31 @@
     // Copy each tab into jQuery data on first read, so a removed value stays
     // removed. A pane read before its tab exists is copied later.
     const migratedPanes = new WeakSet();
+
+    /**
+     * Normalizes a data key as jQuery 4 does, so 'vertical-tab' matches.
+     * @param {unknown} key
+     *   A data key.
+     * @return {string}
+     *   The camel-cased key.
+     */
+    function normalizeKey(key) {
+      return String(key).replace(/-([a-z])/g, (match, letter) =>
+        letter.toUpperCase(),
+      );
+    }
+
+    /**
+     * Checks whether a data read may return the tab.
+     * @param {unknown} key
+     *   The key passed to data(), or undefined for all data.
+     * @return {boolean}
+     *   Whether the read covers the verticalTab key.
+     */
+    function readsTabData(key) {
+      return key === undefined || normalizeKey(key) === 'verticalTab';
+    }
+
     function ensureTabData(pane) {
       if (!pane || typeof pane !== 'object' || migratedPanes.has(pane)) {
         return;
@@ -1071,11 +1096,7 @@
 
     const originalFnData = jquery.fn.data;
     jquery.fn.data = function (key) {
-      if (
-        (key === 'verticalTab' || key === undefined) &&
-        arguments.length <= 1 &&
-        this[0]
-      ) {
+      if (readsTabData(key) && arguments.length <= 1 && this[0]) {
         ensureTabData(this[0]);
       }
       return originalFnData.apply(this, arguments);
@@ -1092,7 +1113,10 @@
       if (keys === undefined) {
         return true;
       }
-      const list = Array.isArray(keys) ? keys : String(keys).match(/\S+/g);
+      // Like jQuery, camel-case each array key, or the whole string first.
+      const list = Array.isArray(keys)
+        ? keys.map(normalizeKey)
+        : normalizeKey(keys).match(/\S+/g);
       return Boolean(list?.includes('verticalTab'));
     }
     /**
@@ -1124,14 +1148,17 @@
     };
 
     jquery.data = function (elem, name) {
-      if (
-        (name === 'verticalTab' || name === undefined) &&
-        arguments.length <= 2 &&
-        elem
-      ) {
+      if (readsTabData(name) && arguments.length <= 2 && elem) {
         ensureTabData(elem);
       }
       return originalData.apply(this, arguments);
+    };
+
+    // A pane whose tab exists has data, as when the tab stored it eagerly.
+    const originalHasData = jquery.hasData;
+    jquery.hasData = function (elem) {
+      ensureTabData(elem);
+      return originalHasData.apply(this, arguments);
     };
 
     const nativeMarkup = Drupal.verticalTabs.createMarkup;

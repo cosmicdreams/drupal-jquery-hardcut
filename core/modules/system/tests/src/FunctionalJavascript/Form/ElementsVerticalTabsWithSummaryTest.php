@@ -142,6 +142,38 @@ class ElementsVerticalTabsWithSummaryTest extends WebDriverTestBase {
   }
 
   /**
+   * Tests that lazy tab data follows jQuery's key normalization.
+   *
+   * Before the first canonical read, the dashed key reads the tab, removing
+   * it keeps it removed, and jQuery.hasData() reports the tab's data.
+   */
+  public function testTabDataNormalizesKeys(): void {
+    $this->drupalGet('form_test/vertical-tabs-with-summary', ['query' => ['legacy' => 1]]);
+    $actual = $this->getSession()->evaluateScript(<<<'JS'
+      (() => {
+        const detached = document.createElement('div');
+        const panes = ['read', 'static-read', 'remove', 'static-remove', 'has'];
+        detached.innerHTML = `<div class="js-form-type-vertical-tabs"><div data-vertical-tabs-panes><input type="hidden" class="vertical-tabs__active-tab" value="">${panes.map((id) => `<details id="alias-${id}"><summary>${id}</summary></details>`).join('')}</div></div>`;
+        Drupal.behaviors.verticalTabs.attach(detached);
+        const [read, staticRead, remove, staticRemove, has] = panes.map((id) => detached.querySelector(`#alias-${id}`));
+        const dashed = jQuery(read).data('vertical-tab');
+        const staticDashed = jQuery.data(staticRead, 'vertical-tab');
+        jQuery(remove).removeData('vertical-tab');
+        jQuery.removeData(staticRemove, ['vertical-tab']);
+        return [
+          dashed !== undefined && dashed === jQuery(read).data('verticalTab'),
+          staticDashed !== undefined && staticDashed === jQuery.data(staticRead, 'verticalTab'),
+          jQuery(remove).data('verticalTab') === undefined,
+          jQuery.data(staticRemove, 'verticalTab') === undefined,
+          jQuery.hasData(has),
+          jQuery(has).data('verticalTab') !== undefined,
+        ];
+      })()
+      JS);
+    $this->assertSame([TRUE, TRUE, TRUE, TRUE, TRUE, TRUE], $actual);
+  }
+
+  /**
    * Tests that constructor overrides keep the legacy settings consistent.
    *
    * A chaining override emits no #details deprecation, and an override that
