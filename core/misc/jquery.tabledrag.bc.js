@@ -686,6 +686,11 @@
         ...args,
       );
     };
+    // This hook is core's own, so legacy detection looks through it.
+    window.Drupal.eventBindings.registerCoreSpecialHandle?.(
+      change.handle,
+      previousHandle,
+    );
     select.checkboxContent = () => {
       const content = checkboxContent();
       if (content instanceof jquery) {

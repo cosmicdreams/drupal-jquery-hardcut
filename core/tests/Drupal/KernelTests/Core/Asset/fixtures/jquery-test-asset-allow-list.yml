@@ -24,3 +24,6 @@
 - fixture: core/modules/system/tests/modules/js_message_test/js_message_test.libraries.yml:show_message
   removal: U
   assets: [js/js_message_test.js]
+- fixture: core/modules/system/tests/modules/states_test/states_test.libraries.yml:legacy_pseudo
+  removal: Z (Drupal 13)
+  assets: [js/legacy-pseudo.js]

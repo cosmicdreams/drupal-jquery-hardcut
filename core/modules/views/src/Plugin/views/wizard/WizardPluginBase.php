@@ -252,7 +252,7 @@ abstract class WizardPluginBase extends PluginBase implements WizardInterface {
       '#attributes' => ['class' => ['options-set']],
       '#states' => [
         'visible' => [
-          ':input[name="page[create]"]' => ['checked' => TRUE],
+          '[name="page[create]"]' => ['checked' => TRUE],
         ],
       ],
       '#prefix' => '<div><div id="edit-page-wrapper">',
@@ -311,7 +311,7 @@ abstract class WizardPluginBase extends PluginBase implements WizardInterface {
       '#type' => 'container',
       '#states' => [
         'visible' => [
-          ':input[name="page[link]"]' => ['checked' => TRUE],
+          '[name="page[link]"]' => ['checked' => TRUE],
         ],
       ],
       '#prefix' => '<div id="edit-page-link-properties-wrapper">',
@@ -336,7 +336,7 @@ abstract class WizardPluginBase extends PluginBase implements WizardInterface {
         '#type' => 'container',
         '#states' => [
           'visible' => [
-            ':input[name="page[feed]"]' => ['checked' => TRUE],
+            '[name="page[feed]"]' => ['checked' => TRUE],
           ],
         ],
         '#prefix' => '<div id="edit-page-feed-properties-wrapper">',
@@ -358,7 +358,7 @@ abstract class WizardPluginBase extends PluginBase implements WizardInterface {
         '#access' => (count($feed_row_options) > 1),
         '#states' => [
           'visible' => [
-            ':input[name="page[feed]"]' => ['checked' => TRUE],
+            '[name="page[feed]"]' => ['checked' => TRUE],
           ],
         ],
         '#prefix' => '<div id="edit-page-feed-properties-row-plugin-wrapper">',
@@ -389,7 +389,7 @@ abstract class WizardPluginBase extends PluginBase implements WizardInterface {
         '#attributes' => ['class' => ['options-set']],
         '#states' => [
           'visible' => [
-            ':input[name="block[create]"]' => ['checked' => TRUE],
+            '[name="block[create]"]' => ['checked' => TRUE],
           ],
         ],
         '#prefix' => '<div id="edit-block-wrapper">',
@@ -461,7 +461,7 @@ abstract class WizardPluginBase extends PluginBase implements WizardInterface {
         '#attributes' => ['class' => ['options-set']],
         '#states' => [
           'visible' => [
-            ':input[name="rest_export[create]"]' => ['checked' => TRUE],
+            '[name="rest_export[create]"]' => ['checked' => TRUE],
           ],
         ],
         '#prefix' => '<div id="edit-rest-export-wrapper">',

@@ -21,6 +21,7 @@ trait CoreLibraryDiscoveryTrait {
   private const JQUERY_LIBRARIES = [
     'core/drupal.ajax.jquery',
     'core/drupal.jquery.position',
+    'core/drupal.states.jquery',
     'core/internal.jquery.form',
     'core/internal.jquery_ui',
     'core/jquery',

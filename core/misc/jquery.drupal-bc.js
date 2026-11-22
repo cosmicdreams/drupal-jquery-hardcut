@@ -8,6 +8,35 @@
 (function (instance) {
   const foreignTriggers = [];
   const legacySlots = new WeakMap();
+  const projectedOriginals = new WeakMap();
+  // Maps each core-owned special.handle hook to the hook it wraps, if any.
+  const coreHandles = new WeakMap();
+  // The special.handle hooks this bridge installs for its projections.
+  const projectionHandles = new WeakSet();
+
+  /**
+   * Records a special.handle hook that core owns.
+   *
+   * Legacy detection looks through these hooks to the hook each one wraps.
+   * @param {function(...unknown): unknown} handle
+   *   The installed special.handle hook.
+   * @param {function(...unknown): unknown} [previous]
+   *   The special.handle hook it wraps, if any.
+   * @internal
+   */
+  function registerCoreSpecialHandle(handle, previous) {
+    if (typeof handle === 'function') {
+      coreHandles.set(handle, previous);
+    }
+  }
+
+  // jQuery's own special hooks, such as mouseenter, exist before any other
+  // script can use this instance, because this file loads right after it.
+  if (typeof instance === 'function') {
+    Object.values(instance.event.special).forEach((special) => {
+      registerCoreSpecialHandle(special?.handle);
+    });
+  }
 
   /**
    * Gives a dedicated bridge the slot reserved in registry order.
@@ -41,7 +70,14 @@
         const { target, type, namespace, selector, listener } = binding;
         if (
           subscriptions.has(binding) ||
-          window.Drupal.ajax?.compatibility?.ownsLegacyEvents?.(jquery, binding)
+          window.Drupal.ajax?.compatibility?.ownsLegacyEvents?.(
+            jquery,
+            binding,
+          ) ||
+          window.Drupal.states?.compatibility?.ownsLegacyEvents?.(
+            jquery,
+            binding,
+          )
         ) {
           return;
         }
@@ -61,6 +97,7 @@
             (type === 'submit' && target instanceof HTMLFormElement));
         const forwardsSynthetic =
           binding.ajax ||
+          binding.states ||
           type === 'compatibility:probe' ||
           directActivation ||
           selectChange;
@@ -85,6 +122,7 @@
           if (
             !forwardsSynthetic ||
             !event.isTrigger ||
+            projectedOriginals.has(event) ||
             (!binding.ajax &&
               (event.originalEvent ||
                 (directActivation && event.target !== target)))
@@ -117,6 +155,18 @@
               value: () => event.stopImmediatePropagation(),
             },
           });
+          if (binding.states && !projected.detail) {
+            if (type.startsWith('state:')) {
+              window.Drupal.states?.compatibility?.warnSyntheticState?.(type);
+            }
+            Object.defineProperty(projected, 'detail', {
+              value: {
+                value: event.value,
+                oldValue: event.oldValue,
+                trigger: event.trigger,
+              },
+            });
+          }
           return listener.call(this, projected, ...args);
         }
 
@@ -151,7 +201,7 @@
    *   The explicitly connected jQuery instance.
    * @param {string} type
    *   The unmapped event type. Install one projection per instance and type.
-   * @param {WeakMap} payloads
+   * @param {{get: function(Event): (object|undefined)}} payloads
    *   Maps native CustomEvents to objects with optional properties and args.
    * @return {function(): void}
    *   Disconnects the projection.
@@ -195,6 +245,8 @@
     }
 
     special.handle = handle;
+    registerCoreSpecialHandle(handle, previousHandle);
+    projectionHandles.add(handle);
     if (!existing) {
       specials[type] = special;
     }
@@ -220,6 +272,221 @@
   }
 
   /**
+   * Projects States publications as one synthetic jQuery event per instance.
+   * @param {object} jquery
+   *   The explicitly connected jQuery instance.
+   * @param {string} type
+   *   The unmapped event type.
+   * @param {WeakMap} activeSynthetic
+   *   Maps active native events to their projection record.
+   * @return {function(): void}
+   *   Disconnects the synthetic projection.
+   * @internal
+   */
+  function observeSyntheticProjection(jquery, type, activeSynthetic) {
+    const specials = jquery.event.special;
+    const existing = specials[type];
+    const special = existing ?? {};
+    const previousHandle = special.handle;
+    const hadHandle = Object.hasOwn(special, 'handle');
+    let connected = true;
+
+    /**
+     * Delivers one synthetic event without originalEvent across targets.
+     * @param {object} event
+     *   The active jQuery event.
+     * @param {...unknown} args
+     *   Additional handler arguments.
+     * @return {unknown}
+     *   The downstream handler's return value.
+     */
+    function handle(event, ...args) {
+      const original = event.originalEvent;
+      const record =
+        connected &&
+        original &&
+        !event.isTrigger &&
+        event.handleObj.origType === type &&
+        original.type === type
+          ? activeSynthetic.get(original)
+          : undefined;
+      if (!record) {
+        return (previousHandle || event.handleObj.handler).call(
+          this,
+          event,
+          ...args,
+        );
+      }
+
+      let { shared } = record;
+      if (!shared) {
+        shared = record.properties
+          ? jquery.Event(event.type, record.properties)
+          : jquery.Event(event.type);
+        shared.target = event.target;
+        shared.isTrigger = 3;
+        record.shared = shared;
+        projectedOriginals.set(shared, original);
+      }
+
+      shared.currentTarget = event.currentTarget;
+      shared.delegateTarget = event.delegateTarget;
+      shared.handleObj = event.handleObj;
+      shared.data = event.data;
+      // A pinned .trigger() without namespaces set an empty namespace.
+      shared.namespace = event.namespace || '';
+
+      // Start from the current payload so an edit made through another
+      // instance is visible, and remember it to detect this handler's edits.
+      const { detail } = original;
+      const fields =
+        record.syncState && detail && typeof detail === 'object'
+          ? ['value', 'oldValue', 'trigger']
+          : [];
+      const before = {};
+      for (const field of fields) {
+        if (Object.hasOwn(detail, field) && shared[field] !== detail[field]) {
+          shared[field] = detail[field];
+        }
+        before[field] = shared[field];
+      }
+
+      const result = (previousHandle || event.handleObj.handler).call(
+        this,
+        shared,
+        ...args,
+      );
+      if (result === false) {
+        shared.preventDefault();
+        shared.stopPropagation();
+      }
+      if (shared.isDefaultPrevented()) {
+        event.preventDefault();
+      }
+      if (shared.isImmediatePropagationStopped()) {
+        event.stopImmediatePropagation();
+      } else if (shared.isPropagationStopped()) {
+        event.stopPropagation();
+      }
+      if (result !== undefined) {
+        shared.result = result;
+      }
+      // Write back only what this handler changed, so a passive instance
+      // never restores a value another instance already edited.
+      for (const field of fields) {
+        if (shared[field] !== before[field]) {
+          detail[field] = shared[field];
+        }
+      }
+      return result;
+    }
+
+    special.handle = handle;
+    registerCoreSpecialHandle(handle, previousHandle);
+    projectionHandles.add(handle);
+    if (!existing) {
+      specials[type] = special;
+    }
+    return () => {
+      connected = false;
+      if (special.handle !== handle) {
+        return;
+      }
+      if (hadHandle) {
+        special.handle = previousHandle;
+      } else {
+        delete special.handle;
+      }
+      if (
+        !existing &&
+        specials[type] === special &&
+        !Reflect.ownKeys(special).length
+      ) {
+        delete specials[type];
+      }
+    };
+  }
+
+  /**
+   * Reports whether a special.handle hook that core does not own exists.
+   * @param {object} jquery
+   *   The connected jQuery instance.
+   * @param {string} type
+   *   The event type.
+   * @return {boolean}
+   *   Whether jQuery dispatch runs handlers through a legacy hook.
+   * @internal
+   */
+  function hasLegacySpecialHandle(jquery, type) {
+    let handle = jquery.event.special[type]?.handle;
+    while (coreHandles.has(handle)) {
+      handle = coreHandles.get(handle);
+    }
+    return typeof handle === 'function';
+  }
+
+  /**
+   * Lets a callback see each native state:* event before jQuery dispatches it.
+   * @param {object} jquery
+   *   The explicitly connected jQuery instance.
+   * @param {function(CustomEvent): void} callback
+   *   Receives the native event.
+   * @return {function(): void}
+   *   Stops observing.
+   */
+  function observeNativeStateDispatch(jquery, callback) {
+    const previous = jquery.event.dispatch;
+    let connected = true;
+
+    /**
+     * Reports a native state:* event, then runs jQuery's dispatch.
+     * @param {Event|object} nativeEvent
+     *   The event jQuery dispatches.
+     * @return {unknown}
+     *   The result of jQuery's dispatch.
+     */
+    function dispatch(nativeEvent) {
+      if (
+        connected &&
+        nativeEvent instanceof CustomEvent &&
+        nativeEvent.type.startsWith('state:')
+      ) {
+        callback(nativeEvent);
+      }
+      return previous.apply(this, arguments);
+    }
+    jquery.event.dispatch = dispatch;
+    return () => {
+      connected = false;
+      if (jquery.event.dispatch === dispatch) {
+        jquery.event.dispatch = previous;
+      }
+    };
+  }
+
+  /**
+   * Copies the defined state fields of a payload.
+   * @param {object} [detail]
+   *   The native event detail.
+   * @return {object}
+   *   The value, oldValue and trigger fields that are not undefined.
+   */
+  function stateProperties(detail) {
+    const properties = {};
+    for (const field of ['value', 'oldValue', 'trigger']) {
+      const value =
+        detail && typeof detail === 'object' && Object.hasOwn(detail, field)
+          ? detail[field]
+          : undefined;
+      // jQuery's event constructor skips undefined properties.
+      if (value !== undefined) {
+        properties[field] = value;
+      }
+    }
+    return properties;
+  }
+
+  /**
    * Projects the legacy payloads of supported owned publications.
    * @param {object} jquery
    *   The explicitly connected jQuery instance.
@@ -230,40 +497,121 @@
    */
   function observeOwnedPublications(jquery, registry) {
     const payloads = new WeakMap();
+    const activeSynthetic = new WeakMap();
     const projections = new Map();
+    // A state:* event dispatched natively, outside the registry, carries its
+    // payload in detail. A legacy hook receives it like a registry
+    // publication. Without one, jQuery handlers get the plain event, as the
+    // pinned jQuery dispatch gave them.
+    const projectedPayloads = {
+      get(event) {
+        if (payloads.has(event)) {
+          return payloads.get(event);
+        }
+        if (
+          event instanceof CustomEvent &&
+          event.type.startsWith('state:') &&
+          !activeSynthetic.has(event) &&
+          hasLegacySpecialHandle(jquery, event.type)
+        ) {
+          return { properties: stateProperties(event.detail) };
+        }
+        return undefined;
+      },
+    };
+
+    /**
+     * Installs a projection, or wraps a hook that replaced it again.
+     *
+     * A library loaded later, for example through Ajax, may replace the
+     * special.handle hook. Wrapping it again gives it the pinned event.
+     * @param {string} key
+     *   The projection key.
+     * @param {string} type
+     *   The event type.
+     * @param {function(): function(): void} install
+     *   Installs the projection and returns its disconnect function.
+     */
+    function project(key, type, install) {
+      const current = projections.get(key);
+      if (current) {
+        // Other projections of this bridge may sit above this one. Only a
+        // hook the bridge does not own needs the projection above it.
+        let handle = jquery.event.special[type]?.handle;
+        while (handle !== current.handle && projectionHandles.has(handle)) {
+          handle = coreHandles.get(handle);
+        }
+        if (handle === current.handle) {
+          return;
+        }
+        // The replaced projection stays in any chain as a pass-through.
+        current.disconnect();
+        projections.delete(key);
+      }
+      const disconnect = install();
+      projections.set(key, {
+        disconnect,
+        handle: jquery.event.special[type].handle,
+      });
+    }
+
     const stop = registry.observePublications((event) => {
       const { type, detail } = event;
       const state = type.startsWith('state:');
+      const statesSynthetic =
+        window.Drupal.states?.compatibility?.isSyntheticTrigger?.(event) ||
+        (state && window.Drupal.states?.compatibility?.isStateEvent?.(event));
+      if (statesSynthetic) {
+        if (activeSynthetic.has(event)) {
+          return undefined;
+        }
+        const properties = state ? stateProperties(detail) : undefined;
+        const key = `synthetic:${type}`;
+        project(key, type, () =>
+          observeSyntheticProjection(jquery, type, activeSynthetic),
+        );
+        activeSynthetic.set(event, {
+          properties,
+          syncState: state,
+          shared: null,
+        });
+        return () => activeSynthetic.delete(event);
+      }
       if ((!state && type !== 'columnschange') || payloads.has(event)) {
         return undefined;
       }
 
-      let payload;
-      if (state) {
-        const properties = {};
-        for (const field of ['value', 'oldValue', 'trigger']) {
-          const value =
-            detail && Object.hasOwn(detail, field) ? detail[field] : undefined;
-          // jQuery's event constructor skips undefined properties.
-          if (value !== undefined) {
-            properties[field] = value;
-          }
-        }
-        payload = { properties };
-      } else {
-        payload = { args: [Boolean(detail?.displayWeight)] };
-      }
+      const payload = state
+        ? { properties: stateProperties(detail) }
+        : { args: [Boolean(detail?.displayWeight)] };
 
-      if (!projections.has(type)) {
-        projections.set(type, observeNativePayloads(jquery, type, payloads));
-      }
+      const key = `payload:${type}`;
+      project(key, type, () =>
+        observeNativePayloads(jquery, type, projectedPayloads),
+      );
       payloads.set(event, payload);
       return () => payloads.delete(event);
     });
 
+    const stopNative = observeNativeStateDispatch(jquery, (event) => {
+      const { type } = event;
+      if (
+        !payloads.has(event) &&
+        !activeSynthetic.has(event) &&
+        hasLegacySpecialHandle(jquery, type)
+      ) {
+        project(`payload:${type}`, type, () =>
+          observeNativePayloads(jquery, type, projectedPayloads),
+        );
+      }
+    });
+
     return () => {
       stop();
-      projections.forEach((disconnect) => disconnect());
+      stopNative();
+      Array.from(projections.values())
+        .reverse()
+        .forEach(({ disconnect }) => disconnect());
       projections.clear();
     };
   }
@@ -363,8 +711,15 @@
     const registry = window.Drupal.eventBindings;
     registry.connectLegacy = registry.connectLegacy ?? connect;
     registry.claimLegacyEvent = registry.claimLegacyEvent ?? claimLegacyEvent;
+    registry.hasLegacySpecialHandle =
+      registry.hasLegacySpecialHandle ?? hasLegacySpecialHandle;
+    registry.registerCoreSpecialHandle =
+      registry.registerCoreSpecialHandle ?? registerCoreSpecialHandle;
     registry.isForeignDefaultAction =
       registry.isForeignDefaultAction || isForeignDefaultAction;
+    registry.getProjectedOriginal =
+      registry.getProjectedOriginal ??
+      ((event) => projectedOriginals.get(event));
     registry.connectLegacy(instance);
   }
 

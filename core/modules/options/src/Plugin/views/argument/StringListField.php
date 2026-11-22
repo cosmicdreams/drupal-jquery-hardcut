@@ -73,7 +73,7 @@ class StringListField extends StringArgument {
       '#default_value' => $this->options['summary']['human'],
       '#states' => [
         'visible' => [
-          ':input[name="options[default_action]"]' => ['value' => 'summary'],
+          '[name="options[default_action]"]' => ['value' => 'summary'],
         ],
       ],
     ];
