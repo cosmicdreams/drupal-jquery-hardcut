@@ -97,7 +97,7 @@ class Tid extends ArgumentDefaultPluginBase implements CacheableDependencyInterf
       '#default_value' => $this->options['limit'],
       '#states' => [
         'visible' => [
-          ':input[name="options[argument_default][taxonomy_tid][node]"]' => ['checked' => TRUE],
+          '[name="options[argument_default][taxonomy_tid][node]"]' => ['checked' => TRUE],
         ],
       ],
     ];
@@ -115,8 +115,8 @@ class Tid extends ArgumentDefaultPluginBase implements CacheableDependencyInterf
       '#default_value' => $this->options['vids'],
       '#states' => [
         'visible' => [
-          ':input[name="options[argument_default][taxonomy_tid][limit]"]' => ['checked' => TRUE],
-          ':input[name="options[argument_default][taxonomy_tid][node]"]' => ['checked' => TRUE],
+          '[name="options[argument_default][taxonomy_tid][limit]"]' => ['checked' => TRUE],
+          '[name="options[argument_default][taxonomy_tid][node]"]' => ['checked' => TRUE],
         ],
       ],
     ];
@@ -131,7 +131,7 @@ class Tid extends ArgumentDefaultPluginBase implements CacheableDependencyInterf
       ],
       '#states' => [
         'visible' => [
-          ':input[name="options[argument_default][taxonomy_tid][node]"]' => ['checked' => TRUE],
+          '[name="options[argument_default][taxonomy_tid][node]"]' => ['checked' => TRUE],
         ],
       ],
     ];

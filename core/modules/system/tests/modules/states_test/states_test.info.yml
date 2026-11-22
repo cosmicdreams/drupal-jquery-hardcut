@@ -1,0 +1,5 @@
+name: States test
+type: module
+description: 'Provides fixtures for native and legacy States conditions.'
+package: Testing
+version: VERSION

@@ -21,13 +21,13 @@ class Ckeditor5ReadOnlyModeHooks {
     $form['field_second_ckeditor5_field']['#disabled'] = \Drupal::state()->get('ckeditor5_read_only_mode_second_ckeditor5_field_enabled', FALSE);
     $form['field_ckeditor5_disable']['#states'] = [
       'disabled' => [
-        ':input[name="field_ckeditor5_toggle[value]"]' => ['checked' => TRUE],
+        '[name="field_ckeditor5_toggle[value]"]' => ['checked' => TRUE],
       ],
     ];
     $form['field_ckeditor5_enable']['#disabled'] = TRUE;
     $form['field_ckeditor5_enable']['#states'] = [
       'enabled' => [
-        ':input[name="field_ckeditor5_toggle[value]"]' => ['checked' => TRUE],
+        '[name="field_ckeditor5_toggle[value]"]' => ['checked' => TRUE],
       ],
     ];
   }

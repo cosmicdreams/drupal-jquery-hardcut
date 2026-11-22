@@ -46,7 +46,7 @@ class DateRangeFieldItemList extends DateTimeFieldItemList {
         '#default_value' => (isset($default_value[0]['default_end_date_type']) && $default_value[0]['default_end_date_type'] == static::DEFAULT_VALUE_CUSTOM) ? $default_value[0]['default_end_date'] : '',
         '#states' => [
           'visible' => [
-            ':input[id="edit-default-value-input-default-end-date-type"]' => ['value' => static::DEFAULT_VALUE_CUSTOM],
+            '[id="edit-default-value-input-default-end-date-type"]' => ['value' => static::DEFAULT_VALUE_CUSTOM],
           ],
         ],
       ];

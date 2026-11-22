@@ -56,16 +56,16 @@
       "owner": "B",
       "references": 1
     },
+    "misc/jquery.states.bc.js": {
+      "owner": "S",
+      "references": 1
+    },
     "misc/jquery.tabledrag.bc.js": {
       "owner": "T",
       "references": 1
     },
     "misc/position.js": {
       "owner": "D",
-      "references": 1
-    },
-    "misc/states.js": {
-      "owner": "S",
       "references": 1
     },
     "modules/ckeditor5/js/build/drupalEntityLinkSuggestions.js": {
@@ -162,6 +162,10 @@
     },
     "modules/system/tests/modules/jquery_bc_test/js/event-bridge-dependent.js": {
       "owner": "B",
+      "references": 1
+    },
+    "modules/system/tests/modules/states_test/js/legacy-pseudo.js": {
+      "owner": "S",
       "references": 1
     },
     "modules/views/js/base.js": {

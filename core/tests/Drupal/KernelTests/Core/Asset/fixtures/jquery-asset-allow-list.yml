@@ -44,9 +44,10 @@
 - core/misc/jquery.drupal-form-bc.js
 - core/misc/jquery.form.js
 - core/misc/jquery.no-conflict.js
+- core/misc/jquery.states.bc.js
 - core/misc/jquery.tabledrag.bc.js
 - core/misc/position.js
-- core/misc/states.js
+- core/misc/states.jquery.js
 - core/modules/ckeditor5/js/build/drupalEntityLinkSuggestions.js
 - core/modules/ckeditor5/js/ckeditor5.admin.js
 - core/modules/ckeditor5/js/ckeditor5.dialog.fix.js

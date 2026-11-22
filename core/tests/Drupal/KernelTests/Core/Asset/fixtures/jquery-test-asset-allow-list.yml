@@ -15,3 +15,6 @@
 - fixture: core/modules/system/tests/modules/jquery_bc_test/jquery_bc_test.libraries.yml:event_bridge_late
   removal: Z
   assets: [js/event-bridge-dependent.js]
+- fixture: core/modules/system/tests/modules/states_test/states_test.libraries.yml:legacy_pseudo
+  removal: Z (Drupal 13)
+  assets: [js/legacy-pseudo.js]

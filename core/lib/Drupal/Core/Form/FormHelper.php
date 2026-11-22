@@ -13,6 +13,22 @@ use Drupal\Core\Render\Element;
 class FormHelper {
 
   /**
+   * Pinned jQuery pseudo-classes and the CSS that replaced them in core keys.
+   *
+   * A search string starting with one of these pseudo-classes also matches a
+   * #states key that starts with the mapped pattern instead. The replacement
+   * is literal unless it starts with the same pseudo-class, in which case the
+   * matched CSS is kept in place of the pseudo-class. Text inside quoted
+   * attribute values is never rewritten by this fallback.
+   *
+   * @see self::processStatesArray()
+   */
+  protected const LEGACY_STATES_PSEUDOS = [
+    ':input' => '(?:input|select|textarea|button|:is\\([^)]+\\))?',
+    ':radio' => '(?:input)?\\[type=(?:"radio"|\'radio\'|radio)\\]',
+  ];
+
+  /**
    * Rewrites #states selectors in a render element.
    *
    * When a structure of elements is being altered, their HTML selectors may
@@ -22,7 +38,7 @@ class FormHelper {
    * @param array $elements
    *   A render array element having a #states property.
    * @param string $search
-   *   A partial or entire jQuery selector string to replace in #states.
+   *   A partial or entire selector string to replace in #states.
    * @param string $replace
    *   The string to replace all instances of $search with.
    *
@@ -48,7 +64,7 @@ class FormHelper {
    * @param array $conditions
    *   States conditions array.
    * @param string $search
-   *   A partial or entire jQuery selector string to replace in #states.
+   *   A partial or entire selector string to replace in #states.
    * @param string $replace
    *   The string to replace all instances of $search with.
    *
@@ -59,13 +75,50 @@ class FormHelper {
     // order of an array.
     $keys = array_keys($conditions);
     $update_keys = FALSE;
+    $fallback_search = NULL;
+    $fallback_prefix = '';
+    $fallback_replace = $replace;
+    $keep_prefix = FALSE;
+    foreach (static::LEGACY_STATES_PSEUDOS as $pseudo => $prefix) {
+      if (str_starts_with($search, $pseudo) && strlen($search) > strlen($pseudo)) {
+        $fallback_search = substr($search, strlen($pseudo));
+        $fallback_prefix = $prefix;
+        // A replacement that keeps the pseudo-class keeps the CSS that
+        // replaced it. Any other replacement is literal, as on the pinned key.
+        if (str_starts_with($replace, $pseudo)) {
+          $fallback_replace = substr($replace, strlen($pseudo));
+          $keep_prefix = TRUE;
+        }
+        break;
+      }
+    }
     foreach ($conditions as $id => $values) {
-      if (str_contains($id, $search)) {
+      if (is_string($id) && str_contains($id, $search)) {
         $update_keys = TRUE;
         $new_id = str_replace($search, $replace, $id);
         // Replace the key and keep the array in the same order.
         $index = array_search($id, $keys, TRUE);
         $keys[$index] = $new_id;
+      }
+      elseif (is_string($id) && $fallback_search !== NULL && str_contains($id, $fallback_search)) {
+        // Quoted attribute values are matched first and returned unchanged, so
+        // text inside them is never rewritten.
+        $pattern = '/("(?:[^"\\\\]|\\\\.)*"|\'(?:[^\'\\\\]|\\\\.)*\')|(?:^|(?<=[\s>+~,(]))(' . $fallback_prefix . ')' . preg_quote($fallback_search, '/') . '/';
+        $new_id = preg_replace_callback($pattern, static function (array $matches) use ($keep_prefix, $fallback_replace): string {
+          if ($matches[1] !== '') {
+            return $matches[1];
+          }
+          return $keep_prefix ? $matches[2] . $fallback_replace : $fallback_replace;
+        }, $id);
+        if ($new_id !== $id) {
+          $update_keys = TRUE;
+          // Replace the key and keep the array in the same order.
+          $index = array_search($id, $keys, TRUE);
+          $keys[$index] = $new_id;
+        }
+        elseif (is_array($values)) {
+          static::processStatesArray($conditions[$id], $search, $replace);
+        }
       }
       elseif (is_array($values)) {
         static::processStatesArray($conditions[$id], $search, $replace);
@@ -112,26 +165,29 @@ class FormHelper {
    * ]
    * @endcode
    *
-   * Every condition is a key/value pair, whose key is a jQuery selector that
+   * Every condition is a key/value pair, whose key is a CSS selector that
    * denotes another element on the page, and whose value is an array of
-   * conditions, which must bet met on that element:
+   * conditions, which must be met on that element:
    * @code
    * [
    *   'visible' => [
-   *     JQUERY_SELECTOR => REMOTE_CONDITIONS,
-   *     JQUERY_SELECTOR => REMOTE_CONDITIONS,
+   *     CSS_SELECTOR => REMOTE_CONDITIONS,
+   *     CSS_SELECTOR => REMOTE_CONDITIONS,
    *     ...
    *   ],
    * ]
    * @endcode
-   * All conditions must be met for the state to be applied.
+   * All conditions must be met for the state to be applied. The browser
+   * resolves selectors from the final markup, after form and render alters.
+   * Extensions using jQuery-specific selectors must explicitly attach
+   * core/drupal.states.jquery and migrate to CSS selectors.
    *
    * Each remote condition is a key/value pair specifying conditions on the
    * other element that need to be met to apply the state to the element:
    * @code
    * [
    *   'visible' => [
-   *     ':input[name="remote_checkbox"]' => ['checked' => TRUE],
+   *     'input[name="remote_checkbox"]' => ['checked' => TRUE],
    *   ],
    * ]
    * @endcode
@@ -147,7 +203,7 @@ class FormHelper {
    *   '#states' => [
    *     // Only show this field when the 'toggle_me' checkbox is enabled.
    *     'visible' => [
-   *       ':input[name="toggle_me"]' => ['checked' => TRUE],
+   *       'input[name="toggle_me"]' => ['checked' => TRUE],
    *     ],
    *   ],
    * ];
@@ -191,7 +247,7 @@ class FormHelper {
    *   '#states' => [
    *     // Show the settings if 'bar' has been selected for 'foo'.
    *     'visible' => [
-   *       ':input[name="foo"]' => ['value' => 'bar'],
+   *       'select[name="foo"]' => ['value' => 'bar'],
    *     ],
    *   ],
    * @endcode

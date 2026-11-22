@@ -13,7 +13,7 @@
 - default_admin/core/drupal.dialog.off_canvas
 - default_admin/core/drupal.displace
 - default_admin/core/drupal.jquery.position
-- default_admin/core/drupal.states
+- default_admin/core/drupal.states.jquery
 - default_admin/core/internal.jquery.form
 - default_admin/core/internal.jquery_ui
 - default_admin/core/jquery
@@ -51,7 +51,7 @@
 - stark/core/drupal.dialog.off_canvas
 - stark/core/drupal.displace
 - stark/core/drupal.jquery.position
-- stark/core/drupal.states
+- stark/core/drupal.states.jquery
 - stark/core/internal.jquery.form
 - stark/core/internal.jquery_ui
 - stark/core/jquery
@@ -88,7 +88,7 @@
 - starterkit_theme/core/drupal.dialog.off_canvas
 - starterkit_theme/core/drupal.displace
 - starterkit_theme/core/drupal.jquery.position
-- starterkit_theme/core/drupal.states
+- starterkit_theme/core/drupal.states.jquery
 - starterkit_theme/core/internal.jquery.form
 - starterkit_theme/core/internal.jquery_ui
 - starterkit_theme/core/jquery
@@ -125,7 +125,7 @@
 - umami/core/drupal.dialog.off_canvas
 - umami/core/drupal.displace
 - umami/core/drupal.jquery.position
-- umami/core/drupal.states
+- umami/core/drupal.states.jquery
 - umami/core/internal.jquery.form
 - umami/core/internal.jquery_ui
 - umami/core/jquery
