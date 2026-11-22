@@ -52,7 +52,10 @@ final class LocaleExportFormStatesTest extends WebDriverTestBase {
 
     $page = $this->getSession()->getPage();
     $options = $this->assertSession()->elementExists('css', '[data-drupal-selector="edit-content-options"]');
-    $this->assertTrue($options->isVisible());
+    // English is not translatable, so the select starts at source text only.
+    $this->assertFalse($options->isVisible());
+    $page->selectFieldOption('langcode', 'fr');
+    $this->assertTrue($options->isVisible(), 'Selecting a language shows the export options.');
     $page->selectFieldOption('langcode', LanguageInterface::LANGCODE_SYSTEM);
     $this->assertFalse($options->isVisible(), 'Selecting source text only hides the export options.');
   }
