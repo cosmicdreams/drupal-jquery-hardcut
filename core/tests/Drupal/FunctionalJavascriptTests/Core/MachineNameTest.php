@@ -328,6 +328,52 @@ class MachineNameTest extends WebDriverTestBase {
   }
 
   /**
+   * Tests a native change listener added between core and a late bridge.
+   *
+   * Ajax binds first, then machine-name, then a native change listener. The
+   * pinned jQuery queue (Ajax, then machine-name) ran ahead of that
+   * listener, so it can neither suppress machine-name nor run before it.
+   */
+  public function testLateReplayNativeListenerCannotStopMachineName(): void {
+    foreach (['observe' => FALSE, 'stop' => TRUE] as $case => $stops) {
+      $this->drupalGet('form-test/machine-name', ['query' => ['ajax' => 1]]);
+      $session = $this->getSession();
+      $this->assertSame('undefined', $session->evaluateScript('typeof window.jQuery'));
+      $scripts = json_encode($this->jqueryScripts());
+      $stop = json_encode($stops);
+      $session->executeScript($this->widgetHelpers() . <<<JS
+        (async () => {
+          const container = createWidget('between');
+          const source = container.querySelector('#between-source');
+          const target = container.querySelector('#between-target');
+          const seen = [];
+          const ajax = Drupal.ajax({ element: source, event: 'change', url: location.href });
+          ajax.eventResponse = () => {
+            seen.push(['ajax', target.value]);
+          };
+          attachWidget(container);
+          source.addEventListener('change', (event) => {
+            seen.push(['native', target.value]);
+            if ($stop) {
+              event.stopImmediatePropagation();
+            }
+          });
+          await load($scripts);
+          source.value = 'Between Order';
+          source.dispatchEvent(new Event('change', { bubbles: true }));
+          ajax.removeEventBindings();
+          window.betweenResult = [seen, target.value];
+        })();
+        JS);
+      $this->assertJsCondition('Array.isArray(window.betweenResult)');
+      $this->assertSame([
+        [['ajax', ''], ['native', 'between_order']],
+        'between_order',
+      ], $session->evaluateScript('window.betweenResult'), "Case: $case.");
+    }
+  }
+
+  /**
    * Tests that a slot claimed by the late adapter keeps the pinned order.
    *
    * Contrib handlers bound later share jQuery's dispatch with core's slot. As

@@ -1284,6 +1284,74 @@ class FormGroupingElementsTest extends WebDriverTestBase {
   }
 
   /**
+   * Tests a form binding that States watches after the binding exists.
+   *
+   * Both bridges are loaded and no contrib handler exists. The form binding
+   * registers first, then States attaches. States' slot binds through jQuery
+   * at once and materializes the form slot in front of it, which keeps the
+   * pinned order. Compared with the same page without the binding, that
+   * costs exactly 1 jQuery() and 4 jQuery._data() calls. The cost is
+   * accepted and tracked under the Ajax/States eager-slot follow-up, which
+   * the seam slice removes.
+   */
+  public function testFormThenStatesJqueryCallCost(): void {
+    $this->drupalGet('form-test/group-details', ['query' => ['legacy-details' => 1, 'states' => 1]]);
+    $session = $this->getSession();
+    $session->executeScript($this->jqueryCallCounter());
+    $actual = $session->evaluateScript(<<<'JS'
+      (() => {
+        const run = (id, withBinding) => {
+          const container = document.body.appendChild(document.createElement('div'));
+          container.innerHTML = `<div class="js-form-item"><input type="checkbox" id="${id}-dependee"></div><div class="js-form-item"><input type="checkbox" id="${id}-target" data-drupal-states='{"checked":{"#${id}-dependee":{"checked":true}}}'></div>`;
+          const dependee = document.getElementById(`${id}-dependee`);
+          const calls = [];
+          if (withBinding) {
+            Drupal.formEvents.listen(dependee, 'change', id, () => calls.push('core'));
+          }
+          jqueryCalls.start();
+          Drupal.attachBehaviors(container);
+          dependee.click();
+          return [jqueryCalls.stop(), document.getElementById(`${id}-target`).checked, calls];
+        };
+        return [run('plain', false), run('bound', true)];
+      })()
+      JS);
+    [$plain, $bound] = $actual;
+    $this->assertSame([TRUE, []], array_slice($plain, 1));
+    $this->assertSame([TRUE, ['core']], array_slice($bound, 1));
+    // Accepted cost: see the Ajax/States eager-slot follow-up.
+    $expected = $plain[0];
+    $expected['init'] += 1;
+    $expected['_data'] += 4;
+    $this->assertSame($expected, $bound[0]);
+  }
+
+  /**
+   * Tests synthetic change order for a form binding registered before States.
+   *
+   * The pinned bindings ran in registration order, so the form callback runs
+   * before States checks the dependent checkbox.
+   */
+  public function testFormThenStatesSyntheticOrder(): void {
+    $this->drupalGet('form-test/group-details', ['query' => ['legacy-details' => 1, 'states' => 1]]);
+    $actual = $this->getSession()->evaluateScript(<<<'JS'
+      (() => {
+        const container = document.body.appendChild(document.createElement('div'));
+        container.innerHTML = `<div class="js-form-item"><input type="checkbox" id="synthetic-dependee"></div><div class="js-form-item"><input type="checkbox" id="synthetic-target" data-drupal-states='{"checked":{"#synthetic-dependee":{"checked":true}}}'></div>`;
+        const dependee = document.getElementById('synthetic-dependee');
+        const target = document.getElementById('synthetic-target');
+        const calls = [];
+        Drupal.formEvents.listen(dependee, 'change', 'synthetic', () => calls.push(`core:${target.checked}`));
+        Drupal.attachBehaviors(container);
+        dependee.checked = true;
+        jQuery(dependee).trigger('change');
+        return [target.checked, calls];
+      })()
+      JS);
+    $this->assertSame([TRUE, ['core:false']], $actual);
+  }
+
+  /**
    * Tests States behind another core slot and a form binding.
    *
    * The bridge binds a slot for an owned select change, a form binding
