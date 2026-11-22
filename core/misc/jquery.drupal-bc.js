@@ -9,6 +9,8 @@
   const foreignTriggers = [];
   const legacySlots = new WeakMap();
   const projectedOriginals = new WeakMap();
+  // Maps each special.handle hook this bridge installs to the one it wraps.
+  const bridgeHandles = new WeakMap();
 
   /**
    * Gives a dedicated bridge the slot reserved in registry order.
@@ -217,6 +219,7 @@
     }
 
     special.handle = handle;
+    bridgeHandles.set(handle, previousHandle);
     if (!existing) {
       specials[type] = special;
     }
@@ -352,6 +355,7 @@
     }
 
     special.handle = handle;
+    bridgeHandles.set(handle, previousHandle);
     if (!existing) {
       specials[type] = special;
     }
@@ -373,6 +377,24 @@
         delete specials[type];
       }
     };
+  }
+
+  /**
+   * Reports whether a special.handle hook other than this bridge's exists.
+   * @param {object} jquery
+   *   The connected jQuery instance.
+   * @param {string} type
+   *   The event type.
+   * @return {boolean}
+   *   Whether jQuery dispatch runs handlers through a legacy hook.
+   * @internal
+   */
+  function hasLegacySpecialHandle(jquery, type) {
+    let handle = jquery.event.special[type]?.handle;
+    while (bridgeHandles.has(handle)) {
+      handle = bridgeHandles.get(handle);
+    }
+    return typeof handle === 'function';
   }
 
   /**
@@ -558,6 +580,8 @@
     const registry = window.Drupal.eventBindings;
     registry.connectLegacy = registry.connectLegacy ?? connect;
     registry.claimLegacyEvent = registry.claimLegacyEvent ?? claimLegacyEvent;
+    registry.hasLegacySpecialHandle =
+      registry.hasLegacySpecialHandle ?? hasLegacySpecialHandle;
     registry.isForeignDefaultAction =
       registry.isForeignDefaultAction || isForeignDefaultAction;
     registry.getProjectedOriginal =
