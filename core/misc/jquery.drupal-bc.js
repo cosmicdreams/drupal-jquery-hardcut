@@ -60,6 +60,19 @@
     const markedHandlers = new WeakSet();
     const anchors = new WeakMap();
     const temporary = new Set();
+    // Maps each target to the handler list types that may hold handlers other
+    // than jQuery's own and the marked slots. The add hook below records every
+    // later binding, so a target missing here has none and needs no jQuery
+    // call. An entry may be stale after a removal; readers verify it.
+    const external = new WeakMap();
+    const seeded = new WeakSet();
+    // jQuery adds its own native listener unless a special setup() declines.
+    // The setups present at connection are jQuery's built-ins, which do not.
+    const builtinSetups = new Set(
+      Object.values(jquery.event.special)
+        .map((special) => special?.setup)
+        .filter(Boolean),
+    );
     let replaying = true;
     let internal = 0;
     let triggerDepth = 0;
@@ -109,22 +122,156 @@
     }
 
     /**
+     * Records the handler list types of an external binding.
+     * @param {EventTarget} target
+     *   The target.
+     * @param {Iterable<string>} bindTypes
+     *   The handler list types.
+     */
+    function track(target, bindTypes) {
+      let types = external.get(target);
+      if (!types) {
+        types = new Set();
+        external.set(target, types);
+      }
+      for (const bindType of bindTypes) {
+        types.add(bindType);
+      }
+    }
+
+    /**
+     * Records handlers bound before this observer hooked jQuery.
+     *
+     * This seed reads jQuery's data once per target while the instance
+     * connects, so it covers handlers of a late connection. Afterwards the
+     * add hook keeps the record without reading jQuery's data.
+     * @param {EventTarget} target
+     *   The target.
+     */
+    function seed(target) {
+      if (seeded.has(target)) {
+        return;
+      }
+      seeded.add(target);
+      const events = jquery._data(target, 'events');
+      if (events) {
+        track(
+          target,
+          Object.keys(events).filter((bindType) =>
+            events[bindType].some(
+              (handleObj) =>
+                !isInternalHandler(handleObj) &&
+                !markedHandlers.has(handleObj.handler),
+            ),
+          ),
+        );
+      }
+    }
+
+    /**
+     * Returns the handler list only if an external binding may be in it.
+     * @param {EventTarget} target
+     *   The target.
+     * @param {string} bindType
+     *   The handler list type.
+     * @return {object[]|undefined}
+     *   The handler list, if any.
+     */
+    function getTrackedHandlers(target, bindType) {
+      return external.get(target)?.has(bindType)
+        ? getHandlers(target, bindType)
+        : undefined;
+    }
+
+    /**
      * Checks for handlers other than jQuery's own and the marked slots.
      * @param {EventTarget} target
      *   The target.
      * @param {string} bindType
      *   The handler list type.
+     * @param {boolean} delegated
+     *   Whether to look for delegated handlers only.
      * @return {boolean}
      *   Whether such a handler exists.
      */
-    function hasExternalHandler(target, bindType) {
-      return Boolean(
-        getHandlers(target, bindType)?.some(
+    function hasExternalHandler(target, bindType, delegated = false) {
+      const found = Boolean(
+        getTrackedHandlers(target, bindType)?.some(
           (handleObj) =>
             !isInternalHandler(handleObj) &&
-            !markedHandlers.has(handleObj.handler),
+            !markedHandlers.has(handleObj.handler) &&
+            (!delegated || handleObj.selector),
         ),
       );
+      if (!found && !delegated) {
+        external.get(target)?.delete(bindType);
+      }
+      return found;
+    }
+
+    /**
+     * Checks whether jQuery added its own native listener for a list type.
+     * @param {string} bindType
+     *   The handler list type.
+     * @return {boolean}
+     *   Whether no contrib special setup() replaced it.
+     */
+    function hasNativeListener(bindType) {
+      const setup = jquery.event.special[bindType]?.setup;
+      return !setup || builtinSetups.has(setup);
+    }
+
+    /**
+     * Runs jQuery's own handle for an active anchor.
+     * @param {object} anchor
+     *   The anchor.
+     * @param {Event} event
+     *   The native event.
+     * @return {unknown}
+     *   The handle's return value.
+     */
+    function runAnchor(anchor, event) {
+      if (!anchor.active) {
+        return undefined;
+      }
+      const { target, bindType } = anchor;
+      const handle = jquery._data(target, 'handle');
+      if (!handle || !getHandlers(target, bindType)) {
+        anchor.active = false;
+        return undefined;
+      }
+      return handle.call(target, event);
+    }
+
+    /**
+     * Moves an inactive anchor behind the latest marked binding.
+     *
+     * The pinned bindings shared one jQuery listener, created by the first
+     * core binding, and every later core binding ran inside it before later
+     * contrib handlers. The native core listeners run one after another, so
+     * jQuery's dispatch belongs after the last of them. The registry keeps a
+     * position listener right after each marked binding's own listener, also
+     * for bindings registered before this instance connected. A list type
+     * that differs from the binding type, such as mouseover for mouseenter,
+     * uses a listener of its own, added now.
+     * @param {object} anchor
+     *   The anchor.
+     * @param {object|undefined} binding
+     *   The latest marked binding for the target and list type, if any.
+     */
+    function placeAnchor(anchor, binding) {
+      const { target, bindType } = anchor;
+      if (anchor.attached) {
+        target.removeEventListener(bindType, anchor.listener);
+        anchor.attached = false;
+      }
+      if (binding?.type === bindType) {
+        anchor.host = binding;
+        return;
+      }
+      anchor.host = undefined;
+      target.addEventListener(bindType, anchor.listener);
+      anchor.attached = true;
     }
 
     /**
@@ -132,17 +279,14 @@
      *
      * The pinned bindings created jQuery's native listener when core bound.
      * A marked slot binds later, so jQuery would add its listener after
-     * native listeners added in between. The anchor is an idle native
-     * listener added when core registers. While a marked slot created the
-     * handler list, the anchor runs jQuery's own handle in its place.
-     * @param {EventTarget} target
-     *   The binding target.
-     * @param {string} bindType
-     *   The jQuery handler list type.
-     * @return {object}
-     *   The anchor, with a reference count.
+     * native listeners added in between. The anchor is an idle position
+     * after core's listener. While a marked slot created the handler list,
+     * the anchor runs jQuery's own handle in its place.
+     * @param {object} slot
+     *   The marked slot.
      */
-    function acquireAnchor(target, bindType) {
+    function acquireAnchor(slot) {
+      const { target, bindType, binding } = slot;
       let byType = anchors.get(target);
       if (!byType) {
         byType = new Map();
@@ -151,35 +295,29 @@
       let anchor = byType.get(bindType);
       if (!anchor) {
         anchor = {
+          target,
+          bindType,
           active: false,
+          attached: false,
           count: 0,
-          listener(event) {
-            if (!anchor.active) {
-              return undefined;
-            }
-            const handle = jquery._data(target, 'handle');
-            if (!handle || !getHandlers(target, bindType)) {
-              anchor.active = false;
-              return undefined;
-            }
-            return handle.call(target, event);
-          },
+          host: undefined,
+          listener: (event) => runAnchor(anchor, event),
         };
         byType.set(bindType, anchor);
-        target.addEventListener(bindType, anchor.listener);
       }
       anchor.count += 1;
-      return anchor;
+      if (!anchor.active) {
+        placeAnchor(anchor, binding);
+      }
     }
 
     /**
      * Drops one reference to an anchor and removes it after the last one.
-     * @param {EventTarget} target
-     *   The binding target.
-     * @param {string} bindType
-     *   The jQuery handler list type.
+     * @param {object} slot
+     *   The marked slot, already removed from the target's slots.
      */
-    function releaseAnchor(target, bindType) {
+    function releaseAnchor(slot) {
+      const { target, bindType, binding } = slot;
       const byType = anchors.get(target);
       const anchor = byType?.get(bindType);
       if (!anchor) {
@@ -187,13 +325,27 @@
       }
       anchor.count -= 1;
       if (anchor.count > 0) {
+        if (anchor.host === binding) {
+          // The position left with the binding; the last one remaining hosts.
+          const remaining = Array.from(markedSlots.get(target) || []).filter(
+            (other) => other.bindType === bindType,
+          );
+          placeAnchor(anchor, remaining.at(-1)?.binding);
+        }
         return;
       }
       byType.delete(bindType);
-      target.removeEventListener(bindType, anchor.listener);
+      if (anchor.attached) {
+        target.removeEventListener(bindType, anchor.listener);
+      }
+      anchor.host = undefined;
+      if (!anchor.active) {
+        return;
+      }
       const handle = jquery._data(target, 'handle');
-      if (anchor.active && handle && getHandlers(target, bindType)) {
-        // Remaining handlers keep a jQuery listener, now after the others.
+      if (handle && getHandlers(target, bindType)) {
+        // Known gap: the position left with core's last binding, so remaining
+        // contrib handlers keep a jQuery listener after the other listeners.
         target.addEventListener(bindType, handle);
       }
     }
@@ -218,7 +370,9 @@
       slot.followsHandlers = followsHandlers;
       const anchor = anchors.get(target)?.get(bindType);
       const handle = jquery._data(target, 'handle');
-      if (created && anchor && handle) {
+      // A contrib special setup() that declines jQuery's listener delivers
+      // the events itself, so the anchor stays idle.
+      if (created && anchor && handle && hasNativeListener(bindType)) {
         target.removeEventListener(bindType, handle);
         anchor.active = true;
       }
@@ -274,7 +428,17 @@
      *   The handler list type.
      */
     function release(target, bindType) {
-      if (triggerDepth || hasExternalHandler(target, bindType)) {
+      if (triggerDepth) {
+        // A handler removed during a trigger, such as one bound with .one(),
+        // releases its slots once the outermost trigger ends.
+        markedSlots.get(target)?.forEach((slot) => {
+          if (slot.bound && slot.bindType === bindType) {
+            temporary.add(slot);
+          }
+        });
+        return;
+      }
+      if (hasExternalHandler(target, bindType)) {
         return;
       }
       markedSlots.get(target)?.forEach((slot) => {
@@ -344,21 +508,25 @@
     const add = function (elem, types, handler, data, selector) {
       const handleObj = handler?.handler ? handler : null;
       const callback = handleObj ? handleObj.handler : handler;
-      if (
+      const bindTypes =
         observing &&
         !internal &&
         elem &&
-        markedSlots.has(elem) &&
+        typeof elem === 'object' &&
         handleObj?.namespace !== false &&
-        callback !== returnTrue
-      ) {
+        callback !== returnTrue &&
+        !markedHandlers.has(callback)
+          ? bindTypesFor(types, handleObj?.selector ?? selector)
+          : null;
+      if (bindTypes && markedSlots.has(elem)) {
         // Core precedes a later handler, as the pinned binding did.
-        const bindTypes = bindTypesFor(types, handleObj?.selector ?? selector);
-        if (bindTypes) {
-          materialize(elem, bindTypes);
-        }
+        materialize(elem, bindTypes);
       }
-      return originalAdd.apply(this, arguments);
+      const result = originalAdd.apply(this, arguments);
+      if (bindTypes) {
+        track(elem, bindTypes);
+      }
+      return result;
     };
     jquery.event.add = add;
 
@@ -429,6 +597,12 @@
     jquery.event.trigger = trigger;
 
     const stop = registry.observe({
+      dispatchAt(binding, event) {
+        const anchor = anchors.get(binding.target)?.get(binding.type);
+        if (anchor?.host === binding) {
+          runAnchor(anchor, event);
+        }
+      },
       add(binding) {
         const { target, type, namespace, selector, listener } = binding;
         if (
@@ -520,11 +694,17 @@
           return listener.call(this, projected, ...args);
         }
 
-        const element = jquery(target);
         const bindType = getBindType(type, selector);
-        const list = getHandlers(target, bindType);
+        if (replaying) {
+          seed(target);
+        }
+        // Accepted gap A: a handler bound between the jQuery file and this
+        // file is not recorded unless its target is seeded above, so a later
+        // registration does not see it; its order relative to core is unknown.
+        const list = getTrackedHandlers(target, bindType);
         const slot = {
           deliver,
+          binding,
           target,
           bindType,
           name,
@@ -539,11 +719,27 @@
           handler(...args) {
             return slot.deliver.apply(this, args);
           },
+          /**
+           * Checks whether core delivers real events from this slot.
+           *
+           * Behind handlers that precede the binding, and whenever a contrib
+           * delegate shares the list: jQuery runs delegates on descendants
+           * first, so only its queue keeps their pinned order with core.
+           * @return {boolean}
+           *   Whether the slot, not core's native listener, delivers.
+           */
+          deliversRealEvents() {
+            return (
+              slot.bound &&
+              (slot.followsHandlers ||
+                hasExternalHandler(target, bindType, true))
+            );
+          },
           remove(unbind = true) {
             subscriptions.delete(binding);
             if (!legacySlot) {
               if (unbind) {
-                element.off(name, selector, slot.handler);
+                jquery(target).off(name, selector, slot.handler);
               }
               return;
             }
@@ -556,7 +752,7 @@
               }
             }
             markedSlots.get(target)?.delete(slot);
-            releaseAnchor(target, bindType);
+            releaseAnchor(slot);
           },
         };
         slotHandlers.add(slot.handler);
@@ -569,7 +765,7 @@
           ),
         );
         if (!legacySlot) {
-          element.on(name, selector, slot.handler);
+          jquery(target).on(name, selector, slot.handler);
           slot.bound = true;
           slot.followsHandlers = followsHandlers;
           return;
@@ -583,7 +779,7 @@
           markedSlots.set(target, new Set());
         }
         markedSlots.get(target).add(slot);
-        acquireAnchor(target, bindType);
+        acquireAnchor(slot);
         // Accepted gap A: a handler bound between the jQuery file and this
         // file runs first, with an unknown order relative to core.
         // Accepted gap B: a foreign handler bound before connectLegacy() has
