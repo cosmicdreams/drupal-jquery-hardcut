@@ -196,6 +196,25 @@
     }
 
     /**
+     * Returns the latest marked binding for a target and list type.
+     * @param {EventTarget} target
+     *   The target.
+     * @param {string} bindType
+     *   The handler list type.
+     * @return {object|undefined}
+     *   The binding, if any.
+     */
+    function lastMarkedBinding(target, bindType) {
+      let last;
+      markedSlots.get(target)?.forEach((slot) => {
+        if (slot.bindType === bindType) {
+          last = slot.binding;
+        }
+      });
+      return last;
+    }
+
+    /**
      * Runs jQuery's own handle for an active anchor.
      * @param {object} anchor
      *   The anchor.
@@ -211,7 +230,7 @@
       const { target, bindType } = anchor;
       const handle = jquery._data(target, 'handle');
       if (!handle || !getHandlers(target, bindType)) {
-        anchor.active = false;
+        idleAnchor(anchor);
         return undefined;
       }
       return handle.call(target, event);
@@ -228,6 +247,13 @@
      * for bindings registered before this instance connected. A list type
      * that differs from the binding type, such as mouseover for mouseenter,
      * uses a listener of its own, added now.
+     *
+     * Known gap: a slot that delivers from jQuery's queue, such as core's
+     * delegate next to a contrib delegate, waits for this position. A native
+     * listener added between two core bindings that stops immediate
+     * propagation then suppresses the first one too. The pinned listener ran
+     * every core binding before it. Neither anchor position keeps both
+     * orders, because core's bindings now have one native listener each.
      * @param {object} anchor
      *   The anchor.
      * @param {object|undefined} binding
@@ -246,6 +272,19 @@
       anchor.host = undefined;
       target.addEventListener(bindType, anchor.listener);
       anchor.attached = true;
+    }
+
+    /**
+     * Makes an anchor idle at the position after core's latest binding.
+     *
+     * The next handler list jQuery creates then dispatches after every core
+     * binding, as the pinned shared listener did.
+     * @param {object} anchor
+     *   The anchor.
+     */
+    function idleAnchor(anchor) {
+      anchor.active = false;
+      placeAnchor(anchor, lastMarkedBinding(anchor.target, anchor.bindType));
     }
 
     /**
@@ -301,10 +340,7 @@
       if (anchor.count > 0) {
         if (anchor.host === binding) {
           // The position left with the binding; the last one remaining hosts.
-          const remaining = Array.from(markedSlots.get(target) || []).filter(
-            (other) => other.bindType === bindType,
-          );
-          placeAnchor(anchor, remaining.at(-1)?.binding);
+          placeAnchor(anchor, lastMarkedBinding(target, bindType));
         }
         return;
       }
@@ -387,7 +423,7 @@
       }
       const anchor = anchors.get(target)?.get(bindType);
       if (anchor && !getHandlers(target, bindType)) {
-        anchor.active = false;
+        idleAnchor(anchor);
       }
     }
 
@@ -437,7 +473,7 @@
       bindTypes.forEach((bindType) => release(target, bindType));
       anchors.get(target)?.forEach((anchor, bindType) => {
         if (anchor.active && !getHandlers(target, bindType)) {
-          anchor.active = false;
+          idleAnchor(anchor);
         }
       });
     }
