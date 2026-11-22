@@ -972,8 +972,8 @@ class FormGroupingElementsTest extends WebDriverTestBase {
   /**
    * Tests a later contrib delegate on a summary descendant.
    *
-   * jQuery ran delegates on deeper elements before the pinned details-aria
-   * delegate, so a contrib delegate that cancels a real click leaves
+   * The pinned jQuery queue ran delegates on deeper elements before the
+   * details-aria delegate, so a contrib delegate that cancels a real click leaves
    * aria-expanded and the open state untouched.
    */
   public function testLaterDelegateCancelsDetailsAria(): void {

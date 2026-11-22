@@ -514,7 +514,7 @@ class MachineNameTest extends WebDriverTestBase {
   /**
    * Tests a contrib special event whose setup() forwards natively.
    *
-   * jQuery adds no listener of its own then, so the contrib handler receives
+   * Then jQuery adds no listener of its own, so the contrib handler receives
    * each native event once.
    */
   public function testContribSpecialSetupDeliversOnce(): void {
