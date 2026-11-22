@@ -1,112 +1,109 @@
 /**
  * @file
- * Module page behaviors.
+ * Filters the module listing by its text search field.
  */
 
-(function ($, Drupal, debounce) {
-  /**
-   * Filters the module list table by a text input search string.
-   *
-   * Additionally accounts for multiple tables being wrapped in "package" details
-   * elements.
-   *
-   * Text search input: input.table-filter-text
-   * Target table:      input.table-filter-text[data-table]
-   * Source text:       .table-filter-text-source, .module-name, .module-description
-   *
-   * @type {Drupal~behavior}
-   */
+((Drupal, debounce) => {
   Drupal.behaviors.tableFilterByText = {
-    attach(context, settings) {
+    attach() {
       const [input] = once('table-filter-text', 'input.table-filter-text');
       if (!input) {
         return;
       }
-      const $table = $(input.getAttribute('data-table'));
-      let $rowsAndDetails;
-      let $rows;
-      let $details;
-      let searching = false;
-
-      function hidePackageDetails(index, element) {
-        const $packDetails = $(element);
-        const $visibleRows = $packDetails.find('tbody tr:visible');
-        $packDetails.toggle($visibleRows.length > 0);
+      const containers = Array.from(
+        document.querySelectorAll(input.dataset.table),
+      );
+      if (!containers.length) {
+        return;
       }
 
-      function filterModuleList(e) {
-        const query = e.target.value;
-        // Case insensitive expression to find query at the beginning of a word.
-        const re = new RegExp(`\\b${query}`, 'i');
+      const rowsAndDetails = Array.from(
+        new Set(
+          containers.flatMap((container) =>
+            Array.from(container.querySelectorAll('tr, details')),
+          ),
+        ),
+      );
+      const rows = rowsAndDetails.filter((element) =>
+        element.matches('tbody tr'),
+      );
+      const packages = rowsAndDetails.filter((element) =>
+        element.matches('.package-listing'),
+      );
+      let searching = false;
 
-        function showModuleRow(index, row) {
-          const sources = row.querySelectorAll(
-            '.table-filter-text-source, .module-name, .module-description',
-          );
-          let sourcesConcat = '';
-          // Concatenate the textContent of the elements in the row, with a
-          // space in between.
-          sources.forEach((item) => {
-            sourcesConcat += ` ${item.textContent}`;
-          });
-          const textMatch = sourcesConcat.search(re) !== -1;
-          $(row).closest('tr').toggle(textMatch);
-        }
-        // Search over all rows and packages.
-        $rowsAndDetails.show();
+      const filterModuleList = ({ target }) => {
+        const query = target.value;
+        // Match a search term at the beginning of a word.
+        const pattern = new RegExp(`\\b${query}`, 'i');
+        rowsAndDetails.forEach((element) => {
+          element.style.display = '';
+        });
 
-        // Filter if the length of the query is at least 2 characters.
         if (query.length >= 2) {
           searching = true;
-          $rows.each(showModuleRow);
+          rows.forEach((row) => {
+            const sources = row.querySelectorAll(
+              '.table-filter-text-source, .module-name, .module-description',
+            );
+            const text = Array.from(
+              sources,
+              (element) => ` ${element.textContent}`,
+            ).join('');
+            row.style.display = pattern.test(text) ? '' : 'none';
+          });
 
-          // Note that we first open all <details> to be able to use ':visible'.
-          // Mark the <details> elements that were closed before filtering, so
-          // they can be closed again when filtering is removed.
-          $details
-            .not('[open]')
-            .attr('data-drupal-system-state', 'forced-open');
+          packages.forEach((details) => {
+            if (!details.open) {
+              details.dataset.drupalSystemState = 'forced-open';
+            }
+            details.setAttribute('open', 'true');
+            if (
+              !Array.from(details.querySelectorAll('tbody tr')).some(
+                (row) => row.getClientRects().length,
+              )
+            ) {
+              details.style.display = 'none';
+            }
+          });
 
-          // Hide the package <details> if they don't have any visible rows.
-          // Note that we first show() all <details> to be able to use ':visible'.
-          $details.attr('open', true).each(hidePackageDetails);
-
+          const visible = rows.filter(
+            (row) => row.getClientRects().length,
+          ).length;
           Drupal.announce(
             Drupal.formatPlural(
-              $rowsAndDetails.filter('tbody tr:visible').length,
+              visible,
               '1 module is available in the modified list.',
               '@count modules are available in the modified list.',
             ),
           );
         } else if (searching) {
           searching = false;
-          $rowsAndDetails.show();
-          // Return <details> elements that had been closed before filtering
-          // to a closed state.
-          $details
-            .filter('[data-drupal-system-state="forced-open"]')
-            .removeAttr('data-drupal-system-state')
-            .attr('open', false);
+          packages.forEach((details) => {
+            if (details.dataset.drupalSystemState === 'forced-open') {
+              delete details.dataset.drupalSystemState;
+              details.open = false;
+            }
+          });
         }
-      }
+      };
 
-      function preventEnterKey(event) {
-        if (event.which === 13) {
+      Drupal.formEvents.listen(
+        input,
+        'input',
+        undefined,
+        debounce(filterModuleList, 200),
+      );
+      Drupal.formEvents.listen(input, 'keydown', undefined, (event) => {
+        if (
+          event.key === 'Enter' ||
+          event.which === 13 ||
+          event.keyCode === 13
+        ) {
           event.preventDefault();
           event.stopPropagation();
         }
-      }
-
-      if ($table.length) {
-        $rowsAndDetails = $table.find('tr, details');
-        $rows = $table.find('tbody tr');
-        $details = $rowsAndDetails.filter('.package-listing');
-
-        $(input).on({
-          input: debounce(filterModuleList, 200),
-          keydown: preventEnterKey,
-        });
-      }
+      });
     },
   };
-})(jQuery, Drupal, Drupal.debounce);
+})(Drupal, Drupal.debounce);

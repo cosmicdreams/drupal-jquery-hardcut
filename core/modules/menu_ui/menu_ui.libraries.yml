@@ -3,7 +3,6 @@ drupal.menu_ui:
   js:
     js/menu_ui.js: {}
   dependencies:
-    - core/jquery
     - core/drupal
     - core/drupal.form
 
@@ -12,8 +11,10 @@ drupal.menu_ui.admin:
   js:
     js/menu_ui.admin.js: {}
   dependencies:
-    - core/jquery
+    - core/drupal.form.events
     - core/drupal
+    - core/drupal.xhr
+    - core/once
 
 drupal.menu_ui.adminforms:
   version: VERSION

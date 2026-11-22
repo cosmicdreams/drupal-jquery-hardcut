@@ -3,7 +3,7 @@ drupal.block:
   js:
     js/block.js: {}
   dependencies:
-    - core/jquery
+    - core/drupal.form.events
     - core/drupal
     - core/once
 
@@ -15,7 +15,7 @@ drupal.block.admin:
     theme:
       css/block.admin.css: {}
   dependencies:
-    - core/jquery
+    - core/drupal.form.events
     - core/drupal
     - core/drupal.announce
     - core/drupal.debounce

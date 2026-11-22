@@ -13,6 +13,22 @@
   removal: Z (Drupal 13)
   literals:
     "core/internal.jquery.form": 1
+- path: core/modules/system/tests/modules/form_test/src/Controller/FormTestController.php
+  removal: Z (Drupal 13)
+  literals:
+    "core/jquery": 1
+- path: core/modules/system/tests/modules/form_test/src/Form/FormTestGroupDetailsForm.php
+  removal: Z (Drupal 13)
+  literals:
+    "core/jquery": 1
+- path: core/modules/system/tests/modules/form_test/src/Form/FormTestMachineNameForm.php
+  removal: Z (Drupal 13)
+  literals:
+    "core/jquery": 1
+- path: core/modules/system/tests/modules/form_test/src/Form/FormTestVerticalTabsWithSummaryForm.php
+  removal: Z (Drupal 13)
+  literals:
+    "core/jquery": 1
 - path: core/modules/system/tests/modules/position_shim_test/src/Controller/PositionShimTestController.php
   removal: D
   literals:
@@ -22,6 +38,10 @@
   literals:
     "core/drupal.jquery.position": 1
 - path: core/modules/system/tests/modules/states_test/src/Controller/StatesTestController.php
+  removal: Z (Drupal 13)
+  literals:
+    "core/jquery": 1
+- path: core/modules/system/tests/modules/tabbingmanager_test/src/Controller/TabbingManagerTestController.php
   removal: Z (Drupal 13)
   literals:
     "core/jquery": 1
@@ -41,6 +61,7 @@
     "core/jquery": 1
     "core/misc/jquery.drupal-ajax-bc.js": 1
     "core/misc/jquery.drupal-bc.js": 1
+    "core/misc/jquery.drupal-form-bc.js": 1
     "core/misc/jquery.no-conflict.js": 1
     "core/misc/jquery.states.bc.js": 1
     "core/misc/jquery.tabledrag.bc.js": 1
@@ -61,6 +82,7 @@
     "core/internal.jquery.form": 1
     "core/misc/jquery.drupal-ajax-bc.js": 2
     "core/misc/jquery.drupal-bc.js": 2
+    "core/misc/jquery.drupal-form-bc.js": 2
     "core/misc/jquery.form.js": 1
     "core/misc/jquery.no-conflict.js": 2
     "core/misc/jquery.states.bc.js": 2
@@ -69,12 +91,7 @@
 - path: core/tests/Drupal/KernelTests/Core/Asset/InstalledProfileAssetsTest.php
   removal: Z (Drupal 13)
   literals:
-    "core/assets/vendor/jquery/jquery.min.js": 1
-    "core/misc/jquery.drupal-ajax-bc.js": 1
-    "core/misc/jquery.drupal-bc.js": 1
-    "core/misc/jquery.no-conflict.js": 1
-    "core/misc/jquery.states.bc.js": 1
-    "core/misc/jquery.tabledrag.bc.js": 1
+    "core/jquery": 1
 - path: core/tests/Drupal/KernelTests/Core/Asset/JqueryFreeLibrariesTest.php
   removal: Z (Drupal 13)
   literals:

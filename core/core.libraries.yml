@@ -321,7 +321,6 @@ drupal.batch:
   js:
     misc/batch.js: { cache: false }
   dependencies:
-    - core/jquery
     - core/drupal
     - core/drupalSettings
     - core/drupal.ajax
@@ -342,7 +341,6 @@ drupal.collapse:
     misc/details-aria.js: {}
     misc/details.js: {}
   dependencies:
-    - core/jquery
     - core/drupal
     - core/drupal.form
     - core/once
@@ -421,10 +419,10 @@ drupal.dropbutton:
     component:
       misc/dropbutton/dropbutton.css: {}
   dependencies:
-    - core/jquery
     - core/drupal
     - core/drupalSettings
     - core/once
+    - core/drupal.form.events
 
 drupal.entity-form:
   version: VERSION
@@ -444,10 +442,17 @@ drupal.form:
   js:
     misc/form.js: {}
   dependencies:
-    - core/jquery
     - core/drupal
     - core/drupal.debounce
     - core/once
+    - core/drupal.form.events
+
+drupal.form.events:
+  version: VERSION
+  js:
+    misc/form-events.js: {}
+  dependencies:
+    - core/drupal
 
 drupal.htmx:
   aggregate_target:
@@ -481,7 +486,6 @@ drupal.machine-name:
   js:
     misc/machine-name.js: {}
   dependencies:
-    - core/jquery
     - core/once
     - core/drupal
     - core/drupalSettings
@@ -543,7 +547,6 @@ drupal.tabbingmanager:
   js:
     misc/tabbingmanager.js: {}
   dependencies:
-    - core/jquery
     - core/drupal
     - core/tabbable
 
@@ -621,9 +624,9 @@ drupal.timezone:
   js:
     misc/timezone.js: {}
   dependencies:
-    - core/jquery
     - core/once
     - core/drupal
+    - core/drupal.xhr
 
 drupal.touchevents-test:
   header: true
@@ -639,7 +642,6 @@ drupal.vertical-tabs:
     component:
       misc/vertical-tabs.css: {}
   dependencies:
-    - core/jquery
     - core/once
     - core/drupal
     - core/drupalSettings
@@ -711,6 +713,7 @@ jquery:
     misc/jquery.drupal-bc.js: { preprocess: false, minified: false }
     misc/jquery.drupal-ajax-bc.js: { preprocess: false, minified: false }
     misc/jquery.tabledrag.bc.js: { preprocess: false, minified: false }
+    misc/jquery.drupal-form-bc.js: { preprocess: false, minified: false }
     misc/jquery.states.bc.js: { preprocess: false, minified: false }
 
 internal.jquery.form:

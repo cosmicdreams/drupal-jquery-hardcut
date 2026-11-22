@@ -27,7 +27,7 @@
  * @event drupalTabbingContextDeactivated
  */
 
-(function ($, Drupal, { tabbable, isTabbable }) {
+(function (Drupal, { tabbable, isTabbable }) {
   /**
    * Provides an API for managing page tabbing order modifications.
    *
@@ -44,6 +44,8 @@
      * @type {Array.<Drupal~TabbingContext>}
      */
     this.stack = [];
+    this.originalTabIndices = new WeakMap();
+    this.focusTraps = new WeakMap();
   }
 
   /**
@@ -57,10 +59,10 @@
    *   A set of initiating values
    * @param {number} options.level
    *   The level in the TabbingManager's stack of this tabbingContext.
-   * @param {jQuery} options.$tabbableElements
+   * @param {HTMLElement[]} options.tabbableElements
    *   The DOM elements that should be reachable via the tab key when this
    *   tabbingContext is active.
-   * @param {jQuery} options.$disabledElements
+   * @param {HTMLElement[]} options.disabledElements
    *   The DOM elements that should not be reachable via the tab key when this
    *   tabbingContext is active.
    * @param {boolean} options.released
@@ -75,7 +77,7 @@
    *   remain within the browser.
    */
   function TabbingContext(options) {
-    $.extend(
+    Object.assign(
       this,
       /** @lends Drupal~TabbingContext# */ {
         /**
@@ -84,14 +86,14 @@
         level: null,
 
         /**
-         * @type {jQuery}
+         * @type {HTMLElement[]}
          */
-        $tabbableElements: $(),
+        tabbableElements: [],
 
         /**
-         * @type {jQuery}
+         * @type {HTMLElement[]}
          */
-        $disabledElements: $(),
+        disabledElements: [],
 
         /**
          * @type {boolean}
@@ -115,7 +117,7 @@
   /**
    * Add public methods to the TabbingManager class.
    */
-  $.extend(
+  Object.assign(
     TabbingManager.prototype,
     /** @lends Drupal~TabbingManager# */ {
       /**
@@ -124,9 +126,8 @@
        * Makes elements outside of the specified set of elements unreachable via
        * the tab key.
        *
-       * @param {jQuery|Selector|Element|ElementArray|object|selection} elements
-       *   The set of elements to which tabbing should be constrained. Can also
-       *   be any jQuery-compatible argument.
+       * @param {string|Element|Iterable<Element>} elements
+       *   The selector, element or list of elements to constrain tabbing to.
        * @param {object} [options={}]
        *   Constrain options.
        * @param {boolean} [options.trapFocus=false]
@@ -144,7 +145,27 @@
        *
        * @fires event:drupalTabbingConstrained
        */
-      constrain(elements, { trapFocus = false } = {}) {
+      constrain(elements, options) {
+        const roots =
+          typeof elements === 'string' && elements
+            ? document.querySelectorAll(elements)
+            : elements;
+        return this.constrainElements(roots, options);
+      },
+
+      /**
+       * Constrains tabbing to native elements, including on mixed pages.
+       *
+       * @param {Element|Iterable<Element>} elements
+       *   The element or list of elements to constrain tabbing to.
+       * @param {object} [options={}]
+       *   The constraint options.
+       * @param {boolean} [options.trapFocus=false]
+       *   Whether Tab and Shift+Tab wrap within the set.
+       * @return {Drupal~TabbingContext}
+       *   The active context.
+       */
+      constrainElements(elements, { trapFocus = false } = {}) {
         // Deactivate all tabbingContexts to prepare for the new constraint. A
         // tabbingContext instance will only be reactivated if the stack is
         // unwound to it in the _unwindStack() method.
@@ -155,19 +176,28 @@
 
         // The "active tabbing set" are the elements tabbing should be constrained
         // to.
-        let tabbableElements = [];
-        $(elements).each((index, rootElement) => {
-          tabbableElements = [...tabbableElements, ...tabbable(rootElement)];
-          if (isTabbable(rootElement)) {
-            tabbableElements = [...tabbableElements, rootElement];
+        const roots =
+          elements instanceof Element ||
+          elements instanceof Document ||
+          elements instanceof DocumentFragment
+            ? [elements]
+            : elements;
+        const tabbableElements = Array.from(roots || []).flatMap((root) => {
+          const target = root instanceof Document ? root.documentElement : root;
+          if (!target || typeof target.querySelectorAll !== 'function') {
+            return [];
           }
+          const descendants = tabbable(target);
+          return target instanceof Element && isTabbable(target)
+            ? [...descendants, target]
+            : descendants;
         });
 
         const tabbingContext = new TabbingContext({
           // The level is the current height of the stack before this new
           // tabbingContext is pushed on top of the stack.
           level: this.stack.length,
-          $tabbableElements: $(tabbableElements),
+          tabbableElements,
           trapFocus,
         });
 
@@ -178,7 +208,7 @@
         tabbingContext.activate();
 
         // Allow modules to respond to the constrain event.
-        $(document).trigger('drupalTabbingConstrained', tabbingContext);
+        publish('drupalTabbingConstrained', tabbingContext);
 
         return tabbingContext;
       },
@@ -219,48 +249,33 @@
        *   The TabbingContext instance that has been activated.
        */
       activate(tabbingContext) {
-        const $set = tabbingContext.$tabbableElements;
-        const level = tabbingContext.level;
-        // Determine which elements are reachable via tabbing by default.
-        const $disabledSet = $(tabbable(document.body))
-          // Exclude elements of the active tabbing set.
-          .not($set);
-        // Set the disabled set on the tabbingContext.
-        tabbingContext.$disabledElements = $disabledSet;
-        // Record the tabindex for each element, so we can restore it later.
-        const il = $disabledSet.length;
-        for (let i = 0; i < il; i++) {
-          this.recordTabindex($disabledSet.eq(i), level);
-        }
-        // Make all tabbable elements outside of the active tabbing set
-        // unreachable.
-        $disabledSet.prop('tabindex', -1).prop('autofocus', false);
+        const { level, tabbableElements } = tabbingContext;
+        const allowed = new Set(tabbableElements);
+        const disabledElements = tabbable(document.body).filter(
+          (element) => !allowed.has(element),
+        );
+        tabbingContext.disabledElements = disabledElements;
+        disabledElements.forEach((element) => {
+          this.recordTabindexElement(element, level);
+        });
+        disabledElements.forEach((element) => {
+          element.tabIndex = -1;
+          element.autofocus = false;
+        });
 
-        // Set focus on an element in the tabbingContext's set of tabbable
-        // elements. First, check if there is an element with an autofocus
-        // attribute. Select the last one from the DOM order.
-        let $hasFocus = $set.filter('[autofocus]').eq(-1);
-        // If no element in the tabbable set has an autofocus attribute, select
-        // the first element in the set.
-        if ($hasFocus.length === 0) {
-          $hasFocus = $set.eq(0);
-        }
-        $hasFocus.trigger('focus');
+        // Prefer the last autofocus element, then the first tabbable element.
+        const first = tabbableElements[0];
+        const last = tabbableElements.at(-1);
+        const autofocus = tabbableElements
+          .filter((element) => element.hasAttribute('autofocus'))
+          .at(-1);
+        (autofocus || first)?.focus();
 
-        // Trap focus within the set.
-        if ($set.length && tabbingContext.trapFocus) {
-          $set.last().on('keydown.focus-trap', (event) => {
-            if (event.key === 'Tab' && !event.shiftKey) {
-              event.preventDefault();
-              $set.first().focus();
-            }
-          });
-          $set.first().on('keydown.focus-trap', (event) => {
-            if (event.key === 'Tab' && event.shiftKey) {
-              event.preventDefault();
-              $set.last().focus();
-            }
-          });
+        if (first && tabbingContext.trapFocus) {
+          this.focusTraps.set(tabbingContext, [
+            focusTrap(last, false, first),
+            focusTrap(first, true, last),
+          ]);
         }
       },
 
@@ -274,70 +289,65 @@
        *   The TabbingContext instance that has been deactivated.
        */
       deactivate(tabbingContext) {
-        const $set = tabbingContext.$disabledElements;
-        const level = tabbingContext.level;
-        const il = $set.length;
+        this.focusTraps.get(tabbingContext)?.forEach((stop) => stop());
+        this.focusTraps.delete(tabbingContext);
+        tabbingContext.disabledElements.forEach((element) => {
+          this.restoreTabindexElement(element, tabbingContext.level);
+        });
+      },
 
-        tabbingContext.$tabbableElements.first().off('keydown.focus-trap');
-        tabbingContext.$tabbableElements.last().off('keydown.focus-trap');
-        for (let i = 0; i < il; i++) {
-          this.restoreTabindex($set.eq(i), level);
+      /**
+       * Records the tabindex and autofocus attributes of a native element.
+       *
+       * Override this method directly to register a native implementation.
+       *
+       * @param {HTMLElement} element
+       *   The element being disabled.
+       * @param {number} level
+       *   The stack level at which the attributes are recorded.
+       */
+      recordTabindexElement(element, level) {
+        let tabInfo = this.originalTabIndices.get(element);
+        if (!tabInfo) {
+          tabInfo = new Map();
+          this.originalTabIndices.set(element, tabInfo);
         }
+        tabInfo.set(level, {
+          tabindex: element.getAttribute('tabindex'),
+          autofocus: element.hasAttribute('autofocus'),
+        });
       },
 
       /**
-       * Records the tabindex and autofocus values of an untabbable element.
+       * Restores the saved tabindex and autofocus on a native element.
        *
-       * @param {jQuery} $el
-       *   The set of elements that have been disabled.
-       * @param {number} level
-       *   The stack level for which the tabindex attribute should be recorded.
-       */
-      recordTabindex($el, level) {
-        const tabInfo = $el.data('drupalOriginalTabIndices') || {};
-        tabInfo[level] = {
-          tabindex: $el[0].getAttribute('tabindex'),
-          autofocus: $el[0].hasAttribute('autofocus'),
-        };
-        $el.data('drupalOriginalTabIndices', tabInfo);
-      },
-
-      /**
-       * Restores the tabindex and autofocus values of a reactivated element.
+       * Override this method directly to register a native implementation.
        *
-       * @param {jQuery} $el
-       *   The element that is being reactivated.
+       * @param {HTMLElement} element
+       *   The element being reactivated.
        * @param {number} level
-       *   The stack level for which the tabindex attribute should be restored.
+       *   The stack level from which to restore the attributes.
        */
-      restoreTabindex($el, level) {
-        const tabInfo = $el.data('drupalOriginalTabIndices');
-        if (tabInfo && tabInfo[level]) {
-          const data = tabInfo[level];
-          if (data.tabindex) {
-            $el[0].setAttribute('tabindex', data.tabindex);
-          }
-          // If the element did not have a tabindex at this stack level then
-          // remove it.
-          else {
-            $el[0].removeAttribute('tabindex');
-          }
-          if (data.autofocus) {
-            $el[0].setAttribute('autofocus', 'autofocus');
-          }
-
-          // Clean up $.data.
-          if (level === 0) {
-            // Remove all data.
-            $el.removeData('drupalOriginalTabIndices');
-          } else {
-            // Remove the data for this stack level and higher.
-            let levelToDelete = level;
-            while (tabInfo.hasOwnProperty(levelToDelete)) {
-              delete tabInfo[levelToDelete];
-              levelToDelete++;
-            }
-            $el.data('drupalOriginalTabIndices', tabInfo);
+      restoreTabindexElement(element, level) {
+        const tabInfo = this.originalTabIndices.get(element);
+        const data = tabInfo?.get(level);
+        if (!data) {
+          return;
+        }
+        if (data.tabindex) {
+          element.setAttribute('tabindex', data.tabindex);
+        } else {
+          element.removeAttribute('tabindex');
+        }
+        if (data.autofocus) {
+          element.setAttribute('autofocus', 'autofocus');
+        }
+        if (level === 0) {
+          this.originalTabIndices.delete(element);
+        } else {
+          let levelToDelete = level;
+          while (tabInfo.delete(levelToDelete)) {
+            levelToDelete++;
           }
         }
       },
@@ -347,7 +357,7 @@
   /**
    * Add public methods to the TabbingContext class.
    */
-  $.extend(
+  Object.assign(
     TabbingContext.prototype,
     /** @lends Drupal~TabbingContext# */ {
       /**
@@ -364,7 +374,7 @@
           this.released = true;
           Drupal.tabbingManager.release(this);
           // Allow modules to respond to the tabbingContext release event.
-          $(document).trigger('drupalTabbingContextReleased', this);
+          publish('drupalTabbingContextReleased', this);
         }
       },
 
@@ -379,7 +389,7 @@
           this.active = true;
           Drupal.tabbingManager.activate(this);
           // Allow modules to respond to the constrain event.
-          $(document).trigger('drupalTabbingContextActivated', this);
+          publish('drupalTabbingContextActivated', this);
         }
       },
 
@@ -393,11 +403,70 @@
           this.active = false;
           Drupal.tabbingManager.deactivate(this);
           // Allow modules to respond to the constrain event.
-          $(document).trigger('drupalTabbingContextDeactivated', this);
+          publish('drupalTabbingContextDeactivated', this);
         }
       },
     },
   );
+
+  /**
+   * Publishes a tabbing lifecycle event with its native context.
+   *
+   * @param {string} type
+   *   The lifecycle event name.
+   * @param {Drupal~TabbingContext} context
+   *   The affected context, supplied as event.detail.
+   */
+  function publish(type, context) {
+    Drupal.eventBindings.publish(
+      document,
+      new CustomEvent(type, {
+        bubbles: true,
+        cancelable: true,
+        detail: context,
+      }),
+    );
+  }
+
+  /**
+   * Wraps focus when Tab is pressed at the edge of the active constraint.
+   *
+   * @param {HTMLElement} target
+   *   The first or last element in the active constraint.
+   * @param {boolean} reverse
+   *   Whether this endpoint traps Shift+Tab.
+   * @param {HTMLElement} next
+   *   The other endpoint, which receives focus on wrap.
+   * @return {function}
+   *   Removes the focus trap.
+   */
+  function focusTrap(target, reverse, next) {
+    const binding = {
+      target,
+      type: 'keydown',
+      namespace: 'focus-trap',
+      tabbingFocusTrap: true,
+      reservesLegacySlot: true,
+      listener(event) {
+        if (event.key === 'Tab' && event.shiftKey === reverse) {
+          event.preventDefault();
+          next.focus();
+        }
+      },
+      stop() {
+        target.removeEventListener('keydown', onKeydown);
+        unregister();
+      },
+    };
+    function onKeydown(event) {
+      if (!binding.handlesNativeEvent?.(event)) {
+        binding.listener(event);
+      }
+    }
+    target.addEventListener('keydown', onKeydown);
+    const unregister = Drupal.eventBindings.register(binding);
+    return binding.stop;
+  }
 
   // Mark this behavior as processed on the first pass and return if it is
   // already processed.
@@ -409,4 +478,8 @@
    * @type {Drupal~TabbingManager}
    */
   Drupal.tabbingManager = new TabbingManager();
-})(jQuery, Drupal, window.tabbable);
+  Object.defineProperty(Drupal.tabbingManager, 'contextPrototype', {
+    value: TabbingContext.prototype,
+  });
+  document.dispatchEvent(new Event('drupal:tabbing-manager-ready'));
+})(Drupal, window.tabbable);

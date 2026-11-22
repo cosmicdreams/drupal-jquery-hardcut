@@ -118,31 +118,19 @@ class InstalledProfileAssetsTest extends KernelTestBase {
     // The fixture records resolution at 92e5c3a3047.
     $baseline = Json::decode(file_get_contents(__DIR__ . '/fixtures/effective-assets-pinned.json'));
     $expected = $baseline['profiles']["$profile:$theme"];
-    // The explicit compatibility library restores the alias and connects its
-    // adapters immediately after the distribution.
-    foreach ($expected['js'] as $index => $asset) {
-      if ($asset['data'] === 'core/assets/vendor/jquery/jquery.min.js') {
-        $bootstrap = $asset;
-        $bootstrap['data'] = 'core/misc/jquery.no-conflict.js';
-        $bootstrap['minified'] = FALSE;
-        $adapter = $bootstrap;
-        $adapter['data'] = 'core/misc/jquery.drupal-bc.js';
-        $ajax_adapter = $bootstrap;
-        $ajax_adapter['data'] = 'core/misc/jquery.drupal-ajax-bc.js';
-        $tables_adapter = $bootstrap;
-        $tables_adapter['data'] = 'core/misc/jquery.tabledrag.bc.js';
-        $states_adapter = $bootstrap;
-        $states_adapter['data'] = 'core/misc/jquery.states.bc.js';
-        array_splice($expected['js'], $index + 1, 0, [
-          $bootstrap,
-          $adapter,
-          $ajax_adapter,
-          $tables_adapter,
-          $states_adapter,
-        ]);
-        break;
-      }
-    }
+    // Native dropbuttons no longer resolve the pinned jQuery dependency.
+    $legacy_library = 'core/jquery';
+    $expected['libraries'] = array_values(array_diff($expected['libraries'], [$legacy_library]));
+    $expected['js'] = array_values(array_filter($expected['js'], static fn (array $asset): bool => $asset['library'] !== $legacy_library));
+    $dropbutton_library = 'core/drupal.dropbutton';
+    $event_library = 'core/drupal.form.events';
+    $library_index = array_search($dropbutton_library, $expected['libraries'], TRUE);
+    array_splice($expected['libraries'], $library_index, 0, [$event_library]);
+    $asset_index = array_search('core/misc/dropbutton/dropbutton.js', array_column($expected['js'], 'data'), TRUE);
+    $form_events = $expected['js'][$asset_index];
+    $form_events['data'] = 'core/misc/form-events.js';
+    $form_events['library'] = $event_library;
+    array_splice($expected['js'], $asset_index, 0, [$form_events]);
     $this->assertSame($expected, $actual);
   }
 

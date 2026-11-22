@@ -58,7 +58,7 @@ class ModuleFilterTest extends WebDriverTestBase {
 
     // Test module filter reduces the number of visible rows.
     $filter->setValue('test');
-    $session->wait(1000, 'jQuery("#module-node:visible").length == 0');
+    $this->assertJsCondition('!document.getElementById("module-node")?.getClientRects().length');
     $visible_rows = $this->filterVisibleElements($module_rows);
     // Test Drupal.announce() message when multiple matches are expected.
     $expected_message = count($visible_rows) . ' modules are available in the modified list.';
@@ -69,7 +69,7 @@ class ModuleFilterTest extends WebDriverTestBase {
     // Test Drupal.announce() message when one match is expected.
     // Using a very specific module name, we expect only one row.
     $filter->setValue('System dependency test');
-    $session->wait(1000, 'jQuery("#module-node:visible").length == 0');
+    $this->assertJsCondition('!document.getElementById("module-node")?.getClientRects().length');
     $visible_rows = $this->filterVisibleElements($module_rows);
     self::assertEquals(1, count($visible_rows));
     $expected_message = '1 module is available in the modified list.';
@@ -79,13 +79,13 @@ class ModuleFilterTest extends WebDriverTestBase {
     // with a period or other separator. This condition is common for test
     // modules.
     $filter->setValue('comment_base_field_test');
-    $session->wait(1000, 'jQuery("#module-node:visible").length == 0');
+    $this->assertJsCondition('!document.getElementById("module-node")?.getClientRects().length');
     $visible_rows = $this->filterVisibleElements($module_rows);
     self::assertEquals(1, count($visible_rows));
 
     // Test Drupal.announce() message when no matches are expected.
     $filter->setValue('Pan-Galactic Gargle Blaster');
-    $session->wait(1000, 'jQuery("#module-node:visible").length == 0');
+    $this->assertJsCondition('!document.getElementById("module-node")?.getClientRects().length');
     $visible_rows = $this->filterVisibleElements($module_rows);
     self::assertEquals(0, count($visible_rows));
 

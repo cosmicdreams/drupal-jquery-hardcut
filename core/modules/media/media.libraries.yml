@@ -3,6 +3,7 @@ form:
   js:
     js/form.js: {}
   dependencies:
+    - core/jquery
     - core/drupal.form
 
 type_form:
@@ -10,6 +11,7 @@ type_form:
   js:
     js/type_form.js: {}
   dependencies:
+    - core/jquery
     - core/drupal.form
 
 oembed.formatter:

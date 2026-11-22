@@ -56,6 +56,10 @@ class FormTestVerticalTabsWithSummaryForm extends FormBase {
       '#button_type' => 'primary',
     ];
 
+    if ($this->getRequest()->query->getBoolean('legacy')) {
+      $form['#attached']['library'][] = 'core/jquery';
+    }
+
     // Attach the library that sets the vertical tab summaries.
     $form['#attached']['library'][] = 'form_test/form_test';
 

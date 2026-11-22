@@ -6,7 +6,6 @@ drupal.taxonomy:
     component:
       css/taxonomy.theme.css: {}
   dependencies:
-    - core/jquery
     - core/drupal
     - core/drupalSettings
     - core/drupal.tabledrag

@@ -1,62 +1,47 @@
 /**
  * @file
- * Taxonomy behaviors.
+ * Keeps the taxonomy weight dividers up to date after a row moves.
  */
 
-(function ($, Drupal) {
-  /**
-   * Reorder taxonomy terms.
-   *
-   * This behavior is dependent on the tableDrag behavior, since it uses the
-   * objects initialized in that behavior to update the row.
-   *
-   * @type {Drupal~behavior}
-   *
-   * @prop {Drupal~behaviorAttach} attach
-   *   Attaches the drag behavior to an applicable table element.
-   */
+((Drupal) => {
   Drupal.behaviors.termDrag = {
     attach(context, settings) {
-      const backStep = settings.taxonomy.backStep;
-      const forwardStep = settings.taxonomy.forwardStep;
-      // Get the taxonomy tableDrag object.
+      const { backStep, forwardStep } = settings.taxonomy;
       const tableDrag = Drupal.tableDrag.taxonomy;
-      const $table = $('#taxonomy');
-      const rows = $table.find('tr').length;
+      const table = document.getElementById('taxonomy');
+      const rows = table.querySelectorAll('tr').length;
 
-      // When a row is swapped, keep previous and next page classes set.
-      tableDrag.row.prototype.onSwap = function (swappedRow) {
-        $table
-          .find('tr.taxonomy-term-preview')
-          .removeClass('taxonomy-term-preview');
-        $table
-          .find('tr.taxonomy-term-divider-top')
-          .removeClass('taxonomy-term-divider-top');
-        $table
-          .find('tr.taxonomy-term-divider-bottom')
-          .removeClass('taxonomy-term-divider-bottom');
-
-        const tableBody = $table[0].tBodies[0];
+      const markPreviewRows = () => {
+        const classes = [
+          'taxonomy-term-preview',
+          'taxonomy-term-divider-top',
+          'taxonomy-term-divider-bottom',
+        ];
+        table
+          .querySelectorAll(classes.map((name) => `tr.${name}`).join(', '))
+          .forEach((row) => row.classList.remove(...classes));
+        const body = table.tBodies[0];
         if (backStep) {
-          for (let n = 0; n < backStep; n++) {
-            $(tableBody.rows[n]).addClass('taxonomy-term-preview');
+          for (let index = 0; index < backStep; index++) {
+            body.rows[index]?.classList.add('taxonomy-term-preview');
           }
-          $(tableBody.rows[backStep - 1]).addClass('taxonomy-term-divider-top');
-          $(tableBody.rows[backStep]).addClass('taxonomy-term-divider-bottom');
+          body.rows[backStep - 1]?.classList.add('taxonomy-term-divider-top');
+          body.rows[backStep]?.classList.add('taxonomy-term-divider-bottom');
         }
-
         if (forwardStep) {
-          for (let k = rows - forwardStep - 1; k < rows - 1; k++) {
-            $(tableBody.rows[k]).addClass('taxonomy-term-preview');
+          for (let index = rows - forwardStep - 1; index < rows - 1; index++) {
+            body.rows[index]?.classList.add('taxonomy-term-preview');
           }
-          $(tableBody.rows[rows - forwardStep - 2]).addClass(
+          body.rows[rows - forwardStep - 2]?.classList.add(
             'taxonomy-term-divider-top',
           );
-          $(tableBody.rows[rows - forwardStep - 1]).addClass(
+          body.rows[rows - forwardStep - 1]?.classList.add(
             'taxonomy-term-divider-bottom',
           );
         }
       };
+      markPreviewRows.nativeTableEvent = true;
+      tableDrag.row.prototype.onSwap = markPreviewRows;
     },
   };
-})(jQuery, Drupal);
+})(Drupal);

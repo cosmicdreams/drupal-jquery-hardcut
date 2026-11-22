@@ -57,7 +57,7 @@ drupal.system:
   js:
     js/system.js: {}
   dependencies:
-    - core/jquery
+    - core/drupal.form.events
     - core/drupal
     - core/drupalSettings
     - core/once
@@ -67,7 +67,7 @@ drupal.system.modules:
   js:
     js/system.modules.js: {}
   dependencies:
-    - core/jquery
+    - core/drupal.form.events
     - core/drupal
     - core/drupal.debounce
     - core/once
@@ -95,7 +95,6 @@ drupal.system.date:
   js:
     js/system.date.js: {}
   dependencies:
-    - core/jquery
     - core/drupal
     - core/drupalSettings
     - core/once

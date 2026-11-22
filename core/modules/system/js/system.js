@@ -1,82 +1,77 @@
 /**
  * @file
- * System behaviors.
+ * Copies field values into empty dependent inputs.
  */
 
-(function ($, Drupal, drupalSettings) {
-  // Cache IDs in an array for ease of use.
-  const ids = [];
+((Drupal, drupalSettings) => {
+  const ids = new Set();
+  const listeners = new WeakMap();
+  const copyEvent = 'value:copy';
 
   /**
-   * Attaches field copy behavior from input fields to other input fields.
-   *
-   * When a field is filled out, apply its value to other fields that will
-   * likely use the same value. In the installer this is used to populate the
-   * administrator email address with the same value as the site email address.
-   *
-   * @type {Drupal~behavior}
-   *
-   * @prop {Drupal~behaviorAttach} attach
-   *   Attaches the field copy behavior to an input field.
+   * Converts configured field IDs to an ordered query selector.
    */
-  Drupal.behaviors.copyFieldValue = {
-    attach(context) {
-      // List of fields IDs on which to bind the event listener.
-      // Create an array of IDs to use with jQuery.
-      Object.keys(drupalSettings.copyFieldValue || {}).forEach((element) => {
-        ids.push(element);
-      });
+  function selector(fieldIds) {
+    return Array.from(fieldIds, (id) => `#${CSS.escape(id)}`).join(', ');
+  }
 
-      if (ids.length) {
-        // Listen to value:copy events on all dependent fields.
-        // We have to use body and not document because of the way jQuery events
-        // bubble up the DOM tree.
-        $(once('copy-field-values', 'body')).on(
-          'value:copy',
-          this.valueTargetCopyHandler,
-        );
-        // Listen on all source elements.
-        $(once('copy-field-values', `#${ids.join(', #')}`)).on(
-          'blur',
-          this.valueSourceBlurHandler,
-        );
+  Drupal.behaviors.copyFieldValue = {
+    attach() {
+      Object.keys(drupalSettings.copyFieldValue || {}).forEach((id) =>
+        ids.add(id),
+      );
+      if (!ids.size) {
+        return;
       }
+
+      const add = (target, type, methodName) => {
+        const stop = Drupal.formEvents.listen(
+          target,
+          type,
+          undefined,
+          (event) => this[methodName].call(target, event),
+        );
+        listeners.set(target, stop);
+      };
+      once('copy-field-values', 'body').forEach((body) => {
+        add(body, copyEvent, 'valueTargetCopyHandlerNative');
+      });
+      once('copy-field-values', selector(ids)).forEach((source) => {
+        add(source, 'blur', 'valueSourceBlurHandlerNative');
+      });
     },
     detach(context, settings, trigger) {
-      if (trigger === 'unload' && ids.length) {
-        $(once.remove('copy-field-values', 'body')).off('value:copy');
-        $(once.remove('copy-field-values', `#${ids.join(', #')}`)).off('blur');
+      if (trigger === 'unload' && ids.size) {
+        once
+          .remove('copy-field-values', `body, ${selector(ids)}`)
+          .forEach((element) => {
+            listeners.get(element)?.();
+            listeners.delete(element);
+          });
       }
     },
 
     /**
-     * Event handler that fill the target element with the specified value.
-     *
-     * @param {jQuery.Event} e
-     *   Event object.
-     * @param {string} value
-     *   Custom value from jQuery trigger.
+     * Fills an empty target from the native event's detail.
      */
-    valueTargetCopyHandler(e, value) {
-      const { target } = e;
+    valueTargetCopyHandlerNative({ target, detail }) {
       if (target.value === '') {
-        target.value = value;
+        target.value = detail;
       }
     },
 
     /**
-     * Handler for a Blur event on a source field.
-     *
-     * This event handler will trigger a 'value:copy' event on all dependent
-     * fields.
-     *
-     * @param {jQuery.Event} e
-     *   The event triggered.
+     * Publishes a native value:copy event for each target of a blurred source.
      */
-    valueSourceBlurHandler(e) {
-      const { value } = e.target;
-      const targetIds = drupalSettings.copyFieldValue[e.target.id];
-      $(`#${targetIds.join(', #')}`).trigger('value:copy', value);
+    valueSourceBlurHandlerNative({ target }) {
+      const targetIds = drupalSettings.copyFieldValue[target.id];
+      if (targetIds?.length) {
+        document.querySelectorAll(selector(targetIds)).forEach((element) => {
+          Drupal.formEvents.publish(element, copyEvent, target.value);
+        });
+      }
     },
   };
-})(jQuery, Drupal, drupalSettings);
+
+  document.dispatchEvent(new Event('drupal:copy-field-value-ready'));
+})(Drupal, drupalSettings);

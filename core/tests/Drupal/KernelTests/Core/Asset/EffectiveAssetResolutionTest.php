@@ -148,6 +148,7 @@ class EffectiveAssetResolutionTest extends KernelTestBase {
     $this->assertSame($legacy, isset($footer['core/misc/jquery.drupal-bc.js']));
     $this->assertSame($legacy, isset($footer['core/misc/jquery.drupal-ajax-bc.js']));
     $this->assertSame($legacy, isset($footer['core/misc/jquery.tabledrag.bc.js']));
+    $this->assertSame($legacy, isset($footer['core/misc/jquery.drupal-form-bc.js']));
     $this->assertSame($legacy, isset($footer['core/misc/jquery.states.bc.js']));
     $this->assertArrayNotHasKey('core/misc/states.jquery.js', $footer);
     $this->assertSame($legacy, isset($footer['core/misc/jquery.form.js']));
@@ -180,6 +181,7 @@ class EffectiveAssetResolutionTest extends KernelTestBase {
         ['core/misc/jquery.drupal-bc.js'],
         ['core/misc/jquery.drupal-ajax-bc.js'],
         ['core/misc/jquery.tabledrag.bc.js'],
+        ['core/misc/jquery.drupal-form-bc.js'],
         ['core/misc/jquery.states.bc.js'],
       ]);
     }

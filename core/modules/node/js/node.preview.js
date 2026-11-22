@@ -3,7 +3,9 @@
  * Preview behaviors.
  */
 
-(function ($, Drupal) {
+(function (Drupal) {
+  let stopPreview;
+
   /**
    * Disables all non-relevant links in node previews.
    *
@@ -19,7 +21,7 @@
    */
   Drupal.behaviors.nodePreviewDestroyLinks = {
     attach(context) {
-      function clickPreviewModal(event) {
+      function clickPreviewModal(event, link) {
         // Only confirm leaving previews when left-clicking and user is not
         // pressing the ALT, CTRL, META (Command key on the Macintosh keyboard)
         // or SHIFT key.
@@ -31,10 +33,10 @@
           !event.shiftKey
         ) {
           event.preventDefault();
-          const $previewDialog = $(
-            `<div>${Drupal.theme('nodePreviewModal')}</div>`,
-          ).appendTo('body');
-          const confirmationDialog = Drupal.dialog($previewDialog, {
+          const previewDialog = document.createElement('div');
+          previewDialog.innerHTML = Drupal.theme('nodePreviewModal');
+          document.body.append(previewDialog);
+          const confirmationDialog = Drupal.dialog(previewDialog, {
             title: Drupal.t('Leave preview?'),
             buttons: [
               {
@@ -46,7 +48,7 @@
               {
                 text: Drupal.t('Leave preview'),
                 click() {
-                  window.top.location.href = event.currentTarget.href;
+                  window.top.location.href = link.href;
                 },
               },
             ],
@@ -59,10 +61,12 @@
         return;
       }
       if (once('node-preview', 'html').length) {
-        $(document).on(
-          'click.preview',
-          'a:not([href^="#"], .node-preview-container a)',
+        stopPreview = Drupal.formEvents.listen(
+          document,
+          'click',
+          'preview',
           clickPreviewModal,
+          'a:not([href^="#"], .node-preview-container a)',
         );
       }
     },
@@ -72,7 +76,8 @@
           context.querySelector('.node-preview-container') &&
           once.remove('node-preview', 'html').length
         ) {
-          $(document).off('click.preview');
+          stopPreview?.();
+          stopPreview = undefined;
         }
       }
     },
@@ -93,11 +98,18 @@
         '[data-drupal-autosubmit]',
         context,
       );
-      if (autosubmit.length) {
-        $(autosubmit).on('formUpdated.preview', function () {
-          $(this.form).trigger('submit');
+      autosubmit.forEach((input) => {
+        Drupal.formEvents.listen(input, 'formUpdated', 'preview', () => {
+          const { form } = input;
+          if (
+            form?.dispatchEvent(
+              new SubmitEvent('submit', { bubbles: true, cancelable: true }),
+            )
+          ) {
+            HTMLFormElement.prototype.submit.call(form);
+          }
         });
-      }
+      });
     },
   };
 
@@ -114,4 +126,4 @@
       'CTRL+Left click will prevent this dialog from showing and proceed to the clicked link.',
     )}</small>`;
   };
-})(jQuery, Drupal);
+})(Drupal);

@@ -8,22 +8,6 @@
       "owner": "C",
       "references": 1
     },
-    "misc/batch.js": {
-      "owner": "U",
-      "references": 1
-    },
-    "misc/details-aria.js": {
-      "owner": "U",
-      "references": 1
-    },
-    "misc/details-summarized-content.js": {
-      "owner": "U",
-      "references": 1
-    },
-    "misc/details.js": {
-      "owner": "U",
-      "references": 1
-    },
     "misc/dialog/dialog.ajax.js": {
       "owner": "D",
       "references": 1
@@ -48,18 +32,6 @@
       "owner": "D",
       "references": 1
     },
-    "misc/dropbutton/dropbutton.js": {
-      "owner": "U",
-      "references": 1
-    },
-    "misc/entity-form.js": {
-      "owner": "U",
-      "references": 1
-    },
-    "misc/form.js": {
-      "owner": "U",
-      "references": 1
-    },
     "misc/jquery.drupal-ajax-bc.js": {
       "owner": "A",
       "references": 1
@@ -70,6 +42,10 @@
     },
     "misc/jquery.drupal-bc.js": {
       "owner": "B",
+      "references": 1
+    },
+    "misc/jquery.drupal-form-bc.js": {
+      "owner": "U",
       "references": 1
     },
     "misc/jquery.form.js": {
@@ -88,32 +64,8 @@
       "owner": "T",
       "references": 1
     },
-    "misc/machine-name.js": {
-      "owner": "U",
-      "references": 1
-    },
     "misc/position.js": {
       "owner": "D",
-      "references": 1
-    },
-    "misc/tabbingmanager.js": {
-      "owner": "U",
-      "references": 1
-    },
-    "misc/timezone.js": {
-      "owner": "U",
-      "references": 1
-    },
-    "misc/vertical-tabs.js": {
-      "owner": "U",
-      "references": 1
-    },
-    "modules/block/js/block.admin.js": {
-      "owner": "U",
-      "references": 1
-    },
-    "modules/block/js/block.js": {
-      "owner": "U",
       "references": 1
     },
     "modules/ckeditor5/js/build/drupalEntityLinkSuggestions.js": {
@@ -144,18 +96,6 @@
       "owner": "C",
       "references": 1
     },
-    "modules/comment/js/comment-by-viewer.js": {
-      "owner": "U",
-      "references": 1
-    },
-    "modules/comment/js/comment-entity-form.js": {
-      "owner": "U",
-      "references": 1
-    },
-    "modules/content_translation/js/content_translation.admin.js": {
-      "owner": "U",
-      "references": 1
-    },
     "modules/contextual/js/contextual.js": {
       "owner": "M",
       "references": 1
@@ -176,28 +116,8 @@
       "owner": "M",
       "references": 1
     },
-    "modules/filter/js/filter.admin.js": {
-      "owner": "U",
-      "references": 1
-    },
-    "modules/filter/js/filter.js": {
-      "owner": "U",
-      "references": 1
-    },
-    "modules/language/js/language.admin.js": {
-      "owner": "U",
-      "references": 1
-    },
     "modules/layout_builder/js/layout-builder.js": {
       "owner": "M",
-      "references": 1
-    },
-    "modules/locale/js/locale.admin.js": {
-      "owner": "U",
-      "references": 1
-    },
-    "modules/locale/js/locale.bulk.js": {
-      "owner": "U",
       "references": 1
     },
     "modules/media/js/form.js": {
@@ -224,42 +144,6 @@
       "owner": "M",
       "references": 1
     },
-    "modules/menu_ui/js/menu_ui.admin.js": {
-      "owner": "U",
-      "references": 1
-    },
-    "modules/menu_ui/js/menu_ui.js": {
-      "owner": "U",
-      "references": 1
-    },
-    "modules/node/js/content_types.js": {
-      "owner": "U",
-      "references": 1
-    },
-    "modules/node/js/node.js": {
-      "owner": "U",
-      "references": 1
-    },
-    "modules/node/js/node.preview.js": {
-      "owner": "U",
-      "references": 1
-    },
-    "modules/path/js/path.js": {
-      "owner": "U",
-      "references": 1
-    },
-    "modules/system/js/system.date.js": {
-      "owner": "U",
-      "references": 1
-    },
-    "modules/system/js/system.js": {
-      "owner": "U",
-      "references": 1
-    },
-    "modules/system/js/system.modules.js": {
-      "owner": "U",
-      "references": 1
-    },
     "modules/system/tests/modules/ajax_test/js/global_events.js": {
       "owner": "A",
       "references": 1
@@ -274,38 +158,14 @@
     },
     "modules/system/tests/modules/css_disable_transitions_test/js/disable_transitions.theme.js": {
       "owner": "U",
-      "references": 2
-    },
-    "modules/system/tests/modules/form_test/js/form_test.js": {
-      "owner": "U",
       "references": 1
     },
     "modules/system/tests/modules/jquery_bc_test/js/event-bridge-dependent.js": {
       "owner": "B",
       "references": 1
     },
-    "modules/system/tests/modules/js_message_test/js/js_message_test.js": {
-      "owner": "U",
-      "references": 1
-    },
     "modules/system/tests/modules/states_test/js/legacy-pseudo.js": {
       "owner": "S",
-      "references": 1
-    },
-    "modules/taxonomy/js/taxonomy.js": {
-      "owner": "U",
-      "references": 1
-    },
-    "modules/text/js/text.js": {
-      "owner": "U",
-      "references": 1
-    },
-    "modules/user/js/user.js": {
-      "owner": "U",
-      "references": 1
-    },
-    "modules/user/js/user.permissions.js": {
-      "owner": "U",
       "references": 1
     },
     "modules/views/js/base.js": {
@@ -332,20 +192,8 @@
       "owner": "C",
       "references": 1
     },
-    "themes/default_admin/js/details.js": {
-      "owner": "U",
-      "references": 1
-    },
     "themes/default_admin/js/media-library.ui.js": {
       "owner": "M",
-      "references": 1
-    },
-    "themes/default_admin/js/nav-tabs.js": {
-      "owner": "U",
-      "references": 1
-    },
-    "themes/default_admin/js/vertical-tabs.js": {
-      "owner": "U",
       "references": 1
     }
   },

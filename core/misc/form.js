@@ -15,320 +15,233 @@
 /**
  * Triggers when a click on a page fragment link or hash change is detected.
  *
- * The event triggers when the fragment in the URL changes (a hash change) and
- * when a link containing a fragment identifier is clicked. In case the hash
- * changes due to a click this event will only be triggered once.
+ * If a link click also changes the hash, this event is dispatched once.
+ * The event bubbles from the body and its detail is the target element or null.
  *
  * @event formFragmentLinkClickOrHashChange
  */
 
-(function ($, Drupal, debounce) {
-  /**
-   * Retrieves the summary for the first element.
-   *
-   * @return {string}
-   *   The text of the summary.
-   */
-  $.fn.drupalGetSummary = function () {
-    const callback = this.data('summaryCallback');
+((Drupal, debounce) => {
+  const summaries = new WeakMap();
+  const formListeners = new WeakMap();
 
-    if (!this[0] || !callback) {
-      return '';
-    }
-
-    const result = callback(this[0]);
-
-    return result ? result.trim() : '';
-  };
+  const { listen, publish } = Drupal.formEvents;
 
   /**
-   * Sets the summary for all matched elements.
+   * Form summary operations.
    *
-   * @param {function} callback
-   *   Either a function that will be called each time the summary is
-   *   retrieved or a string (which is returned each time).
-   *
-   * @return {jQuery}
-   *   jQuery collection of the current element.
-   *
-   * @fires event:summaryUpdated
-   *
-   * @listens event:formUpdated
+   * @namespace
    */
-  $.fn.drupalSetSummary = function (callback) {
-    const self = this;
+  Drupal.form = {
+    /**
+     * Retrieves the trimmed summary for an element.
+     *
+     * @param {HTMLElement} element
+     *   The element whose summary is requested.
+     * @return {string}
+     *   The summary, or an empty string when none has been set.
+     */
+    getSummary(element) {
+      const callback = summaries.get(element)?.callback;
+      const result = callback?.(element);
+      return result ? result.trim() : '';
+    },
 
-    // To facilitate things, the callback should always be a function. If it's
-    // not, we wrap it into an anonymous function which just returns the value.
-    if (typeof callback !== 'function') {
-      const val = callback;
-      callback = function () {
-        return val;
+    /**
+     * Sets a summary for an element or group of elements.
+     *
+     * Each formUpdated event on any element in the group causes a
+     * summaryUpdated event on every element in the group.
+     *
+     * @param {HTMLElement|Iterable<HTMLElement>} elements
+     *   The element or list of elements receiving the summary.
+     * @param {string|function(HTMLElement): string} summary
+     *   The text or a callback evaluated with the summarized element.
+     * @return {HTMLElement|Iterable<HTMLElement>}
+     *   The original element or list.
+     */
+    setSummary(elements, summary) {
+      const group =
+        elements?.nodeType === Node.ELEMENT_NODE
+          ? [elements]
+          : Array.from(elements || []);
+      const callback = typeof summary === 'function' ? summary : () => summary;
+      const update = () => {
+        group.forEach((element) => publish(element, 'summaryUpdated'));
       };
-    }
 
-    return (
-      this.data('summaryCallback', callback)
-        // To prevent duplicate events, the handlers are first removed and then
-        // (re-)added.
-        .off('formUpdated.summary')
-        .on('formUpdated.summary', () => {
-          self.trigger('summaryUpdated');
-        })
-        // The actual summaryUpdated handler doesn't fire when the callback is
-        // changed, so we have to do this manually.
-        .trigger('summaryUpdated')
-    );
+      group.forEach((element) => {
+        summaries.get(element)?.stop();
+        const stop = listen(element, 'formUpdated', 'summary', update);
+        summaries.set(element, { callback, stop });
+      });
+      update();
+      return elements;
+    },
+
+    listen,
+    publish,
   };
 
   /**
    * Prevents consecutive form submissions of identical form values.
    *
-   * Repetitive form submissions that would submit the identical form values
-   * are prevented, unless the form values are different to the previously
-   * submitted values.
-   *
-   * This is a simplified re-implementation of a user-agent behavior that
-   * should be natively supported by major web browsers, but at this time, only
-   * Firefox has a built-in protection.
-   *
-   * A form value-based approach ensures that the constraint is triggered for
-   * consecutive, identical form submissions only. Compared to that, a form
-   * button-based approach would (1) rely on [visible] buttons to exist where
-   * technically not required and (2) require more complex state management if
-   * there are multiple buttons in a form.
-   *
-   * This implementation is based on form-level submit events only and relies
-   * on jQuery's serialize() method to determine submitted form values. As such,
-   * the following limitations exist:
-   *
-   * - Event handlers on form buttons that preventDefault() do not receive a
-   *   double-submit protection. That is deemed to be fine, since such button
-   *   events typically trigger reversible client-side or server-side
-   *   operations that are local to the context of a form only.
-   * - Changed values in advanced form controls, such as file inputs, are not
-   *   part of the form values being compared between consecutive form submits
-   *   (due to limitations of jQuery.serialize()). That is deemed to be
-   *   acceptable, because if the user forgot to attach a file, then the size of
-   *   HTTP payload will most likely be small enough to be fully passed to the
-   *   server endpoint within seconds, or even milliseconds. If a user
-   *   mistakenly attached a wrong file and is technically versed enough to
-   *   cancel the form submission (and HTTP payload) in order to attach a
-   *   different file, then that edge-case is not supported here.
-   *
-   * Lastly, all forms submitted via HTTP GET are idempotent by definition of
-   * HTTP standards, so excluded in this implementation.
+   * The comparison uses the form's submitted values. It runs for submission
+   * events, excludes GET forms, and does not compare the bytes of file inputs.
    *
    * @type {Drupal~behavior}
    */
   Drupal.behaviors.formSingleSubmit = {
     attach() {
-      function onFormSubmit(e) {
-        const $form = $(e.currentTarget);
-        const formValues = new URLSearchParams(
-          new FormData(e.target),
-        ).toString();
-        const previousValues = $form.attr('data-drupal-form-submit-last');
-        if (previousValues === formValues) {
-          e.preventDefault();
-        } else {
-          $form.attr('data-drupal-form-submit-last', formValues);
-        }
-      }
-
-      $(once('form-single-submit', 'body')).on(
-        'submit.singleSubmit',
-        'form:not([method~="GET"])',
-        onFormSubmit,
-      );
-    },
-  };
-
-  /**
-   * Sends a 'formUpdated' event each time a form element is modified.
-   *
-   * @param {HTMLElement} element
-   *   The element to trigger a form updated event on.
-   *
-   * @fires event:formUpdated
-   */
-  function triggerFormUpdated(element) {
-    $(element).trigger('formUpdated');
-  }
-
-  /**
-   * Collects the IDs of all form fields in the given form.
-   *
-   * @param {HTMLFormElement} form
-   *   The form element to search.
-   *
-   * @return {Array}
-   *   Array of IDs for form fields.
-   */
-  function fieldsList(form) {
-    // We use id to avoid name duplicates on radio fields and filter out
-    // elements with a name but no id.
-    return [].map.call(form.querySelectorAll('[name][id]'), (el) => el.id);
-  }
-
-  /**
-   * Triggers the 'formUpdated' event on form elements when they are modified.
-   *
-   * @type {Drupal~behavior}
-   *
-   * @prop {Drupal~behaviorAttach} attach
-   *   Attaches formUpdated behaviors.
-   * @prop {Drupal~behaviorDetach} detach
-   *   Detaches formUpdated behaviors.
-   *
-   * @fires event:formUpdated
-   */
-  Drupal.behaviors.formUpdated = {
-    attach(context) {
-      const $context = $(context);
-      const contextIsForm = context.tagName === 'FORM';
-      const $forms = $(
-        once('form-updated', contextIsForm ? $context : $context.find('form')),
-      );
-      let formFields;
-
-      if ($forms.length) {
-        // Initialize form behaviors, use $.makeArray to be able to use native
-        // forEach array method and have the callback parameters in the right
-        // order.
-        $.makeArray($forms).forEach((form) => {
-          const events = 'change.formUpdated input.formUpdated ';
-          const eventHandler = debounce((event) => {
-            triggerFormUpdated(event.target);
-          }, 300);
-          formFields = fieldsList(form).join(',');
-
-          form.setAttribute('data-drupal-form-fields', formFields);
-          $(form).on(events, eventHandler);
-        });
-      }
-      // On ajax requests context is the form element.
-      if (contextIsForm) {
-        formFields = fieldsList(context).join(',');
-        // @todo replace with form.getAttribute() when #1979468 is in.
-        const currentFields = $(context).attr('data-drupal-form-fields');
-        // If there has been a change in the fields or their order, trigger
-        // formUpdated.
-        if (formFields !== currentFields) {
-          triggerFormUpdated(context);
-        }
-      }
-    },
-    detach(context, settings, trigger) {
-      const $context = $(context);
-      const contextIsForm = context.tagName === 'FORM';
-      if (trigger === 'unload') {
-        once
-          .remove(
-            'form-updated',
-            contextIsForm ? $context : $context.find('form'),
-          )
-          .forEach((form) => {
-            form.removeAttribute('data-drupal-form-fields');
-            $(form).off('.formUpdated');
-          });
-      }
-    },
-  };
-
-  /**
-   * Prepopulate form fields with information from the visitor browser.
-   *
-   * @type {Drupal~behavior}
-   *
-   * @prop {Drupal~behaviorAttach} attach
-   *   Attaches the behavior for filling user info from browser.
-   */
-  Drupal.behaviors.fillUserInfoFromBrowser = {
-    attach(context, settings) {
-      const userInfo = ['name', 'mail', 'homepage'];
-      const $forms = $(
-        once('user-info-from-browser', '[data-user-info-from-browser]'),
-      );
-      if ($forms.length) {
-        userInfo.forEach((info) => {
-          const $element = $forms.find(`[name=${info}]`);
-          const browserData = localStorage.getItem(`Drupal.visitor.${info}`);
-          if (!$element.length) {
-            return;
-          }
-          const emptyValue = $element[0].value === '';
-          const defaultValue =
-            $element.attr('data-drupal-default-value') === $element[0].value;
-          if (browserData && (emptyValue || defaultValue)) {
-            $element.each(function (index, item) {
-              item.value = browserData;
-            });
-          }
-        });
-      }
-      $forms.on('submit', () => {
-        userInfo.forEach((info) => {
-          const $element = $forms.find(`[name=${info}]`);
-          if ($element.length) {
-            localStorage.setItem(`Drupal.visitor.${info}`, $element[0].value);
-          }
-        });
+      once('form-single-submit', 'body').forEach((body) => {
+        listen(
+          body,
+          'submit',
+          'singleSubmit',
+          (event, form) => {
+            const values = new URLSearchParams(new FormData(form)).toString();
+            if (form.dataset.drupalFormSubmitLast === values) {
+              event.preventDefault();
+            } else {
+              form.dataset.drupalFormSubmitLast = values;
+            }
+          },
+          'form:not([method~="GET"])',
+        );
       });
     },
   };
 
   /**
-   * Sends a fragment interaction event on a hash change or fragment link click.
+   * Collects the IDs of named form fields.
    *
-   * @param {jQuery.Event} e
-   *   The event triggered.
-   *
-   * @fires event:formFragmentLinkClickOrHashChange
+   * @param {HTMLFormElement} form
+   *   The form element to search.
+   * @return {string}
+   *   The form field IDs in their current order.
    */
-  const handleFragmentLinkClickOrHashChange = (e) => {
-    let url;
-    if (e.type === 'click') {
-      url = e.currentTarget.location
-        ? e.currentTarget.location
-        : e.currentTarget;
-    } else {
-      url = window.location;
-    }
-    const hash = url.hash.substring(1);
-    if (hash) {
-      const $target = $(`#${hash}`);
-      $('body').trigger('formFragmentLinkClickOrHashChange', [$target]);
+  function fieldsList(form) {
+    return Array.from(
+      form.querySelectorAll('[name][id]'),
+      (element) => element.id,
+    ).join(',');
+  }
 
-      /**
-       * Clicking a fragment link or a hash change should focus the target
-       * element, but event timing issues in multiple browsers require a timeout.
-       */
-      setTimeout(() => $target.trigger('focus'), 300);
-    }
+  /**
+   * Finds forms inside a behavior context, including the context itself.
+   *
+   * @param {Document|HTMLElement} context
+   *   The behavior context.
+   * @return {HTMLFormElement[]|NodeList}
+   *   The forms to initialize or unload.
+   */
+  function formsIn(context) {
+    return context.tagName === 'FORM'
+      ? [context]
+      : context.querySelectorAll('form');
+  }
+
+  /**
+   * Triggers formUpdated when a form is modified.
+   *
+   * @type {Drupal~behavior}
+   */
+  Drupal.behaviors.formUpdated = {
+    attach(context) {
+      once('form-updated', formsIn(context)).forEach((form) => {
+        const update = debounce((event) => {
+          publish(event.target, 'formUpdated');
+        }, 300);
+        form.dataset.drupalFormFields = fieldsList(form);
+        formListeners.set(
+          form,
+          ['change', 'input'].map((type) =>
+            listen(form, type, 'formUpdated', update),
+          ),
+        );
+      });
+      // Ajax can reattach behaviors to a form whose fields have changed.
+      if (
+        context.tagName === 'FORM' &&
+        fieldsList(context) !== context.dataset.drupalFormFields
+      ) {
+        publish(context, 'formUpdated');
+      }
+    },
+    detach(context, settings, trigger) {
+      if (trigger === 'unload') {
+        once.remove('form-updated', formsIn(context)).forEach((form) => {
+          delete form.dataset.drupalFormFields;
+          formListeners.get(form)?.forEach((stop) => stop());
+          formListeners.delete(form);
+        });
+      }
+    },
   };
 
-  const debouncedHandleFragmentLinkClickOrHashChange = debounce(
-    handleFragmentLinkClickOrHashChange,
+  /**
+   * Prepopulates form fields with information from the visitor browser.
+   *
+   * @type {Drupal~behavior}
+   */
+  Drupal.behaviors.fillUserInfoFromBrowser = {
+    attach() {
+      const userInfo = ['name', 'mail', 'homepage'];
+      const forms = once(
+        'user-info-from-browser',
+        '[data-user-info-from-browser]',
+      );
+      if (!forms.length) {
+        return;
+      }
+      const findFields = (name) =>
+        forms.flatMap((form) =>
+          Array.from(form.querySelectorAll(`[name=${name}]`)),
+        );
+      userInfo.forEach((name) => {
+        const fields = findFields(name);
+        const saved = localStorage.getItem(`Drupal.visitor.${name}`);
+        const first = fields[0];
+        if (
+          saved &&
+          first &&
+          (!first.value || first.dataset.drupalDefaultValue === first.value)
+        ) {
+          fields.forEach((element) => {
+            element.value = saved;
+          });
+        }
+      });
+      forms.forEach((form) =>
+        listen(form, 'submit', undefined, () => {
+          userInfo.forEach((name) => {
+            const field = findFields(name)[0];
+            if (field) {
+              localStorage.setItem(`Drupal.visitor.${name}`, field.value);
+            }
+          });
+        }),
+      );
+    },
+  };
+
+  const fragmentChanged = debounce(
+    (event, source) => {
+      const hash = (
+        event.type === 'click' ? source.hash : window.location.hash
+      ).substring(1);
+      if (hash) {
+        const target = document.getElementById(hash);
+        publish(document.body, 'formFragmentLinkClickOrHashChange', target);
+        // Allow the browser and any listeners to reveal the target first.
+        setTimeout(() => target?.focus(), 300);
+      }
+    },
     300,
     true,
   );
+  listen(window, 'hashchange', 'form-fragment', fragmentChanged);
+  listen(document, 'click', 'form-fragment', fragmentChanged, 'a[href*="#"]');
 
-  // Binds a listener to handle URL fragment changes.
-  $(window).on(
-    'hashchange.form-fragment',
-    debouncedHandleFragmentLinkClickOrHashChange,
-  );
-
-  /**
-   * Binds a listener to handle clicks on fragment links and absolute URL links
-   * containing a fragment, this is needed next to the hash change listener
-   * because clicking such links doesn't trigger a hash change when the fragment
-   * is already in the URL.
-   */
-  $(document).on(
-    'click.form-fragment',
-    'a[href*="#"]',
-    debouncedHandleFragmentLinkClickOrHashChange,
-  );
-})(jQuery, Drupal, Drupal.debounce);
+  document.dispatchEvent(new Event('drupal:form-ready'));
+})(Drupal, Drupal.debounce);

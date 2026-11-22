@@ -3,44 +3,47 @@
  * Additional functionality for HTML5 details elements.
  */
 
-(function ($) {
+((Drupal) => {
   /**
-   * Open parent details elements of a targeted page fragment.
+   * Opens closed parent details elements so the target becomes visible.
    *
-   * Opens all (nested) details element on a hash change or fragment link click
-   * when the target is a child element, in order to make sure the targeted
-   * element is visible. Aria attributes on the summary
-   * are set by triggering the click event listener in details-aria.js.
-   *
-   * @param {jQuery.Event} e
-   *   The event triggered.
-   * @param {jQuery} $target
-   *   The targeted node as a jQuery object.
+   * @param {HTMLElement|null} target
+   *   The fragment target or invalid form field.
    */
-  const handleFragmentLinkClickOrHashChange = (e, $target) => {
-    $target.parents('details').not('[open]').find('> summary').trigger('click');
-  };
+  function openParentDetails(target) {
+    const parents = [];
+    for (
+      let parent = target?.parentElement;
+      parent;
+      parent = parent.parentElement
+    ) {
+      if (parent.matches('details:not([open])')) {
+        parents.push(parent);
+      }
+    }
+    parents.reverse().forEach((parent) => {
+      parent
+        .querySelectorAll(':scope > summary')
+        .forEach((summary) => summary.click());
+    });
+  }
 
-  /**
-   * Binds a listener to handle fragment link clicks and URL hash changes.
-   */
-  $('body').on(
-    'formFragmentLinkClickOrHashChange.details',
-    handleFragmentLinkClickOrHashChange,
+  Drupal.form.listen(
+    document.body,
+    'formFragmentLinkClickOrHashChange',
+    'details',
+    (event) => openParentDetails(event.detail),
   );
 
-  /**
-   * Binds a listener to handle required fields in details elements.
-   */
   window.addEventListener(
     'invalid',
     (event) => {
       if (
         event.target.matches('details :is(input, textarea, select)[required]')
       ) {
-        handleFragmentLinkClickOrHashChange(event, $(event.target));
+        openParentDetails(event.target);
       }
     },
     { capture: true },
   );
-})(jQuery);
+})(Drupal);

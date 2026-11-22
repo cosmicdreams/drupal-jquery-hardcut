@@ -56,13 +56,13 @@ class ModuleUninstallFilterTest extends WebDriverTestBase {
 
     // Test module filter reduces the number of visible rows.
     $filter->setValue('dynamic');
-    $session->wait(1000, 'jQuery("#edit-uninstall-page-cache:visible").length == 0');
+    $this->assertJsCondition('!document.getElementById("edit-uninstall-page-cache")?.getClientRects().length');
     $visible_rows = $this->filterVisibleElements($module_rows);
     $this->assertNotEquals(count($module_rows), count($visible_rows));
 
     // Test Drupal.announce() message when multiple matches are expected.
     $filter->setValue('cache');
-    $session->wait(1000, 'jQuery("#drupal-live-announce").html().indexOf("modules are available") > -1');
+    $this->assertJsCondition('document.getElementById("drupal-live-announce").textContent.includes("modules are available")');
     $visible_rows = $this->filterVisibleElements($module_rows);
     $expected_message = count($visible_rows) . ' modules are available in the modified list.';
     $assertSession->elementTextContains('css', '#drupal-live-announce', $expected_message);
@@ -70,7 +70,7 @@ class ModuleUninstallFilterTest extends WebDriverTestBase {
     // Test Drupal.announce() message when only one match is expected.
     // Using a very specific module name, we expect only one row.
     $filter->setValue('dynamic page cache');
-    $session->wait(1000, 'jQuery("#drupal-live-announce").html().indexOf("module is available") > -1');
+    $this->assertJsCondition('document.getElementById("drupal-live-announce").textContent.includes("module is available")');
     $visible_rows = $this->filterVisibleElements($module_rows);
     $this->assertEquals(1, count($visible_rows));
     $expected_message = '1 module is available in the modified list.';
@@ -78,7 +78,7 @@ class ModuleUninstallFilterTest extends WebDriverTestBase {
 
     // Test Drupal.announce() message when no matches are expected.
     $filter->setValue('Pan-Galactic Gargle Blaster');
-    $session->wait(1000, 'jQuery("#drupal-live-announce").html().indexOf("0 modules are available") > -1');
+    $this->assertJsCondition('document.getElementById("drupal-live-announce").textContent.includes("0 modules are available")');
     $visible_rows = $this->filterVisibleElements($module_rows);
     $this->assertEquals(0, count($visible_rows));
     $expected_message = '0 modules are available in the modified list.';
