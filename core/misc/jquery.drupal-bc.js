@@ -82,6 +82,7 @@
     let dispatchDepth = 0;
     let removeDepth = 0;
     let observing = true;
+    let settleQueued = false;
     let returnTrue;
 
     /**
@@ -233,8 +234,13 @@
 
     /**
      * Releases slots whose release waited for a trigger or dispatch to end.
+     *
+     * A slot whose target still runs a native listener for its type waits
+     * again, since jQuery's ordinary dispatch there may still queue it.
+     * @param {boolean} settling
+     *   Whether no script is on the stack, so every dispatch has ended.
      */
-    function settleTemporary() {
+    function settleTemporary(settling = false) {
       if (triggerDepth || dispatchDepth || !temporary.size) {
         return;
       }
@@ -242,9 +248,43 @@
       temporary.clear();
       slots.forEach((slot) => {
         if (slot.bound) {
-          release(slot.target, slot.bindType);
+          release(slot.target, slot.bindType, settling);
         }
       });
+    }
+
+    /**
+     * Settles waiting slots once the running native listener returns.
+     *
+     * A microtask runs when no script is on the stack, so jQuery's ordinary
+     * dispatch that queued the slots has ended.
+     */
+    function queueSettle() {
+      if (!settleQueued) {
+        settleQueued = true;
+        queueMicrotask(() => {
+          settleQueued = false;
+          settleTemporary(true);
+        });
+      }
+    }
+
+    /**
+     * Checks whether a native listener runs on the target for the type now.
+     *
+     * jQuery's ordinary dispatch runs inside its own native listener, with
+     * window.event set to the native event. The browser sets it for every
+     * listener, also on a target outside the document.
+     * @param {EventTarget} target
+     *   The target.
+     * @param {string} bindType
+     *   The handler list type.
+     * @return {boolean}
+     *   Whether a dispatch of that type is at the target.
+     */
+    function isDispatching(target, bindType) {
+      const current = window.event;
+      return current?.type === bindType && current.currentTarget === target;
     }
 
     /**
@@ -483,17 +523,23 @@
      *   The target.
      * @param {string} bindType
      *   The handler list type.
+     * @param {boolean} settling
+     *   Whether no script is on the stack, so every dispatch has ended.
      */
-    function release(target, bindType) {
-      if (triggerDepth || dispatchDepth) {
-        // A handler removed during a trigger or an anchored dispatch, such as
+    function release(target, bindType, settling = false) {
+      const dispatching = !settling && isDispatching(target, bindType);
+      if (triggerDepth || dispatchDepth || dispatching) {
+        // A handler removed during a trigger or a jQuery dispatch, such as
         // one bound with .one(), releases its slots once the outermost one
-        // ends.
+        // ends. jQuery still runs the slots it queued for that dispatch.
         markedSlots.get(target)?.forEach((slot) => {
           if (slot.bound && slot.bindType === bindType) {
             temporary.add(slot);
           }
         });
+        if (dispatching) {
+          queueSettle();
+        }
         return;
       }
       if (hasExternalHandler(target, bindType)) {
