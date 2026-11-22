@@ -46,9 +46,12 @@
         focusout: 'focusOutNative',
         focusin: 'focusInNative',
       };
-      // Known gap: jQuery runs a contrib mouseenter or mouseleave handler on
-      // mouseover or mouseout, which fire before the native events here. The
-      // pinned binding ran in that same jQuery dispatch, in binding order.
+      // Known ordering gap: jQuery runs a contrib mouseenter or mouseleave
+      // handler on mouseover or mouseout, which fire before the native events
+      // here. That handler now runs before core's hover handler, whatever
+      // the binding order, and its stopImmediatePropagation() cannot stop
+      // core. The pinned binding ran in that same jQuery dispatch, in binding
+      // order.
       Object.entries(handlers).forEach(([type, method]) => {
         listen(dropbutton, type, 'dropbutton', (event) => this[method](event));
       });
