@@ -223,15 +223,17 @@
     /**
      * Checks whether core's native listener delivers real events itself.
      *
-     * A claimed slot reports its current order, since the base bridge binds
-     * it on demand and releases it when no other jQuery handler remains.
+     * A claimed slot reports its current state, since the base bridge binds
+     * it on demand and releases it when no other jQuery handler remains. It
+     * delivers behind handlers that precede the binding and whenever contrib
+     * delegates share jQuery's queue.
      * @param {object} entry
      *   The binding entry.
      * @return {boolean}
-     *   Whether no handler ahead of core's slot precedes the binding.
+     *   Whether core's native listener delivers real events.
      */
     function hasNativeOrder(entry) {
-      return entry.slot ? !entry.slot.followsHandlers : entry.nativeOrder;
+      return entry.slot ? !entry.slot.deliversRealEvents() : entry.nativeOrder;
     }
 
     function isSyntheticDefaultAction(event) {
@@ -529,13 +531,11 @@
    *   Stops supplying the arguments.
    */
   function installPublications(jquery) {
-    const publications = new WeakMap();
+    const publications = new WeakSet();
     const legacyTypes = [...tabbingEvents, fragmentEvent, valueCopyEvent];
     const stop = window.Drupal.eventBindings.observePublications((event) => {
       if (legacyTypes.includes(event.type)) {
-        publications.set(event, [
-          event.type === fragmentEvent ? jquery(event.detail) : event.detail,
-        ]);
+        publications.add(event);
         return () => publications.delete(event);
       }
       return undefined;
@@ -546,13 +546,22 @@
       const special = existing || (specials[type] = {});
       const hadHandle = Object.hasOwn(special, 'handle');
       const previous = special.handle;
+      // Only a jQuery handler wraps the fragment target, so a publication
+      // without legacy receivers makes no jQuery call.
       const handle = function (event, ...args) {
+        const native = event.originalEvent;
         const positional =
-          !event.isTrigger && publications.get(event.originalEvent);
+          !event.isTrigger && publications.has(native)
+            ? [
+                native.type === fragmentEvent
+                  ? jquery(native.detail)
+                  : native.detail,
+              ]
+            : args;
         return (previous || event.handleObj.handler).call(
           this,
           event,
-          ...(positional || args),
+          ...positional,
         );
       };
       special.handle = handle;
