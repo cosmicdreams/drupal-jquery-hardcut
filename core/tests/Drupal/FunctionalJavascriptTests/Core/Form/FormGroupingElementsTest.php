@@ -1214,6 +1214,40 @@ class FormGroupingElementsTest extends WebDriverTestBase {
   }
 
   /**
+   * Tests a States change whose core callback adds a contrib delegate.
+   *
+   * Core's native listener delivers the change. The callback then adds a
+   * delegated jQuery handler, so core's slot delivers real events from then
+   * on. The States projection of the same change must not run core again.
+   * The added delegate still runs in this dispatch, a known ordering gap: the
+   * pinned queue skipped it.
+   */
+  public function testStatesChangeAfterAddedDelegateRunsCoreOnce(): void {
+    $this->drupalGet('form-test/group-details', ['query' => ['legacy-details' => 1, 'states' => 1]]);
+    $session = $this->getSession();
+    $session->executeScript(<<<'JS'
+      const container = document.body.appendChild(document.createElement('div'));
+      container.innerHTML = `<div class="js-form-item"><input type="checkbox" id="added-dependee"></div><div class="js-form-item" id="added-wrapper"><input type="checkbox" id="added-target" data-drupal-states='{"checked":{"#added-dependee":{"checked":true}}}'></div>`;
+      Drupal.attachBehaviors(container);
+      const wrapper = document.getElementById('added-wrapper');
+      window.addedCalls = [];
+      Drupal.formEvents.listen(wrapper, 'change', 'added', () => {
+        window.addedCalls.push('core');
+        if (!window.addedDelegate) {
+          window.addedDelegate = true;
+          jQuery(wrapper).on('change.added', 'input', () => window.addedCalls.push('delegate'));
+        }
+      }, 'input');
+      jQuery(wrapper).on('change.added', () => window.addedCalls.push('legacy'));
+      JS);
+    $session->getPage()->findById('added-dependee')->click();
+    $calls = $session->evaluateScript("[document.getElementById('added-target').checked, window.addedCalls]");
+    $this->assertTrue($calls[0]);
+    $this->assertSame(['core'], array_values(array_filter($calls[1], fn ($call) => $call === 'core')));
+    $this->assertSame('legacy', end($calls[1]));
+  }
+
+  /**
    * Tests a form binding on a checkbox that States watches.
    *
    * Both bridges are loaded, and no contrib handler exists. States' own

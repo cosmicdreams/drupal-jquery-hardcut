@@ -147,6 +147,15 @@
         // dispatches after core's listener may then run core twice.
         if (!event.composedPath().includes(window)) {
           nativeDeliveries.get(event)?.delete(binding);
+        } else if (!handled) {
+          // Core's native listener delivers this event now. Its callback may
+          // add a contrib delegate, after which a slot accepts real events,
+          // such as a States projection of this event. The claim keeps that
+          // slot from running core again. Known ordering gap: jQuery's
+          // dispatch starts after core's listener, so a handler that the
+          // callback adds still runs in this dispatch. The pinned queue was
+          // fixed before core ran and skipped it.
+          claimNativeDelivery(event, binding);
         }
         return handled;
       };
