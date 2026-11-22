@@ -410,6 +410,36 @@
     const payloads = new WeakMap();
     const activeSynthetic = new WeakMap();
     const projections = new Map();
+
+    /**
+     * Installs a projection, or wraps a hook that replaced it again.
+     *
+     * A library loaded later, for example through Ajax, may replace the
+     * special.handle hook. Wrapping it again gives it the pinned event.
+     * @param {string} key
+     *   The projection key.
+     * @param {string} type
+     *   The event type.
+     * @param {function(): function(): void} install
+     *   Installs the projection and returns its disconnect function.
+     */
+    function project(key, type, install) {
+      const current = projections.get(key);
+      if (current && jquery.event.special[type]?.handle === current.handle) {
+        return;
+      }
+      if (current) {
+        // The replaced projection stays in any chain as a pass-through.
+        current.disconnect();
+        projections.delete(key);
+      }
+      const disconnect = install();
+      projections.set(key, {
+        disconnect,
+        handle: jquery.event.special[type].handle,
+      });
+    }
+
     const stop = registry.observePublications((event) => {
       const { type, detail } = event;
       const state = type.startsWith('state:');
@@ -435,12 +465,9 @@
           }
         }
         const key = `synthetic:${type}`;
-        if (!projections.has(key)) {
-          projections.set(
-            key,
-            observeSyntheticProjection(jquery, type, activeSynthetic),
-          );
-        }
+        project(key, type, () =>
+          observeSyntheticProjection(jquery, type, activeSynthetic),
+        );
         activeSynthetic.set(event, {
           properties,
           syncState: state,
@@ -469,9 +496,7 @@
       }
 
       const key = `payload:${type}`;
-      if (!projections.has(key)) {
-        projections.set(key, observeNativePayloads(jquery, type, payloads));
-      }
+      project(key, type, () => observeNativePayloads(jquery, type, payloads));
       payloads.set(event, payload);
       return () => payloads.delete(event);
     });
@@ -480,7 +505,7 @@
       stop();
       Array.from(projections.values())
         .reverse()
-        .forEach((disconnect) => disconnect());
+        .forEach(({ disconnect }) => disconnect());
       projections.clear();
     };
   }
