@@ -82,10 +82,26 @@
     let dispatchDepth = 0;
     let removeDepth = 0;
     let observing = true;
-    // jQuery exposes its internal returnTrue only on a prevented event.
-    const probe = jquery.Event('drupal:legacy-probe');
-    probe.preventDefault();
-    const returnTrue = probe.isDefaultPrevented;
+    let returnTrue;
+
+    /**
+     * Checks for jQuery's internal returnTrue stub.
+     *
+     * jQuery exposes returnTrue only on a prevented event. The probe event is
+     * built on first use, so a page without legacy use makes no jQuery call.
+     * @param {function(...unknown): unknown} callback
+     *   A handler.
+     * @return {boolean}
+     *   Whether the handler is jQuery's returnTrue.
+     */
+    function isReturnTrue(callback) {
+      if (!returnTrue) {
+        const probe = jquery.Event('drupal:legacy-probe');
+        probe.preventDefault();
+        returnTrue = probe.isDefaultPrevented;
+      }
+      return callback === returnTrue;
+    }
 
     /**
      * Returns the handler list type jQuery uses for an event type.
@@ -109,7 +125,7 @@
      *   Whether jQuery itself added the handler.
      */
     function isInternalHandler(handleObj) {
-      return handleObj.namespace === false || handleObj.handler === returnTrue;
+      return handleObj.namespace === false || isReturnTrue(handleObj.handler);
     }
 
     /**
@@ -556,8 +572,8 @@
         elem &&
         typeof elem === 'object' &&
         handleObj?.namespace !== false &&
-        callback !== returnTrue &&
-        !markedHandlers.has(callback)
+        !markedHandlers.has(callback) &&
+        !isReturnTrue(callback)
           ? bindTypesFor(types, handleObj?.selector ?? selector)
           : null;
       if (bindTypes && markedSlots.has(elem)) {
