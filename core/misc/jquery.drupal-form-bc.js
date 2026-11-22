@@ -1075,7 +1075,11 @@
      *   Whether the read covers the verticalTab key.
      */
     function readsTabData(key) {
-      return key === undefined || normalizeKey(key) === 'verticalTab';
+      // An object key sets data, so jQuery handles it without conversion.
+      return (
+        key === undefined ||
+        (typeof key === 'string' && normalizeKey(key) === 'verticalTab')
+      );
     }
 
     function ensureTabData(pane) {

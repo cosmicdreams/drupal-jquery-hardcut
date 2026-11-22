@@ -174,6 +174,45 @@ class ElementsVerticalTabsWithSummaryTest extends WebDriverTestBase {
   }
 
   /**
+   * Tests that the lazy tab data wrapper leaves object setters to jQuery.
+   *
+   * An object passed to data() sets its own properties, even one named
+   * toString, as pinned jQuery did.
+   */
+  public function testTabDataObjectSetter(): void {
+    $this->drupalGet('form_test/vertical-tabs-with-summary', ['query' => ['legacy' => 1]]);
+    $actual = $this->getSession()->evaluateScript(<<<'JS'
+      (() => {
+        const detached = document.createElement('div');
+        detached.innerHTML = '<div class="js-form-type-vertical-tabs"><div data-vertical-tabs-panes><input type="hidden" class="vertical-tabs__active-tab" value=""><details id="setter-method"><summary>Method</summary></details><details id="setter-static"><summary>Static</summary></details></div></div>';
+        Drupal.behaviors.verticalTabs.attach(detached);
+        const method = detached.querySelector('#setter-method');
+        const utility = detached.querySelector('#setter-static');
+        const errors = [];
+        try {
+          jQuery(method).data({ toString: 'contrib' });
+        }
+        catch (error) {
+          errors.push(error.message);
+        }
+        try {
+          jQuery.data(utility, { toString: 'contrib' });
+        }
+        catch (error) {
+          errors.push(error.message);
+        }
+        return [
+          errors,
+          jQuery(method).data('toString'),
+          jQuery.data(utility, 'toString'),
+          jQuery(method).data('verticalTab') === Drupal.verticalTabs.get(method),
+        ];
+      })()
+      JS);
+    $this->assertSame([[], 'contrib', 'contrib', TRUE], $actual);
+  }
+
+  /**
    * Tests that constructor overrides keep the legacy settings consistent.
    *
    * A chaining override emits no #details deprecation, and an override that
