@@ -26,8 +26,10 @@
   /**
    * Checks whether a mutation record removed part of an unloaded batch.
    *
-   * The record removes a node inside the unloaded context, or a node that
-   * holds the context or one of its targets, even if that node returns.
+   * The record removes a tracked target, or a node holding the context or a
+   * target, even if that node returns. It may also replace the content of a
+   * tracked target that stays. Other removals inside the context, such as an
+   * Ajax throbber leaving, do not settle the batch.
    * @param {MutationRecord} record
    *   A childList mutation record.
    * @param {object} batch
@@ -39,19 +41,20 @@
     if (!record.removedNodes.length) {
       return false;
     }
-    if (batch.context.contains(record.target)) {
+    const targets = Array.from(batch.bindings, ({ target }) => target);
+    if (targets.includes(record.target)) {
       return true;
     }
     return Array.from(record.removedNodes).some(
       (node) =>
         node.contains(batch.context) ||
-        Array.from(batch.bindings).some(({ target }) => node.contains(target)),
+        targets.some((target) => node.contains(target)),
     );
   }
 
-  // Settle a batch once the unload's update removes content from it, whether
-  // its targets leave, stay or move. Unrelated insertions, such as an Ajax
-  // throbber before a delayed swap, keep it.
+  // Settle a batch once the unload's update removes a tracked target, whether
+  // it leaves, stays with new content or moves. Unrelated insertions and
+  // removals, such as an Ajax throbber around a delayed swap, keep it.
   const removalObserver = new MutationObserver((records) => {
     Array.from(pendingUnloads).forEach((batch) => {
       if (
