@@ -293,6 +293,41 @@ class MachineNameTest extends WebDriverTestBase {
   }
 
   /**
+   * Tests late Ajax and machine-name order after a contrib handler leaves.
+   *
+   * The late replay binds core's machine-name slot behind the Ajax slot. A
+   * contrib handler that is bound and removed again must not release it, so
+   * Ajax still runs first on a real change.
+   */
+  public function testLateAjaxOrderSurvivesContribRemoval(): void {
+    $this->drupalGet('form-test/machine-name', ['query' => ['ajax' => 1]]);
+    $session = $this->getSession();
+    $scripts = json_encode($this->jqueryScripts());
+    $session->executeScript($this->widgetHelpers() . <<<JS
+      (async () => {
+        const container = createWidget('held');
+        const source = container.querySelector('#held-source');
+        const target = container.querySelector('#held-target');
+        const seen = [];
+        const ajax = Drupal.ajax({ element: source, event: 'change', url: location.href });
+        ajax.eventResponse = () => {
+          seen.push(target.value);
+        };
+        attachWidget(container);
+        await load($scripts);
+        jQuery(source).on('change.held', () => {});
+        jQuery(source).off('.held');
+        source.value = 'Held Order';
+        source.dispatchEvent(new Event('change', { bubbles: true }));
+        ajax.removeEventBindings();
+        window.heldOrderResult = [seen, target.value];
+      })();
+      JS);
+    $this->assertJsCondition('Array.isArray(window.heldOrderResult)');
+    $this->assertSame([[''], 'held_order'], $session->evaluateScript('window.heldOrderResult'));
+  }
+
+  /**
    * Tests that a slot claimed by the late adapter keeps the pinned order.
    *
    * Contrib handlers bound later share jQuery's dispatch with core's slot. As
