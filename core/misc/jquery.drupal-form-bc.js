@@ -181,8 +181,9 @@
    * Installs legacy bindings for one instance in their reserved slots.
    *
    * jquery.drupal-bc.js reserves a slot for each marked binding in registry
-   * order: when core registers it, or when the instance connects later. This
-   * adapter claims each slot in place and never reorders handlers.
+   * order: when core registers it, or when the instance connects later. It
+   * binds the slot only while this instance needs it. This adapter claims
+   * each slot in place and never reorders handlers.
    * @param {Function} jquery
    *   The connected instance.
    * @return {function(): void}
@@ -214,9 +215,23 @@
       return Boolean(
         list?.some(
           (handleObj) =>
-            !handlers.has(handleObj.guid) && !isInternalHandler(handleObj),
+            !handlers.has(handleObj.handler) && !isInternalHandler(handleObj),
         ),
       );
+    }
+
+    /**
+     * Checks whether core's native listener delivers real events itself.
+     *
+     * A claimed slot reports its current order, since the base bridge binds
+     * it on demand and releases it when no other jQuery handler remains.
+     * @param {object} entry
+     *   The binding entry.
+     * @return {boolean}
+     *   Whether no handler ahead of core's slot precedes the binding.
+     */
+    function hasNativeOrder(entry) {
+      return entry.slot ? !entry.slot.followsHandlers : entry.nativeOrder;
     }
 
     function isSyntheticDefaultAction(event) {
@@ -259,10 +274,11 @@
         try {
           remove?.call(this, handle);
         } finally {
-          const entry = handlers.get(handle.guid);
-          if (entry?.binding.target === this) {
+          const entry = handlers.get(handle.handler);
+          // The base bridge also unbinds a slot it releases.
+          if (entry?.binding.target === this && !entry.slot?.releasing) {
             const { slot } = entry;
-            handlers.delete(handle.guid);
+            handlers.delete(handle.handler);
             entry.attached = false;
             entry.slot = undefined;
             entry.handler = undefined;
@@ -303,20 +319,18 @@
         deliver,
       );
       const handler = slot?.handler ?? deliver;
-      let followsHandlers = slot?.followsHandlers;
       if (!slot) {
         // Without the base bridge, bind at registration time instead.
-        followsHandlers = hasExternalHandler(target, bindType);
+        entry.nativeOrder = !hasExternalHandler(target, bindType);
         jquery(target).on(name, selector, handler);
       }
       // Behind handlers that precede the binding, core delivers real events
       // from its slot to keep registration order. Otherwise core's native
       // listener keeps its own position.
-      entry.nativeOrder = !followsHandlers;
       entry.slot = slot;
       entry.handler = handler;
       entry.attached = true;
-      handlers.set(handler.guid, entry);
+      handlers.set(handler, entry);
     }
 
     // Removes jQuery's own leftovers so the element has no jQuery listener.
@@ -336,13 +350,14 @@
       entry.attached = false;
       entry.slot = undefined;
       entry.handler = undefined;
-      handlers.delete(handler.guid);
+      handlers.delete(handler);
       if (slot) {
+        // The base bridge also removes jQuery's leftovers.
         slot.remove(true);
       } else {
         jquery(target).off(name, selector, handler);
+        releaseInternalHandlers(target, bindType);
       }
-      releaseInternalHandlers(target, bindType);
     }
 
     const originalTrigger = jquery.event.trigger;
@@ -385,7 +400,7 @@
         entry.deliver = function (event, fragmentTarget) {
           if (!event.isTrigger) {
             if (
-              entry.nativeOrder ||
+              hasNativeOrder(entry) ||
               Drupal.eventBindings.isForeignDefaultAction?.(
                 event.originalEvent,
               ) ||
@@ -469,7 +484,7 @@
           }
           if (
             !entry.attached ||
-            entry.nativeOrder ||
+            hasNativeOrder(entry) ||
             !hasExternalHandler(target, bindType)
           ) {
             return false;
