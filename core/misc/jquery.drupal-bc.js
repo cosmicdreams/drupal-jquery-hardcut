@@ -62,10 +62,10 @@
     const temporary = new Set();
     // Maps each target to the handler list types that may hold handlers other
     // than jQuery's own and the marked slots. The add hook below records every
-    // later binding, so a target missing here has none and needs no jQuery
-    // call. An entry may be stale after a removal; readers verify it.
+    // binding made after this observer connected, so a target missing here
+    // needs no jQuery call. An entry may be stale after a removal; readers
+    // verify it.
     const external = new WeakMap();
-    const seeded = new WeakSet();
     // jQuery adds its own native listener unless a special setup() declines.
     // The setups present at connection are jQuery's built-ins, which do not.
     const builtinSetups = new Set(
@@ -136,35 +136,6 @@
       }
       for (const bindType of bindTypes) {
         types.add(bindType);
-      }
-    }
-
-    /**
-     * Records handlers bound before this observer hooked jQuery.
-     *
-     * This seed reads jQuery's data once per target while the instance
-     * connects, so it covers handlers of a late connection. Afterwards the
-     * add hook keeps the record without reading jQuery's data.
-     * @param {EventTarget} target
-     *   The target.
-     */
-    function seed(target) {
-      if (seeded.has(target)) {
-        return;
-      }
-      seeded.add(target);
-      const events = jquery._data(target, 'events');
-      if (events) {
-        track(
-          target,
-          Object.keys(events).filter((bindType) =>
-            events[bindType].some(
-              (handleObj) =>
-                !isInternalHandler(handleObj) &&
-                !markedHandlers.has(handleObj.handler),
-            ),
-          ),
-        );
       }
     }
 
@@ -695,12 +666,12 @@
         }
 
         const bindType = getBindType(type, selector);
-        if (replaying) {
-          seed(target);
-        }
         // Accepted gap A: a handler bound between the jQuery file and this
-        // file is not recorded unless its target is seeded above, so a later
-        // registration does not see it; its order relative to core is unknown.
+        // file is not recorded. A late connection replays without reading
+        // jQuery's data, so it makes no jQuery call on a page without legacy
+        // handlers. Every handler such a read could find was bound inside
+        // this gap. A marked slot binds only before a later recorded handler,
+        // and its order relative to the unrecorded one is unknown.
         const list = getTrackedHandlers(target, bindType);
         const slot = {
           deliver,
