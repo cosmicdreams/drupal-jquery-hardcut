@@ -20,6 +20,9 @@
   // Maps a native event to the entries whose core listener left this dispatch
   // to the slot.
   const slotDeliveries = new WeakMap();
+  // Maps a native event to the entries whose slot jQuery's ordinary dispatch
+  // queued while the slot delivered real events.
+  const queuedSlots = new WeakMap();
   const dispatchResets = new Set();
   const bindingChecks = new WeakMap();
   // Maps each connected instance to the function that removes its adapter.
@@ -189,6 +192,7 @@
         (event) => {
           nativeDeliveries.delete(event);
           slotDeliveries.delete(event);
+          queuedSlots.delete(event);
         },
         { capture: true },
       );
@@ -396,6 +400,33 @@
       }
     }
 
+    // jQuery fixes its queue when a dispatch starts. A handler ahead of a
+    // queued slot may leave jQuery's lists and stop propagation, as a .one()
+    // handler can. The pinned queue then skipped core, so the slot, not
+    // core's native listener, keeps the delivery for that dispatch.
+    const originalHandlers = jquery.event.handlers;
+    const queueHandlers = function (event) {
+      const queue = originalHandlers.apply(this, arguments);
+      const native = event.originalEvent;
+      if (!event.isTrigger && native instanceof Event) {
+        queue.forEach(({ handlers: matched }) => {
+          matched.forEach(({ handler }) => {
+            const entry = handlers.get(handler);
+            if (entry?.slot && !hasNativeOrder(entry)) {
+              let queued = queuedSlots.get(native);
+              if (!queued) {
+                queued = new WeakSet();
+                queuedSlots.set(native, queued);
+              }
+              queued.add(entry);
+            }
+          });
+        });
+      }
+      return queue;
+    };
+    jquery.event.handlers = queueHandlers;
+
     const originalTrigger = jquery.event.trigger;
     const trigger = function (event, data, elem) {
       const rawType = (typeof event === 'string' ? event : event.type).split(
@@ -441,9 +472,9 @@
             // queue still ran core, so that decision stands. A claimed slot
             // reports its own state: the base bridge keeps it bound for the
             // rest of a dispatch that queued it.
-            const leftToSlot = slotDeliveries
-              .get(event.originalEvent)
-              ?.has(entry);
+            const leftToSlot =
+              Boolean(slotDeliveries.get(event.originalEvent)?.has(entry)) ||
+              Boolean(queuedSlots.get(event.originalEvent)?.has(entry));
             if (
               (!leftToSlot &&
                 (hasNativeOrder(entry) ||
@@ -528,6 +559,9 @@
           if (isSyntheticDefaultAction(event)) {
             return true;
           }
+          if (entry.attached && queuedSlots.get(event)?.has(entry)) {
+            return true;
+          }
           if (
             !entry.attached ||
             hasNativeOrder(entry) ||
@@ -568,6 +602,9 @@
       stopPublications();
       if (jquery.event.trigger === trigger) {
         jquery.event.trigger = originalTrigger;
+      }
+      if (jquery.event.handlers === queueHandlers) {
+        jquery.event.handlers = originalHandlers;
       }
       observed.forEach((restore) => restore());
       observed.clear();

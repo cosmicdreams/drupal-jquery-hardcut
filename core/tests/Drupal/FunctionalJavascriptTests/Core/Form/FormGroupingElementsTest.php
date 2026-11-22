@@ -1122,6 +1122,48 @@ class FormGroupingElementsTest extends WebDriverTestBase {
   }
 
   /**
+   * Tests a prebound delegated .one() handler that stops propagation.
+   *
+   * Bound before details-aria, it runs in jQuery's ordinary dispatch ahead of
+   * core's native listener, removes itself and stops propagation on a span.
+   * The pinned queue then skipped the summary group, so core did not run.
+   * Core's native listener must not fall back after the handler leaves.
+   */
+  public function testEarlyOneStopPropagationCancelsDetailsAria(): void {
+    $this->drupalGet('form-test/group-details', ['query' => ['legacy-details' => 1]]);
+    $session = $this->getSession();
+    $session->executeScript(<<<'JS'
+      // Bind details-aria again after the contrib handler.
+      let aria;
+      Drupal.eventBindings.observe({
+        add(binding) {
+          aria = binding.detailsAria ? binding : aria;
+        },
+        remove() {},
+      })();
+      aria.stop();
+      once.remove('detailsAria', document.body);
+      const container = document.body.appendChild(document.createElement('div'));
+      container.innerHTML = '<details id="stop-details"><summary id="stop-summary"><span id="stop-span">Toggle</span></summary><input name="stop"></details>';
+      window.stopOneCalls = 0;
+      jQuery(document.body).one('click', 'span', (event) => {
+        window.stopOneCalls += 1;
+        event.stopPropagation();
+      });
+      Drupal.behaviors.detailsAria.attach(document);
+      window.stopInitial = document.getElementById('stop-summary').getAttribute('aria-expanded');
+      JS);
+    $initial = $session->evaluateScript('window.stopInitial');
+    $state = "[document.getElementById('stop-summary').getAttribute('aria-expanded'), window.stopOneCalls]";
+    $span = $session->getPage()->findById('stop-span');
+    $span->click();
+    $this->assertSame([$initial, 1], $session->evaluateScript($state));
+    // The handler is gone, so the next click runs core natively.
+    $span->click();
+    $this->assertSame(['true', 1], $session->evaluateScript($state));
+  }
+
+  /**
    * Tests that a queued slot and core's later native listener run core once.
    *
    * A delegated .one() handler bound before core removes itself in jQuery's
