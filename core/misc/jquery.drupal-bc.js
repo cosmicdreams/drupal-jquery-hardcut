@@ -79,6 +79,7 @@
     let replaying = true;
     let internal = 0;
     let triggerDepth = 0;
+    let dispatchDepth = 0;
     let removeDepth = 0;
     let observing = true;
     // jQuery exposes its internal returnTrue only on a prevented event.
@@ -215,6 +216,22 @@
     }
 
     /**
+     * Releases slots whose release waited for a trigger or dispatch to end.
+     */
+    function settleTemporary() {
+      if (triggerDepth || dispatchDepth || !temporary.size) {
+        return;
+      }
+      const slots = Array.from(temporary);
+      temporary.clear();
+      slots.forEach((slot) => {
+        if (slot.bound) {
+          release(slot.target, slot.bindType);
+        }
+      });
+    }
+
+    /**
      * Runs jQuery's own handle for an active anchor.
      * @param {object} anchor
      *   The anchor.
@@ -233,7 +250,16 @@
         idleAnchor(anchor);
         return undefined;
       }
-      return handle.call(target, event);
+      // jQuery runs the handlers it queued when this dispatch started, so a
+      // handler that removes itself, such as one bound with .one(), releases
+      // its slots after the dispatch, as during a trigger.
+      dispatchDepth += 1;
+      try {
+        return handle.call(target, event);
+      } finally {
+        dispatchDepth -= 1;
+        settleTemporary();
+      }
     }
 
     /**
@@ -438,9 +464,10 @@
      *   The handler list type.
      */
     function release(target, bindType) {
-      if (triggerDepth) {
-        // A handler removed during a trigger, such as one bound with .one(),
-        // releases its slots once the outermost trigger ends.
+      if (triggerDepth || dispatchDepth) {
+        // A handler removed during a trigger or an anchored dispatch, such as
+        // one bound with .one(), releases its slots once the outermost one
+        // ends.
         markedSlots.get(target)?.forEach((slot) => {
           if (slot.bound && slot.bindType === bindType) {
             temporary.add(slot);
@@ -593,15 +620,7 @@
         return originalTrigger.apply(this, arguments);
       } finally {
         triggerDepth -= 1;
-        if (!triggerDepth && temporary.size) {
-          const slots = Array.from(temporary);
-          temporary.clear();
-          slots.forEach((slot) => {
-            if (slot.bound) {
-              release(slot.target, slot.bindType);
-            }
-          });
-        }
+        settleTemporary();
       }
     };
     jquery.event.trigger = trigger;
