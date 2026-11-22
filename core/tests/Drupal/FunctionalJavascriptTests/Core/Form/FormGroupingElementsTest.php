@@ -1214,6 +1214,74 @@ class FormGroupingElementsTest extends WebDriverTestBase {
   }
 
   /**
+   * Tests a form binding on a checkbox that States watches.
+   *
+   * Both bridges are loaded, and no contrib handler exists. States' own
+   * jQuery handler is core code, so registering the form binding makes no
+   * jQuery calls, and the binding adds none to a change on the checkbox.
+   * States' handler makes the same calls with or without the binding.
+   */
+  public function testStatesHandlerIsNotContrib(): void {
+    $this->drupalGet('form-test/group-details', ['query' => ['legacy-details' => 1, 'states' => 1]]);
+    $session = $this->getSession();
+    $page = $session->getPage();
+    $session->executeScript($this->jqueryCallCounter() . <<<'JS'
+      const container = document.body.appendChild(document.createElement('div'));
+      container.innerHTML = `<div class="js-form-item"><input type="checkbox" id="watched-dependee"></div><div class="js-form-item"><input type="checkbox" id="watched-target" data-drupal-states='{"checked":{"#watched-dependee":{"checked":true}}}'></div>`;
+      Drupal.attachBehaviors(container);
+      window.watchedCalls = [];
+      jqueryCalls.start();
+      JS);
+    $page->findById('watched-dependee')->click();
+    $session->executeScript(<<<'JS'
+      window.watchedBaseline = jqueryCalls.stop();
+      jqueryCalls.start();
+      Drupal.formEvents.listen(document.getElementById('watched-dependee'), 'change', 'watched', () => window.watchedCalls.push('core'));
+      window.watchedRegistration = jqueryCalls.stop();
+      jqueryCalls.start();
+      JS);
+    $page->findById('watched-dependee')->click();
+    $this->assertNoJqueryCalls($session->evaluateScript('window.watchedRegistration'), 'Registration');
+    $this->assertSame($session->evaluateScript('window.watchedBaseline'), $session->evaluateScript('jqueryCalls.stop()'), 'Interaction');
+    $this->assertSame(
+      [FALSE, ['core']],
+      $session->evaluateScript("[document.getElementById('watched-target').checked, window.watchedCalls]"),
+    );
+  }
+
+  /**
+   * Tests a form binding behind an earlier core slot and a later handler.
+   *
+   * The bridge binds a slot for an owned select change at registration, so
+   * jQuery's listener precedes the form binding's native listener. A later
+   * contrib handler binds the form slot behind that slot. Core still runs
+   * before the contrib handler, in registration order.
+   */
+  public function testFormSlotBehindCoreSlotKeepsOrder(): void {
+    $this->drupalGet('form-test/group-details', ['query' => ['legacy-details' => 1]]);
+    $actual = $this->getSession()->evaluateScript(<<<'JS'
+      (() => {
+        const select = document.body.appendChild(document.createElement('select'));
+        select.innerHTML = '<option value="a">A</option><option value="b">B</option>';
+        const calls = [];
+        const owned = () => calls.push('owned');
+        select.addEventListener('change', owned);
+        const unregister = Drupal.eventBindings.register({ target: select, type: 'change', listener: owned });
+        const stop = Drupal.formEvents.listen(select, 'change', 'behind', () => calls.push('core'));
+        jQuery(select).on('change.behind', () => calls.push('contrib'));
+        select.value = 'b';
+        select.dispatchEvent(new Event('change', { bubbles: true }));
+        jQuery(select).off('.behind');
+        stop();
+        unregister();
+        select.remove();
+        return calls;
+      })()
+      JS);
+    $this->assertSame(['owned', 'core', 'contrib'], $actual);
+  }
+
+  /**
    * Tests two connected instances with slots on both sides of core.
    *
    * The page's instance queues core's slot before core's native listener.
