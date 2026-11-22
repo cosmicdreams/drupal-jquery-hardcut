@@ -542,6 +542,7 @@
       const { target, bindType, name, selector } = slot;
       slot.bound = false;
       slot.followsHandlers = false;
+      slot.replayBound = false;
       temporary.delete(slot);
       internal += 1;
       slot.releasing = true;
@@ -597,7 +598,16 @@
         return;
       }
       markedSlots.get(target)?.forEach((slot) => {
-        if (slot.bound && slot.bindType === bindType) {
+        // A slot bound behind an earlier slot during a replay keeps its
+        // place while that slot stays bound.
+        if (
+          slot.bound &&
+          slot.bindType === bindType &&
+          !(
+            slot.replayBound &&
+            slot.precedingSlots.some((preceding) => preceding.bound)
+          )
+        ) {
           unbindSlot(slot);
         }
       });
@@ -674,18 +684,19 @@
         elem &&
         typeof elem === 'object' &&
         handleObj?.namespace !== false &&
-        // A slot, such as States' own, is core code: it neither binds a
-        // marked slot in front of it nor counts as an external binding.
-        !slotHandlers.has(callback) &&
+        !markedHandlers.has(callback) &&
         !isReturnTrue(callback)
           ? bindTypesFor(types, handleObj?.selector ?? selector)
           : null;
       if (bindTypes && markedSlots.has(elem)) {
-        // Core precedes a later handler, as the pinned binding did.
+        // Core precedes a later handler, as the pinned binding did. A later
+        // slot, such as Ajax's, binds at registration and is already a
+        // jQuery call, so the earlier slots keep their place in front of it.
         materialize(elem, bindTypes);
       }
       const result = originalAdd.apply(this, arguments);
-      if (bindTypes) {
+      // A slot, such as States' own, is core code, not an external binding.
+      if (bindTypes && !slotHandlers.has(callback)) {
         track(elem, bindTypes);
       }
       return result;
@@ -963,14 +974,22 @@
         // file runs first, with an unknown order relative to core.
         // Accepted gap B: a foreign handler bound before connectLegacy() has
         // no pinned equivalent; it also stays ahead of core's slot.
+        // During a replay, jQuery's listener follows every native listener,
+        // so core binds behind an earlier slot, such as Ajax's, which
+        // delivers real events from jQuery's queue. That target already has
+        // core's jQuery binding, and the check reads no jQuery data.
+        const behindSlot =
+          replaying && slot.precedingSlots.some((preceding) => preceding.bound);
         if (
+          behindSlot ||
           list?.some(
             (handleObj) =>
               !isInternalHandler(handleObj) &&
               !slotHandlers.has(handleObj.handler),
           )
         ) {
-          bindSlot(slot, followsHandlers);
+          bindSlot(slot, followsHandlers || behindSlot);
+          slot.replayBound = behindSlot;
         }
       },
       remove(binding) {
