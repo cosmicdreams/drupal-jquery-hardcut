@@ -11,6 +11,9 @@
 
   /**
    * Gives a dedicated bridge the slot reserved in registry order.
+   *
+   * A marked slot may not be bound yet. The bridge binds it on demand and
+   * reports its current state through bound and followsHandlers.
    */
   function claimLegacyEvent(jquery, binding, deliver) {
     const slot = legacySlots.get(jquery)?.get(binding);
@@ -20,6 +23,21 @@
       return slot;
     }
     return undefined;
+  }
+
+  /**
+   * Splits jQuery event types into raw type names.
+   * @param {unknown} types
+   *   The types argument of a jQuery event method.
+   * @return {string[]}
+   *   The raw types, or an empty list for every type.
+   */
+  function rawTypes(types) {
+    return typeof types === 'string'
+      ? (types.match(/\S+/g) || [])
+          .map((token) => token.split('.')[0])
+          .filter(Boolean)
+      : [];
   }
 
   /**
@@ -36,7 +54,379 @@
     const subscriptions = legacySlots.get(jquery) || new Map();
     legacySlots.set(jquery, subscriptions);
     const slotHandlers = new WeakSet();
+    // Marked slots bind only while this instance needs them. Each target maps
+    // to its marked slots in registration order.
+    const markedSlots = new WeakMap();
+    const markedHandlers = new WeakSet();
+    const anchors = new WeakMap();
+    const temporary = new Set();
     let replaying = true;
+    let internal = 0;
+    let triggerDepth = 0;
+    let removeDepth = 0;
+    let observing = true;
+    // jQuery exposes its internal returnTrue only on a prevented event.
+    const probe = jquery.Event('drupal:legacy-probe');
+    probe.preventDefault();
+    const returnTrue = probe.isDefaultPrevented;
+
+    /**
+     * Returns the handler list type jQuery uses for an event type.
+     * @param {string} type
+     *   The raw event type.
+     * @param {string|undefined} selector
+     *   The delegation selector, if any.
+     * @return {string}
+     *   The handler list type.
+     */
+    function getBindType(type, selector) {
+      const special = jquery.event.special[type];
+      return (selector ? special?.delegateType : special?.bindType) || type;
+    }
+
+    /**
+     * Checks for the leverageNative controller or its trigger stub.
+     * @param {object} handleObj
+     *   A jQuery handler record.
+     * @return {boolean}
+     *   Whether jQuery itself added the handler.
+     */
+    function isInternalHandler(handleObj) {
+      return handleObj.namespace === false || handleObj.handler === returnTrue;
+    }
+
+    /**
+     * Returns this instance's handler list for a target and type.
+     * @param {EventTarget} target
+     *   The target.
+     * @param {string} bindType
+     *   The handler list type.
+     * @return {object[]|undefined}
+     *   The handler list, if any.
+     */
+    function getHandlers(target, bindType) {
+      return jquery._data(target, 'events')?.[bindType];
+    }
+
+    /**
+     * Checks for handlers other than jQuery's own and the marked slots.
+     * @param {EventTarget} target
+     *   The target.
+     * @param {string} bindType
+     *   The handler list type.
+     * @return {boolean}
+     *   Whether such a handler exists.
+     */
+    function hasExternalHandler(target, bindType) {
+      return Boolean(
+        getHandlers(target, bindType)?.some(
+          (handleObj) =>
+            !isInternalHandler(handleObj) &&
+            !markedHandlers.has(handleObj.handler),
+        ),
+      );
+    }
+
+    /**
+     * Keeps jQuery's dispatch for one target and type at core's position.
+     *
+     * The pinned bindings created jQuery's native listener when core bound.
+     * A marked slot binds later, so jQuery would add its listener after
+     * native listeners added in between. The anchor is an idle native
+     * listener added when core registers. While a marked slot created the
+     * handler list, the anchor runs jQuery's own handle in its place.
+     * @param {EventTarget} target
+     *   The binding target.
+     * @param {string} bindType
+     *   The jQuery handler list type.
+     * @return {object}
+     *   The anchor, with a reference count.
+     */
+    function acquireAnchor(target, bindType) {
+      let byType = anchors.get(target);
+      if (!byType) {
+        byType = new Map();
+        anchors.set(target, byType);
+      }
+      let anchor = byType.get(bindType);
+      if (!anchor) {
+        anchor = {
+          active: false,
+          count: 0,
+          listener(event) {
+            if (!anchor.active) {
+              return undefined;
+            }
+            const handle = jquery._data(target, 'handle');
+            if (!handle || !getHandlers(target, bindType)) {
+              anchor.active = false;
+              return undefined;
+            }
+            return handle.call(target, event);
+          },
+        };
+        byType.set(bindType, anchor);
+        target.addEventListener(bindType, anchor.listener);
+      }
+      anchor.count += 1;
+      return anchor;
+    }
+
+    /**
+     * Drops one reference to an anchor and removes it after the last one.
+     * @param {EventTarget} target
+     *   The binding target.
+     * @param {string} bindType
+     *   The jQuery handler list type.
+     */
+    function releaseAnchor(target, bindType) {
+      const byType = anchors.get(target);
+      const anchor = byType?.get(bindType);
+      if (!anchor) {
+        return;
+      }
+      anchor.count -= 1;
+      if (anchor.count > 0) {
+        return;
+      }
+      byType.delete(bindType);
+      target.removeEventListener(bindType, anchor.listener);
+      const handle = jquery._data(target, 'handle');
+      if (anchor.active && handle && getHandlers(target, bindType)) {
+        // Remaining handlers keep a jQuery listener, now after the others.
+        target.addEventListener(bindType, handle);
+      }
+    }
+
+    /**
+     * Binds a marked slot through jQuery.
+     * @param {object} slot
+     *   The marked slot.
+     * @param {boolean} followsHandlers
+     *   Whether the handlers ahead of the slot precede the binding.
+     */
+    function bindSlot(slot, followsHandlers) {
+      const { target, bindType, name, selector } = slot;
+      const created = !getHandlers(target, bindType);
+      internal += 1;
+      try {
+        jquery(target).on(name, selector, slot.handler);
+      } finally {
+        internal -= 1;
+      }
+      slot.bound = true;
+      slot.followsHandlers = followsHandlers;
+      const anchor = anchors.get(target)?.get(bindType);
+      const handle = jquery._data(target, 'handle');
+      if (created && anchor && handle) {
+        target.removeEventListener(bindType, handle);
+        anchor.active = true;
+      }
+    }
+
+    /**
+     * Removes jQuery's own leftovers so the target has no jQuery listener.
+     * @param {EventTarget} target
+     *   The target.
+     * @param {string} bindType
+     *   The handler list type.
+     */
+    function releaseInternalHandlers(target, bindType) {
+      const list = getHandlers(target, bindType);
+      if (list?.length && list.every(isInternalHandler)) {
+        jquery.event.remove(target, bindType);
+      }
+    }
+
+    /**
+     * Unbinds a marked slot, which stays reserved.
+     * @param {object} slot
+     *   The marked slot.
+     */
+    function unbindSlot(slot) {
+      const { target, bindType, name, selector } = slot;
+      slot.bound = false;
+      slot.followsHandlers = false;
+      temporary.delete(slot);
+      internal += 1;
+      slot.releasing = true;
+      try {
+        jquery(target).off(name, selector, slot.handler);
+        releaseInternalHandlers(target, bindType);
+      } finally {
+        slot.releasing = false;
+        internal -= 1;
+      }
+      const anchor = anchors.get(target)?.get(bindType);
+      if (anchor && !getHandlers(target, bindType)) {
+        anchor.active = false;
+      }
+    }
+
+    /**
+     * Releases a target's marked slots once no other jQuery handler remains.
+     *
+     * A later handler materializes them again in front of it, which is the
+     * position an unreleased slot would have, so releasing reorders nothing.
+     * @param {EventTarget} target
+     *   The target.
+     * @param {string} bindType
+     *   The handler list type.
+     */
+    function release(target, bindType) {
+      if (triggerDepth || hasExternalHandler(target, bindType)) {
+        return;
+      }
+      markedSlots.get(target)?.forEach((slot) => {
+        if (slot.bound && slot.bindType === bindType) {
+          unbindSlot(slot);
+        }
+      });
+    }
+
+    /**
+     * Releases the marked slots of every handler list type on a target.
+     * @param {EventTarget} target
+     *   The target.
+     */
+    function releaseTarget(target) {
+      const bindTypes = new Set();
+      markedSlots.get(target)?.forEach((slot) => {
+        if (slot.bound) {
+          bindTypes.add(slot.bindType);
+        }
+      });
+      bindTypes.forEach((bindType) => release(target, bindType));
+      anchors.get(target)?.forEach((anchor, bindType) => {
+        if (anchor.active && !getHandlers(target, bindType)) {
+          anchor.active = false;
+        }
+      });
+    }
+
+    /**
+     * Binds unbound marked slots on a target whose handler lists match.
+     * @param {EventTarget} target
+     *   The target.
+     * @param {Set<string>|null} bindTypes
+     *   The handler list types, or null for all of them.
+     * @return {object[]}
+     *   The slots bound by this call.
+     */
+    function materialize(target, bindTypes) {
+      const bound = [];
+      markedSlots.get(target)?.forEach((slot) => {
+        if (!slot.bound && (!bindTypes || bindTypes.has(slot.bindType))) {
+          bindSlot(slot, false);
+          bound.push(slot);
+        }
+      });
+      return bound;
+    }
+
+    /**
+     * Returns the handler list types for a jQuery types argument.
+     * @param {unknown} types
+     *   The types argument.
+     * @param {string|undefined} selector
+     *   The delegation selector, if any.
+     * @return {Set<string>|null}
+     *   The handler list types, or null for every type.
+     */
+    function bindTypesFor(types, selector) {
+      const list = rawTypes(types);
+      return list.length
+        ? new Set(list.map((type) => getBindType(type, selector)))
+        : null;
+    }
+
+    const originalAdd = jquery.event.add;
+    const add = function (elem, types, handler, data, selector) {
+      const handleObj = handler?.handler ? handler : null;
+      const callback = handleObj ? handleObj.handler : handler;
+      if (
+        observing &&
+        !internal &&
+        elem &&
+        markedSlots.has(elem) &&
+        handleObj?.namespace !== false &&
+        callback !== returnTrue
+      ) {
+        // Core precedes a later handler, as the pinned binding did.
+        const bindTypes = bindTypesFor(types, handleObj?.selector ?? selector);
+        if (bindTypes) {
+          materialize(elem, bindTypes);
+        }
+      }
+      return originalAdd.apply(this, arguments);
+    };
+    jquery.event.add = add;
+
+    const originalRemove = jquery.event.remove;
+    const remove = function (elem, types, handler, selector) {
+      const outer = observing && !internal && !removeDepth && elem;
+      if (
+        outer &&
+        markedSlots.has(elem) &&
+        (typeof handler !== 'function' || markedHandlers.has(handler))
+      ) {
+        // An .off() call that matches core's slot removes core, as pinned.
+        materialize(elem, bindTypesFor(types, selector));
+      }
+      removeDepth += 1;
+      try {
+        return originalRemove.apply(this, arguments);
+      } finally {
+        removeDepth -= 1;
+        if (outer && markedSlots.has(elem)) {
+          releaseTarget(elem);
+        }
+      }
+    };
+    jquery.event.remove = remove;
+
+    const originalTrigger = jquery.event.trigger;
+    const trigger = function (event, data, elem, onlyHandlers) {
+      const type = (typeof event === 'string' ? event : event?.type)?.split(
+        '.',
+      )[0];
+      if (observing && !internal && type) {
+        // A synthetic trigger reaches core through its slot, as pinned.
+        const special = jquery.event.special[type];
+        const direct = new Set([type, special?.bindType || type]);
+        const bubbling = new Set([type, special?.delegateType || type]);
+        let node = elem || document;
+        let first = true;
+        while (node) {
+          materialize(node, first ? direct : bubbling).forEach((slot) =>
+            temporary.add(slot),
+          );
+          if (onlyHandlers || special?.noBubble) {
+            break;
+          }
+          first = false;
+          node =
+            node.parentNode ||
+            (node.nodeType === Node.DOCUMENT_NODE ? node.defaultView : null);
+        }
+      }
+      triggerDepth += 1;
+      try {
+        return originalTrigger.apply(this, arguments);
+      } finally {
+        triggerDepth -= 1;
+        if (!triggerDepth && temporary.size) {
+          const slots = Array.from(temporary);
+          temporary.clear();
+          slots.forEach((slot) => {
+            if (slot.bound) {
+              release(slot.target, slot.bindType);
+            }
+          });
+        }
+      }
+    };
+    jquery.event.trigger = trigger;
 
     const stop = registry.observe({
       add(binding) {
@@ -61,7 +451,7 @@
           !binding.handlesNativeEvent;
         // An owner marks a binding whose adapter claims the slot later, on
         // every connected instance it supports.
-        const legacySlot = Boolean(binding.reservesLegacySlot);
+        const legacySlot = Boolean(binding.reservesLegacySlot) && !tableSlot;
         // A select has no native change() method for jQuery's trigger to invoke.
         const selectChange =
           !selector && type === 'change' && target instanceof HTMLSelectElement;
@@ -131,35 +521,76 @@
         }
 
         const element = jquery(target);
-        const special = jquery.event.special[type];
-        const bindType =
-          (selector ? special?.delegateType : special?.bindType) || type;
-        const list = jquery._data(target, 'events')?.[bindType];
+        const bindType = getBindType(type, selector);
+        const list = getHandlers(target, bindType);
         const slot = {
           deliver,
+          target,
+          bindType,
+          name,
+          selector,
+          bound: false,
           // Whether handlers ahead of this slot precede the binding in
           // registration order. When core registers the binding, every
           // existing handler does, and this instance dispatches before core's
           // native listener. During a replay, only earlier slots do; the order
           // of other existing handlers is unknown.
-          followsHandlers: Boolean(
-            list?.some(
-              (handleObj) => !replaying || slotHandlers.has(handleObj.handler),
-            ),
-          ),
+          followsHandlers: false,
           handler(...args) {
             return slot.deliver.apply(this, args);
           },
           remove(unbind = true) {
             subscriptions.delete(binding);
-            if (unbind) {
-              element.off(name, selector, slot.handler);
+            if (!legacySlot) {
+              if (unbind) {
+                element.off(name, selector, slot.handler);
+              }
+              return;
             }
+            if (slot.bound) {
+              if (unbind) {
+                unbindSlot(slot);
+              } else {
+                slot.bound = false;
+                temporary.delete(slot);
+              }
+            }
+            markedSlots.get(target)?.delete(slot);
+            releaseAnchor(target, bindType);
           },
         };
-        element.on(name, selector, slot.handler);
         slotHandlers.add(slot.handler);
         subscriptions.set(binding, slot);
+        const followsHandlers = Boolean(
+          list?.some(
+            (handleObj) =>
+              !isInternalHandler(handleObj) &&
+              (!replaying || slotHandlers.has(handleObj.handler)),
+          ),
+        );
+        if (!legacySlot) {
+          element.on(name, selector, slot.handler);
+          slot.bound = true;
+          slot.followsHandlers = followsHandlers;
+          return;
+        }
+
+        // A marked slot binds now only behind existing handlers. Otherwise it
+        // binds right before the first later handler, a synthetic trigger, or
+        // an .off() call that could match it.
+        markedHandlers.add(slot.handler);
+        if (!markedSlots.has(target)) {
+          markedSlots.set(target, new Set());
+        }
+        markedSlots.get(target).add(slot);
+        acquireAnchor(target, bindType);
+        // Accepted gap A: a handler bound between the jQuery file and this
+        // file runs first, with an unknown order relative to core.
+        // Accepted gap B: a foreign handler bound before connectLegacy() has
+        // no pinned equivalent; it also stays ahead of core's slot.
+        if (list?.some((handleObj) => !isInternalHandler(handleObj))) {
+          bindSlot(slot, followsHandlers);
+        }
       },
       remove(binding) {
         const slot = subscriptions.get(binding);
@@ -169,7 +600,19 @@
       },
     });
     replaying = false;
-    return stop;
+    return () => {
+      stop();
+      observing = false;
+      if (jquery.event.add === add) {
+        jquery.event.add = originalAdd;
+      }
+      if (jquery.event.remove === remove) {
+        jquery.event.remove = originalRemove;
+      }
+      if (jquery.event.trigger === trigger) {
+        jquery.event.trigger = originalTrigger;
+      }
+    };
   }
 
   /**
