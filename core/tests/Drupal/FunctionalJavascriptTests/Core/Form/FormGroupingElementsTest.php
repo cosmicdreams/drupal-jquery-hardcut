@@ -1078,7 +1078,7 @@ class FormGroupingElementsTest extends WebDriverTestBase {
   /**
    * Tests a delegated .one() handler bound before details-aria.
    *
-   * jQuery's own listener then runs before core's native listener, and a
+   * The jQuery listener then runs before core's native listener, and a
    * native listener in between stops immediate propagation. The .one()
    * handler removes itself during jQuery's ordinary dispatch, but core's slot
    * stays queued there, so the pinned queue still ran details-aria. The slot
