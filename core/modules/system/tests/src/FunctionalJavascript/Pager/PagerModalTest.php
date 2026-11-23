@@ -52,7 +52,12 @@ class PagerModalTest extends WebDriverTestBase {
     $this->assertSession()->elementExists('css', '.test-pager-0')->clickLink('Go to page 2');
     $this->assertSession()->assertWaitOnAjaxRequest();
 
-    $this->assertEquals('Page 2', $this->assertSession()->elementExists('css', '.pager__item.is-active')->getText());
+    // Include the visually hidden "Page" label in the active item's text.
+    $current_page = $this->getSession()->evaluateScript(<<<'JS'
+      document.querySelector('#drupal-modal .test-pager-0 .pager__item.is-active a')
+        ?.textContent.trim().replace(/\s+/g, ' ')
+      JS);
+    $this->assertSame('Page 2', $current_page);
     // Ensure we're still in the modal.
     $this->assertTrue($this->assertSession()->elementExists('css', '#drupal-modal')->isVisible());
   }

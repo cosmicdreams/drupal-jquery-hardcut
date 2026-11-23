@@ -260,18 +260,16 @@ JS;
 
     // Click on the dropdown button.
     $page->find('css', '.ck-text-fragment-language-dropdown button')->click();
+    $this->assertNotNull($assert_session->waitForElementVisible('css', '.ck-text-fragment-language-dropdown .ck-dropdown__panel'));
 
-    // Get all the languages available in dropdown.
-    $current_languages = $page->findAll('css', '.ck-text-fragment-language-dropdown li .ck-button__label');
-
-    // Remove "Remove language" element from current languages.
-    array_shift($current_languages);
-
-    // Create array of full language name.
-    $languages = [];
-    foreach ($current_languages as $item) {
-      $languages[] = $item->getText();
-    }
+    // Read labels throughout the scrollable menu, including off-screen rows.
+    // The first entry is "Remove language".
+    $languages = $this->getSession()->evaluateScript(<<<'JS'
+      Array.from(
+        document.querySelectorAll('.ck-text-fragment-language-dropdown li .ck-button__label'),
+        ({ textContent }) => textContent.trim(),
+      ).slice(1)
+      JS);
 
     // Return the values from a single column.
     $configured_languages = array_column($configured_languages, 0);
