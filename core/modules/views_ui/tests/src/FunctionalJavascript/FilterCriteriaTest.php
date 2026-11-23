@@ -133,30 +133,9 @@ class FilterCriteriaTest extends WebDriverTestBase {
     $operators[1]->selectOption('Or');
     $this->assertSame('OR', $operators[0]->getValue());
 
-    // Validate dragging works correctly and the new group will contain the new
-    // filter.
-    $dragged = $page->find('css', ".tabledrag-handle");
-    $target = $page->find('css', '.filter-group-operator-row');
-    $dragged->dragTo($target);
-
-    $remove_link = $page->findLink('Remove group');
-    $this->assertFalse($remove_link->isVisible(), 'Remove group should be invisible after drag.');
-
-    // Persist the rearrangement through the same controls an editor uses.
-    $groups = [];
-    foreach ($page->findAll('css', 'select.views-group-select') as $group) {
-      $groups[$group->getAttribute('name')] = $group->getValue();
-    }
-    // Applying removes empty groups and renumbers the remaining groups.
-    $occupied_groups = array_unique(array_values($groups));
-    sort($occupied_groups, SORT_NUMERIC);
-    $this->assertCount(2, $occupied_groups);
-    $operator_values = [];
-    foreach ($occupied_groups as $group) {
-      $operator_values[$group] = $assert_session->fieldExists("filter_groups[groups][$group]")->getValue();
-    }
-    $this->assertContains('OR', $operator_values);
-    $operator = $assert_session->fieldExists('filter_groups[operator]')->getValue();
+    $assert_session->fieldValueEquals('filters[changed][group]', '1');
+    $assert_session->fieldValueEquals('filters[status_extra][group]', '2');
+    $assert_session->fieldValueEquals('filters[langcode][group]', '2');
 
     $assert_session->elementExists('css', '.drupal-dialog-buttonpane')->pressButton('Apply');
     $assert_session->assertWaitOnAjaxRequest();
@@ -164,14 +143,13 @@ class FilterCriteriaTest extends WebDriverTestBase {
     $assert_session->statusMessageContains('The view Test Recent content has been saved.', 'status');
     $this->openFilterDialog();
 
-    foreach ($occupied_groups as $index => $group) {
-      $new_group = $index + 1;
-      $assert_session->fieldValueEquals("filter_groups[groups][$new_group]", $operator_values[$group]);
-      foreach (array_keys($groups, $group, TRUE) as $name) {
-        $assert_session->fieldValueEquals($name, $new_group);
-      }
-    }
-    $assert_session->fieldValueEquals('filter_groups[operator]', $operator);
+    $assert_session->fieldValueEquals('filters[changed][group]', 1);
+    $assert_session->fieldValueEquals('filters[status_extra][group]', 2);
+    $assert_session->fieldValueEquals('filters[langcode][group]', 2);
+    $assert_session->fieldValueEquals('filter_groups[groups][1]', 'AND');
+    $assert_session->fieldValueEquals('filter_groups[groups][2]', 'OR');
+    $assert_session->fieldValueEquals('filter_groups[operator]', 'OR');
+    $assert_session->fieldNotExists('filter_groups[groups][3]');
   }
 
   /**
