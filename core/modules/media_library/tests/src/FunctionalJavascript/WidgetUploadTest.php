@@ -263,7 +263,8 @@ class WidgetUploadTest extends MediaLibraryTestBase {
     $this->pressSaveButton();
     $page->uncheckField('media_library_select_form[2]');
     $this->waitForText('1 item selected');
-    $this->waitForText("Select $existing_media_name");
+    // The existing item may be below the dialog's scroll viewport.
+    $this->waitForFieldExists("Select $existing_media_name");
     $media_items = Media::loadMultiple();
     $added_media = array_pop($media_items);
     $added_media_name = $added_media->label();
@@ -645,7 +646,8 @@ class WidgetUploadTest extends MediaLibraryTestBase {
     //   fails. https://www.drupal.org/project/drupal/issues/3055648
     $selection_area->find('css', 'summary')->click();
     $this->saveAnd('select');
-    $this->waitForText("Select $existing_media_name");
+    // The existing item may be below the dialog's scroll viewport.
+    $this->waitForFieldExists("Select $existing_media_name");
     $media_items = Media::loadMultiple();
     $added_media = array_pop($media_items);
     $added_media_name = $added_media->label();
