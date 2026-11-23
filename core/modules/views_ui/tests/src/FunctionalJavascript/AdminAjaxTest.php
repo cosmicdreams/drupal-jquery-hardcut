@@ -74,7 +74,6 @@ class AdminAjaxTest extends WebDriverTestBase {
   #[DataProvider('viewsThemes')]
   public function testFindHandler(string $theme): void {
     $this->useViewsTheme($theme);
-    $this->getSession()->resizeWindow(800, 540);
     $this->drupalGet('admin/structure/views/view/user_admin_people');
     $assert = $this->assertSession();
     $assert->elementExists('css', '#views-add-field')->click();
@@ -87,6 +86,13 @@ class AdminAjaxTest extends WebDriverTestBase {
     $category = $dialog->findField('Category');
     $checkbox = $assert->fieldExists('name[views.dropbutton]', $dialog);
     $title = $assert->elementExists('css', '.title', $checkbox->getParent()->getParent()->getParent());
+
+    $this->assertJsCondition(<<<'JS'
+      (() => {
+        const list = document.querySelector('dialog.views-ui-dialog[open] [data-drupal-views-scroll]');
+        return list.clientHeight > 0 && list.scrollHeight > list.clientHeight;
+      })()
+      JS);
 
     // Select several handlers that are visible after scrolling.
     $scroll_positions = $this->getSession()->evaluateScript(<<<'JS'
