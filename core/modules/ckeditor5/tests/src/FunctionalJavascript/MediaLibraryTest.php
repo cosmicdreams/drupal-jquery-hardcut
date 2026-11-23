@@ -241,10 +241,12 @@ class MediaLibraryTest extends WebDriverTestBase {
     $assert = $this->assertSession();
     $editable = $assert->waitForElementVisible('css', '#drupal-off-canvas .ck-editor__editable');
     $this->assertNotNull($editable);
-    $resize = $assert->elementExists('css', '#drupal-off-canvas-wrapper [role="separator"]');
-    $resize->focus();
-    $resize->keyDown(35);
-    $this->assertJsCondition('Drupal.displace.offsets.right >= window.innerWidth - 1');
+    $this->getSession()->executeScript(<<<'JS'
+      const resize = document.querySelector('#drupal-off-canvas-wrapper [role="separator"]');
+      resize.focus();
+      resize.dispatchEvent(new KeyboardEvent('keydown', { key: 'End', bubbles: true }));
+      JS);
+    $this->assertJsCondition('Drupal.displace.offsets.right >= document.documentElement.clientWidth - 1');
     $editable->click();
     $insert_media = $assert->waitForElementVisible('xpath', '//div[@id="drupal-off-canvas"]//button[span[text()="Insert Media"]]');
     $this->assertNotNull($insert_media);

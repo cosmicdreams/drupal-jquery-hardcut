@@ -248,7 +248,7 @@
       }
       const endpoint = new URL(url, document.baseURI);
       Object.entries(query).forEach(([key, param]) => {
-        endpoint.searchParams.set(key, param);
+        endpoint.searchParams.set(key, param ?? '');
       });
       endpoint.searchParams.set('q', term);
       const key = endpoint.href;
