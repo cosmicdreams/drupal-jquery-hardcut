@@ -422,7 +422,7 @@ class DialogTest extends WebDriverTestBase {
     $assert = $this->assertSession();
     $session->executeScript(<<<'JS'
       Drupal.ajax({
-        url: Drupal.url('ajax-test/dialog-widgets'),
+        url: Drupal.url('form-test/autocomplete'),
         dialogType: 'modal',
       }).execute();
       JS);
