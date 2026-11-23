@@ -592,7 +592,7 @@ class DialogTest extends WebDriverTestBase {
       $this->drupalGet($modal ? 'ajax-test/dialog' : 'form-test/autocomplete');
       if ($modal) {
         $session->executeScript("Drupal.ajax({ url: Drupal.url('form-test/autocomplete'), dialogType: 'modal' }).execute()");
-        $this->assertNotNull($assert->waitForElementVisible('css', 'dialog:modal [name="autocomplete_1"]'));
+        $this->assertNotNull($assert->waitForElementVisible('css', 'dialog[open] [name="autocomplete_1"]'));
       }
       $session->executeScript(<<<'JS'
         window.field = document.querySelector('[name="autocomplete_1"]');
@@ -651,7 +651,7 @@ class DialogTest extends WebDriverTestBase {
     $this->drupalGet('ajax-test/dialog');
     $session = $this->getSession();
     $session->executeScript("Drupal.ajax({ url: Drupal.url('form-test/autocomplete'), dialogType: 'modal' }).execute()");
-    $this->assertNotNull($this->assertSession()->waitForElementVisible('css', 'dialog:modal input[role="combobox"]'));
+    $this->assertNotNull($this->assertSession()->waitForElementVisible('css', 'dialog[open] input[role="combobox"]'));
     $session->executeScript(<<<'JS'
       const field = document.querySelector('dialog:modal input[role="combobox"]');
       const announce = Drupal.announce;
