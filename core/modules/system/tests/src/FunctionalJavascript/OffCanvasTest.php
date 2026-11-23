@@ -8,6 +8,7 @@ use Drupal\FunctionalJavascriptTests\DrupalSelenium2Driver;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\Attributes\Group;
 use PHPUnit\Framework\Attributes\RunTestsInSeparateProcesses;
+use PHPUnit\Framework\Attributes\TestWith;
 
 /**
  * Tests the off-canvas dialog functionality.
@@ -113,6 +114,131 @@ class OffCanvasTest extends OffCanvasTestBase {
     $page->clickLink('Off_canvas link!');
     $this->waitForOffCanvasToOpen();
     $web_assert->elementTextContains('css', '#drupal-off-canvas-wrapper', 'Thing 2 says hello');
+  }
+
+  /**
+   * Tests autocomplete styling and dismissal inside the tray.
+   */
+  #[TestWith(['stark'])]
+  #[TestWith(['starterkit_theme'])]
+  #[TestWith(['umami'])]
+  #[TestWith(['default_admin'])]
+  public function testAutocomplete(string $theme): void {
+    $this->container->get('module_installer')->install(['form_test']);
+    $this->enableTheme($theme);
+    $this->drupalLogin($this->drupalCreateUser(['access autocomplete test']));
+    $this->drupalGet('/off-canvas-test-links');
+    $session = $this->getSession();
+    $assert = $this->assertSession();
+    $session->executeScript(<<<'JS'
+      Drupal.ajax({
+        url: Drupal.url('form-test/autocomplete'),
+        dialogType: 'dialog',
+        dialogRenderer: 'off_canvas',
+      }).execute();
+      JS);
+    $field = $assert->waitForElementVisible('css', '#drupal-off-canvas input.form-autocomplete');
+    $this->assertNotNull($field);
+    $field->setValue('label');
+    if ($theme === 'default_admin') {
+      $message = $assert->waitForElementVisible('css', '#drupal-off-canvas .admin-autocomplete__message');
+      $this->assertNotNull($message);
+      $this->assertSame('Loading…', $message->getText());
+    }
+    $option = $assert->waitOnAutocomplete();
+    $this->assertNotNull($option);
+    $driver = $session->getDriver();
+    $this->assertInstanceOf(DrupalSelenium2Driver::class, $driver);
+    $webdriver = $driver->getWebDriverSession();
+    $press = static function (string $value) use ($webdriver): void {
+      $webdriver->postActions([
+        'actions' => [
+          [
+            'type' => 'key',
+            'id' => 'keyboard',
+            'actions' => [
+              ['type' => 'keyDown', 'value' => $value],
+              ['type' => 'keyUp', 'value' => $value],
+            ],
+          ],
+        ],
+      ]);
+    };
+    $press("\u{E015}");
+    foreach (['light', 'dark'] as $scheme) {
+      $session->executeScript(sprintf('document.documentElement.style.colorScheme = "%s"', $scheme));
+      $this->assertJsCondition(<<<'JS'
+        (() => {
+          const option = document.querySelector('#drupal-off-canvas-wrapper [aria-selected="true"][role="option"]');
+          const style = getComputedStyle(option);
+          return style.color === 'rgb(51, 51, 51)' &&
+            style.backgroundColor === 'rgb(255, 255, 255)' &&
+            style.outlineWidth === '2px' && style.outlineStyle === 'solid';
+        })()
+        JS);
+    }
+    $press("\u{E00C}");
+    $assert->elementNotExists('css', '#drupal-off-canvas-wrapper [role="option"]');
+    $assert->elementExists('css', '#drupal-off-canvas-wrapper[open]');
+    $this->assertSame('label', $field->getValue());
+
+    if ($theme === 'default_admin') {
+      $this->drupalGet('/form-test/autocomplete');
+      $field = $assert->elementExists('css', 'input.form-autocomplete');
+      $field->setValue('label');
+      $this->assertNotNull($assert->waitOnAutocomplete());
+      $this->assertJsCondition("getComputedStyle(document.querySelector('.autocomplete-list:popover-open')).borderTopWidth === '0px'");
+      $session->executeScript(<<<'JS'
+        const field = document.querySelector('input.form-autocomplete');
+        Object.assign(field.style, { position: 'fixed', bottom: '0' });
+        JS);
+      $this->assertJsCondition(<<<'JS'
+        (() => {
+          const list = document.querySelector('.autocomplete-list--above');
+          return list && getComputedStyle(list).borderBottomWidth === '0px' &&
+            getComputedStyle(list).borderTopLeftRadius !== '0px' &&
+            getComputedStyle(list).borderBottomLeftRadius === '0px';
+        })()
+        JS);
+    }
+  }
+
+  /**
+   * Tests viewport centering when a modal is opened from outside the tray.
+   */
+  public function testModalWithExpandedTray(): void {
+    $session = $this->getSession();
+    $session->resizeWindow(1200, 800);
+    $this->drupalGet('/off-canvas-test-links');
+    $this->clickLink('Open side panel 1');
+    $this->waitForOffCanvasToOpen();
+    $session->executeScript(<<<'JS'
+      const grip = document.querySelector('#drupal-off-canvas-wrapper [role="separator"]');
+      window.initialOffset = Drupal.displace.offsets.right;
+      grip.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowLeft', bubbles: true }));
+      const opener = document.createElement('button');
+      opener.textContent = 'Open viewport modal';
+      opener.addEventListener('click', () => Drupal.ajax({
+        url: Drupal.url('off-canvas-test-thing2'),
+        element: opener,
+        dialogType: 'modal',
+      }).execute());
+      document.body.prepend(opener);
+      JS);
+    $this->assertJsCondition('Drupal.displace.offsets.right > window.initialOffset');
+    $session->getPage()->pressButton('Open viewport modal');
+    $this->assertJsCondition(<<<'JS'
+      (() => {
+        const modal = document.querySelector('dialog:modal');
+        if (!modal?.textContent.includes('Thing 2 says hello')) {
+          return false;
+        }
+        const { left, top, width, height } = modal.getBoundingClientRect();
+        return document.querySelector('#drupal-off-canvas-wrapper[open]') &&
+          Math.abs(left + width / 2 - document.documentElement.clientWidth / 2) < 2 &&
+          Math.abs(top + height / 2 - document.documentElement.clientHeight / 2) < 2;
+      })()
+      JS);
   }
 
   /**

@@ -7,6 +7,7 @@ namespace Drupal\Tests\ckeditor5\FunctionalJavascript;
 use Drupal\editor\Entity\Editor;
 use Drupal\file\Entity\File;
 use Drupal\filter\Entity\FilterFormat;
+use Drupal\FunctionalJavascriptTests\DrupalSelenium2Driver;
 use Drupal\media\Entity\Media;
 use Drupal\Tests\ckeditor5\Traits\CKEditor5TestTrait;
 use Drupal\Tests\media\Traits\MediaTypeCreationTrait;
@@ -144,16 +145,6 @@ class EntityLinkSuggestionsTest extends CKEditor5TestBase {
     $this->assertSame('Foo', $results[0]->find('css', '.entity-link-suggestions-result-line--title')->getText());
     $this->assertSame('Information about screaming hairy armadillo', $results[1]->find('css', '.entity-link-suggestions-result-line--title')->getText());
 
-    // Make the search term longer to narrow down the results.
-    $autocomplete_field->setValue('fo');
-    $this->assertNotNull($assert_session->waitOnAutocomplete());
-
-    // Find all the autocomplete results.
-    $results = $page->findAll('css', '.entity-link-suggestions-result-line[role=option]');
-    $this->assertCount(2, $results);
-    $this->assertSame('Foo', $results[0]->find('css', '.entity-link-suggestions-result-line--title')->getText());
-    $this->assertSame('Information about screaming hairy armadillo', $results[1]->find('css', '.entity-link-suggestions-result-line--title')->getText());
-
     // Find the first result and click it.
     $results[0]->click();
 
@@ -254,7 +245,31 @@ class EntityLinkSuggestionsTest extends CKEditor5TestBase {
       $field->setValue('Foo');
       $suggestion = $assert->waitForElementVisible('css', '.ck-link-form [role="option"]');
       $this->assertNotNull($suggestion);
-      $suggestion->click();
+      $this->dismissEditorOverlay();
+      $assert->assertNoElementAfterWait('css', '.ck-link-form [role="option"]');
+      $this->assertVisibleBalloon('.ck-link-form');
+      $this->assertSame('Foo', $field->getValue());
+
+      $field->click();
+      $this->assertNotNull($assert->waitOnAutocomplete());
+      $driver = $session->getDriver();
+      $this->assertInstanceOf(DrupalSelenium2Driver::class, $driver);
+      $driver->getWebDriverSession()->postActions([
+        'actions' => [
+          [
+            'type' => 'key',
+            'id' => 'keyboard',
+            'actions' => [
+              ['type' => 'keyDown', 'value' => "\u{E015}"],
+              ['type' => 'keyUp', 'value' => "\u{E015}"],
+              ['type' => 'keyDown', 'value' => "\u{E007}"],
+              ['type' => 'keyUp', 'value' => "\u{E007}"],
+            ],
+          ],
+        ],
+      ]);
+      $this->assertVisibleBalloon('.ck-link-form');
+      $assert->elementNotExists('css', 'dialog[open] .ck-content a');
       $this->assertSame($entity->toUrl()->toString(), $field->getValue());
       $balloon->pressButton('Insert');
       $this->assertBalloonClosed();

@@ -268,6 +268,40 @@ class DialogTest extends WebDriverTestBase {
   }
 
   /**
+   * Tests that a burst of announcements flushes before the burst ends.
+   */
+  public function testAnnouncementBurst(): void {
+    $this->drupalGet('ajax-test/dialog');
+    $this->clickLink('Link 1 (modal)');
+    $this->assertNotNull($this->assertSession()->waitForElementVisible('css', 'dialog[open]'));
+    $this->getSession()->executeScript(<<<'JS'
+      const region = document.querySelector('#drupal-live-announce');
+      let calls = 0;
+      const observer = new MutationObserver(() => {
+        if (region.textContent.includes('First in burst')) {
+          window.firstFlush = { calls, text: region.textContent };
+          observer.disconnect();
+        }
+      });
+      observer.observe(region, { childList: true });
+      Drupal.announce('First in burst');
+      Drupal.announce('Cancelled in burst')();
+      const burst = setInterval(() => {
+        calls += 1;
+        Drupal.announce(`Later message ${calls}`);
+        if (calls === 10) {
+          clearInterval(burst);
+        }
+      }, 40);
+      JS);
+    $this->assertJsCondition(<<<'JS'
+      window.firstFlush?.calls > 0 && window.firstFlush.calls < 10 &&
+        window.firstFlush.text.includes('Later message 1') &&
+        !window.firstFlush.text.includes('Cancelled in burst')
+      JS);
+  }
+
+  /**
    * Tests overlapping responses and cancellation of a dialog request.
    */
   public function testStaleDialogResponses(): void {
@@ -518,6 +552,87 @@ class DialogTest extends WebDriverTestBase {
     $press("\u{E004}");
     $this->assertJsCondition("document.activeElement !== field && field.value === 'se' && list.hidden");
 
+    $session->executeScript("type('se')");
+    $this->assertNotNull($assert->waitOnAutocomplete());
+    $press("\u{E015}");
+    $press("\u{E004}");
+    $this->assertJsCondition("document.activeElement !== field && field.value === 'Second' && list.hidden");
+
+    // Keep results visible during both debounce and the pending request.
+    $session->executeScript("type('se')");
+    $this->assertNotNull($assert->waitOnAutocomplete());
+    $press("\u{E015}");
+    $session->executeScript(<<<'JS'
+      window.previousOption = list.firstElementChild;
+      type('same');
+      window.keptDuringDebounce = !list.hidden && !field.hasAttribute('aria-activedescendant');
+      JS);
+    $this->assertJsCondition("keptDuringDebounce && pending.has('same') && !list.hidden");
+    $press("\u{E015}");
+    $this->assertJsCondition("!field.hasAttribute('aria-activedescendant')");
+    $session->executeScript(<<<'JS'
+      previousOption.click();
+      window.announcementCount = 0;
+      const announce = Drupal.announce;
+      Drupal.announce = (...args) => {
+        window.announcementCount += 1;
+        return announce(...args);
+      };
+      pending.get('same').respond('Second', 'Seventh');
+      JS);
+    $this->assertJsCondition(<<<'JS'
+      field.value === 'same' && !field.classList.contains('is-autocompleting') &&
+        list.firstElementChild === previousOption && announcementCount === 0
+      JS);
+    $press("\u{E015}");
+    $this->assertJsCondition("field.hasAttribute('aria-activedescendant')");
+
+    // Suppress searches for denied first characters and during composition.
+    $session->executeScript(<<<'JS'
+      field.dataset.autocompleteFirstCharacterDenylist = '!';
+      type('!ignored');
+      setTimeout(() => { window.checkedDenylist = !pending.has('!ignored'); }, 350);
+      JS);
+    $this->assertJsCondition("window.checkedDenylist === true && list.hidden");
+    $session->executeScript(<<<'JS'
+      field.dispatchEvent(new CompositionEvent('compositionstart', { bubbles: true }));
+      type('日');
+      setTimeout(() => { window.checkedComposition = !pending.has('日'); }, 350);
+      JS);
+    $this->assertJsCondition("window.checkedComposition === true && list.hidden");
+    $session->executeScript(<<<'JS'
+      field.dispatchEvent(new CompositionEvent('compositionend', { bubbles: true }));
+      JS);
+    $this->assertJsCondition("pending.has('日')");
+    $session->executeScript("pending.get('日').respond()");
+    $this->assertJsCondition(<<<'JS'
+      list.hidden && document.querySelector('#drupal-live-announce').textContent === 'No search results.'
+      JS);
+
+    // Leaving the list or moving onto a non-option clears pointer selection.
+    $session->executeScript(<<<'JS'
+      type('se');
+      window.outside = document.createElement('button');
+      outside.type = 'button';
+      outside.textContent = 'Keep input focus';
+      outside.addEventListener('mousedown', (event) => event.preventDefault());
+      field.closest('form').prepend(outside);
+      JS);
+    $option = $assert->waitOnAutocomplete();
+    $this->assertNotNull($option);
+    $driver->mouseOver($option->getXpath());
+    $this->assertJsCondition("field.hasAttribute('aria-activedescendant')");
+    $session->executeScript("list.dispatchEvent(new PointerEvent('pointermove', { bubbles: true }))");
+    $this->assertJsCondition("!field.hasAttribute('aria-activedescendant')");
+    $outside = $assert->elementExists('css', '#drupal-modal form button');
+    $driver->mouseOver($outside->getXpath());
+    $driver->mouseOver($option->getXpath());
+    $this->assertJsCondition("field.hasAttribute('aria-activedescendant')");
+    $driver->mouseOver($outside->getXpath());
+    $this->assertJsCondition("!field.hasAttribute('aria-activedescendant') && !list.hidden");
+    $outside->click();
+    $this->assertJsCondition("document.activeElement === field && list.hidden");
+
     // Page through a list that cannot fit all its suggestions at once.
     $session->executeScript("list.style.maxHeight = '100px'; type('page')");
     $this->assertJsCondition("pending.has('page')");
@@ -577,6 +692,75 @@ class DialogTest extends WebDriverTestBase {
     $assert->elementExists('css', '#drupal-modal')->getParent()->pressButton('Close');
     $session->executeScript("pending.get('slow').respond('Late')");
     $this->assertJsCondition("pending.get('slow').signal.aborted && !field.isConnected && !list.isConnected");
+  }
+
+  /**
+   * Tests that Escape closes a modal while autocomplete has no results yet.
+   */
+  public function testAutocompleteEscapeWhileCollapsed(): void {
+    $this->container->get('module_installer')->install(['form_test']);
+    $this->drupalLogin($this->drupalCreateUser(['access autocomplete test']));
+    $this->drupalGet('ajax-test/dialog');
+    $session = $this->getSession();
+    $assert = $this->assertSession();
+    $driver = $session->getDriver();
+    $this->assertInstanceOf(DrupalSelenium2Driver::class, $driver);
+
+    foreach (['debouncing', 'loading'] as $state) {
+      $session->executeScript(<<<'JS'
+        Drupal.ajax({
+          url: Drupal.url('form-test/autocomplete'),
+          dialogType: 'modal',
+        }).execute();
+        JS);
+      $this->assertNotNull($assert->waitForElementVisible('css', 'dialog[open] input.form-autocomplete'));
+      $session->executeScript(<<<'JS'
+        window.field = document.querySelector('dialog:modal input.form-autocomplete');
+        window.autocompleteRequest = null;
+        window.originalFetch ??= window.fetch;
+        window.fetch = (url, options) => {
+          if (!String(url).includes(field.dataset.autocompletePath.split('?')[0])) {
+            return originalFetch(url, options);
+          }
+          window.autocompleteRequest = options.signal;
+          return new Promise(() => {});
+        };
+        field.focus();
+        field.value = 'se';
+        JS);
+      if ($state === 'debouncing') {
+        // Schedule the search as the real Escape key enters the modal.
+        $session->executeScript(<<<'JS'
+          window.addEventListener('keydown', () => {
+            field.dispatchEvent(new Event('input', { bubbles: true }));
+          }, { capture: true, once: true });
+          JS);
+      }
+      else {
+        $session->executeScript("field.dispatchEvent(new Event('input', { bubbles: true }))");
+        $this->assertJsCondition('window.autocompleteRequest !== null');
+      }
+      $driver->getWebDriverSession()->postActions([
+        'actions' => [
+          [
+            'type' => 'key',
+            'id' => 'keyboard',
+            'actions' => [
+              ['type' => 'keyDown', 'value' => "\u{E00C}"],
+              ['type' => 'keyUp', 'value' => "\u{E00C}"],
+            ],
+          ],
+        ],
+      ]);
+      $assert->assertNoElementAfterWait('css', 'dialog[open]');
+      if ($state === 'debouncing') {
+        $session->executeScript('setTimeout(() => { window.debounceCancelled = !autocompleteRequest; }, 350)');
+        $this->assertJsCondition('window.debounceCancelled === true');
+      }
+      else {
+        $this->assertJsCondition('window.autocompleteRequest.aborted');
+      }
+    }
   }
 
   /**
