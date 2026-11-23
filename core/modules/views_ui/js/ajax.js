@@ -12,6 +12,21 @@
  */
 ((Drupal, once) => {
   const commands = Drupal.AjaxCommands.prototype;
+  const dialogEditors = new WeakMap();
+
+  /**
+   * Finds the editor that opened this dialog, even after the dialog closes.
+   * @param {Drupal.Ajax} ajax
+   *   The request from the editor or its dialog.
+   * @return {Element|undefined}
+   *   The editor that owns the request.
+   */
+  function owningEditor(ajax) {
+    return (
+      ajax.element?.closest('.views-edit-view') ??
+      dialogEditors.get(ajax.form ?? ajax.element)
+    );
+  }
 
   /**
    * Checks that the response still owns the modal.
@@ -31,11 +46,12 @@
     if (!isCurrentDialogResponse(ajax)) {
       return;
     }
-    document
-      .querySelectorAll('.hilited')
+    const editor = owningEditor(ajax);
+    editor
+      ?.querySelectorAll('.hilited')
       .forEach((element) => element.classList.remove('hilited'));
-    document
-      .querySelectorAll(response.selector)
+    editor
+      ?.querySelectorAll(response.selector)
       .forEach((element) => element.classList.add('hilited'));
   };
 
@@ -43,25 +59,32 @@
     if (!isCurrentDialogResponse(ajax)) {
       return;
     }
-    once('views-ajax-submit', '.js-views-ui-dialog[open] form').forEach(
-      (form) => {
-        Drupal.ajax({
-          url: response.url,
-          event: 'submit',
-          base: form.id,
-          element: form,
-        }).form = form;
-      },
-    );
+    const modal = document.getElementById('drupal-modal');
+    if (!modal?.closest('.js-views-ui-dialog[open]')) {
+      return;
+    }
+    const editor = owningEditor(ajax);
+    once('views-ajax-submit', 'form', modal).forEach((form) => {
+      if (editor) {
+        dialogEditors.set(form, editor);
+      }
+      Drupal.ajax({
+        url: response.url,
+        event: 'submit',
+        base: form.id,
+        element: form,
+      }).form = form;
+    });
   };
 
   commands.viewsShowButtons = (ajax, response) => {
-    document
-      .querySelectorAll('.views-edit-view .form-actions')
+    const editor = owningEditor(ajax);
+    editor
+      ?.querySelectorAll('.form-actions')
       .forEach((element) => element.classList.remove('js-hide'));
     if (response.changed) {
-      document
-        .querySelectorAll('.views-edit-view .view-changed.messages')
+      editor
+        ?.querySelectorAll('.view-changed.messages')
         .forEach((element) => element.classList.remove('js-hide'));
     }
   };

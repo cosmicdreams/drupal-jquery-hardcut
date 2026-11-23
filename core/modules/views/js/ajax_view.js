@@ -48,7 +48,12 @@
       return;
     }
     const formSelector = `form#views-exposed-form-${settings.view_name.replaceAll('_', '-')}-${settings.view_display_id.replaceAll('_', '-')}`;
-    const inlineForms = view.querySelectorAll(formSelector);
+    const ownElements = (selector) =>
+      [...view.querySelectorAll(selector)].filter(
+        (element) =>
+          element.closest('.view, [class*="js-view-dom-id-"]') === view,
+      );
+    const inlineForms = ownElements(formSelector);
     const exposedForms = Array.from(
       inlineForms.length
         ? inlineForms
@@ -108,8 +113,9 @@
     if (!view.parentElement?.closest('.view')) {
       once(
         'views-pager',
-        '.js-pager__items a[href], th.views-field a[href], .attachment .views-summary a[href]',
-        view,
+        ownElements(
+          '.js-pager__items a[href], th.views-field a[href], .attachment .views-summary a[href]',
+        ),
       ).forEach((element) => {
         const href = new URL(element.href);
         bindRequest({

@@ -113,10 +113,9 @@ class BlockExposedFilterAJAXTest extends WebDriverTestBase {
 
     $session = $this->getSession();
     $assert = $this->assertSession();
-    $first = $assert->elementExists('css', '#block-first-view');
     $second = $assert->elementExists('css', '#block-second-view');
-    $assert->elementTextContains('css', '.view', 'Article A', $first);
-    $assert->elementTextContains('css', '.view', 'Article A', $second);
+    $assert->elementTextContains('css', '#block-first-view', 'Article A');
+    $assert->elementTextContains('css', '#block-second-view', 'Article A');
     $assert->fieldExists('type', $second)->selectOption('page');
 
     // Activate Apply while focus is still on the filter, as for a keyboard
@@ -127,8 +126,8 @@ class BlockExposedFilterAJAXTest extends WebDriverTestBase {
       form.querySelector('[type="submit"]').click();
       JS);
     $assert->assertWaitOnAjaxRequest();
-    $assert->elementTextContains('css', '.view', 'Article A', $first);
-    $assert->elementTextNotContains('css', '.view', 'Article A', $second);
+    $assert->elementTextContains('css', '#block-first-view', 'Article A');
+    $assert->elementTextNotContains('css', '#block-second-view', 'Article A');
     $this->assertJsCondition("document.activeElement.matches('#block-second-view select[name=type]')");
 
     // Give the focused field a selector that the response will not contain.

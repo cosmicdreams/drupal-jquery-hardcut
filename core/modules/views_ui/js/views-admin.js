@@ -44,41 +44,49 @@
         },
       ];
       groups.forEach(({ selector, path, suffix = '' }, index) => {
-        const targets = once(`views-fill-${index}`, selector, context);
-        const source = targets[0]?.form?.querySelector(
-          '[data-drupal-selector="edit-label"]',
-        );
-        if (!source) {
-          return;
-        }
-        const listeners = wizardListeners.get(source) ?? [];
-        wizardListeners.set(source, listeners);
+        const targetsByForm = new Map();
+        once(`views-fill-${index}`, selector, context).forEach((target) => {
+          const targets = targetsByForm.get(target.form) ?? [];
+          targets.push(target);
+          targetsByForm.set(target.form, targets);
+        });
+        targetsByForm.forEach((targets, form) => {
+          const source = form?.querySelector(
+            '[data-drupal-selector="edit-label"]',
+          );
+          if (!source) {
+            return;
+          }
+          const listeners = wizardListeners.get(source) ?? [];
+          wizardListeners.set(source, listeners);
 
-        const populate = () => {
-          const value = path
-            ? source.value.toLowerCase().replace(/[^a-z0-9-]+/g, '-')
-            : source.value;
-          targets
-            .filter((target) => target.isConnected)
-            .forEach((target) => {
-              const max = target.maxLength;
-              target.value =
-                (max < 0
-                  ? value
-                  : value.slice(0, Math.max(0, max - suffix.length))) + suffix;
-            });
-        };
-        // Replace the previous listener when the wizard rebuilds its fields.
-        source.removeEventListener('input', listeners[index]);
-        targets.forEach((target) =>
-          target.addEventListener(
-            'focus',
-            () => source.removeEventListener('input', populate),
-            { once: true },
-          ),
-        );
-        listeners[index] = populate;
-        source.addEventListener('input', populate);
+          const populate = () => {
+            const value = path
+              ? source.value.toLowerCase().replace(/[^a-z0-9-]+/g, '-')
+              : source.value;
+            targets
+              .filter((target) => target.isConnected)
+              .forEach((target) => {
+                const max = target.maxLength;
+                target.value =
+                  (max < 0
+                    ? value
+                    : value.slice(0, Math.max(0, max - suffix.length))) +
+                  suffix;
+              });
+          };
+          // Replace the previous listener when the wizard rebuilds its fields.
+          source.removeEventListener('input', listeners[index]);
+          targets.forEach((target) =>
+            target.addEventListener(
+              'focus',
+              () => source.removeEventListener('input', populate),
+              { once: true },
+            ),
+          );
+          listeners[index] = populate;
+          source.addEventListener('input', populate);
+        });
       });
     },
   };
@@ -570,12 +578,10 @@
   Drupal.behaviors.viewsUiRearrangeFilter = {
     attach(context) {
       const drag = Drupal.tableDrag?.['views-rearrange-filters'];
-      if (drag) {
-        once(
-          'views-rearrange-filters',
-          '#views-rearrange-filters',
-          context,
-        ).forEach((table) => rearrangeFilters(table, drag));
+      if (drag?.table) {
+        once('views-rearrange-filters', drag.table).forEach((table) =>
+          rearrangeFilters(table, drag),
+        );
       }
     },
   };
