@@ -578,7 +578,7 @@
   Drupal.behaviors.viewsUiRearrangeFilter = {
     attach(context) {
       const drag = Drupal.tableDrag?.['views-rearrange-filters'];
-      if (drag?.table) {
+      if (drag?.table && context.contains(drag.table)) {
         once('views-rearrange-filters', drag.table).forEach((table) =>
           rearrangeFilters(table, drag),
         );
