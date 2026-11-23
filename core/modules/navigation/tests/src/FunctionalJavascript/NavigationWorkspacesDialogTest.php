@@ -111,7 +111,7 @@ class NavigationWorkspacesDialogTest extends WebDriverTestBase {
           Math.abs(rect.top + rect.height / 2 - window.innerHeight / 2) < 2;
       })()
       JS);
-    $assert->elementTextContains('css', '#drupal-modal', 'Would you like to activate');
+    $assert->elementTextContains('css', '#drupal-modal', 'Activate the Stage workspace.');
   }
 
   /**
