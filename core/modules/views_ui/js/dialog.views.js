@@ -4,16 +4,24 @@
  */
 
 ((Drupal) => {
-  window.addEventListener('dialog:beforecreate', ({ target, dialog, settings }) => {
-    if (!dialog.element.matches('.views-ui-dialog') && !settings.classes?.['drupal-dialog']?.split(' ').includes('views-ui-dialog')) {
-      return;
-    }
-    const scroll = target.querySelector('[data-drupal-views-scroll]');
-    if (scroll) {
-      settings.scrollTarget = scroll;
-      dialog.element.classList.add('views-ui-dialog-scroll');
-    }
-  });
+  window.addEventListener(
+    'dialog:beforecreate',
+    ({ target, dialog, settings }) => {
+      if (
+        !dialog.element.matches('.views-ui-dialog') &&
+        !settings.classes?.['drupal-dialog']
+          ?.split(' ')
+          .includes('views-ui-dialog')
+      ) {
+        return;
+      }
+      const scroll = target.querySelector('[data-drupal-views-scroll]');
+      if (scroll) {
+        settings.scrollTarget = scroll;
+        dialog.element.classList.add('views-ui-dialog-scroll');
+      }
+    },
+  );
 
   document.addEventListener('dialogContentResize', ({ target }) => {
     const content = target.closest('.views-ui-dialog .drupal-dialog-content');
@@ -30,14 +38,27 @@
     const decoration =
       styles.boxSizing === 'border-box'
         ? 0
-        : ['paddingTop', 'paddingBottom', 'borderTopWidth', 'borderBottomWidth']
-            .reduce((sum, side) => sum + Number.parseFloat(styles[side]), 0);
+        : [
+            'paddingTop',
+            'paddingBottom',
+            'borderTopWidth',
+            'borderBottomWidth',
+          ].reduce((sum, side) => sum + Number.parseFloat(styles[side]), 0);
     scroll.style.maxHeight = `${Math.max(0, content.clientHeight - outside - decoration)}px`;
   });
 
-  document.addEventListener('toggle', ({ target }) => {
-    if (target.matches('details') && target.closest('[data-drupal-views-scroll]')) {
-      target.dispatchEvent(new Event('dialogContentResize', { bubbles: true }));
-    }
-  }, true);
+  document.addEventListener(
+    'toggle',
+    ({ target }) => {
+      if (
+        target.matches('details') &&
+        target.closest('[data-drupal-views-scroll]')
+      ) {
+        target.dispatchEvent(
+          new Event('dialogContentResize', { bubbles: true }),
+        );
+      }
+    },
+    true,
+  );
 })(Drupal);

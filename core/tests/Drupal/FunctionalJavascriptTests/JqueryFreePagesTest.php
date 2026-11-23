@@ -16,7 +16,7 @@ use PHPUnit\Framework\Attributes\RunTestsInSeparateProcesses;
  * @todo Extend the core-only matrix to installer, update and batch, Umami,
  *   node display and edit, states, machine name, uploads, Media Library,
  *   text formats and CKEditor 5 link balloons, menu editing, table weights,
- *   other Field UI pages, Views edit and pager, contextual links, Layout
+ *   other Field UI pages, Views pager, contextual links, Layout
  *   Builder, tabbing, People, language, locale, modules, theme settings,
  *   nested modals, a generated Starterkit theme and a contrib subtheme.
  * @todo Test aggregated, cached and streaming responses with asset provenance.
@@ -177,6 +177,27 @@ class JqueryFreePagesTest extends WebDriverTestBase {
     $actual['off-canvas'] = $this->observedEdges();
 
     $this->assertExpectedEdges($actual);
+  }
+
+  /**
+   * Checks the Views editor and listing without theme-supplied libraries.
+   */
+  public function testViewsPagesWithoutJquery(): void {
+    \Drupal::service('theme_installer')->install(['stark']);
+    $this->config('system.theme')->set('admin', 'stark')->save();
+    $this->config('system.performance')->set('js.preprocess', FALSE)->save();
+    $this->installAssetObserver();
+    $this->drupalLogin($this->createUser(['administer views', 'view the administration theme']));
+
+    $this->drupalGet('admin/structure/views');
+    $this->assertSession()->elementExists('css', 'input.views-filter-text');
+    $this->assertSame([], $this->observedEdges(), 'Views listing');
+
+    $this->drupalGet('admin/structure/views/view/content');
+    $this->assertSession()->elementExists('css', '#views-add-field')->click();
+    $this->assertSession()->assertWaitOnAjaxRequest();
+    $this->assertSession()->elementExists('css', 'dialog[open] .filterable-option');
+    $this->assertSame([], $this->observedEdges(), 'Views editor');
   }
 
   /**

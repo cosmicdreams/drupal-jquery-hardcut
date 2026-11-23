@@ -162,6 +162,49 @@ class ExposedFilterAJAXTest extends WebDriverTestBase {
   }
 
   /**
+   * Tests that an exposed filter keeps focus across a view replacement.
+   */
+  public function testExposedFilterKeepsFocus(): void {
+    $this->drupalGet('admin/content');
+    $session = $this->getSession();
+    $title = $this->assertSession()->fieldExists('title');
+    $title->setValue('Page One');
+
+    // The filter retains focus when it is the active control at request time.
+    $title->focus();
+    $session->executeScript('document.querySelector("form.views-exposed-form").querySelector("[type=submit]").click()');
+    $this->assertSession()->assertWaitOnAjaxRequest();
+    $this->assertJsCondition('document.activeElement.name === "title"');
+    $this->assertSession()->pageTextContains('Page One');
+    $this->assertSession()->pageTextNotContains('Page Two');
+  }
+
+  /**
+   * Tests that a delayed refresh cannot overwrite newer filter results.
+   */
+  public function testOverlappingRefresh(): void {
+    $this->drupalGet('admin/content');
+    $session = $this->getSession();
+    $session->executeScript(<<<'JS'
+      const send = XMLHttpRequest.prototype.send;
+      XMLHttpRequest.prototype.send = function (...args) {
+        XMLHttpRequest.prototype.send = send;
+        window.sendViewRefresh = () => send.apply(this, args);
+      };
+      document.querySelector('.js-view-dom-id-' + Object.values(drupalSettings.views.ajaxViews)[0].view_dom_id)
+        .dispatchEvent(new Event('RefreshView'));
+      JS);
+    $this->assertJsCondition('typeof window.sendViewRefresh === "function"');
+    $this->submitForm(['title' => 'Page Two'], 'Filter');
+    $this->assertJsCondition('new URL(location.href).searchParams.get("title") === "Page Two"');
+    $session->executeScript('window.sendViewRefresh()');
+    $this->assertSession()->assertWaitOnAjaxRequest();
+    $this->assertSession()->pageTextNotContains('Page One');
+    $this->assertSession()->pageTextContains('Page Two');
+    $this->assertSession()->addressEquals('admin/content?title=Page%20Two&type=All&status=All');
+  }
+
+  /**
    * Tests if exposed filtering via AJAX works in a modal.
    */
   public function testExposedFiltersInModal(): void {

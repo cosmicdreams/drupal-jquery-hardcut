@@ -20,6 +20,8 @@
     },
   };
 
+  const wizardListeners = new WeakMap();
+
   Drupal.behaviors.viewsUiAddView = {
     attach(context) {
       const groups = [
@@ -38,6 +40,8 @@
       if (!source?.form) {
         return;
       }
+      const listeners = wizardListeners.get(source) ?? [];
+      wizardListeners.set(source, listeners);
       groups.forEach(({ selector, path, suffix = '' }, index) => {
         const targets = once(`views-fill-${index}`, selector, context);
         if (!targets.length) {
@@ -48,16 +52,18 @@
           const value = path
             ? source.value.toLowerCase().replace(/[^a-z0-9-]+/g, '-')
             : source.value;
-          targets.filter((target) => target.isConnected).forEach((target) => {
-            const max = target.maxLength;
-            target.value =
-              (max < 0 ? value : value.slice(0, Math.max(0, max - suffix.length))) +
-              suffix;
-          });
+          targets
+            .filter((target) => target.isConnected)
+            .forEach((target) => {
+              const max = target.maxLength;
+              target.value =
+                (max < 0
+                  ? value
+                  : value.slice(0, Math.max(0, max - suffix.length))) + suffix;
+            });
         };
         // Replace the previous listener when the wizard rebuilds its fields.
-        const key = `views-fill-${index}`;
-        source.removeEventListener('input', Drupal.ajax.elementData.get(source, key));
+        source.removeEventListener('input', listeners[index]);
         targets.forEach((target) =>
           target.addEventListener(
             'focus',
@@ -65,7 +71,7 @@
             { once: true },
           ),
         );
-        Drupal.ajax.elementData.set(source, key, populate);
+        listeners[index] = populate;
         source.addEventListener('input', populate);
       });
     },
@@ -86,29 +92,37 @@
         );
         const selected = form.querySelector('.views-selected-options');
         const checked = new Map();
-        const options = Array.from(form.querySelectorAll('.filterable-option'), (row) => {
-          const title = row.querySelector('.title');
-          const description = row.querySelector('.description');
-          const checkbox = row.querySelector('input[type="checkbox"]');
-          title.addEventListener('click', () => checkbox.click());
-          const label = title.textContent.trim();
-          if (checkbox.checked) {
-            checked.set(checkbox, label);
-          }
-          checkbox.addEventListener('change', () => {
+        const options = Array.from(
+          form.querySelectorAll('.filterable-option'),
+          (row) => {
+            const title = row.querySelector('.title');
+            const description = row.querySelector('.description');
+            const checkbox = row.querySelector('input[type="checkbox"]');
+            title.addEventListener('click', () => checkbox.click());
+            const label = title.textContent.trim();
             if (checkbox.checked) {
               checked.set(checkbox, label);
-            } else {
-              checked.delete(checkbox);
             }
-            updateSelected();
-            notifyResize();
-          });
-          return { row, text: `${label} ${description.textContent}`.toLowerCase() };
-        });
+            checkbox.addEventListener('change', () => {
+              if (checkbox.checked) {
+                checked.set(checkbox, label);
+              } else {
+                checked.delete(checkbox);
+              }
+              updateSelected();
+              notifyResize();
+            });
+            return {
+              row,
+              text: `${label} ${description.textContent}`.toLowerCase(),
+            };
+          },
+        );
 
         function notifyResize() {
-          form.dispatchEvent(new Event('dialogContentResize', { bubbles: true }));
+          form.dispatchEvent(
+            new Event('dialogContentResize', { bubbles: true }),
+          );
         }
 
         function updateSelected() {
@@ -218,7 +232,9 @@
       );
       const args = document.getElementById('preview-args');
       if (bucket && args) {
-        args.parentElement.hidden = !bucket.querySelector('.views-display-setting a');
+        args.parentElement.hidden = !bucket.querySelector(
+          '.views-display-setting a',
+        );
       }
     },
   };
@@ -228,12 +244,14 @@
    */
   function rearrangeFilters(table, tableDrag) {
     const form = table.closest('form');
-    const groups = [...table.querySelectorAll('.views-group-title')].map((title) => ({
-      title,
-      operator: title.querySelector('select'),
-      cell: title.querySelector('.group-operator'),
-      message: title.nextElementSibling,
-    }));
+    const groups = [...table.querySelectorAll('.views-group-title')].map(
+      (title) => ({
+        title,
+        operator: title.querySelector('select'),
+        cell: title.querySelector('.group-operator'),
+        message: title.nextElementSibling,
+      }),
+    );
 
     function redraw() {
       groups.forEach(({ operator, cell, message }) => {
@@ -284,15 +302,19 @@
     actions.firstElementChild.append(action);
     table.before(actions);
     table.querySelectorAll('.views-remove-group').forEach((button) => {
-      button.before(addAction(button, Drupal.t('Remove group'), 'views-remove-group-link'));
+      button.before(
+        addAction(button, Drupal.t('Remove group'), 'views-remove-group-link'),
+      );
     });
 
-    const operatorWrapper = form.querySelector('.js-form-item-filter-groups-operator');
+    const operatorWrapper = form.querySelector(
+      '.js-form-item-filter-groups-operator',
+    );
     if (operatorWrapper && groups.length > 1) {
       const operator = operatorWrapper.querySelector('select');
-      operatorWrapper.querySelectorAll('label, .description').forEach((element) =>
-        element.classList.add('visually-hidden'),
-      );
+      operatorWrapper
+        .querySelectorAll('label, .description')
+        .forEach((element) => element.classList.add('visually-hidden'));
       const selects = [operator];
       groups.slice(1).forEach(({ title }, index) => {
         const row = document.createElement('tr');
@@ -305,7 +327,10 @@
           const copy = operator.cloneNode(true);
           copy.removeAttribute('id');
           copy.removeAttribute('name');
-          copy.setAttribute('aria-label', Drupal.t('Operator to use on all groups'));
+          copy.setAttribute(
+            'aria-label',
+            Drupal.t('Operator to use on all groups'),
+          );
           copy.value = operator.value;
           selects.push(copy);
           cell.append(copy);
@@ -349,29 +374,39 @@
       const field = element.querySelector('select.views-group-select');
       if (marker && field) {
         const group = marker.id.slice('views-group-'.length);
-        field.classList.remove(...[...field.classList].filter((name) =>
-          name.startsWith('views-group-select-'),
-        ));
+        field.classList.remove(
+          ...[...field.classList].filter((name) =>
+            name.startsWith('views-group-select-'),
+          ),
+        );
         field.classList.add(`views-group-select-${group}`);
         field.value = group;
       }
       redraw();
     };
 
-    groups.forEach(({ operator }) => operator.addEventListener('change', redraw));
-    table.querySelectorAll('a.views-groups-remove-link').forEach((link) =>
-      link.addEventListener('click', redraw),
+    groups.forEach(({ operator }) =>
+      operator.addEventListener('change', redraw),
     );
+    table
+      .querySelectorAll('a.views-groups-remove-link')
+      .forEach((link) => link.addEventListener('click', redraw));
     redraw();
   }
 
   Drupal.behaviors.viewsFilterConfigSelectAll = {
     attach(context) {
-      once('filterConfigSelectAll', '.js-form-item-options-value-all', context).forEach((item) => {
+      once(
+        'filterConfigSelectAll',
+        '.js-form-item-options-value-all',
+        context,
+      ).forEach((item) => {
         const selectAll = item.querySelector('input[type="checkbox"]');
-        const checkboxes = item.closest('.form-checkboxes').querySelectorAll(
-          '.js-form-type-checkbox:not(.js-form-item-options-value-all) input[type="checkbox"]',
-        );
+        const checkboxes = item
+          .closest('.form-checkboxes')
+          .querySelectorAll(
+            '.js-form-type-checkbox:not(.js-form-item-options-value-all) input[type="checkbox"]',
+          );
         item.classList.remove('js-hide');
         item.hidden = false;
         selectAll.addEventListener('change', () => {
@@ -393,7 +428,9 @@
   Drupal.behaviors.viewsRemoveIconClass = {
     attach(context) {
       once('dropbutton-icon', '.dropbutton', context).forEach((dropbutton) => {
-        dropbutton.querySelectorAll('.icon').forEach((icon) => icon.classList.remove('icon'));
+        dropbutton
+          .querySelectorAll('.icon')
+          .forEach((icon) => icon.classList.remove('icon'));
       });
     },
   };
@@ -407,12 +444,16 @@
       ).forEach((button) => {
         button.hidden = true;
         const parent = button.closest('div.views-expose, div.views-grouped');
-        parent.querySelectorAll('.exposed-description, .grouped-description').forEach(
-          (description) => { description.hidden = true; },
-        );
-        parent.querySelectorAll('input[type="checkbox"], input[type="radio"]').forEach((input) =>
-          input.addEventListener('click', () => button.click()),
-        );
+        parent
+          .querySelectorAll('.exposed-description, .grouped-description')
+          .forEach((description) => {
+            description.hidden = true;
+          });
+        parent
+          .querySelectorAll('input[type="checkbox"], input[type="radio"]')
+          .forEach((input) =>
+            input.addEventListener('click', () => button.click()),
+          );
       });
     },
   };
@@ -425,10 +466,16 @@
         context,
       ).forEach((input) => {
         const update = () => {
-          input.form.querySelectorAll('input.default-radios, td.any-default-radios-row')
-            .forEach((element) => { element.parentElement.hidden = input.checked; });
-          input.form.querySelectorAll('input.default-checkboxes')
-            .forEach((element) => { element.parentElement.hidden = !input.checked; });
+          input.form
+            .querySelectorAll('input.default-radios, td.any-default-radios-row')
+            .forEach((element) => {
+              element.parentElement.hidden = input.checked;
+            });
+          input.form
+            .querySelectorAll('input.default-checkboxes')
+            .forEach((element) => {
+              element.parentElement.hidden = !input.checked;
+            });
         };
         input.addEventListener('change', update);
         update();
@@ -448,7 +495,9 @@
           return;
         }
         const oldValue = submit.value;
-        submit.addEventListener('mouseup', () => { submit.value = oldValue; });
+        submit.addEventListener('mouseup', () => {
+          submit.value = oldValue;
+        });
         function update() {
           if (dropdown.value === 'default') {
             submit.value = Drupal.t('Apply (all displays)');
@@ -457,9 +506,9 @@
           } else {
             submit.value = Drupal.t('Apply (this display)');
           }
-          dropdown.closest('.drupal-dialog-content')?.dispatchEvent(
-            new Event('dialogButtonsChange'),
-          );
+          dropdown
+            .closest('.drupal-dialog-content')
+            ?.dispatchEvent(new Event('dialogButtonsChange'));
         }
         dropdown.addEventListener('change', update);
         update();
@@ -469,7 +518,11 @@
 
   Drupal.behaviors.viewsUiHandlerRemoveLink = {
     attach(context) {
-      once('views-remove', 'a.views-remove-link, a.display-remove-link', context).forEach((link) => {
+      once(
+        'views-remove',
+        'a.views-remove-link, a.display-remove-link',
+        context,
+      ).forEach((link) => {
         link.addEventListener('click', (event) => {
           event.preventDefault();
           const [prefix, id] = link.id.split('-remove-link-');
@@ -484,8 +537,11 @@
     attach(context) {
       const drag = Drupal.tableDrag?.['views-rearrange-filters'];
       if (drag) {
-        once('views-rearrange-filters', '#views-rearrange-filters', context)
-          .forEach((table) => rearrangeFilters(table, drag));
+        once(
+          'views-rearrange-filters',
+          '#views-rearrange-filters',
+          context,
+        ).forEach((table) => rearrangeFilters(table, drag));
       }
     },
   };

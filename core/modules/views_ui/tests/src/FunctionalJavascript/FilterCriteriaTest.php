@@ -117,6 +117,10 @@ class FilterCriteriaTest extends WebDriverTestBase {
     $this->assertNotEquals($status_extra_original_value, $status_extra_group_field->getValue(), 'Status extra group should be changed');
     $this->assertNotEquals($langcode_original_value, $langcode_group_field->getValue(), 'Langcode group should be changed');
 
+    $operator = $page->findById('views-group-title-2')->findField('Operator');
+    $operator->selectOption('Or');
+    $assert_session->elementTextContains('css', '#views-row-status_extra .views-operator-label, #views-row-langcode .views-operator-label', 'Or');
+
     $this->assertSession()->waitForLink('Create new filter group', 20000);
     $create_new_filter_group = $page->findLink('Create new filter group');
     $this->assertTrue($create_new_filter_group->isVisible(), 'Add group link found.');

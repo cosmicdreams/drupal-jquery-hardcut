@@ -14,12 +14,14 @@
    */
   Drupal.behaviors.ViewsAjaxView = {};
   Drupal.behaviors.ViewsAjaxView.attach = function (context, settings) {
-    Object.entries(settings?.views?.ajaxViews ?? {}).forEach(([key, config]) => {
-      const instance = new Drupal.views.ajaxView(config);
-      if (instance.view) {
-        Drupal.views.instances[key] = instance;
-      }
-    });
+    Object.entries(settings?.views?.ajaxViews ?? {}).forEach(
+      ([key, config]) => {
+        const instance = new Drupal.views.ajaxView(config);
+        if (instance.view) {
+          Drupal.views.instances[key] = instance;
+        }
+      },
+    );
   };
   Drupal.behaviors.ViewsAjaxView.detach = (context, settings, trigger) => {
     if (trigger === 'unload') {
@@ -79,7 +81,12 @@
     // values of exposed fields, including multi-select array parameters.
     const stripArraySuffix = (name) => name.split('[')[0];
     const excluded = new Set([
-      'page', 'reset', 'sort', 'order', 'q', 'render',
+      'page',
+      'reset',
+      'sort',
+      'order',
+      'q',
+      'render',
       ...this.exposedForms.flatMap((form) =>
         Array.from(form.elements, ({ name }) => stripArraySuffix(name)),
       ),
@@ -104,7 +111,8 @@
     this.settings = settings;
 
     // Separate exposed blocks can outlive the view markup.
-    const submit = ':is(input[type=submit], button[type=submit], input[type=image]):not([data-drupal-selector=edit-reset])';
+    const submit =
+      ':is(input[type=submit], button[type=submit], input[type=image]):not([data-drupal-selector=edit-reset])';
     once(
       `views-exposed-${settings.view_dom_id}`,
       this.exposedForms.flatMap((form) => [...form.querySelectorAll(submit)]),
@@ -126,7 +134,10 @@
           submit: {
             ...this.settings,
             ...Drupal.Views.parseQueryString(href.search),
-            ...Drupal.Views.parseViewArgs(href.href, this.settings.view_base_path),
+            ...Drupal.Views.parseViewArgs(
+              href.href,
+              this.settings.view_base_path,
+            ),
           },
         });
       });
@@ -164,8 +175,14 @@
         !this.element.isConnected
       ) {
         // Use the common cleanup without changing the current focus.
-        const focus = Drupal.ajax.elementData.get(this.element, 'disable-refocus');
-        const refocus = Drupal.ajax.elementData.get(this.element, 'refocus-blur');
+        const focus = Drupal.ajax.elementData.get(
+          this.element,
+          'disable-refocus',
+        );
+        const refocus = Drupal.ajax.elementData.get(
+          this.element,
+          'refocus-blur',
+        );
         Drupal.ajax.elementData.set(this.element, 'disable-refocus', true);
         Drupal.ajax.elementData.set(this.element, 'refocus-blur', false);
         return success.call(this, [], status).finally(() => {
@@ -190,7 +207,11 @@
    */
   Drupal.AjaxCommands.prototype.setBrowserUrl = (ajax, response) => {
     // Do not change browser URL if we are in a dialog wrapper.
-    if (ajax.element && !ajax.dialogOrigin && !ajax.element.closest('.drupal-dialog-content')) {
+    if (
+      ajax.element &&
+      !ajax.dialogOrigin &&
+      !ajax.element.closest('.drupal-dialog-content')
+    ) {
       window.history.replaceState(null, '', response.url);
     }
   };

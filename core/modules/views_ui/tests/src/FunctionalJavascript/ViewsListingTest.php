@@ -89,8 +89,6 @@ class ViewsListingTest extends WebDriverTestBase {
 
     // Reset the search string and check that we are back to the initial stage.
     $search_input->setValue('');
-    // Add a backspace to trigger the keyUp event.
-    $search_input->keyUp(8);
 
     $enabled_rows = $page->findAll('css', 'tr.views-ui-list-enabled');
     $enabled_rows = $this->filterVisibleElements($enabled_rows);

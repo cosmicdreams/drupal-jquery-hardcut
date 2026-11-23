@@ -125,6 +125,38 @@ class PreviewTest extends WebDriverTestBase {
   }
 
   /**
+   * Tests previewing a view with contextual arguments while editing it.
+   */
+  public function testPreviewArgumentsWhileEditing(): void {
+    $this->drupalGet('admin/structure/views/view/test_preview/edit/default');
+    $assert = $this->assertSession();
+    $page = $this->getSession()->getPage();
+    $args = $assert->fieldExists('preview-args');
+    $this->assertTrue($args->isVisible());
+    $args->setValue('2');
+    $page->pressButton('Update preview');
+    $assert->assertWaitOnAjaxRequest();
+    $this->assertPreviewAJAX(1);
+    $assert->elementTextContains('css', '#views-live-preview .views-row', 'George');
+
+    $assert->elementExists('css', '#views-add-field')->click();
+    $assert->assertWaitOnAjaxRequest();
+
+    // Refresh the preview while a configuration dialog has an active editor.
+    $session = $this->getSession();
+    $session->executeScript(<<<'JS'
+      document.querySelector('#preview-args').value = '3';
+      document.querySelector('#preview-submit').click();
+      document.querySelector('dialog[open] input[data-drupal-selector="edit-override-controls-options-search"]').focus();
+      JS);
+    $assert->assertWaitOnAjaxRequest();
+    $this->assertPreviewAJAX(1);
+    $assert->elementTextContains('css', '#views-live-preview .views-row', 'Ringo');
+    $assert->elementExists('css', 'dialog.views-ui-dialog[open]');
+    $this->assertJsCondition('document.activeElement.dataset.drupalSelector === "edit-override-controls-options-search"');
+  }
+
+  /**
    * Tests pagers in the preview form.
    */
   public function testPreviewWithPagersUI(): void {
