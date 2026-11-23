@@ -362,7 +362,9 @@
             search(direction);
           } else {
             const next =
-              active < 0 && direction < 0 ? rows.length - 1 : active + direction;
+              active < 0 && direction < 0
+                ? rows.length - 1
+                : active + direction;
             activate(next < rows.length ? next : -1, true);
           }
         } else if (key === 'Enter' && active >= 0) {
