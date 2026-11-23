@@ -2275,15 +2275,14 @@
           // data-drupal-selector. Look for the same base ID within this insert.
           if (element.id) {
             const base = CSS.escape(element.id.split('--')[0]);
-            match += `, #${base}, [id^="${base}--"]`;
+            match += `, [id="${base}"], [id^="${base}--"]`;
           }
-          const matches = children
+          candidates[candidate] = children
             .filter((child) => child.nodeType === Node.ELEMENT_NODE)
-            .flatMap((child) => [
-              ...(child.matches(match) ? [child] : []),
-              ...child.querySelectorAll(match),
-            ]);
-          candidates[candidate] = matches.length === 1 ? matches[0] : null;
+            .map((child) =>
+              child.matches(match) ? child : child.querySelector(match),
+            )
+            .find(Boolean);
         });
       });
       const elements = nodes.filter(
