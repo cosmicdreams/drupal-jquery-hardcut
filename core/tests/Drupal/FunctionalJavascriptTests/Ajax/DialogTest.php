@@ -621,7 +621,9 @@ class DialogTest extends WebDriverTestBase {
           option?.getAttribute('aria-selected') === 'false'
         JS);
       $this->assertJsCondition(<<<'JS'
-        field.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', cancelable: true })) &&
+        ['Enter', 'Escape'].every((key) =>
+          field.dispatchEvent(new KeyboardEvent('keydown', { key, cancelable: true }))
+        ) &&
           field.value === 'label'
         JS);
       $session->executeScript('scroller.scrollTop = 0');

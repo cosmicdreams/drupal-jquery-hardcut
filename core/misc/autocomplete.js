@@ -483,7 +483,7 @@
           }
         } else if (key === 'Enter' && expanded && active >= 0) {
           select(active);
-        } else if (key === 'Escape' && (rows.length || request || timer)) {
+        } else if (key === 'Escape' && (expanded || request || timer)) {
           close();
         } else {
           return;
