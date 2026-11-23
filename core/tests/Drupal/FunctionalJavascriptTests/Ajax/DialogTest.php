@@ -475,14 +475,18 @@ class DialogTest extends WebDriverTestBase {
     $this->assertInstanceOf(DrupalSelenium2Driver::class, $driver);
     $webdriver = $driver->getWebDriverSession();
     $press = static function (string $value) use ($webdriver): void {
-      $webdriver->postActions(['actions' => [[
-        'type' => 'key',
-        'id' => 'keyboard',
+      $webdriver->postActions([
         'actions' => [
-          ['type' => 'keyDown', 'value' => $value],
-          ['type' => 'keyUp', 'value' => $value],
+          [
+            'type' => 'key',
+            'id' => 'keyboard',
+            'actions' => [
+              ['type' => 'keyDown', 'value' => $value],
+              ['type' => 'keyUp', 'value' => $value],
+            ],
+          ],
         ],
-      ]]]);
+      ]);
     };
     $press("\u{E015}");
     $this->assertJsCondition(<<<'JS'
