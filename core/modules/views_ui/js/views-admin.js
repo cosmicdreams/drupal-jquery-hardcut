@@ -43,17 +43,16 @@
           suffix: '.xml',
         },
       ];
-      const source = document.getElementById('edit-label');
-      if (!source?.form) {
-        return;
-      }
-      const listeners = wizardListeners.get(source) ?? [];
-      wizardListeners.set(source, listeners);
       groups.forEach(({ selector, path, suffix = '' }, index) => {
         const targets = once(`views-fill-${index}`, selector, context);
-        if (!targets.length) {
+        const source = targets[0]?.form?.querySelector(
+          '[data-drupal-selector="edit-label"]',
+        );
+        if (!source) {
           return;
         }
+        const listeners = wizardListeners.get(source) ?? [];
+        wizardListeners.set(source, listeners);
 
         const populate = () => {
           const value = path

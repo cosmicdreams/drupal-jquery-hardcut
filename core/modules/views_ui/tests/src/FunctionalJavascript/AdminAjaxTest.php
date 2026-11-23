@@ -166,10 +166,10 @@ class AdminAjaxTest extends WebDriverTestBase {
     $heading->click();
     $editable->click();
     $assert->elementExists('xpath', '//button[span[text()="Link"]]')->click();
-    $url = $assert->waitForElementVisible('css', 'dialog[open] .ck-balloon-panel_visible input.ck-input-text');
+    $url = $assert->waitForElementVisible('css', 'dialog[open] .ck-balloon-panel_visible input[inputmode=url]');
     $this->assertNotNull($url);
     $url->setValue('https://example.com');
-    $this->assertJsCondition('document.activeElement.matches("dialog[open] .ck-balloon-panel_visible input.ck-input-text")');
+    $this->assertJsCondition('document.activeElement.matches("dialog[open] .ck-balloon-panel_visible input[inputmode=url]")');
     $assert->elementExists('css', '.ck-balloon-panel_visible .ck-link-form')->pressButton('Insert');
     $assert->elementAttributeContains('css', '.ck-editor__editable a', 'href', 'https://example.com');
   }

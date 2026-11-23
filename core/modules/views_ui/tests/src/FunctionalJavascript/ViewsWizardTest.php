@@ -126,6 +126,7 @@ class ViewsWizardTest extends WebDriverTestBase {
     $assert->fieldExists('page[create]', $dialog)->check();
     $title = $assert->fieldExists('page[title]', $dialog);
     $this->assertSame('Editorial review', $title->getValue());
+    $title->focus();
     $title->setValue('Custom page title');
     $label->setValue('Weekly review');
     $this->assertJsCondition('document.querySelector("dialog[open] input[name=id]").value === "weekly_review"');
