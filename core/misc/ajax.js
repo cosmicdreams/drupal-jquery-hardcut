@@ -1124,13 +1124,6 @@
     this.element = element;
 
     /**
-     * The last focused element right before processing ajax response.
-     *
-     * @type {string|null}
-     */
-    this.preCommandsFocusedElementSelector = null;
-
-    /**
      * @type {Drupal.Ajax~elementSettings}
      */
     this.elementSettings = elementSettings;
@@ -1222,7 +1215,6 @@
       },
       beforeSubmit(formValues, elementSettings, options) {
         ajax.ajaxing = true;
-        ajax.preCommandsFocusedElementSelector = null;
         return ajax.beforeSubmit(formValues, elementSettings, options);
       },
       beforeSend(xmlhttprequest, options) {
@@ -1750,9 +1742,6 @@
     status,
     xmlhttprequest,
   ) {
-    this.preCommandsFocusedElementSelector =
-      document.activeElement.getAttribute('data-drupal-selector');
-
     // Sanity check for browser support (object expected).
     if (typeof response === 'string') {
       try {
@@ -1865,21 +1854,6 @@
       this.element.disabled = false;
     }
 
-    // Save the element and its ancestors, starting with the nearest target.
-    const elementParents = [];
-    if (this.element) {
-      elementParents.push(this.element);
-      for (
-        let parent = this.element.parentElement;
-        parent;
-        parent = parent.parentElement
-      ) {
-        if (parent.hasAttribute('data-drupal-selector')) {
-          elementParents.push(parent);
-        }
-      }
-    }
-
     // Track if any command is altering the focus so we can avoid changing the
     // focus set by the Ajax command.
     const focusChanged = Object.keys(response || {}).some((key) => {
@@ -1890,6 +1864,29 @@
         command === 'openDialog'
       );
     });
+
+    if (!focusChanged && this.element) {
+      const targets = [];
+      const active = document.activeElement;
+      if (
+        Drupal.ajax.elementData.get(this.element, 'refocus-blur') &&
+        (active === this.element || this.form?.contains(active))
+      ) {
+        targets.push(active);
+      }
+      if (!Drupal.ajax.elementData.get(this.element, 'disable-refocus')) {
+        for (
+          let element = this.element;
+          element;
+          element = element.parentElement
+        ) {
+          if (element.hasAttribute('data-drupal-selector')) {
+            targets.push(element);
+          }
+        }
+      }
+      focusTargets.set(this, targets);
+    }
 
     const logError = (error) =>
       // eslint-disable-next-line no-console
@@ -1911,32 +1908,10 @@
         // exist anymore.
         .then(() => {
           if (!focusChanged && (this.isResponseCurrent?.() ?? true)) {
-            let target = false;
-            if (this.element) {
-              if (
-                Drupal.ajax.elementData.get(this.element, 'refocus-blur') &&
-                this.preCommandsFocusedElementSelector
-              ) {
-                target = document.querySelector(
-                  `[data-drupal-selector="${CSS.escape(this.preCommandsFocusedElementSelector)}"]`,
-                );
-              }
-              if (
-                !target &&
-                !Drupal.ajax.elementData.get(this.element, 'disable-refocus')
-              ) {
-                for (let n = 0; !target && n < elementParents.length; n += 1) {
-                  target = document.querySelector(
-                    `[data-drupal-selector="${CSS.escape(
-                      elementParents[n].getAttribute('data-drupal-selector'),
-                    )}"]`,
-                  );
-                }
-              }
-            }
-            if (target) {
-              target.focus();
-            }
+            focusTargets
+              .get(this)
+              ?.find((element) => element?.isConnected)
+              ?.focus();
           }
           // Reattach behaviors, if they were detached in beforeSerialize(). The
           // attachBehaviors() called on the new content from processing the
@@ -1951,6 +1926,7 @@
           this.settings = null;
         })
         .catch(logError)
+        .finally(() => focusTargets.delete(this))
     );
   };
 
@@ -2012,6 +1988,9 @@
     }
     return [...document.querySelectorAll(selector)];
   }
+
+  // Follow focus candidates only through replacements of their own markup.
+  const focusTargets = new WeakMap();
 
   const insertMethods = {
     html: (target, nodes) => target.replaceChildren(...nodes),
@@ -2277,7 +2256,29 @@
         ) {
           destination = target.tBodies[0] ?? target;
         }
+        const candidates = focusTargets.get(ajax);
+        const replaced = candidates?.map(
+          (element) => element && destination.contains(element),
+        );
         insertMethods[method](destination, children);
+        replaced?.forEach((wasInDestination, candidate) => {
+          const element = candidates[candidate];
+          if (!wasInDestination || element.isConnected) {
+            return;
+          }
+          const selector = element.getAttribute('data-drupal-selector');
+          if (selector === null) {
+            return;
+          }
+          const match = `[data-drupal-selector="${CSS.escape(selector)}"]`;
+          const matches = children
+            .filter((child) => child.nodeType === Node.ELEMENT_NODE)
+            .flatMap((child) => [
+              ...(child.matches(match) ? [child] : []),
+              ...child.querySelectorAll(match),
+            ]);
+          candidates[candidate] = matches.length === 1 ? matches[0] : null;
+        });
       });
       const elements = nodes.filter(
         (node) => node.nodeType === Node.ELEMENT_NODE,
