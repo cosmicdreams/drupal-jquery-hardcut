@@ -300,20 +300,21 @@ class OffCanvasTest extends OffCanvasTestBase {
     // The previously open tray must stay interactive while the new open waits.
     $session->executeScript(<<<'JS'
       const tray = document.getElementById('drupal-off-canvas');
+      const wrapper = tray.parentElement;
       Drupal.behaviors.trayProbe = {
         attach(context) {
-          if (context === tray) {
+          if (context === wrapper) {
             tray.dataset.probeAttached = '';
           }
         },
         detach(context, settings, trigger) {
-          if (context === tray && trigger === 'unload') {
+          if (context === wrapper && trigger === 'unload') {
             delete tray.dataset.probeAttached;
           }
         },
       };
-      Drupal.attachBehaviors(tray);
-      tray.addEventListener('htmx:drupal:unload', () => {
+      Drupal.attachBehaviors(wrapper);
+      wrapper.addEventListener('htmx:drupal:unload', () => {
         Drupal.dialog.beginOpenRequest('#drupal-off-canvas');
         window.supersededOnUnload = true;
       }, { once: true });

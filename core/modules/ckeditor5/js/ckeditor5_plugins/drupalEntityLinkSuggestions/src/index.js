@@ -121,7 +121,10 @@ class DrupalEntityLinkSuggestions extends Plugin {
           this.autocomplete?.close();
           return;
         }
-        this.autocomplete ??= initializeAutocomplete(
+        if (this.autocomplete) {
+          return;
+        }
+        this.autocomplete = initializeAutocomplete(
           linkFormView.urlInputView.fieldView.element,
           {
             // @see \Drupal\ckeditor5\Plugin\CKEditor5Plugin\EntityLinkSuggestions::getDynamicPluginConfig()

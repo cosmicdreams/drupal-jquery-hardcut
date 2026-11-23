@@ -2,6 +2,11 @@
  * Renders an entity title and its optional description.
  *
  * The suggestion endpoint provides HTML sanitized for display.
+ *
+ * @param {HTMLElement} option
+ *   The option to populate.
+ * @param {object} item
+ *   The entity suggestion.
  */
 function renderOption(option, item) {
   option.classList.add('entity-link-suggestions-result-line');

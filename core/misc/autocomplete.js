@@ -26,6 +26,15 @@
 
   /**
    * Attaches a combobox to an input using a Drupal suggestion endpoint.
+   *
+   * @param {HTMLInputElement} input
+   *   The input that receives the suggestions.
+   * @param {string} url
+   *   The suggestion endpoint.
+   * @param {object} options
+   *   Query, rendering, and selection options for the input.
+   * @return {object}
+   *   The combobox lifecycle controls.
    */
   Drupal.autocomplete = (input, url, options = {}) => {
     const {
@@ -44,10 +53,11 @@
     const supportsPopover = typeof list.showPopover === 'function';
     const listeners = new AbortController();
     const { signal } = listeners;
+    nextId += 1;
     const attributes = {
       role: 'combobox',
       'aria-autocomplete': 'list',
-      'aria-controls': `drupal-autocomplete-${++nextId}`,
+      'aria-controls': `drupal-autocomplete-${nextId}`,
       'aria-expanded': 'false',
       autocomplete: 'off',
     };
@@ -66,6 +76,7 @@
     list.id = attributes['aria-controls'];
     list.classList.add('autocomplete-list', ...classes);
     list.setAttribute('role', 'listbox');
+    list.tabIndex = -1;
     const label = input.labels?.[0]?.textContent.trim();
     list.setAttribute('aria-label', label || Drupal.t('Suggestions'));
     list.hidden = true;
