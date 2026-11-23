@@ -268,7 +268,6 @@ class JqueryFreePagesTest extends WebDriverTestBase {
         const paths = [
           ['library:jquery', /\/assets\/vendor\/jquery\//],
           ['library:jquery-ui-autocomplete', /\/jquery\.ui\/.*\/autocomplete(?:-min)?\.js$/],
-          ['library:jquery-ui-dialog', /\/jquery\.ui\/.*\/dialog(?:-min)?\.js$/],
           ['library:jquery-ui-js', /\/assets\/vendor\/jquery\.ui\/.*\.js$/],
           ['library:jquery-ui-css', /\/(assets\/vendor|css\/components)\/jquery\.ui\/.*\.css$/],
           ['library:jquery-position', /\/misc\/position\.js$/],

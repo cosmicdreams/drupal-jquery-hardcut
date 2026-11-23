@@ -26,6 +26,15 @@
     return /^\d+(\.\d+)?$/.test(value) ? `${value}px` : value;
   }
 
+  function isPercentage(value) {
+    return /^\d+(\.\d+)?%$/.test(value);
+  }
+
+  function availableHeight(percentage) {
+    const fraction = parseFloat(percentage) / 100;
+    return `calc(${percentage} - ${fraction} * var(--drupal-dialog-displaced-height))`;
+  }
+
   /**
    * Creates or retrieves the dialog associated with the content element.
    *
@@ -58,12 +67,16 @@
     let scrollTarget;
     let closing = false;
     let title;
+    let dialogClasses = [];
 
+    // Autocomplete looks for the closest stacking context during attachment.
+    element.className = 'drupal-dialog ui-front';
     titlebar.className = 'drupal-dialog-titlebar';
     closeButton.className = 'drupal-dialog-titlebar-close';
     closeButton.type = 'button';
     closeButton.textContent = Drupal.t('Close');
     closeButton.title = closeButton.textContent;
+    closeButton.setAttribute('aria-label', closeButton.textContent);
     titlebar.append(closeButton);
     pane.className = 'drupal-dialog-buttonpane';
     buttons.className = 'drupal-dialog-buttonset form-actions';
@@ -124,12 +137,27 @@
         element.setAttribute('aria-label', Drupal.t('Dialog'));
       }
       title.hidden = !title.textContent;
+
+      const description = content.getAttribute('aria-describedby');
+      if (description) {
+        element.setAttribute('aria-describedby', description);
+      } else if (
+        content.textContent.trim() &&
+        !content.querySelector('[aria-describedby]')
+      ) {
+        // Use the content as the description when it has no description markup.
+        content.id = content.id || `${title.id}-description`;
+        element.setAttribute('aria-describedby', content.id);
+      } else {
+        element.removeAttribute('aria-describedby');
+      }
+
       closeButton.hidden = settings.closeButton === false;
-      element.className = ['drupal-dialog', settings.classes?.['drupal-dialog']]
-        .filter(Boolean)
-        .join(' ');
-      // Autocomplete looks for the closest stacking context for its menu.
-      element.classList.add('ui-front');
+      element.classList.remove(...dialogClasses);
+      dialogClasses = (settings.classes?.['drupal-dialog'] || '')
+        .split(/\s+/)
+        .filter(Boolean);
+      element.classList.add('drupal-dialog', 'ui-front', ...dialogClasses);
       element.classList.toggle(
         'drupal-dialog--viewport-centered',
         settings.autoResize === false || settings.autoResize === 'false',
@@ -148,6 +176,20 @@
         element.style[dimension] = settings[dimension]
           ? cssLength(settings[dimension])
           : '';
+      }
+      for (const dimension of ['minHeight', 'maxHeight']) {
+        if (isPercentage(settings[dimension])) {
+          element.style[dimension] = availableHeight(settings[dimension]);
+        }
+      }
+      if (isPercentage(settings.height)) {
+        // Let short content size the dialog and cap taller content.
+        element.style.height = '';
+        const limit = availableHeight(settings.height);
+        const maxHeight =
+          element.style.maxHeight || 'var(--drupal-dialog-viewport-max-height)';
+        element.style.maxHeight =
+          maxHeight === 'none' ? limit : `min(${limit}, ${maxHeight})`;
       }
       if (!element.open || Object.hasOwn(options, 'buttons')) {
         renderButtons();
@@ -211,12 +253,13 @@
         element.remove();
       }
       // An Ajax command can disable or replace the original trigger.
-      if (opener?.isConnected && isFocusable(opener)) {
-        if (document.activeElement === document.body) {
-          opener.focus({ preventScroll: true });
-        }
-      } else if (openerContainer) {
-        tabbable(openerContainer)[0]?.focus({ preventScroll: true });
+      const focused = document.activeElement;
+      if (!focused || !isFocusable(focused)) {
+        const target =
+          opener?.isConnected && isFocusable(opener)
+            ? opener
+            : openerContainer && tabbable(openerContainer)[0];
+        target?.focus({ preventScroll: true });
       }
       closing = false;
     }

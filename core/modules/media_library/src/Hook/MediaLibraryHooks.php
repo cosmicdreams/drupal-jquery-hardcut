@@ -273,7 +273,7 @@ class MediaLibraryHooks {
     // prevents the "Apply filters" submit button from being moved into the
     // dialog's button area.
     // @see \Drupal\Core\Render\Element\Actions::processActions
-    // @see Drupal.behaviors.dialog.prepareDialogButtons
+    // @see core/misc/dialog/dialog.ajax.js
     // @todo Remove this after
     //   https://www.drupal.org/project/drupal/issues/3089751 is fixed.
     if (($key = array_search('form-actions', $form['actions']['#attributes']['class'])) !== FALSE) {

@@ -264,6 +264,57 @@ class DialogTest extends WebDriverTestBase {
   }
 
   /**
+   * Tests that percentage heights cap the dialog's natural height.
+   */
+  public function testPercentageHeight(): void {
+    $this->drupalGet('ajax-test/dialog');
+    $this->clickLink('Link 1 (modal)');
+    $dialog = $this->assertSession()->waitForElementVisible('css', 'dialog[open]');
+    $this->assertNotNull($dialog);
+    $dialog->pressButton('Close');
+
+    $session = $this->getSession();
+    $session->executeScript(<<<'JS'
+      const toolbar = document.createElement('div');
+      toolbar.dataset.offsetTop = '80';
+      document.body.append(toolbar);
+      Drupal.displace();
+      const content = document.createElement('div');
+      content.textContent = 'Short content';
+      Drupal.dialog(content, { height: '75%', removeOnClose: true }).showModal();
+      JS);
+    $short_height = $session->evaluateScript('document.querySelector("dialog:modal").offsetHeight');
+    $this->assertGreaterThan(0, $short_height);
+    $limit = $session->evaluateScript('(document.documentElement.clientHeight - Drupal.displace.offsets.top) * 0.75');
+    $this->assertLessThan($limit, $short_height);
+
+    $session->executeScript(<<<'JS'
+      const tallBlock = document.createElement('div');
+      tallBlock.style.height = '200vh';
+      document.querySelector('dialog:modal .drupal-dialog-content').append(tallBlock);
+      JS);
+    $this->assertEqualsWithDelta($limit, $session->evaluateScript('document.querySelector("dialog:modal").offsetHeight'), 1);
+    $this->assertJsCondition(<<<'JS'
+      (() => {
+        const content = document.querySelector('dialog:modal .drupal-dialog-content');
+        return content.scrollHeight > content.clientHeight;
+      })()
+      JS);
+
+    $session->executeScript(<<<'JS'
+      const content = document.querySelector('dialog:modal .drupal-dialog-content');
+      const dialog = Drupal.dialog.get(content);
+      dialog.element.classList.add('dialog-consumer-state');
+      dialog.update({ maxHeight: '50%' });
+      JS);
+    $this->assertEqualsWithDelta($limit * 2 / 3, $session->evaluateScript('document.querySelector("dialog:modal").offsetHeight'), 1);
+    $this->assertJsCondition('document.querySelector("dialog:modal").classList.contains("dialog-consumer-state")');
+
+    $session->executeScript('document.querySelector("dialog:modal .drupal-dialog-content").lastElementChild.remove()');
+    $this->assertSame($short_height, $session->evaluateScript('document.querySelector("dialog:modal").offsetHeight'));
+  }
+
+  /**
    * Tests native modal naming, focus containment, and keyboard dismissal.
    */
   public function testNativeModalFocus(): void {

@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Drupal\Tests\system\FunctionalJavascript;
 
+use Drupal\FunctionalJavascriptTests\DrupalSelenium2Driver;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\Attributes\Group;
 use PHPUnit\Framework\Attributes\RunTestsInSeparateProcesses;
@@ -112,6 +113,48 @@ class OffCanvasTest extends OffCanvasTestBase {
     $page->clickLink('Off_canvas link!');
     $this->waitForOffCanvasToOpen();
     $web_assert->elementTextContains('css', '#drupal-off-canvas-wrapper', 'Thing 2 says hello');
+  }
+
+  /**
+   * Tests keyboard focus wrapping in the non-modal off-canvas tray.
+   */
+  public function testFocusWrap(): void {
+    $this->drupalGet('/off-canvas-test-links');
+    $this->clickLink('Display more links!');
+    $this->waitForOffCanvasToOpen();
+    $this->assertJsCondition('document.querySelector("dialog#drupal-off-canvas-wrapper[open]:not(:modal)") !== null');
+
+    $driver = $this->getSession()->getDriver();
+    $this->assertInstanceOf(DrupalSelenium2Driver::class, $driver);
+    $webdriver = $driver->getWebDriverSession();
+    $keyboard = ['type' => 'key', 'id' => 'keyboard'];
+
+    $this->getSession()->executeScript('document.querySelector("#drupal-off-canvas-wrapper .drupal-dialog-resize").focus()');
+    $this->assertJsCondition('document.activeElement.matches("#drupal-off-canvas-wrapper .drupal-dialog-resize")');
+    $keyboard['actions'] = [
+      ['type' => 'keyDown', 'value' => "\u{E004}"],
+      ['type' => 'keyUp', 'value' => "\u{E004}"],
+    ];
+    $webdriver->postActions(['actions' => [$keyboard]]);
+    $this->assertJsCondition('document.activeElement.matches("#drupal-off-canvas-wrapper .drupal-dialog-titlebar-close")');
+
+    $keyboard['actions'] = [
+      ['type' => 'keyDown', 'value' => "\u{E008}"],
+      ['type' => 'keyDown', 'value' => "\u{E004}"],
+      ['type' => 'keyUp', 'value' => "\u{E004}"],
+      ['type' => 'keyUp', 'value' => "\u{E008}"],
+    ];
+    $webdriver->postActions(['actions' => [$keyboard]]);
+    $this->assertJsCondition('document.activeElement.matches("#drupal-off-canvas-wrapper .drupal-dialog-resize")');
+
+    // Escape closes the tray and returns focus to its trigger.
+    $keyboard['actions'] = [
+      ['type' => 'keyDown', 'value' => "\u{E00C}"],
+      ['type' => 'keyUp', 'value' => "\u{E00C}"],
+    ];
+    $webdriver->postActions(['actions' => [$keyboard]]);
+    $this->waitForOffCanvasToClose();
+    $this->assertJsCondition('document.activeElement.textContent === "Display more links!"');
   }
 
   /**

@@ -62,8 +62,16 @@ class CKEditor5Test extends CKEditor5TestBase {
     $this->drupalGet('node/1/edit');
 
     $page->selectFieldOption('body[0][format]', 'ckeditor5');
-    $this->assertNotEmpty($assert_session->waitForText('Change text format?'));
-    $page->pressButton('Continue');
+    $dialog = $assert_session->waitForElementVisible('css', 'dialog.editor-change-text-format-modal');
+    $this->assertNotNull($dialog);
+    $title = $dialog->find('css', '.drupal-dialog-title');
+    $this->assertSame('Change text format?', $title->getText());
+    $this->assertSame($title->getAttribute('id'), $dialog->getAttribute('aria-labelledby'));
+    $description = $dialog->find('css', '.drupal-dialog-content');
+    $this->assertNotEmpty($description->getAttribute('id'));
+    $this->assertSame($description->getAttribute('id'), $dialog->getAttribute('aria-describedby'));
+    $this->assertStringContainsString('Save your changes before switching the text format to avoid losing data.', $description->getText());
+    $dialog->pressButton('Continue');
     // CKEditor initialization can exceed the normal wait time under CI.
     // Ensure the editor is loaded and has loaded the existing content.
     $this->assertNotEmpty($assert_session->waitForElement('css', '.ck-editor'));

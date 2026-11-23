@@ -33,7 +33,6 @@ class JqueryFreeLibrariesTest extends KernelTestBase {
    */
   private const WIDGETS = [
     'core/assets/vendor/jquery.ui/ui/widgets/autocomplete-min.js' => 'jquery-ui-autocomplete',
-    'core/assets/vendor/jquery.ui/ui/widgets/dialog-min.js' => 'jquery-ui-dialog',
   ];
 
   /**

@@ -125,14 +125,12 @@ class ManageFieldsTest extends WebDriverTestBase {
     // confirm that contains-based search works.
     $filter->setValue('ext');
     $page->waitFor(1, static fn () => !$horse_field_row->isVisible());
-    $page->waitFor(1, static fn () => $carrot_field_row->isVisible());
+    $this->assertNotNull($this->assertSession()->waitForElementVisible('css', '.js-reuse-table tr[data-field-id="field_carrot"]'));
     $this->assertFalse($horse_field_row->isVisible());
     $this->assertTrue($horseradish_field_row->isVisible());
-    $this->assertTrue($carrot_field_row->isVisible());
     // Ensure clearing brings all the results back.
     $filter->setValue('');
-    $page->waitFor(1, static fn () => $horse_field_row->isVisible());
-    $this->assertTrue($horse_field_row->isVisible());
+    $this->assertNotNull($this->assertSession()->waitForElementVisible('css', '.js-reuse-table tr[data-field-id="field_horse"]'));
     $this->assertTrue($horseradish_field_row->isVisible());
     $this->assertTrue($carrot_field_row->isVisible());
   }

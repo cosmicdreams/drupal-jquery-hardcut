@@ -79,7 +79,7 @@ class TestController {
           'data-dialog-renderer' => 'off_canvas',
           'data-dialog-options' => Json::encode([
             'classes' => [
-              "drupal-dialog" => "ui-corner-all side-1",
+              "drupal-dialog" => "side-1",
             ],
           ]),
         ],
@@ -95,7 +95,7 @@ class TestController {
           'data-dialog-options' => Json::encode([
             'width' => 555,
             'classes' => [
-              "drupal-dialog" => "ui-corner-all side-2",
+              "drupal-dialog" => "side-2",
             ],
           ]),
         ],
@@ -111,7 +111,7 @@ class TestController {
           'data-dialog-options' => Json::encode([
             'width' => 555,
             'classes' => [
-              "drupal-dialog" => "ui-corner-all top-1",
+              "drupal-dialog" => "top-1",
             ],
           ]),
         ],
@@ -128,7 +128,7 @@ class TestController {
           'data-dialog-options' => Json::encode([
             'height' => 421,
             'classes' => [
-              "drupal-dialog" => "ui-corner-all top-2",
+              "drupal-dialog" => "top-2",
             ],
 
           ]),

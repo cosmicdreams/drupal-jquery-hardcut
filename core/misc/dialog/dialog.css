@@ -4,23 +4,28 @@
  */
 
 .drupal-dialog {
+  --drupal-dialog-displaced-height: calc(var(--drupal-displace-offset-top, 0px) + var(--drupal-displace-offset-bottom, 0px));
+  --drupal-dialog-viewport-max-height: calc(95% - 0.95 * var(--drupal-dialog-displaced-height));
+
   position: fixed;
   z-index: 1260;
+  overflow: visible;
   box-sizing: border-box;
-  inset: var(--drupal-displace-offset-top, 0px) var(--drupal-displace-offset-right, 0px) var(--drupal-displace-offset-bottom, 0px) var(--drupal-displace-offset-left, 0px);
   width: 300px;
   max-width: calc(100% - var(--drupal-displace-offset-left, 0px) - var(--drupal-displace-offset-right, 0px) - 1rem);
-  max-height: calc(95% - var(--drupal-displace-offset-top, 0px) - var(--drupal-displace-offset-bottom, 0px));
+  max-height: var(--drupal-dialog-viewport-max-height);
   margin: auto;
   padding: 0;
-  overflow: visible;
   color: #222;
   border: 1px solid #aaa;
   border-radius: 3px;
   background: #fff;
+  inset: var(--drupal-displace-offset-top, 0) var(--drupal-displace-offset-right, 0) var(--drupal-displace-offset-bottom, 0) var(--drupal-displace-offset-left, 0);
 }
 
 .drupal-dialog--viewport-centered {
+  --drupal-dialog-displaced-height: 0px;
+
   inset: 0;
 }
 
@@ -32,7 +37,7 @@
 .drupal-dialog::backdrop {
   overflow: hidden;
   overscroll-behavior: contain;
-  background: rgb(0 0 0 / 50%);
+  background: rgb(0, 0, 0, 0.5);
 }
 
 .drupal-dialog-titlebar {
@@ -52,18 +57,18 @@
 
 .drupal-dialog-titlebar-close {
   position: absolute;
-  inset-block-start: 50%;
-  inset-inline-end: 0.5rem;
+  overflow: hidden;
   width: 1.75rem;
   height: 1.75rem;
   padding: 0;
-  transform: translateY(-50%);
   cursor: pointer;
-  overflow: hidden;
+  transform: translateY(-50%);
   text-indent: -9999px;
   color: inherit;
   border: 1px solid transparent;
   background: transparent;
+  inset-block-start: 50%;
+  inset-inline-end: 0.5rem;
 }
 
 .drupal-dialog-titlebar-close::before {
@@ -75,11 +80,11 @@
 }
 
 .drupal-dialog-content {
+  overflow: auto;
   flex: 1 1 auto;
   min-height: 0;
-  overflow: auto;
-  overscroll-behavior: contain;
   padding: 0.5em 1em;
+  overscroll-behavior: contain;
 }
 
 .drupal-dialog-buttonpane {
