@@ -1065,6 +1065,26 @@ class AjaxTest extends WebDriverTestBase {
     $has_focus_id = $this->getSession()->evaluateScript('document.activeElement.id');
     $this->assertEquals('edit-textfield-2', $has_focus_id);
 
+    // Moving focus elsewhere in the form leaves it outside the replaced group.
+    $textfield1->focus();
+    $textfield1->setValue('Owls hoot');
+    $select->focus();
+    $this->assertSession()->assertWaitOnAjaxRequest();
+    $this->assertSame('edit-select', $this->getSession()->evaluateScript('document.activeElement.id'));
+
+    // Moving focus to a control outside the form leaves it there as well.
+    $textfield1->focus();
+    $textfield1->setValue('Frogs croak');
+    $this->getSession()->executeScript(<<<'JS'
+      const outside = document.createElement('button');
+      outside.id = 'outside-ajax-form';
+      outside.textContent = 'Outside the form';
+      document.querySelector('#edit-textfield').form.after(outside);
+      outside.focus();
+      JS);
+    $this->assertSession()->assertWaitOnAjaxRequest();
+    $this->assertSame('outside-ajax-form', $this->getSession()->evaluateScript('document.activeElement.id'));
+
     // Test textfield with 'change' event listener with refocus-blur set to
     // FALSE.
     $textfield3->focus();

@@ -1868,9 +1868,17 @@
     if (!focusChanged && this.element) {
       const targets = [];
       const active = document.activeElement;
+      // Automatic focus restoration with refocus-blur:
+      // Focus before the response             Focus after the response
+      // Replaced field with a matching field  Restore focus to the replacement
+      // Replaced field with no match          Fall back to the owning submit control
+      // Same form, outside replaced content   Leave focus in place
+      // Outside the submitting form           Leave focus in place
+      // Duplicate selectors in other forms    Match within the replacement only
       if (
         Drupal.ajax.elementData.get(this.element, 'refocus-blur') &&
-        (active === this.element || this.form?.contains(active))
+        active &&
+        active !== document.body
       ) {
         targets.push(active);
       }
@@ -1908,10 +1916,12 @@
         // exist anymore.
         .then(() => {
           if (!focusChanged && (this.isResponseCurrent?.() ?? true)) {
-            focusTargets
+            const target = focusTargets
               .get(this)
-              ?.find((element) => element?.isConnected)
-              ?.focus();
+              ?.find((element) => element?.isConnected);
+            if (target && target !== document.activeElement) {
+              target.focus();
+            }
           }
           // Reattach behaviors, if they were detached in beforeSerialize(). The
           // attachBehaviors() called on the new content from processing the
