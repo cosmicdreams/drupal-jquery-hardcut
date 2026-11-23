@@ -144,7 +144,8 @@
       if (
         !target?.isConnected ||
         latestRequests.get(target) !== request ||
-        !this.element.isConnected
+        !this.element.isConnected ||
+        (this.dialogOrigin && !Drupal.dialog.hasOpenOrigin(this.dialogOrigin))
       ) {
         // Use the common cleanup without changing the current focus.
         const focus = Drupal.ajax.elementData.get(

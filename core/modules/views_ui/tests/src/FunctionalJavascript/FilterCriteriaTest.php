@@ -127,6 +127,11 @@ class FilterCriteriaTest extends WebDriverTestBase {
     $create_new_filter_group->click();
     $assert_session->assertWaitOnAjaxRequest();
 
+    $operators = $page->findAll('css', '.filter-group-operator-row select');
+    $this->assertCount(2, $operators);
+    $operators[1]->selectOption('Or');
+    $this->assertSame('OR', $operators[0]->getValue());
+
     // Validate dragging works correctly and the new group will contain the new
     // filter.
     $dragged = $page->find('css', ".tabledrag-handle");

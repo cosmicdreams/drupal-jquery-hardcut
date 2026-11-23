@@ -374,6 +374,7 @@
           const copy = operator.cloneNode(true);
           copy.removeAttribute('id');
           copy.removeAttribute('name');
+          copy.removeAttribute('data-drupal-selector');
           copy.setAttribute(
             'aria-label',
             Drupal.t('Operator to use on all groups'),
