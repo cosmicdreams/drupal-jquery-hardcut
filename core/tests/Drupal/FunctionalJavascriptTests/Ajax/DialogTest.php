@@ -518,6 +518,30 @@ class DialogTest extends WebDriverTestBase {
     $press("\u{E004}");
     $this->assertJsCondition("document.activeElement !== field && field.value === 'se' && list.hidden");
 
+    // Page through a list that cannot fit all its suggestions at once.
+    $session->executeScript("list.style.maxHeight = '100px'; type('page')");
+    $this->assertJsCondition("pending.has('page')");
+    $session->executeScript(<<<'JS'
+      pending.get('page').respond(...Array.from({ length: 24 }, (_, i) => `Option ${i}`));
+      JS);
+    $this->assertNotNull($assert->waitOnAutocomplete());
+    $press("\u{E00E}");
+    $this->assertJsCondition("list.firstElementChild.id === field.getAttribute('aria-activedescendant')");
+    $press("\u{E00F}");
+    $this->assertJsCondition(<<<'JS'
+      (() => {
+        const option = document.getElementById(field.getAttribute('aria-activedescendant'));
+        return Number(option?.dataset.optionIndex) > 1 &&
+          option !== list.lastElementChild && list.scrollTop > 0;
+      })()
+      JS);
+    $press("\u{E00E}");
+    $this->assertJsCondition("list.firstElementChild.id === field.getAttribute('aria-activedescendant')");
+    $press("\u{E00E}");
+    $this->assertJsCondition("!field.hasAttribute('aria-activedescendant')");
+    $press("\u{E00F}");
+    $this->assertJsCondition("list.firstElementChild.id === field.getAttribute('aria-activedescendant')");
+
     // A popup near the viewport edge must flip and stay on screen.
     $session->executeScript(<<<'JS'
       Object.assign(field.style, { position: 'fixed', bottom: '0', right: '0' });
@@ -553,6 +577,140 @@ class DialogTest extends WebDriverTestBase {
     $assert->elementExists('css', '#drupal-modal')->getParent()->pressButton('Close');
     $session->executeScript("pending.get('slow').respond('Late')");
     $this->assertJsCondition("pending.get('slow').signal.aborted && !field.isConnected && !list.isConnected");
+  }
+
+  /**
+   * Tests that clipping a focused field closes its suggestions.
+   */
+  public function testAutocompleteClipping(): void {
+    $this->container->get('module_installer')->install(['form_test']);
+    $this->drupalLogin($this->drupalCreateUser(['access autocomplete test']));
+    $session = $this->getSession();
+    $assert = $this->assertSession();
+
+    foreach ([FALSE, TRUE] as $modal) {
+      $this->drupalGet($modal ? 'ajax-test/dialog' : 'form-test/autocomplete');
+      if ($modal) {
+        $session->executeScript("Drupal.ajax({ url: Drupal.url('form-test/autocomplete'), dialogType: 'modal' }).execute()");
+        $this->assertNotNull($assert->waitForElementVisible('css', 'dialog:modal [name="autocomplete_1"]'));
+      }
+      $session->executeScript(<<<'JS'
+        window.field = document.querySelector('[name="autocomplete_1"]');
+        window.list = document.getElementById(field.getAttribute('aria-controls'));
+        const wrapper = field.parentElement;
+        window.scroller = document.createElement('div');
+        scroller.style.cssText = 'height: 100px; overflow: auto';
+        wrapper.before(scroller);
+        const spacer = document.createElement('div');
+        spacer.style.height = '300px';
+        scroller.append(wrapper, spacer);
+        field.focus();
+        field.value = 'label';
+        field.dispatchEvent(new Event('input', { bubbles: true }));
+        JS);
+      $this->assertNotNull($assert->waitOnAutocomplete());
+      $session->executeScript(<<<'JS'
+        field.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown', cancelable: true }));
+        window.option = document.getElementById(field.getAttribute('aria-activedescendant'));
+        scroller.scrollTop = 200;
+        JS);
+      $this->assertJsCondition(<<<'JS'
+        document.activeElement === field && list.hidden &&
+          field.getAttribute('aria-expanded') === 'false' &&
+          !field.hasAttribute('aria-activedescendant') &&
+          option?.getAttribute('aria-selected') === 'false'
+        JS);
+      $this->assertJsCondition(<<<'JS'
+        ['Enter', 'Tab'].every((key) =>
+          field.dispatchEvent(new KeyboardEvent('keydown', { key, cancelable: true })) &&
+          field.value === 'label'
+        )
+        JS);
+      $session->executeScript('scroller.scrollTop = 0');
+      $this->assertJsCondition("field.getBoundingClientRect().bottom <= scroller.getBoundingClientRect().bottom && list.hidden");
+    }
+  }
+
+  /**
+   * Tests announcement cancellation when a modal closes with queued results.
+   */
+  public function testAutocompleteCancelsModalAnnouncement(): void {
+    $this->container->get('module_installer')->install(['form_test']);
+    $this->drupalLogin($this->drupalCreateUser(['access autocomplete test']));
+    $this->drupalGet('ajax-test/dialog');
+    $session = $this->getSession();
+    $session->executeScript("Drupal.ajax({ url: Drupal.url('form-test/autocomplete'), dialogType: 'modal' }).execute()");
+    $this->assertNotNull($this->assertSession()->waitForElementVisible('css', 'dialog:modal input[role="combobox"]'));
+    $session->executeScript(<<<'JS'
+      const field = document.querySelector('dialog:modal input[role="combobox"]');
+      const announce = Drupal.announce;
+      Drupal.announce = (message) => {
+        const cancel = announce(message);
+        if (message.includes('result is available')) {
+          // Close after the controller gets the cancellation callback, but
+          // before the queued text reaches the live region.
+          queueMicrotask(() => {
+            announce('Independent announcement');
+            field.closest('dialog').querySelector('.drupal-dialog-close').click();
+          });
+        }
+        return cancel;
+      };
+      field.focus();
+      field.value = 'label';
+      field.dispatchEvent(new Event('input', { bubbles: true }));
+      JS);
+    $this->assertJsCondition(<<<'JS'
+      !document.querySelector('dialog:modal') &&
+        document.querySelector('#drupal-live-announce')?.textContent === 'Independent announcement'
+      JS);
+  }
+
+  /**
+   * Tests teardown when the input or its list is removed without unload.
+   */
+  public function testAutocompleteRemovalWithoutUnload(): void {
+    $this->container->get('module_installer')->install(['form_test']);
+    $this->drupalLogin($this->drupalCreateUser(['access autocomplete test']));
+    $this->drupalGet('form-test/autocomplete');
+    $session = $this->getSession();
+    $session->executeScript(<<<'JS'
+      window.field = document.querySelector('[name="autocomplete_1"]');
+      window.list = document.getElementById(field.getAttribute('aria-controls'));
+      const fetch = window.fetch;
+      window.fetch = (url, options) => {
+        if (url.searchParams?.get('q') === 'pending') {
+          window.requestSignal = options.signal;
+          return new Promise(() => {});
+        }
+        return fetch(url, options);
+      };
+      window.type = (value) => {
+        field.focus();
+        field.value = value;
+        field.dispatchEvent(new Event('input', { bubbles: true }));
+      };
+      type('label');
+      JS);
+    $this->assertNotNull($this->assertSession()->waitOnAutocomplete());
+    $session->executeScript(<<<'JS'
+      const cancelFrame = window.cancelAnimationFrame;
+      window.frameCancelled = false;
+      window.cancelAnimationFrame = (id) => {
+        window.frameCancelled = true;
+        cancelFrame(id);
+      };
+      list.remove();
+      JS);
+    $this->assertJsCondition("frameCancelled && !field.hasAttribute('aria-expanded') && !field.hasAttribute('aria-controls')");
+    $session->executeScript(<<<'JS'
+      Drupal.attachBehaviors(field);
+      window.list = document.getElementById(field.getAttribute('aria-controls'));
+      type('pending');
+      JS);
+    $this->assertJsCondition("window.requestSignal && list.isConnected && field.classList.contains('is-autocompleting')");
+    $session->executeScript('field.remove()');
+    $this->assertJsCondition("requestSignal.aborted && !list.isConnected && !field.classList.contains('is-autocompleting')");
   }
 
   /**

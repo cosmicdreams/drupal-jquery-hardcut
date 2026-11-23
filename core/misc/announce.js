@@ -112,20 +112,24 @@
    *   'polite' or 'assertive'.
    *
    * @return {function}
-   *   The return of the call to debounce.
+   *   Cancels this announcement if it is still queued.
    *
    * @see https://www.w3.org/WAI/PF/aria-practices/#liveprops
    */
+  const flushAnnouncements = debounce(announce, 200);
   Drupal.announce = function (text, priority) {
-    // Save the text and priority into a closure variable. Multiple simultaneous
-    // announcements will be concatenated and read in sequence.
-    announcements.push({
-      text,
-      priority,
-    });
-    // Immediately invoke the function that debounce returns. 200 ms is right at
-    // the cusp where humans notice a pause, so we will wait
-    // at most this much time before the set of queued announcements is read.
-    return debounce(announce, 200)();
+    const message = { text, priority };
+    announcements.push(message);
+    flushAnnouncements();
+
+    return () => {
+      const index = announcements.indexOf(message);
+      if (index !== -1) {
+        announcements.splice(index, 1);
+        if (!announcements.length) {
+          flushAnnouncements.cancel();
+        }
+      }
+    };
   };
 })(Drupal, Drupal.debounce);

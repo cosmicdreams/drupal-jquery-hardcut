@@ -304,7 +304,7 @@ JS);
   }
 
   /**
-   * Waits for the jQuery autocomplete delay duration.
+   * Waits for an autocomplete suggestion to become visible.
    *
    * @see core/misc/autocomplete.js
    */
