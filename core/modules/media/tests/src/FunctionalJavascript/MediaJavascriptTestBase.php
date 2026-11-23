@@ -35,12 +35,9 @@ abstract class MediaJavascriptTestBase extends WebDriverTestBase {
    *   The CSS selector.
    * @param int $timeout
    *   (Optional) Timeout in milliseconds, defaults to 1000.
-   * @param string $message
-   *   (Optional) Message to pass to assertJsCondition().
    */
-  protected function waitUntilVisible(string $selector, int $timeout = 1000, $message = '') {
-    $condition = "jQuery('" . $selector . ":visible').length > 0";
-    $this->assertJsCondition($condition, $timeout, $message);
+  protected function waitUntilVisible(string $selector, int $timeout = 1000) {
+    $this->assertNotNull($this->assertSession()->waitForElementVisible('css', $selector, $timeout));
   }
 
   /**

@@ -111,27 +111,27 @@ class ManageFieldsTest extends WebDriverTestBase {
     $this->assertTrue($carrot_field_row->isVisible());
     // Filter by 'horse' field name.
     $filter->setValue('horse');
-    $session->wait(1000, "jQuery('[data-field-id=\"field_carrot\"]:visible').length == 0");
+    $page->waitFor(1, static fn () => !$carrot_field_row->isVisible());
     $this->assertTrue($horse_field_row->isVisible());
     $this->assertTrue($horseradish_field_row->isVisible());
     $this->assertFalse($carrot_field_row->isVisible());
     // Filter even more so only 'horseradish' is visible.
     $filter->setValue('horserad');
-    $session->wait(1000, "jQuery('[data-field-id=\"field_horse\"]:visible').length == 0");
+    $page->waitFor(1, static fn () => !$horse_field_row->isVisible());
     $this->assertFalse($horse_field_row->isVisible());
     $this->assertTrue($horseradish_field_row->isVisible());
     $this->assertFalse($carrot_field_row->isVisible());
     // Filter by field type but search with 'ext' instead of 'text' to
     // confirm that contains-based search works.
     $filter->setValue('ext');
-    $session->wait(1000, "jQuery('[data-field-id=\"field_horse\"]:visible').length == 0");
-    $session->wait(1000, "jQuery('[data-field-id=\"field_carrot\"]:visible').length == 1");
+    $page->waitFor(1, static fn () => !$horse_field_row->isVisible());
+    $page->waitFor(1, static fn () => $carrot_field_row->isVisible());
     $this->assertFalse($horse_field_row->isVisible());
     $this->assertTrue($horseradish_field_row->isVisible());
     $this->assertTrue($carrot_field_row->isVisible());
     // Ensure clearing brings all the results back.
     $filter->setValue('');
-    $session->wait(1000, "jQuery('[data-field-id=\"field_horse\"]:visible').length == 1");
+    $page->waitFor(1, static fn () => $horse_field_row->isVisible());
     $this->assertTrue($horse_field_row->isVisible());
     $this->assertTrue($horseradish_field_row->isVisible());
     $this->assertTrue($carrot_field_row->isVisible());

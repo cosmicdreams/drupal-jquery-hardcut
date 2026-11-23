@@ -323,7 +323,7 @@ abstract class MediaLibraryTestBase extends WebDriverTestBase {
     $selector = '.js-media-library-add-form-added-media';
 
     // Assert that focus is shifted to the new media items.
-    $this->assertJsCondition('jQuery("' . $selector . '").is(":focus")');
+    $this->assertJsCondition('document.activeElement.matches("' . $selector . '")');
 
     $assert_session = $this->assertSession();
     $assert_session->pageTextMatches('/The media items? ha(s|ve) been created but ha(s|ve) not yet been saved. Fill in any required fields and save to add (it|them) to the media library./');
@@ -345,7 +345,7 @@ abstract class MediaLibraryTestBase extends WebDriverTestBase {
   protected function assertNoMediaAdded() {
     // Assert the focus is shifted to the first tabbable element of the add
     // form, which should be the source field.
-    $this->assertJsCondition('jQuery(tabbable.tabbable(document.getElementById("media-library-add-form-wrapper"))[0]).is(":focus")');
+    $this->assertJsCondition('document.activeElement === tabbable.tabbable(document.getElementById("media-library-add-form-wrapper"))[0]');
 
     $this->assertSession()
       ->elementNotExists('css', '[data-drupal-selector="edit-media-0-fields"]');

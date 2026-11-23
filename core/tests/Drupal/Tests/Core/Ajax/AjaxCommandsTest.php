@@ -19,7 +19,6 @@ use Drupal\Core\Ajax\DispatchEventCommand;
 use Drupal\Core\Ajax\FocusCommand;
 use Drupal\Core\Ajax\HtmlCommand;
 use Drupal\Core\Ajax\InsertCommand;
-use Drupal\Core\Ajax\InvokeCommand;
 use Drupal\Core\Ajax\OpenDialogCommand;
 use Drupal\Core\Ajax\PrependCommand;
 use Drupal\Core\Ajax\RedirectCommand;
@@ -37,7 +36,6 @@ use Drupal\Core\Asset\AttachedAssets;
 use Drupal\Tests\UnitTestCase;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\Attributes\Group;
-use PHPUnit\Framework\Attributes\IgnoreDeprecations;
 
 /**
  * Test coverage for various classes in the \Drupal\Core\Ajax namespace.
@@ -366,26 +364,6 @@ class AjaxCommandsTest extends UnitTestCase {
       'selector' => '#page-title',
       'data' => '<p>New Text!</p>',
       'settings' => ['my-setting' => 'setting'],
-    ];
-
-    $this->assertEquals($expected, $command->render());
-  }
-
-  /**
-   * Tests invoke command.
-   *
-   * @see \Drupal\Core\Ajax\InvokeCommand
-   */
-  #[IgnoreDeprecations]
-  public function testInvokeCommand(): void {
-    $this->expectUserDeprecationMessage('Drupal\Core\Ajax\InvokeCommand is deprecated in drupal:12.0.0 and is removed from drupal:13.0.0. Use a native command for the operation, or define an explicit command in your extension. See https://www.drupal.org/node/CHANGE_RECORD.');
-    $command = new InvokeCommand('#page-title', 'myMethod', ['var1', 'var2']);
-
-    $expected = [
-      'command' => 'invoke',
-      'selector' => '#page-title',
-      'method' => 'myMethod',
-      'args' => ['var1', 'var2'],
     ];
 
     $this->assertEquals($expected, $command->render());

@@ -2605,8 +2605,7 @@ function hook_validation_constraint_alter(array &$definitions) {
  * The individual commands that you can return implement interface
  * \Drupal\Core\Ajax\CommandInterface. Available commands provide the ability
  * to pop up alerts, manipulate text and markup in various ways, redirect
- * to a new URL, and the generic \Drupal\Core\Ajax\InvokeCommand, which
- * invokes an arbitrary jQuery command.
+ * to a new URL, and move keyboard focus.
  *
  * As noted above, status messages are prepended automatically if you use the
  * 'wrapper' method and return HTML markup. This is not the case if you return

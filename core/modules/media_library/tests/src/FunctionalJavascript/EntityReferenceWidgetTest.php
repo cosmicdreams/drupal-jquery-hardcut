@@ -94,9 +94,9 @@ class EntityReferenceWidgetTest extends MediaLibraryTestBase {
     $this->assertFalse($open_button->hasAttribute('data-disabled-focus'));
     $this->assertTrue($open_button->hasAttribute('disabled'));
     // The button should be disabled.
-    $this->assertJsCondition('jQuery("#field_twin_media-media-library-wrapper .js-media-library-open-button").is(":disabled")');
+    $this->assertJsCondition('document.querySelector("#field_twin_media-media-library-wrapper .js-media-library-open-button")?.matches(":disabled")');
     // The button should not have focus.
-    $this->assertJsCondition('jQuery("#field_twin_media-media-library-wrapper .js-media-library-open-button").not(":focus")');
+    $this->assertJsCondition('!document.activeElement.matches("#field_twin_media-media-library-wrapper .js-media-library-open-button")');
   }
 
   /**
@@ -132,7 +132,7 @@ class EntityReferenceWidgetTest extends MediaLibraryTestBase {
     $this->assertTrue($menu->hasLink('Show Type Three media (selected)'));
     // Assert the focus is set to the first tabbable element when a vertical tab
     // is clicked.
-    $this->assertJsCondition('jQuery(tabbable.tabbable(document.getElementById("media-library-content"))[0]).is(":focus")');
+    $this->assertJsCondition('document.activeElement === tabbable.tabbable(document.getElementById("media-library-content"))[0]');
     $assert_session->elementExists('css', '.ui-dialog-titlebar-close')->click();
 
     // Assert that there are no links in the media library view.
@@ -260,7 +260,7 @@ class EntityReferenceWidgetTest extends MediaLibraryTestBase {
     $this->selectMediaItem(0);
     $this->pressInsertSelected('Added one media item.');
     // Assert the focus is set back on the open button of the media field.
-    $this->assertJsCondition('jQuery("#field_twin_media-media-library-wrapper .js-media-library-open-button").is(":focus")');
+    $this->assertJsCondition('document.activeElement.matches("#field_twin_media-media-library-wrapper .js-media-library-open-button")');
 
     // The toggle for weight inputs' visibility should not be available when the
     // field contains a single item.
@@ -273,7 +273,7 @@ class EntityReferenceWidgetTest extends MediaLibraryTestBase {
     $button->press();
     $this->waitForText('Dog has been removed.');
     // Assert the focus is set back on the open button of the media field.
-    $this->assertJsCondition('jQuery("#field_twin_media-media-library-wrapper .js-media-library-open-button").is(":focus")');
+    $this->assertJsCondition('document.activeElement.matches("#field_twin_media-media-library-wrapper .js-media-library-open-button")');
 
     // Assert we can select the same media item twice.
     $this->openMediaLibraryForField('field_twin_media');
@@ -368,7 +368,7 @@ class EntityReferenceWidgetTest extends MediaLibraryTestBase {
     $open_button = $this->assertElementExistsAfterWait('css', '.js-media-library-open-button[name^="field_twin_media"]');
     $this->assertTrue($open_button->hasAttribute('data-disabled-focus'));
     $this->assertTrue($open_button->hasAttribute('disabled'));
-    $this->assertJsCondition('jQuery("#field_twin_media-media-library-wrapper .js-media-library-open-button").is(":disabled")');
+    $this->assertJsCondition('document.querySelector("#field_twin_media-media-library-wrapper .js-media-library-open-button")?.matches(":disabled")');
 
     // Ensure that the selection completed successfully.
     $assert_session->pageTextNotContains('Add or select media');
@@ -383,14 +383,14 @@ class EntityReferenceWidgetTest extends MediaLibraryTestBase {
     $button->press();
     $this->waitForText('Cat has been removed.');
     // Assert the focus is set to the wrapper of the other selected item.
-    $this->assertJsCondition('jQuery("#field_twin_media-media-library-wrapper [data-media-library-item-delta]").is(":focus")');
+    $this->assertJsCondition('document.activeElement.matches("#field_twin_media-media-library-wrapper [data-media-library-item-delta]")');
     $assert_session->elementTextNotContains('css', '#field_twin_media-media-library-wrapper', 'Cat');
     $assert_session->elementTextContains('css', '#field_twin_media-media-library-wrapper', 'Turtle');
     // Assert the open button is no longer disabled.
     $open_button = $assert_session->elementExists('css', '.js-media-library-open-button[name^="field_twin_media"]');
     $this->assertFalse($open_button->hasAttribute('data-disabled-focus'));
     $this->assertFalse($open_button->hasAttribute('disabled'));
-    $this->assertJsCondition('jQuery("#field_twin_media-media-library-wrapper .js-media-library-open-button").is(":not(:disabled)")');
+    $this->assertJsCondition('document.querySelector("#field_twin_media-media-library-wrapper .js-media-library-open-button")?.matches(":not(:disabled)")');
 
     // Open the media library again and select another item.
     $this->openMediaLibraryForField('field_twin_media');
@@ -403,7 +403,7 @@ class EntityReferenceWidgetTest extends MediaLibraryTestBase {
     // Assert the open button is disabled.
     $this->assertTrue($assert_session->elementExists('css', '.js-media-library-open-button[name^="field_twin_media"]')->hasAttribute('data-disabled-focus'));
     $this->assertTrue($assert_session->elementExists('css', '.js-media-library-open-button[name^="field_twin_media"]')->hasAttribute('disabled'));
-    $this->assertJsCondition('jQuery("#field_twin_media-media-library-wrapper .js-media-library-open-button").is(":disabled")');
+    $this->assertJsCondition('document.querySelector("#field_twin_media-media-library-wrapper .js-media-library-open-button")?.matches(":disabled")');
 
     // Assert the selection is cleared when the modal is closed.
     $this->openMediaLibraryForField('field_unlimited_media');
@@ -593,17 +593,13 @@ class EntityReferenceWidgetTest extends MediaLibraryTestBase {
    */
   protected function sortableUpdate($item, $from, $to = NULL): void {
     // See core/modules/media_library/js/media_library.widget.js.
-    $script = <<<JS
-(function ($) {
-    var selection = document.querySelectorAll('.js-media-library-selection');
-    selection.forEach(function (widget) {
-        $(widget).children().each(function (index, child) {
-            $(child).find('.js-media-library-item-weight').val(index);
+    $script = <<<'JS'
+      document.querySelectorAll('.js-media-library-selection').forEach((widget) => {
+        Array.from(widget.children).forEach((child, index) => {
+          child.querySelector('.js-media-library-item-weight').value = index;
         });
-    });
-})(jQuery)
-
-JS;
+      });
+      JS;
 
     $this->getSession()->executeScript($script);
   }

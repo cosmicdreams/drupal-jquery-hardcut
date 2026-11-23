@@ -35,19 +35,6 @@ class PrimaryTabsTest extends WebDriverTestBase {
     $session = $this->getSession();
     $session->resizeWindow(500, 900);
     $this->drupalGet('user/' . $account->id() . '/edit');
-    // Default Admin sticky/states still attach jQuery until slices D/S; prove
-    // nav-tabs.js runs its native listener with zero jQuery event dispatches.
-    $session->executeScript(<<<'JS'
-      window.navTabsDispatchCount = 0;
-      if (typeof window.jQuery === 'function') {
-        const originalDispatch = jQuery.event.dispatch;
-        jQuery.event.dispatch = function (...args) {
-          window.navTabsDispatchCount += 1;
-          return originalDispatch.apply(this, args);
-        };
-      }
-      JS);
-
     $assert = $this->assertSession();
     $tabs_selector = '.tabs--primary';
     $button_selector = "$tabs_selector [data-drupal-nav-tabs-trigger]";
@@ -66,7 +53,6 @@ class PrimaryTabsTest extends WebDriverTestBase {
     $this->pressEnter();
     $this->assertSame('false', $button->getAttribute('aria-expanded'));
     $this->assertJsCondition("document.querySelector('$inactive_selector').getClientRects().length === 0");
-    $this->assertSame(0, $session->evaluateScript('window.navTabsDispatchCount'));
 
     $session->resizeWindow(1024, 900);
     $this->assertNotNull($assert->waitForElementVisible('css', $inactive_selector));

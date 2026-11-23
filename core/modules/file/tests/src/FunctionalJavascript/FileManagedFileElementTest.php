@@ -111,6 +111,21 @@ class FileManagedFileElementTest extends WebDriverTestBase {
   }
 
   /**
+   * Tests automatic upload through the managed file progress event.
+   */
+  public function testManagedFileProgressUpload(): void {
+    $file_system = $this->container->get('file_system');
+    $filename = $file_system->tempnam('temporary://', 'progress-upload') . '.txt';
+    file_put_contents($filename, 'Managed file upload with progress.');
+
+    $this->drupalGet('file/test/0/0/0', ['query' => ['upload_progress' => 1]]);
+    $this->assertJsCondition('Object.values(drupalSettings.ajax).some((settings) => settings.event === "fileUpload")');
+    $this->getSession()->getPage()->attachFileToField('files[file]', $file_system->realpath($filename));
+    $this->assertNotNull($this->assertSession()->waitForLink(basename($filename)));
+    $this->assertGreaterThan(0, $this->getLastFileId());
+  }
+
+  /**
    * Retrieves the fid of the last inserted file.
    */
   protected function getLastFileId(): int {

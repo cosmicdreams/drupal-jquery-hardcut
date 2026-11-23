@@ -25,7 +25,9 @@ exports.command = function drupalCreateRole(
     this.setValue('input[name="label"]', roleName);
 
     this.execute(() => {
-      jQuery('input[name="label"]').trigger('formUpdated');
+      document
+        .querySelector('input[name="label"]')
+        .dispatchEvent(new Event('input', { bubbles: true }));
     });
     // Wait for the machine name to appear so that it can be used later to
     // select the permissions from the permission page.

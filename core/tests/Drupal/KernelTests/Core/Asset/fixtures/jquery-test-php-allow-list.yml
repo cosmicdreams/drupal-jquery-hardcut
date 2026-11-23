@@ -1,13 +1,5 @@
 # Fixture references come from 92e5c3a3047. Remove each entry as its slice converts it.
 # The exact H harness literals and deliberate attachment control expire in Drupal 13.
-- path: core/modules/system/tests/modules/position_shim_test/src/Controller/PositionShimTestController.php
-  removal: D
-  literals:
-    "core/drupal.jquery.position": 1
-- path: core/modules/system/tests/modules/position_shim_test/src/Controller/PositionShimTestPortedJqueryTestsController.php
-  removal: D
-  literals:
-    "core/drupal.jquery.position": 1
 - path: core/tests/Drupal/KernelTests/Core/Asset/AttachedAssetsTest.php
   removal: Z (Drupal 13)
   literals:

@@ -1,7 +1,0 @@
-name: jQuery BC test theme
-type: theme
-base theme: false
-libraries-override:
-  core/jquery:
-    js:
-      assets/vendor/jquery/jquery.min.js: /core/assets/vendor/jquery/jquery.js

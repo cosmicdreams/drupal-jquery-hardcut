@@ -1,51 +1,48 @@
 /**
- * @file media_library.view.js
+ * @file
+ * Adds bulk selection to the media library.
  */
-(($, Drupal) => {
+
+((Drupal, once) => {
   /**
-   * Adds checkbox to select all items in the library.
+   * Adds a checkbox to select all items in each media library view.
    *
    * @type {Drupal~behavior}
-   *
-   * @prop {Drupal~behaviorAttach} attach
-   *   Attaches behavior to select all media items.
    */
   Drupal.behaviors.MediaLibrarySelectAll = {
     attach(context) {
-      const $view = $(
-        once(
-          'media-library-select-all',
-          '.js-media-library-view[data-view-display-id="page"]',
-          context,
-        ),
-      );
-      if ($view.length && $view.find('.js-media-library-item').length) {
-        const $checkbox = $(Drupal.theme('checkbox')).on(
-          'click',
-          ({ currentTarget }) => {
-            // Toggle all checkboxes.
-            const $checkboxes = $(currentTarget)
-              .closest('.js-media-library-view')
-              .find('.js-media-library-item input[type="checkbox"]');
-            $checkboxes
-              .prop('checked', $(currentTarget).prop('checked'))
-              .each((index, input) =>
-                input.dispatchEvent(new Event('change', { bubbles: true })),
-              );
-            // Announce the selection.
-            const announcement = $(currentTarget).prop('checked')
+      once(
+        'media-library-select-all',
+        '.js-media-library-view[data-view-display-id="page"]',
+        context,
+      ).forEach((view) => {
+        const firstItem = view.querySelector('.js-media-library-item');
+        if (!firstItem) {
+          return;
+        }
+        const label = document.createElement('label');
+        label.className = 'media-library-select-all';
+        label.textContent = Drupal.t('Select all media');
+        label.insertAdjacentHTML('afterbegin', Drupal.theme('checkbox'));
+        const checkbox = label.querySelector('input');
+        checkbox.addEventListener('change', () => {
+          const items = view.querySelectorAll(
+            '.js-media-library-item input[type="checkbox"]',
+          );
+          for (const input of items) {
+            input.checked = checkbox.checked;
+            input.dispatchEvent(new Event('change', { bubbles: true }));
+          }
+          Drupal.announce(
+            checkbox.checked
               ? Drupal.t('All @count items selected', {
-                  '@count': $checkboxes.length,
+                  '@count': items.length,
                 })
-              : Drupal.t('Zero items selected');
-            Drupal.announce(announcement);
-          },
-        );
-        const $label = $('<label class="media-library-select-all"></label>');
-        $label[0].textContent = Drupal.t('Select all media');
-        $label.prepend($checkbox);
-        $view.find('.js-media-library-item').first().before($label);
-      }
+              : Drupal.t('Zero items selected'),
+          );
+        });
+        firstItem.before(label);
+      });
     },
   };
-})(jQuery, Drupal);
+})(Drupal, once);

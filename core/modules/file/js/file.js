@@ -279,7 +279,9 @@
           .find('div.ajax-progress-bar')
           .slideDown();
       }, 500);
-      $clickedButton.trigger('fileUpload');
+      this.dispatchEvent(
+        new Event('fileUpload', { bubbles: true, cancelable: true }),
+      );
     },
 
     /**

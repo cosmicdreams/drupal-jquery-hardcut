@@ -52,9 +52,7 @@
 - core/modules/file/js/file.js
 - core/modules/layout_builder/js/layout-builder.js
 - core/modules/media/js/type_form.js
-- core/modules/media_library/js/media_library.click_to_select.js
 - core/modules/media_library/js/media_library.ui.js
-- core/modules/media_library/js/media_library.view.js
 - core/modules/media_library/js/media_library.widget.js
 - core/modules/views/js/base.js
 - core/modules/views_ui/js/ajax.js

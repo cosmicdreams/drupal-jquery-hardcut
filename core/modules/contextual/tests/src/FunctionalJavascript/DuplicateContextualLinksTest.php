@@ -39,17 +39,17 @@ class DuplicateContextualLinksTest extends WebDriverTestBase {
     $contextual_id = '[data-contextual-id^="contextual_test"]';
     foreach (['fresh', 'cached'] as $state) {
       $this->drupalGet('contextual-tests/duplicate-links');
-      $this->assertJsCondition("(typeof jQuery !== 'undefined' && jQuery('[data-contextual-id]:empty').length === 0)");
+      $this->assertJsCondition("!document.querySelector('[data-contextual-id]:empty')");
       // Click each duplicate contextual trigger and verify only that region's
       // links open. If the cached path doesn't isolate duplicates, toggling
       // one opens both.
       foreach (['first', 'second'] as $id) {
         $other = $id === 'first' ? 'second' : 'first';
-        $this->getSession()->executeScript("jQuery('#region-$id $contextual_id .trigger').trigger('click');");
+        $this->getSession()->executeScript("document.querySelector('#region-$id $contextual_id .trigger').click();");
         $this->assertNotNull($this->assertSession()->waitForElementVisible('css', "#region-$id $contextual_id .contextual-links"), "Contextual links in region-$id should open ($state page).");
         $this->assertFalse($this->getSession()->getPage()->find('css', "#region-$other $contextual_id .contextual-links")->isVisible(), "Contextual links in region-$other must NOT open when only region-$id was toggled ($state page).");
         // Close it again for the next iteration.
-        $this->getSession()->executeScript("jQuery('#region-$id $contextual_id .trigger').trigger('click');");
+        $this->getSession()->executeScript("document.querySelector('#region-$id $contextual_id .trigger').click();");
         $this->assertSession()->waitForElementRemoved('css', "#region-$id $contextual_id .contextual.open");
       }
     }

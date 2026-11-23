@@ -65,9 +65,9 @@ class MediaUiJavascriptTest extends MediaJavascriptTestBase {
     $this->drupalGet('admin/structure/media/add');
     $page->fillField('label', $name);
     $machine_name = strtolower($name);
-    $this->assertJsCondition("jQuery('.machine-name-value').html() == '$machine_name'");
+    $this->assertJsCondition("document.querySelector('.machine-name-value')?.textContent === '$machine_name'");
     $page->selectFieldOption('source', 'test');
-    $this->assertJsCondition("jQuery('.form-item-source-configuration-test-config-value').length > 0");
+    $this->assertNotNull($this->assertSession()->waitForElement('css', '.form-item-source-configuration-test-config-value'));
     $page->fillField('description', $description);
     $page->pressButton('Save and manage fields');
     // The wait prevents intermittent test failures.

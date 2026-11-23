@@ -284,7 +284,7 @@ class DialogTest extends WebDriverTestBase {
     $script = <<<SCRIPT
       (function () {
         window.dialogResizeElapsed = false;
-        jQuery(document).trigger('drupalViewportOffsetChange', Drupal.displace.offsets);
+        window.dispatchEvent(new Event('resize'));
         document.querySelector('.ui-dialog button[title="Close"]').click();
         window.setTimeout(function () {
           window.dialogResizeElapsed = true;

@@ -79,11 +79,8 @@ class DisplayTest extends WebDriverTestBase {
 
     $page->find('css', '#views-display-menu-tabs .add')->click();
 
-    // Wait for the animation to complete.
-    $this->getSession()->wait(1000, "jQuery(':animated').length === 0;");
-
-    // Add the display.
-    $page->find('css', '#edit-displays-top-add-display-block')->click();
+    // Add the display once the menu opens.
+    $this->assertSession()->waitForElementVisible('css', '#edit-displays-top-add-display-block')->click();
 
     $element = $page->findById('views-display-menu-tabs')->findLink('Block');
     $this->assertNotEmpty($element);
@@ -189,7 +186,7 @@ class DisplayTest extends WebDriverTestBase {
   protected function toggleContextualTriggerVisibility($selector): void {
     // Hovering over the element itself with should be enough, but does not
     // work. Manually remove the visually-hidden class.
-    $this->getSession()->executeScript("jQuery('{$selector} .contextual .trigger').toggleClass('visually-hidden');");
+    $this->getSession()->executeScript("document.querySelectorAll('{$selector} .contextual .trigger').forEach((trigger) => trigger.classList.toggle('visually-hidden'));");
   }
 
   /**
@@ -214,8 +211,7 @@ class DisplayTest extends WebDriverTestBase {
 
     $page->find('css', '#views-display-menu-tabs .add')->click();
 
-    // Wait for the animation to complete.
-    $this->getSession()->wait(1000, "jQuery(':animated').length === 0;");
+    $this->assertNotNull($this->assertSession()->waitForElementVisible('css', '.add ul input'));
 
     // Look for the input element, always in second spot.
     $elements = $page->findAll('css', '.add ul input');
