@@ -172,16 +172,17 @@
         });
       });
 
+      if (!rows.length) {
+        Drupal.announce(Drupal.t('No search results.'));
+        return;
+      }
       Drupal.announce(
         Drupal.formatPlural(
           rows.length,
-          '1 result is available.',
-          '@count results are available.',
+          '1 result is available. Use the up and down arrow keys to navigate.',
+          '@count results are available. Use the up and down arrow keys to navigate.',
         ),
       );
-      if (!rows.length) {
-        return;
-      }
 
       // Keep the popover in the field's DOM subtree, including inside modals
       // and editor balloons. Without popovers, use a fixed overlay in the
