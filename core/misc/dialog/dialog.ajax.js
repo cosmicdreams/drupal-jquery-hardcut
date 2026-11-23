@@ -4,59 +4,17 @@
  */
 
 (function (Drupal) {
-  const requests = new WeakMap();
-  const openVersions = new WeakMap();
-  const selectorVersions = new Map();
-
-  window.addEventListener('dialog:aftercreate', ({ dialog }) => {
-    openVersions.set(dialog.element, {});
-  });
-
-  document.addEventListener(
-    'drupal:ajax-before-send',
-    ({ detail: { ajax } }) => {
-      const source =
-        ajax.element ||
-        (ajax.elementSettings.dialogType && document.activeElement);
-      const origin = source?.closest?.('dialog[open]');
-      requests.set(ajax, {
-        origin,
-        opened: openVersions.get(origin),
-      });
-    },
-  );
-
-  document.addEventListener('drupal:ajax-complete', ({ detail: { ajax } }) => {
-    requests.delete(ajax);
-    if (!Drupal.ajax.instances.some((instance) => instance?.ajaxing)) {
-      selectorVersions.clear();
-    }
-  });
-
   function acceptsCommand(ajax, selector) {
-    const { origin, opened } = requests.get(ajax) || {};
-    if (
-      origin &&
-      (!origin.isConnected ||
-        !origin.open ||
-        openVersions.get(origin) !== opened)
-    ) {
-      return false;
-    }
-    if (selector && ajax.requestSequence) {
-      if (ajax.requestSequence < (selectorVersions.get(selector) || 0)) {
-        return false;
-      }
-      selectorVersions.set(selector, ajax.requestSequence);
-    }
-    return true;
+    return (
+      Drupal.dialog.hasOpenOrigin(ajax.dialogOrigin) &&
+      (!selector || Drupal.dialog.isLatestOpen(selector, ajax.dialogGeneration))
+    );
   }
 
   function closeFromResponse(ajax, dialog) {
-    const request = requests.get(ajax);
-    if (request?.origin === dialog.element) {
+    if (ajax.dialogOrigin?.element === dialog.element) {
       // Commands later in this same response may open another dialog.
-      request.origin = null;
+      ajax.dialogOrigin = null;
     }
     dialog.close();
   }
@@ -110,7 +68,10 @@
     if (!response.selector) {
       return false;
     }
-    if (!acceptsCommand(ajax, response.selector)) {
+    if (
+      !Drupal.dialog.hasOpenOrigin(ajax.dialogOrigin) ||
+      !Drupal.dialog.claimOpen(response.selector, ajax.dialogGeneration)
+    ) {
       return;
     }
     let content = document.querySelector(response.selector);
@@ -124,6 +85,9 @@
       content.id = response.selector.replace(/^#/, '');
     }
 
+    if (!Drupal.dialog.isLatestOpen(response.selector, ajax.dialogGeneration)) {
+      return;
+    }
     const options = {
       ...response.dialogOptions,
       opener: ajax.element || document.activeElement,
@@ -135,11 +99,17 @@
       options.drupalAutoButtons !== 'false';
     const dialog = Drupal.dialog(content, options);
     ajax.wrapper = ajax.wrapper || content.id;
+    const isCurrent = () =>
+      acceptsCommand(ajax, response.selector) && content.isConnected;
     ajax.commands.insert(
       ajax,
       { ...response, command: 'insert', method: 'html' },
       status,
+      isCurrent,
     );
+    if (!isCurrent()) {
+      return;
+    }
 
     if (options.drupalAutoButtons && !options.explicitButtons) {
       syncButtons(content, dialog);
@@ -155,9 +125,9 @@
       });
     }
     if (options.modal) {
-      dialog.showModal();
+      dialog.showModal(ajax.dialogGeneration);
     } else {
-      dialog.show();
+      dialog.show(ajax.dialogGeneration);
     }
   };
 
@@ -189,7 +159,7 @@
     ajax,
     response,
   ) {
-    if (!acceptsCommand(ajax)) {
+    if (!acceptsCommand(ajax, '#drupal-modal')) {
       return;
     }
     Drupal.ajax({

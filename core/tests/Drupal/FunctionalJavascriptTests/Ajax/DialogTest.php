@@ -298,7 +298,7 @@ class DialogTest extends WebDriverTestBase {
   }
 
   /**
-   * Tests nested autocomplete, details and select controls in dialogs.
+   * Tests nested autocomplete, details, select and tabledrag in dialogs.
    */
   public function testNestedFormWidgets(): void {
     $this->container->get('module_installer')->install(['form_test', 'contextual_test']);
@@ -347,6 +347,14 @@ class DialogTest extends WebDriverTestBase {
         JS);
       $menu->click();
       $this->assertSame('value', $field->getValue());
+
+      $handle = $assert->elementExists('css', '#dialog-order tr:last-child .tabledrag-handle', $dialog);
+      $handle->focus();
+      $handle->keyDown(38);
+      $handle->keyUp(38);
+      $handle->blur();
+      $first_row = $assert->elementExists('css', '#dialog-order tbody tr:first-child', $dialog);
+      $this->assertStringContainsString('Second item', $first_row->getText());
 
       $region = $dialog->find('css', '.contextual-region');
       $session->getDriver()->mouseOver($region->getXpath());

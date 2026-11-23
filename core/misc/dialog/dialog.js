@@ -5,6 +5,10 @@
 
 (function (Drupal, drupalSettings, { isFocusable, tabbable }, bodyScrollLock) {
   const dialogs = new WeakMap();
+  const openSessions = new WeakMap();
+  const latestOpen = new Map();
+  let openGeneration = 0;
+  let pendingOpens = 0;
   let titleId = 0;
   const dimensions = [
     'width',
@@ -33,6 +37,88 @@
   function availableHeight(percentage) {
     const fraction = parseFloat(percentage) / 100;
     return `calc(${percentage} - ${fraction} * var(--drupal-dialog-displaced-height))`;
+  }
+
+  function nextOpenGeneration() {
+    openGeneration += 1;
+    return openGeneration;
+  }
+
+  function targetKey(target) {
+    const content =
+      typeof target === 'string' ? document.querySelector(target) : target;
+    return content?.id ? `#${CSS.escape(content.id)}` : target;
+  }
+
+  function isLatestOpen(target, generation) {
+    return generation >= (latestOpen.get(targetKey(target)) ?? -Infinity);
+  }
+
+  function claimOpen(target, generation) {
+    if (!isLatestOpen(target, generation)) {
+      return false;
+    }
+    latestOpen.set(targetKey(target), generation);
+    return true;
+  }
+
+  function forgetSettledOpens() {
+    // Ajax may have started before the dialog library was loaded.
+    if (!pendingOpens && !Drupal.ajax?.pendingRequests().next().value) {
+      latestOpen.clear();
+    }
+  }
+
+  function requestOrigin(source) {
+    const element = source?.closest?.('dialog[open]');
+    if (openSessions.has(element)) {
+      return { element, generation: openSessions.get(element) };
+    }
+  }
+
+  function hasOpenOrigin(origin) {
+    return (
+      !origin ||
+      (origin.element.isConnected &&
+        origin.element.open &&
+        openSessions.get(origin.element) === origin.generation)
+    );
+  }
+
+  function trackAjaxRequest(ajax) {
+    const { dialogType, dialogRenderer, dialog } = ajax.elementSettings;
+    const source = ajax.element || (dialogType && document.activeElement);
+    ajax.dialogGeneration = nextOpenGeneration();
+    ajax.dialogOrigin = requestOrigin(source);
+    let target;
+    if (
+      dialogRenderer === 'off_canvas' ||
+      dialogRenderer === 'off_canvas_top'
+    ) {
+      target = '#drupal-off-canvas';
+    } else if (dialogType === 'modal') {
+      target = '#drupal-modal';
+    } else if (dialogType === 'dialog' && dialog?.target) {
+      target = `#${CSS.escape(dialog.target.replace(/^#/, ''))}`;
+    }
+    if (target) {
+      claimOpen(target, ajax.dialogGeneration);
+    }
+  }
+
+  function claimAjaxResponse(ajax, response) {
+    if (!hasOpenOrigin(ajax.dialogOrigin)) {
+      return;
+    }
+    // Some requests only identify the target in the response. Claim it
+    // before preceding commands can wait for assets or start another open.
+    Object.values(response || {}).forEach(({ command, selector }) => {
+      if (command === 'openDialog' && selector) {
+        claimOpen(selector, ajax.dialogGeneration);
+      } else if (command === 'openModalDialogWithUrl') {
+        claimOpen('#drupal-modal', ajax.dialogGeneration);
+      }
+    });
   }
 
   /**
@@ -207,7 +293,10 @@
       target.focus({ preventScroll: true });
     }
 
-    function open(modal) {
+    function open(modal, generation) {
+      if (!claimOpen(content, generation)) {
+        return;
+      }
       if (element.open) {
         return;
       }
@@ -215,23 +304,36 @@
       openerContainer = opener?.closest('[data-drupal-ajax-container]');
       settings.modal = modal;
       emit('beforecreate');
+      if (!isLatestOpen(content, generation) || !element.isConnected) {
+        return;
+      }
       update({});
       element.returnValue = '';
+      openSessions.set(element, generation);
+      const observer = new ResizeObserver(() => {
+        if (observer === resizeObserver && element.open) {
+          content.dispatchEvent(
+            new Event('dialogContentResize', { bubbles: true }),
+          );
+        }
+      });
+      resizeObserver = observer;
+      observer.observe(element);
       if (modal) {
-        element.showModal();
         scrollTarget = settings.scrollTarget || content;
         bodyScrollLock.lock(scrollTarget);
+        element.showModal();
       } else {
         element.show();
       }
-      focusInitial();
-      resizeObserver = new ResizeObserver(() => {
-        content.dispatchEvent(
-          new Event('dialogContentResize', { bubbles: true }),
-        );
-      });
-      resizeObserver.observe(element);
-      emit('aftercreate');
+      // The browser moves focus during show(), and focus handlers can close
+      // the dialog before it returns.
+      if (openSessions.get(element) === generation) {
+        focusInitial();
+        if (openSessions.get(element) === generation) {
+          emit('aftercreate');
+        }
+      }
     }
 
     function close(value) {
@@ -239,11 +341,13 @@
         return;
       }
       closing = true;
+      openSessions.delete(element);
       emit('beforeclose');
       if (settings.modal) {
         bodyScrollLock.unlock(scrollTarget);
       }
       resizeObserver.disconnect();
+      resizeObserver = null;
       element.close(value);
       if (settings.removeOnClose) {
         Drupal.detachBehaviors(content, null, 'unload');
@@ -264,6 +368,17 @@
       closing = false;
     }
 
+    function show(modal, generation = nextOpenGeneration()) {
+      // Lifecycle listeners can open the same target before this call returns.
+      pendingOpens += 1;
+      try {
+        open(modal, generation);
+      } finally {
+        pendingOpens -= 1;
+        forgetSettledOpens();
+      }
+    }
+
     const dialog = {
       element,
       get open() {
@@ -272,8 +387,8 @@
       get returnValue() {
         return element.returnValue;
       },
-      show: () => open(false),
-      showModal: () => open(true),
+      show: (generation) => show(false, generation),
+      showModal: (generation) => show(true, generation),
       close,
       update,
       settings,
@@ -326,5 +441,29 @@
     return dialog;
   };
 
-  Drupal.dialog.get = (element) => dialogs.get(element);
+  Object.assign(Drupal.dialog, {
+    get: (element) => dialogs.get(element),
+    claimOpen,
+    isLatestOpen,
+    requestOrigin,
+    hasOpenOrigin,
+    trackAjaxRequest,
+    claimAjaxResponse,
+    beginOpenRequest(target) {
+      pendingOpens += 1;
+      const generation = nextOpenGeneration();
+      claimOpen(target, generation);
+      return generation;
+    },
+    finishOpenRequest() {
+      pendingOpens -= 1;
+      forgetSettledOpens();
+    },
+  });
+  // Adopt requests that started before the dialog controller loaded, in
+  // send order, before taking a token for any new open.
+  for (const ajax of Drupal.ajax?.pendingRequests() || []) {
+    trackAjaxRequest(ajax);
+  }
+  document.addEventListener('drupal:ajax-complete', forgetSettledOpens);
 })(Drupal, drupalSettings, window.tabbable, bodyScrollLock);

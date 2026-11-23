@@ -512,8 +512,7 @@
   // and requests whose default success callback ran.
   const preparedRequests = new WeakSet();
   const receivedRequests = new WeakSet();
-  const startedRequests = new WeakSet();
-  let requestSequence = 0;
+  const startedRequests = new Set();
 
   /**
    * Fired on document before Drupal Ajax calls the beforeSend method.
@@ -544,6 +543,7 @@
       ajax.form.clk = null;
     }
     if (startedRequests.delete(ajax)) {
+      delete ajax.dialogOrigin;
       document.dispatchEvent(
         new CustomEvent('drupal:ajax-complete', {
           detail: { ajax },
@@ -944,6 +944,9 @@
    */
   Drupal.ajax.instances = [];
 
+  // The dialog library can load as part of an in-flight Ajax response.
+  Drupal.ajax.pendingRequests = () => startedRequests.values();
+
   /**
    * List all objects where the associated element is not in the DOM
    *
@@ -1224,10 +1227,9 @@
       },
       beforeSend(xmlhttprequest, options) {
         ajax.ajaxing = true;
-        // Dialog commands may load their handlers after this request starts.
-        ajax.requestSequence = ++requestSequence;
         const wasDisabled = ajax.element?.disabled;
         startedRequests.add(ajax);
+        Drupal.dialog?.trackAjaxRequest(ajax);
         document.dispatchEvent(
           new CustomEvent('drupal:ajax-before-send', {
             detail: { ajax },
@@ -1767,6 +1769,7 @@
     };
     let result;
     try {
+      Drupal.dialog?.claimAjaxResponse(this, response);
       result = this.success(response, status);
     } catch (error) {
       complete();
@@ -2195,8 +2198,12 @@
      *   An optional selector string.
      * @param {object} [response.settings]
      *   An optional array of settings that will be used.
+     * @param {number} [status]
+     *   The XMLHttpRequest status.
+     * @param {function} [isCurrent]
+     *   Whether this insert is still current after detaching behaviors.
      */
-    insert(ajax, response) {
+    insert(ajax, response, status, isCurrent) {
       const selector = response.selector || ajax.wrapper;
       const method = response.method || ajax.method;
       const effect = response.effect || ajax.effect;
@@ -2218,6 +2225,10 @@
         // Retain the original detach context, including the missing-wrapper
         // fallback to document.
         Drupal.detachBehaviors(targets[0], settings);
+      }
+      // Detach behaviors may have opened a newer dialog on this target.
+      if (isCurrent && !isCurrent()) {
+        return;
       }
       targets.forEach((target, index) => {
         const children =

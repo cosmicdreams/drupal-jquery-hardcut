@@ -59,6 +59,27 @@ class AjaxTestController {
     $suggestions = \Drupal::formBuilder()->getForm(FormTestAutocompleteForm::class)['autocomplete_1'];
     $suggestions['#title'] = 'Suggestions';
     $suggestions['#size'] = 20;
+    $table = [
+      '#type' => 'table',
+      '#attributes' => ['id' => 'dialog-order'],
+      '#header' => ['Item', 'Weight'],
+      '#tabledrag' => [
+        ['action' => 'order', 'relationship' => 'sibling', 'group' => 'dialog-weight'],
+      ],
+    ];
+    foreach (['First item', 'Second item'] as $weight => $label) {
+      $table[] = [
+        '#attributes' => ['class' => ['draggable']],
+        'label' => ['#plain_text' => $label],
+        'weight' => [
+          '#type' => 'select',
+          '#name' => 'weight-' . $weight,
+          '#options' => [0 => 0, 1 => 1],
+          '#value' => $weight,
+          '#attributes' => ['class' => ['dialog-weight']],
+        ],
+      ];
+    }
     return [
       '#title' => 'Dialog widgets',
       '#type' => 'container',
@@ -85,6 +106,7 @@ class AjaxTestController {
           '#options' => ['first' => 'First', 'second' => 'Second'],
         ],
         'suggestions' => $suggestions,
+        'table' => $table,
       ],
     ];
   }

@@ -739,6 +739,7 @@ drupal.dialog.off_canvas.htmx:
   dependencies:
     - core/drupal.dialog.off_canvas.base
     - core/drupal.htmx
+    - core/drupal.message
 
 drupal.dialog.off_canvas.base:
   version: VERSION
