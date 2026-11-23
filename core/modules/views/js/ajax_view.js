@@ -111,13 +111,13 @@
     });
 
     if (!view.parentElement?.closest('.view')) {
-      // Attachments have no view DOM ID and refresh their outer view.
-      const links = [
-        ...view.querySelectorAll(
-          '.js-pager__items a[href], th.views-field a[href], .attachment .views-summary a[href]',
-        ),
-      ].filter((link) => link.closest('[class*="js-view-dom-id-"]') === view);
-      once('views-pager', links).forEach((element) => {
+      // As on the initial page, pager and sort links inside an attachment
+      // refresh its outer view. The context keeps separate views independent.
+      once(
+        'views-pager',
+        '.js-pager__items a[href], th.views-field a[href], .attachment .views-summary a[href]',
+        view,
+      ).forEach((element) => {
         const href = new URL(element.href);
         bindRequest({
           ...defaults,
