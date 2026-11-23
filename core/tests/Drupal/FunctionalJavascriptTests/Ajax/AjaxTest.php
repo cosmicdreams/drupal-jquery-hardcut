@@ -1119,6 +1119,58 @@ JS);
   }
 
   /**
+   * Tests restoring focus when an Ajax insert replaces two forms at once.
+   */
+  public function testFocusInSharedReplacement(): void {
+    $this->drupalGet('/ajax_forms_test_get_form');
+    $session = $this->getSession();
+    $session->executeScript(<<<'JS'
+      const region = document.createElement('div');
+      region.id = 'shared-replacement';
+      region.innerHTML = `
+        <form id="first-form">
+          <input id="shared-field--first" data-drupal-selector="shared-field">
+        </form>
+        <form id="second-form">
+          <input id="shared-field--old" data-drupal-selector="shared-field">
+        </form>`;
+      document.body.append(region);
+      const replace = (formId, fieldId, replacement) => {
+        const field = document.getElementById(fieldId);
+        field.dataset.refocusBlur = 'true';
+        field.focus();
+        const ajax = Drupal.ajax({ element: field, url: location.href, event: 'test-focus' });
+        return ajax.success([{
+          command: 'insert',
+          selector: '#shared-replacement',
+          method: 'html',
+          data: `
+            <form id="first-form">
+              <input id="shared-field--first" data-drupal-selector="shared-field">
+            </form>
+            <form id="${formId}">
+              <input name="form_build_id" type="hidden" value="second-build">
+              <div id="shared-field--description">Field description</div>
+              ${replacement}
+            </form>`,
+        }], 'success');
+      };
+      window.replaceSharedForms = replace;
+      replace('second-form', 'shared-field--old',
+        '<input id="shared-field--exact" data-drupal-selector="shared-field">');
+      JS);
+    $this->assertJsCondition('document.activeElement.id === "shared-field--exact"');
+
+    // With a regenerated form ID, match its build ID. The field's generated
+    // selector also changes, so focus must fall back to a focusable control.
+    $session->executeScript(<<<'JS'
+      window.replaceSharedForms('rebuilt-form', 'shared-field--exact',
+        '<input id="shared-field--rebuilt" data-drupal-selector="shared-field--rebuilt">');
+      JS);
+    $this->assertJsCondition('document.activeElement.id === "shared-field--rebuilt"');
+  }
+
+  /**
    * Tests URLs that are also a JS object property are not mistakenly trusted.
    */
   public function testPropertyUrl(): void {

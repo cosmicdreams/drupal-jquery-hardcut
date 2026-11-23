@@ -183,6 +183,7 @@ class ExposedFilterAJAXTest extends WebDriverTestBase {
    * Tests that a delayed refresh cannot overwrite newer filter results.
    */
   public function testOverlappingRefresh(): void {
+    \Drupal::state()->set('views_test_modal.attach_refresh_widget', TRUE);
     $this->drupalGet('admin/content');
     $session = $this->getSession();
     $session->executeScript(<<<'JS'
@@ -190,17 +191,27 @@ class ExposedFilterAJAXTest extends WebDriverTestBase {
       const queue = prototype.commandExecutionQueue;
       const addCss = Drupal.AjaxCommands.prototype.add_css;
       prototype.commandExecutionQueue = function (response, status) {
-        prototype.commandExecutionQueue = queue;
-        this.commands.add_css = (...args) => new Promise((resolve) => {
-          window.finishLoadingRefreshAssets = () => resolve(addCss(...args));
-        });
-        const asset = { command: 'add_css', data: [{ href: 'data:text/css,.views-refresh-test%7Bcolor:inherit%7D' }] };
-        return queue.call(this, [asset, ...Object.values(response)], status);
+        const commands = Object.values(response);
+        if (!window.finishLoadingRefreshAssets) {
+          const originalLibraries = drupalSettings.ajaxPageState.libraries;
+          this.commands.add_css = (...args) => new Promise((resolve) => {
+            window.refreshSettingsMerged = drupalSettings.ajaxPageState.libraries !== originalLibraries;
+            window.finishLoadingRefreshAssets = () => resolve(addCss(...args));
+          });
+          window.oldRefreshHasWidget = commands.some(({ command, data }) =>
+            command === 'add_js' && data.some(({ src }) => src.includes('refresh-widget.js')));
+        }
+        else {
+          prototype.commandExecutionQueue = queue;
+          window.newRefreshHasWidget = commands.some(({ command, data }) =>
+            command === 'add_js' && data.some(({ src }) => src.includes('refresh-widget.js')));
+        }
+        return queue.call(this, response, status);
       };
       document.querySelector('.js-view-dom-id-' + Object.values(drupalSettings.views.ajaxViews)[0].view_dom_id)
         .dispatchEvent(new Event('RefreshView'));
       JS);
-    $this->assertJsCondition('typeof window.finishLoadingRefreshAssets === "function"');
+    $this->assertJsCondition('window.refreshSettingsMerged && window.oldRefreshHasWidget');
     $this->submitForm(['title' => 'Page Two'], 'Filter');
     $this->assertJsCondition('new URL(location.href).searchParams.get("title") === "Page Two"');
     $this->assertJsCondition(<<<'JS'
@@ -209,8 +220,10 @@ class ExposedFilterAJAXTest extends WebDriverTestBase {
         return results.includes('Page Two') && !results.includes('Page One');
       })()
       JS);
+    $this->assertJsCondition('window.newRefreshHasWidget === false');
     $session->executeScript('window.finishLoadingRefreshAssets()');
     $this->assertSession()->assertWaitOnAjaxRequest();
+    $this->assertSession()->elementTextContains('css', 'tbody[data-refresh-widget]', 'Page Two');
     $this->assertSession()->pageTextNotContains('Page One');
     $this->assertSession()->pageTextContains('Page Two');
     $this->assertSession()->addressEquals('admin/content?title=Page%20Two&type=All&status=All');

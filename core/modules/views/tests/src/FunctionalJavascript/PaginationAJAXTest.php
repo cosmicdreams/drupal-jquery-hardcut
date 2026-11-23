@@ -151,6 +151,45 @@ class PaginationAJAXTest extends WebDriverTestBase {
   }
 
   /**
+   * Tests that attachment pager and sort links refresh the outer view.
+   */
+  public function testAttachmentPaginationAndSorting(): void {
+    $this->container->get('theme_installer')->install(['default_admin', 'starterkit_theme']);
+    $this->config('views.view.test_content_ajax')
+      ->set('display.default.display_options.pager.options.items_per_page', 5)
+      ->set('display.attachment_1', [
+        'id' => 'attachment_1',
+        'display_title' => 'Attachment',
+        'display_plugin' => 'attachment',
+        'position' => 3,
+        'display_options' => [
+          'displays' => ['page_1' => 'page_1'],
+          'inherit_pager' => TRUE,
+          'render_pager' => TRUE,
+        ],
+      ])
+      ->save();
+
+    $assert = $this->assertSession();
+    $attachment_selector = '.attachment-before .view-display-id-attachment_1';
+    $outer_rows = '.view-display-id-page_1 > .view-content tbody tr';
+    foreach (['default_admin', 'starterkit_theme'] as $theme) {
+      $this->config('system.theme')->set('default', $theme)->save();
+      $this->drupalGet('test-content-ajax');
+
+      $attachment = $assert->elementExists('css', $attachment_selector);
+      $assert->elementExists('named', ['link', 'Updated'], $attachment)->click();
+      $assert->assertExpectedAjaxRequest(1);
+      $assert->elementTextContains('css', "$outer_rows:first-child", 'Node 1 content');
+
+      $attachment = $assert->elementExists('css', $attachment_selector);
+      $assert->elementExists('css', '.js-pager__items a[href*="page=1"]', $attachment)->click();
+      $assert->assertExpectedAjaxRequest(1);
+      $assert->elementTextContains('css', "$outer_rows:first-child", 'Node 6 content');
+    }
+  }
+
+  /**
    * Tests if pagination via AJAX works for the filter with default value.
    */
   public function testDefaultFilterPagination(): void {

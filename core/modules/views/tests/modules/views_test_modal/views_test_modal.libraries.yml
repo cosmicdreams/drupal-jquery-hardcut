@@ -1,0 +1,8 @@
+refresh_widget:
+  css:
+    component:
+      refresh-widget.css: {}
+  js:
+    refresh-widget.js: {}
+  dependencies:
+    - core/drupal

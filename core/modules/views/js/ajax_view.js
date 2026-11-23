@@ -111,20 +111,13 @@
     });
 
     if (!view.parentElement?.closest('.view')) {
-      // Attachment summaries filter the outer view, even when the attachment
-      // has its own wrapper.
-      const attachmentLinks = [
-        ...view.querySelectorAll('.attachment .views-summary a[href]'),
-      ].filter(
-        (element) =>
-          element
-            .closest('.attachment')
-            .closest('[class*="js-view-dom-id-"]') === view,
-      );
-      once('views-pager', [
-        ...ownElements('.js-pager__items a[href], th.views-field a[href]'),
-        ...attachmentLinks,
-      ]).forEach((element) => {
+      // Attachments have no view DOM ID and refresh their outer view.
+      const links = [
+        ...view.querySelectorAll(
+          '.js-pager__items a[href], th.views-field a[href], .attachment .views-summary a[href]',
+        ),
+      ].filter((link) => link.closest('[class*="js-view-dom-id-"]') === view);
+      once('views-pager', links).forEach((element) => {
         const href = new URL(element.href);
         bindRequest({
           ...defaults,

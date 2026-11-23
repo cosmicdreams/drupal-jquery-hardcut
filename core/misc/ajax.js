@@ -1816,11 +1816,18 @@
       (executionQueue, key) =>
         executionQueue.then(() => {
           const { command } = response[key];
-          // Recheck ownership after any asynchronous command, such as an asset load.
+          // Even a superseded response must apply settings and load assets
+          // (settings, add_css, add_js, including scripts for placeholders).
+          // Recheck freshness after each await before applying page updates:
+          // inserts, removals, changed, restripe, focus, scrollTop, history,
+          // dialog writes and other page effects.
           if (
             command &&
             ajaxCommands[command] &&
-            (this.isResponseCurrent?.() ?? true)
+            (command === 'settings' ||
+              command === 'add_css' ||
+              command === 'add_js' ||
+              (this.isResponseCurrent?.() ?? true))
           ) {
             // When a command returns a promise, the remaining commands will not
             // execute until that promise has been fulfilled. This is typically
@@ -1874,7 +1881,7 @@
       // Replaced field with no match          Fall back to the owning submit control
       // Same form, outside replaced content   Leave focus in place
       // Outside the submitting form           Leave focus in place
-      // Duplicate selectors in other forms    Match within the replacement only
+      // Duplicate selectors in other forms    Match within the field's owning form
       if (
         Drupal.ajax.elementData.get(this.element, 'refocus-blur') &&
         active &&
@@ -2001,6 +2008,48 @@
 
   // Follow focus candidates only through replacements of their own markup.
   const focusTargets = new WeakMap();
+
+  function findReplacementFocusTarget(element, form, children) {
+    const selector = element.getAttribute('data-drupal-selector');
+    if (selector === null) {
+      return;
+    }
+    const roots = children.filter(
+      (child) => child.nodeType === Node.ELEMENT_NODE,
+    );
+    const findAll = (selector) =>
+      roots.flatMap((root) => [
+        ...(root.matches(selector) ? [root] : []),
+        ...root.querySelectorAll(selector),
+      ]);
+    let owner = form;
+    if (form && !form.isConnected) {
+      const buildId = form.elements.namedItem('form_build_id')?.value;
+      owner =
+        (buildId &&
+          findAll(
+            `form:has(input[name="form_build_id"][value="${CSS.escape(buildId)}"])`,
+          )[0]) ||
+        (form.id && findAll(`form[id="${CSS.escape(form.id)}"]`)[0]);
+      if (!owner) {
+        return;
+      }
+    }
+
+    const inOwner = (candidate) => !owner || owner.contains(candidate);
+    const exact = findAll(
+      `[data-drupal-selector="${CSS.escape(selector)}"]`,
+    ).find(inOwner);
+    if (exact || !element.id) {
+      return exact;
+    }
+
+    // Generated IDs can carry a unique suffix into data-drupal-selector.
+    const base = CSS.escape(element.id.split('--')[0]);
+    return findAll(
+      `:is(input, select, textarea, button):is([id="${base}"], [id^="${base}--"])`,
+    ).find((candidate) => inOwner(candidate) && isFocusable(candidate));
+  }
 
   const insertMethods = {
     html: (target, nodes) => target.replaceChildren(...nodes),
@@ -2267,6 +2316,9 @@
           destination = target.tBodies[0] ?? target;
         }
         const candidates = focusTargets.get(ajax);
+        const owners = candidates?.map(
+          (element) => element?.form ?? element?.closest('form'),
+        );
         const replaced = candidates?.map(
           (element) => element && destination.contains(element),
         );
@@ -2276,23 +2328,11 @@
           if (!wasInDestination || element.isConnected) {
             return;
           }
-          const selector = element.getAttribute('data-drupal-selector');
-          if (selector === null) {
-            return;
-          }
-          let match = `[data-drupal-selector="${CSS.escape(selector)}"]`;
-          // An explicitly generated form ID can carry its unique suffix into
-          // data-drupal-selector. Look for the same base ID within this insert.
-          if (element.id) {
-            const base = CSS.escape(element.id.split('--')[0]);
-            match += `, [id="${base}"], [id^="${base}--"]`;
-          }
-          candidates[candidate] = children
-            .filter((child) => child.nodeType === Node.ELEMENT_NODE)
-            .map((child) =>
-              child.matches(match) ? child : child.querySelector(match),
-            )
-            .find(Boolean);
+          candidates[candidate] = findReplacementFocusTarget(
+            element,
+            owners[candidate],
+            children,
+          );
         });
       });
       const elements = nodes.filter(
@@ -2830,9 +2870,7 @@
       return new Promise((resolve, reject) => {
         loadjs.ready(allUniqueBundleIds, {
           success() {
-            if (ajax.isResponseCurrent?.() ?? true) {
-              Drupal.attachBehaviors(parentEl, settings);
-            }
+            Drupal.attachBehaviors(parentEl, settings);
             // All JS files were loaded and new and old behaviors have
             // been attached. Resolve the promise and let the remaining
             // commands execute.
