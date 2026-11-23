@@ -228,14 +228,14 @@
             list.style.visibility = middlewareData.hide.referenceHidden
               ? 'hidden'
               : '';
+            if (direction && active < 0) {
+              activate(direction > 0 ? 0 : rows.length - 1, true);
+            }
           }
         });
       stopPositioning = autoUpdate(input, list, position, {
         animationFrame: true,
       });
-      if (direction) {
-        activate(direction > 0 ? 0 : rows.length - 1, true);
-      }
     }
 
     async function search(direction) {
