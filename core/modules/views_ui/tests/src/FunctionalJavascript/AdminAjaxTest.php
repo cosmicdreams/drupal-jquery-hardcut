@@ -131,8 +131,9 @@ class AdminAjaxTest extends WebDriverTestBase {
    * Tests the heading menu and link balloon in a text area handler.
    */
   public function testAreaEditor(): void {
-    \Drupal::service('module_installer')->install(['ckeditor5']);
+    \Drupal::service('module_installer')->install(['ckeditor5', 'views_ui_test']);
     $this->resetAll();
+    \Drupal::state()->set('views_ui_test.enable_area_editor', TRUE);
     FilterFormat::create([
       'format' => 'area_format',
       'name' => 'Area format',
@@ -164,7 +165,7 @@ class AdminAjaxTest extends WebDriverTestBase {
     $this->assertNotNull($heading);
     $heading->click();
     $editable->click();
-    $assert->elementExists('css', '.ck-toolbar button[data-cke-tooltip-text^="Link"]')->click();
+    $assert->elementExists('xpath', '//button[span[text()="Link"]]')->click();
     $url = $assert->waitForElementVisible('css', 'dialog[open] .ck-balloon-panel_visible input.ck-input-text');
     $this->assertNotNull($url);
     $url->setValue('https://example.com');
