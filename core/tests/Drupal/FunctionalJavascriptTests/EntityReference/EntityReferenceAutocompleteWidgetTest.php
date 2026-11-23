@@ -93,12 +93,12 @@ class EntityReferenceAutocompleteWidgetTest extends WebDriverTestBase {
     $page = $this->getSession()->getPage();
     $assert_session = $this->assertSession();
 
-    $autocomplete_field = $assert_session->waitForElement('css', '[name="' . $field_name . '[0][target_id]"].ui-autocomplete-input');
+    $autocomplete_field = $assert_session->waitForElement('css', '[name="' . $field_name . '[0][target_id]"][role="combobox"]');
     $autocomplete_field->setValue('Test');
     $this->getSession()->getDriver()->keyDown($autocomplete_field->getXpath(), ' ');
     $assert_session->waitOnAutocomplete();
 
-    $results = $page->findAll('css', '.ui-autocomplete li');
+    $results = $page->findAll('css', '.autocomplete-list [role=option]');
 
     $this->assertCount(2, $results);
     $assert_session->pageTextContains('Test page');
@@ -118,7 +118,7 @@ class EntityReferenceAutocompleteWidgetTest extends WebDriverTestBase {
 
     $this->doAutocomplete($field_name);
 
-    $results = $page->findAll('css', '.ui-autocomplete li');
+    $results = $page->findAll('css', '.autocomplete-list [role=option]');
 
     $this->assertCount(1, $results);
     $assert_session->pageTextContains('Test page');
@@ -137,7 +137,7 @@ class EntityReferenceAutocompleteWidgetTest extends WebDriverTestBase {
     $this->drupalGet('node/add/page');
 
     $this->doAutocomplete($field_name);
-    $results = $page->findAll('css', '.ui-autocomplete li');
+    $results = $page->findAll('css', '.autocomplete-list [role=option]');
 
     $this->assertCount(1, $results);
     $assert_session->pageTextContains('Test page');
@@ -164,7 +164,7 @@ class EntityReferenceAutocompleteWidgetTest extends WebDriverTestBase {
     $this->drupalGet('node/add/page');
 
     $this->doAutocomplete($field_name);
-    $this->assertCount(2, $page->findAll('css', '.ui-autocomplete li'));
+    $this->assertCount(2, $page->findAll('css', '.autocomplete-list [role=option]'));
 
     // Open an entity form in a modal and search in its autocomplete field.
     $session = $this->getSession();
@@ -174,11 +174,11 @@ class EntityReferenceAutocompleteWidgetTest extends WebDriverTestBase {
     $input = $modal->findField($field_name . '[0][target_id]');
     $input->setValue('Test');
     $session->getDriver()->keyDown($input->getXpath(), ' ');
-    $this->assertNotNull($assert_session->waitForElementVisible('css', 'dialog[open] .ui-autocomplete li'));
-    $this->assertCount(2, $modal->findAll('css', '.ui-autocomplete li'));
+    $this->assertNotNull($assert_session->waitForElementVisible('css', 'dialog[open] .autocomplete-list [role=option]'));
+    $this->assertCount(2, $modal->findAll('css', '.autocomplete-list [role=option]'));
     $this->assertJsCondition(<<<'JS'
       (() => {
-        const status = document.querySelector('dialog [role="status"][aria-live="assertive"]');
+        const status = document.querySelector('dialog #drupal-live-announce[aria-live="polite"]');
         return status?.closest(':modal') && !status.closest('[inert]') &&
           status.textContent.includes('2 results are available');
       })()
@@ -222,10 +222,10 @@ class EntityReferenceAutocompleteWidgetTest extends WebDriverTestBase {
     $this->assertSession()->waitOnAutocomplete();
 
     // Check the autocomplete results.
-    $results = $page->findAll('css', '.ui-autocomplete li');
+    $results = $page->findAll('css', '.autocomplete-list [role=option]');
     $this->assertCount(1, $results);
-    $this->assertSession()->elementTextNotContains('css', '.ui-autocomplete li', 'dark green');
-    $this->assertSession()->elementTextContains('css', '.ui-autocomplete li', 'dark blue');
+    $this->assertSession()->elementTextNotContains('css', '.autocomplete-list [role=option]', 'dark green');
+    $this->assertSession()->elementTextContains('css', '.autocomplete-list [role=option]', 'dark blue');
   }
 
   /**

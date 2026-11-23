@@ -366,15 +366,15 @@ class DialogTest extends WebDriverTestBase {
       $field = $dialog->findField('Suggestions');
       $field->setValue('label');
       $session->getDriver()->keyDown($field->getXpath(), ' ');
-      $menu = $assert->waitForElementVisible('css', 'dialog[open] .ui-autocomplete li');
+      $menu = $assert->waitForElementVisible('css', 'dialog[open] .autocomplete-list [role=option]');
       $this->assertNotNull($menu);
       $this->assertJsCondition(<<<'JS'
         (() => {
           const input = document.querySelector('dialog[open] input.form-autocomplete');
-          const item = document.querySelector('dialog[open] .ui-autocomplete li');
+          const item = document.querySelector('dialog[open] .autocomplete-list [role=option]');
           const anchor = input.getBoundingClientRect();
           const option = item.getBoundingClientRect();
-          return getComputedStyle(item.parentElement).position === 'absolute' &&
+          return getComputedStyle(item.parentElement).position === 'fixed' &&
             Math.abs(option.left - anchor.left) < 10 &&
             Math.abs(option.top - anchor.bottom) < 10 &&
             item.contains(document.elementFromPoint(

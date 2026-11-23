@@ -1,11 +1,7 @@
 # Remove entries when their resolved closures stop reaching the jQuery family.
 - default_admin/ckeditor5/internal.admin
 - default_admin/ckeditor5/internal.drupal.ckeditor5
-- default_admin/ckeditor5/internal.drupal.ckeditor5.link-entity-suggestions
 - default_admin/contextual/drupal.contextual-links
-- default_admin/core/drupal.autocomplete
-- default_admin/core/drupal.jquery.position
-- default_admin/core/internal.jquery_ui
 - default_admin/core/jquery
 - default_admin/default_admin/media_library
 - default_admin/editor/drupal.editor
@@ -22,11 +18,7 @@
 - default_admin/views_ui/views_ui.listing
 - stark/ckeditor5/internal.admin
 - stark/ckeditor5/internal.drupal.ckeditor5
-- stark/ckeditor5/internal.drupal.ckeditor5.link-entity-suggestions
 - stark/contextual/drupal.contextual-links
-- stark/core/drupal.autocomplete
-- stark/core/drupal.jquery.position
-- stark/core/internal.jquery_ui
 - stark/core/jquery
 - stark/default_admin/media_library
 - stark/editor/drupal.editor
@@ -42,11 +34,7 @@
 - stark/views_ui/views_ui.listing
 - starterkit_theme/ckeditor5/internal.admin
 - starterkit_theme/ckeditor5/internal.drupal.ckeditor5
-- starterkit_theme/ckeditor5/internal.drupal.ckeditor5.link-entity-suggestions
 - starterkit_theme/contextual/drupal.contextual-links
-- starterkit_theme/core/drupal.autocomplete
-- starterkit_theme/core/drupal.jquery.position
-- starterkit_theme/core/internal.jquery_ui
 - starterkit_theme/core/jquery
 - starterkit_theme/default_admin/media_library
 - starterkit_theme/editor/drupal.editor
@@ -62,11 +50,7 @@
 - starterkit_theme/views_ui/views_ui.listing
 - umami/ckeditor5/internal.admin
 - umami/ckeditor5/internal.drupal.ckeditor5
-- umami/ckeditor5/internal.drupal.ckeditor5.link-entity-suggestions
 - umami/contextual/drupal.contextual-links
-- umami/core/drupal.autocomplete
-- umami/core/drupal.jquery.position
-- umami/core/internal.jquery_ui
 - umami/core/jquery
 - umami/default_admin/media_library
 - umami/editor/drupal.editor

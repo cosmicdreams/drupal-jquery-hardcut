@@ -310,7 +310,7 @@ JS);
    */
   public function waitOnAutocomplete(): ?NodeElement {
     // Wait for the autocomplete to be visible.
-    return $this->waitForElementVisible('css', '.ui-autocomplete li');
+    return $this->waitForElementVisible('css', '.autocomplete-list [role=option]');
   }
 
   /**

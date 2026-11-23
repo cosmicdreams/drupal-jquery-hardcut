@@ -15,7 +15,7 @@ use PHPUnit\Framework\Attributes\RunTestsInSeparateProcesses;
 /**
  * Prevents new jQuery dependencies in resolved core library closures.
  *
- * The baseline fixture records reachable libraries and widgets per theme and
+ * The baseline fixture records reachable libraries per theme and
  * library. Empty lists mean none of the tracked dependencies are reachable.
  * To regenerate it, run this test with JQUERY_FREE_REGENERATE=1. Keep the
  * baseline for compatibility work and remove entries from the separate
@@ -29,20 +29,13 @@ class JqueryFreeLibrariesTest extends KernelTestBase {
   use CoreLibraryDiscoveryTrait;
 
   /**
-   * The jQuery UI widgets tracked in the closure map.
-   */
-  private const WIDGETS = [
-    'core/assets/vendor/jquery.ui/ui/widgets/autocomplete-min.js' => 'jquery-ui-autocomplete',
-  ];
-
-  /**
    * Checks the jQuery dependencies against the shrinking allow-list.
    */
   public function testLibraryClosures(): void {
     $map = $this->buildClosureMap();
     $fixture = __DIR__ . '/fixtures/jquery-library-closures.yml';
     if (getenv('JQUERY_FREE_REGENERATE') === '1') {
-      $contents = "# Resolved jQuery libraries and widgets by theme and library.\n";
+      $contents = "# Resolved jQuery libraries by theme and library.\n";
       foreach ($map as $key => $closure) {
         $contents .= "$key: [" . implode(', ', $closure) . "]\n";
       }
@@ -87,7 +80,7 @@ class JqueryFreeLibrariesTest extends KernelTestBase {
     }
 
     $actual = [];
-    foreach ($this->coreLibrariesByTheme() as $theme => $libraries) {
+    foreach (array_keys($this->coreLibrariesByTheme()) as $theme) {
       $discovery = $this->container->get('library.discovery');
       // Expose declarations to the dependency resolver without enabling their
       // extensions. Use production library lookups for other dependencies.
@@ -101,7 +94,7 @@ class JqueryFreeLibrariesTest extends KernelTestBase {
         $resolver = new LibraryDependencyResolver($registry);
         foreach (array_keys($extension_libraries) as $id) {
           $closure = $resolver->getLibrariesWithDependencies(["$extension/$id"]);
-          $matches = self::trackedDependencies($closure, $libraries);
+          $matches = self::trackedDependencies($closure);
           if ($matches) {
             $actual["$path:$id"][$theme] = $matches;
           }
@@ -126,7 +119,7 @@ class JqueryFreeLibrariesTest extends KernelTestBase {
       $resolver = $this->container->get('library.dependency_resolver');
       foreach (array_keys($libraries) as $library) {
         $closure = $resolver->getLibrariesWithDependencies([$library]);
-        $map["$theme/$library"] = self::trackedDependencies($closure, $libraries);
+        $map["$theme/$library"] = self::trackedDependencies($closure);
       }
     }
     ksort($map, SORT_STRING);
@@ -134,26 +127,16 @@ class JqueryFreeLibrariesTest extends KernelTestBase {
   }
 
   /**
-   * Returns the legacy libraries and widgets in a resolved closure.
+   * Returns the legacy libraries in a resolved closure.
    *
    * @param string[] $closure
    *   The resolved library IDs.
-   * @param array $libraries
-   *   Library definitions keyed by ID.
    *
    * @return string[]
-   *   The sorted legacy IDs and widgets.
+   *   The sorted legacy IDs.
    */
-  private static function trackedDependencies(array $closure, array $libraries): array {
+  private static function trackedDependencies(array $closure): array {
     $matches = array_intersect(self::JQUERY_LIBRARIES, $closure);
-    foreach ($closure as $dependency) {
-      foreach ($libraries[$dependency]['js'] ?? [] as $asset) {
-        if (isset(self::WIDGETS[$asset['data']])) {
-          $matches[] = self::WIDGETS[$asset['data']];
-        }
-      }
-    }
-    $matches = array_values(array_unique($matches));
     sort($matches, SORT_STRING);
     return $matches;
   }

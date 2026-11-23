@@ -2903,7 +2903,6 @@ __metadata:
     globals: "npm:^17.12.0"
     htmx.org: "npm:4.0.1"
     jquery: "npm:^4.0.0"
-    jquery-ui: "npm:^1.14.2"
     jsdom: "npm:^30.1.0"
     loadjs: "npm:^4.3.0"
     minimist: "npm:^1.2.8"
@@ -5740,15 +5739,6 @@ __metadata:
     merge-stream: "npm:^2.0.0"
     supports-color: "npm:^8.0.0"
   checksum: 10c0/8c4737ffd03887b3c6768e4cc3ca0269c0336c1e4b1b120943958ddb035ed2a0fc6acab6dc99631720a3720af4e708ff84fb45382ad1e83c27946adf3623969b
-  languageName: node
-  linkType: hard
-
-"jquery-ui@npm:^1.14.2":
-  version: 1.14.2
-  resolution: "jquery-ui@npm:1.14.2"
-  dependencies:
-    jquery: "npm:>=1.12.0 <5.0.0"
-  checksum: 10c0/83b65744c4f4f2e9fa12833feb76c964f9565ef8301ef4e224e93e6c867e10a45d7da3e93bc7bcaec5227a61e09a2a6d1ce0198d9c38de08e4ada3d53a628615
   languageName: node
   linkType: hard
 

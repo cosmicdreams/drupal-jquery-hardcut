@@ -9,17 +9,11 @@
 - path: core/tests/Drupal/KernelTests/Core/Asset/CoreLibraryDiscoveryTrait.php
   removal: Z (Drupal 13)
   literals:
-    "core/drupal.jquery.position": 1
-    "core/internal.jquery_ui": 1
     "core/jquery": 1
 - path: core/tests/Drupal/KernelTests/Core/Asset/InstalledProfileAssetsTest.php
   removal: Z (Drupal 13)
   literals:
     "core/jquery": 1
-- path: core/tests/Drupal/KernelTests/Core/Asset/JqueryFreeLibrariesTest.php
-  removal: Z (Drupal 13)
-  literals:
-    "core/assets/vendor/jquery.ui/ui/widgets/autocomplete-min.js": 1
 - path: core/themes/default_admin/tests/src/Kernel/MediaLibraryJavascriptOrderTest.php
   removal: M
   literals:

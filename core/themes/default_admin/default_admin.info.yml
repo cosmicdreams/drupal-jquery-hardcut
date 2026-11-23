@@ -46,11 +46,6 @@ libraries-override:
       component:
         misc/vertical-tabs.css: false
 
-  core/internal.jquery_ui:
-    css:
-      theme:
-        assets/vendor/jquery.ui/themes/base/theme.css: false
-
   user/drupal.user:
     css:
       component:

@@ -178,6 +178,17 @@
       processTargets.forEach((target) => {
         htmx.trigger(target, 'htmx:drupal:unload');
       });
+      // An unload listener can supersede the guarded swap. The old content
+      // stays in place, so restore its behaviors.
+      if (detail.ctx.swapGuard && !detail.ctx.swapGuard()) {
+        processTargets.forEach((target) => {
+          if (target.isConnected) {
+            htmx.trigger(target, 'htmx:drupal:load');
+          }
+        });
+        return false;
+      }
+      return true;
     },
 
     htmx_after_settle(elt, detail) {

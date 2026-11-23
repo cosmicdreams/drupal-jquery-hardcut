@@ -44,53 +44,41 @@ class JqueryFreePagesTest extends WebDriverTestBase {
       'global:jQuery' => ['Z', 'Z'],
       'library:jquery' => ['Z', 'Z'],
       'library:jquery-bootstrap' => ['B', 'Z'],
-      'library:jquery-ui-css' => ['Z', 'Z'],
     ],
     'field-display' => [
       'global:jQuery' => ['Z', 'Z'],
       'library:jquery' => ['Z', 'Z'],
       'library:jquery-bootstrap' => ['B', 'Z'],
-      'library:jquery-ui-css' => ['Z', 'Z'],
     ],
     'front' => [
       'global:jQuery' => ['Z', 'Z'],
       'library:jquery' => ['Z', 'Z'],
       'library:jquery-bootstrap' => ['B', 'Z'],
-      'library:jquery-ui-css' => ['Z', 'Z'],
     ],
     'modal' => [
       'global:jQuery' => ['Z', 'Z'],
       'library:jquery' => ['Z', 'Z'],
       'library:jquery-bootstrap' => ['B', 'Z'],
-      'library:jquery-ui-css' => ['Z', 'Z'],
     ],
     'node-add' => [
       'global:jQuery' => ['Z', 'Z'],
-      'global:jQuery.ui' => ['C', 'C'],
       'library:jquery' => ['Z', 'Z'],
       'library:jquery-bootstrap' => ['B', 'Z'],
-      'library:jquery-ui-css' => ['Z', 'Z'],
-      'library:jquery-position' => ['C', 'C'],
-      'library:jquery-ui-autocomplete' => ['C', 'C'],
-      'library:jquery-ui-js' => ['C', 'C'],
     ],
     'off-canvas' => [
       'global:jQuery' => ['Z', 'Z'],
       'library:jquery' => ['Z', 'Z'],
       'library:jquery-bootstrap' => ['B', 'Z'],
-      'library:jquery-ui-css' => ['Z', 'Z'],
     ],
     'permissions' => [
       'global:jQuery' => ['Z', 'Z'],
       'library:jquery' => ['Z', 'Z'],
       'library:jquery-bootstrap' => ['B', 'Z'],
-      'library:jquery-ui-css' => ['Z', 'Z'],
     ],
     'vertical-tabs' => [
       'global:jQuery' => ['Z', 'Z'],
       'library:jquery' => ['Z', 'Z'],
       'library:jquery-bootstrap' => ['B', 'Z'],
-      'library:jquery-ui-css' => ['Z', 'Z'],
     ],
   ];
 
@@ -258,19 +246,12 @@ class JqueryFreePagesTest extends WebDriverTestBase {
         if (typeof window.jQuery !== 'undefined') {
           edges.add('global:jQuery');
         }
-        if (window.jQuery?.ui) {
-          edges.add('global:jQuery.ui');
-        }
         if (window.$?.fn?.jquery) {
           edges.add('global:$');
         }
         performance.getEntriesByType('resource').forEach(({ name }) => urls.add(name));
         const paths = [
           ['library:jquery', /\/assets\/vendor\/jquery\//],
-          ['library:jquery-ui-autocomplete', /\/jquery\.ui\/.*\/autocomplete(?:-min)?\.js$/],
-          ['library:jquery-ui-js', /\/assets\/vendor\/jquery\.ui\/.*\.js$/],
-          ['library:jquery-ui-css', /\/(assets\/vendor|css\/components)\/jquery\.ui\/.*\.css$/],
-          ['library:jquery-position', /\/misc\/position\.js$/],
           ['library:jquery-bootstrap', /\/misc\/jquery\.no-conflict\.js$/],
         ];
         urls.forEach((url) => {

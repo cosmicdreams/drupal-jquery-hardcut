@@ -81,10 +81,10 @@ class DefaultValueWidgetTest extends WebDriverTestBase {
     $this->assertSession()->waitOnAutocomplete();
 
     // Check the autocomplete results.
-    $results = $page->findAll('css', '.ui-autocomplete li');
+    $results = $page->findAll('css', '.autocomplete-list [role=option]');
     $this->assertCount(2, $results);
-    $this->assertSession()->elementTextNotContains('css', '.ui-autocomplete li', 'random tag 1');
-    $this->assertSession()->elementTextContains('css', '.ui-autocomplete li', 'green');
+    $this->assertSession()->elementTextNotContains('css', '.autocomplete-list [role=option]', 'random tag 1');
+    $this->assertSession()->elementTextContains('css', '.autocomplete-list [role=option]', 'green');
   }
 
 }

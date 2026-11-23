@@ -26,6 +26,7 @@
 .drupal-dialog--viewport-centered {
   --drupal-dialog-displaced-height: 0px;
 
+  max-width: calc(100% - 1rem);
   inset: 0;
 }
 

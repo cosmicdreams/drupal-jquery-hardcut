@@ -112,12 +112,6 @@ drupal.nav-tabs:
     - core/once
     - core/drupal.debounce
 
-admin.jquery.ui:
-  version: VERSION
-  css:
-    component:
-      css/components/jquery.ui/theme.css: { weight: -1 }
-
 admin.drupal.dialog:
   version: VERSION
   css:
@@ -125,7 +119,6 @@ admin.drupal.dialog:
       css/components/dialog.css: {}
   dependencies:
     - default_admin/accent
-    - default_admin/admin.jquery.ui
 
 admin.tabledrag:
   version: VERSION
@@ -226,11 +219,6 @@ autocomplete:
   css:
     theme:
       css/components/autocomplete-loading.module.css: { }
-  js:
-    js/autocomplete.js: {}
-  dependencies:
-    - core/once
-    - default_admin/admin.jquery.ui
 
 details-focus:
   js:

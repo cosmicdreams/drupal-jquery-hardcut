@@ -128,18 +128,18 @@ class EntityLinkSuggestionsTest extends CKEditor5TestBase {
     $this->assertEmpty($autocomplete_field->getValue(), 'Autocomplete field is empty.');
 
     // Make sure the autocomplete result container is hidden.
-    $autocomplete_container = $assert_session->elementExists('css', '.ck-link-form .entity-link-suggestions-ui-autocomplete');
+    $autocomplete_container = $assert_session->elementExists('css', '.ck-link-form .entity-link-suggestions-autocomplete');
     $this->assertFalse($autocomplete_container->isVisible());
 
     // Trigger a keydown event to activate an autocomplete search.
     $autocomplete_field->setValue('f');
-    $this->assertTrue($this->getSession()->wait(5000, "document.querySelectorAll('.entity-link-suggestions-result-line.ui-menu-item').length > 0"));
+    $this->assertTrue($this->getSession()->wait(5000, "document.querySelectorAll('.entity-link-suggestions-result-line[role=option]').length > 0"));
 
     // Make sure the autocomplete result container is visible.
     $this->assertTrue($autocomplete_container->isVisible());
 
     // Find all the autocomplete results.
-    $results = $page->findAll('css', '.entity-link-suggestions-result-line.ui-menu-item');
+    $results = $page->findAll('css', '.entity-link-suggestions-result-line[role=option]');
     $this->assertCount(2, $results);
     $this->assertSame('Foo', $results[0]->find('css', '.entity-link-suggestions-result-line--title')->getText());
     $this->assertSame('Information about screaming hairy armadillo', $results[1]->find('css', '.entity-link-suggestions-result-line--title')->getText());
@@ -150,7 +150,7 @@ class EntityLinkSuggestionsTest extends CKEditor5TestBase {
     $assert_session->waitForElementRemoved('xpath', '//span[@class="entity-link-suggestions-result-line--title" and text()="Foo"]');
 
     // Find all the autocomplete results.
-    $results = $page->findAll('css', '.entity-link-suggestions-result-line.ui-menu-item');
+    $results = $page->findAll('css', '.entity-link-suggestions-result-line[role=option]');
     $this->assertCount(2, $results);
     $this->assertSame('Foo', $results[0]->find('css', '.entity-link-suggestions-result-line--title')->getText());
     $this->assertSame('Information about screaming hairy armadillo', $results[1]->find('css', '.entity-link-suggestions-result-line--title')->getText());
@@ -177,8 +177,8 @@ class EntityLinkSuggestionsTest extends CKEditor5TestBase {
     $balloon = $this->assertVisibleBalloon('.ck-link-form');
     $autocomplete_field = $balloon->find('css', '.ck-input-text[inputmode=url]');
     $autocomplete_field->setValue('fo');
-    $assert_session->waitForElementVisible('css', '.ck-link-form .entity-link-suggestions-ui-autocomplete');
-    $results = $page->findAll('css', '.entity-link-suggestions-result-line.ui-menu-item');
+    $assert_session->waitForElementVisible('css', '.ck-link-form .entity-link-suggestions-autocomplete');
+    $results = $page->findAll('css', '.entity-link-suggestions-result-line[role=option]');
     $results[1]->click();
     $expected_url = base_path() . 'media/1/edit';
     $this->assertSame($expected_url, $autocomplete_field->getValue());
@@ -206,8 +206,8 @@ class EntityLinkSuggestionsTest extends CKEditor5TestBase {
     $autocomplete_field->setValue('http://example.com');
     $autocomplete_field->click();
     $this->assertSession()->assertWaitOnAjaxRequest();
-    $this->assertSession()->waitForElementVisible('css', '.entity-link-suggestions-result-line.ui-menu-item');
-    $results = $page->findAll('css', '.entity-link-suggestions-result-line.ui-menu-item');
+    $this->assertSession()->waitForElementVisible('css', '.entity-link-suggestions-result-line[role=option]');
+    $results = $page->findAll('css', '.entity-link-suggestions-result-line[role=option]');
     $this->assertCount(1, $results);
     $this->assertSame('http://example.com', $results[0]->find('css', '.entity-link-suggestions-result-line--title')->getText());
     $this->assertSame('No content suggestions found. This URL will be used as is.', $results[0]->find('css', '.entity-link-suggestions-result-line--description')->getText());
@@ -216,11 +216,6 @@ class EntityLinkSuggestionsTest extends CKEditor5TestBase {
     $assert_session->waitForElementRemoved('css', '.entity-link-suggestions-result-line--title');
     $assert_session->waitForElementVisible('css', '.ck-link-form .ck-button-save');
     $link_edit_balloon->pressButton('Update');
-    $this->getSession()->wait(5000, '!document.querySelector(".ck .ui-autocomplete") || document.querySelector(".ck .ui-autocomplete").style.display === "none"');
-    $autocomplete_still_present = $this->getSession()->evaluateScript('!!document.querySelector(".ck .ui-autocomplete")');
-    if ($autocomplete_still_present) {
-      $link_edit_balloon->pressButton('Update');
-    }
     $this->assertTrue($assert_session->waitForElementRemoved('css', '.ck-button-save'));
     // Assert balloon is still visible, but now it's again the link actions one.
     $this->assertVisibleBalloon('.ck-link-toolbar');

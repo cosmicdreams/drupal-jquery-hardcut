@@ -156,8 +156,7 @@
     let title;
     let dialogClasses = [];
 
-    // Autocomplete looks for the closest stacking context during attachment.
-    element.className = 'drupal-dialog ui-front';
+    element.className = 'drupal-dialog';
     titlebar.className = 'drupal-dialog-titlebar';
     closeButton.className = 'drupal-dialog-titlebar-close';
     closeButton.type = 'button';
@@ -244,10 +243,12 @@
       dialogClasses = (settings.classes?.['drupal-dialog'] || '')
         .split(/\s+/)
         .filter(Boolean);
-      element.classList.add('drupal-dialog', 'ui-front', ...dialogClasses);
+      element.classList.add('drupal-dialog', ...dialogClasses);
       element.classList.toggle(
         'drupal-dialog--viewport-centered',
-        settings.autoResize === false || settings.autoResize === 'false',
+        settings.autoResize === false ||
+          settings.autoResize === 'false' ||
+          (settings.modal && !!opener?.closest('#drupal-off-canvas-wrapper')),
       );
       const previousContentClasses = (content.dataset.dialogClasses || '')
         .split(/\s+/)

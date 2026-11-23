@@ -75,10 +75,10 @@
   width: 3.5rem; /* 56px */
   height: 3.5rem;
   margin: -1.75rem;
-  border: var(--input-border-size) solid var(--jui-dropdown-border-color);
+  border: var(--input-border-size) solid var(--autocomplete-border-color);
   border-radius: 3.5rem;
   background: var(--admin-color-bg-raised);
-  box-shadow: 0 0.25rem 0.625rem var(--jui-dropdown-shadow-color);
+  box-shadow: 0 0.25rem 0.625rem var(--autocomplete-shadow-color);
 }
 .ajax-progress__throbber--fullscreen,
 .drupal-dialog .ajax-progress__throbber {

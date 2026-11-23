@@ -255,57 +255,19 @@ loadjs:
   js:
     assets/vendor/loadjs/loadjs.min.js: { minified: true }
 
-# Common files for libraries that still rely on jQuery UI components.
-# @todo Remove when no longer required by drupal.autocomplete.
-internal.jquery_ui:
-  version: VERSION
-  js:
-    # These JavaScript assets previously came from core/jquery.ui, a deprecated
-    # library.
-    # @todo replace with solution in https://drupal.org/node/3076171
-    assets/vendor/jquery.ui/ui/version-min.js: { minified: true }
-    assets/vendor/jquery.ui/ui/data-min.js: { minified: true }
-    assets/vendor/jquery.ui/ui/disable-selection-min.js: { minified: true }
-    assets/vendor/jquery.ui/ui/focusable-min.js: { minified: true }
-    assets/vendor/jquery.ui/ui/jquery-patch-min.js: { minified: true }
-    assets/vendor/jquery.ui/ui/keycode-min.js: { minified: true }
-    assets/vendor/jquery.ui/ui/plugin-min.js: { minified: true }
-    assets/vendor/jquery.ui/ui/scroll-parent-min.js: { minified: true }
-    assets/vendor/jquery.ui/ui/widget-min.js: { minified: true }
-    assets/vendor/jquery.ui/ui/unique-id-min.js: { minified: true }
-    assets/vendor/jquery.ui/ui/labels-min.js: { minified: true }
-  css:
-    component:
-      assets/vendor/jquery.ui/themes/base/core.css: {}
-    theme:
-      assets/vendor/jquery.ui/themes/base/theme.css: {}
-  dependencies:
-    - core/jquery
-
 drupal.autocomplete:
   version: VERSION
   js:
-    # The remaining JavaScript assets previously came from core/jquery.ui, a
-    # deprecated library.
-    # @todo replace with solution in https://drupal.org/node/3076171
-    assets/vendor/jquery.ui/ui/widgets/menu-min.js: { minified: true }
-    assets/vendor/jquery.ui/ui/widgets/autocomplete-min.js: { minified: true }
     misc/autocomplete.js: {}
-  # All CSS assets previously came from core/jquery.ui, a deprecated library.
-  # @todo replace with solution found in https://drupal.org/node/3076171
   css:
     component:
-      assets/vendor/jquery.ui/themes/base/menu.css: {}
-      assets/vendor/jquery.ui/themes/base/autocomplete.css: {}
+      misc/components/autocomplete.css: {}
       misc/components/autocomplete-loading.module.css: {}
   dependencies:
-    - core/jquery
-    - core/internal.jquery_ui
     - core/drupal
-    - core/drupalSettings
-    - core/drupal.ajax
-    - core/drupal.jquery.position
-    - core/tabbable
+    - core/once
+    - core/drupal.announce
+    - core/internal.floating-ui
 
 drupal.batch:
   version: VERSION
@@ -664,16 +626,6 @@ jquery:
     # browser instead of potentially multiple times from different pages.
     assets/vendor/jquery/jquery.min.js: { preprocess: false, minified: true, preserve_override_order: true }
     misc/jquery.no-conflict.js: { preprocess: false, minified: false }
-
-drupal.jquery.position:
-  # This is a modified version of jQuery UI position for that does not require
-  # any jQuery UI assets, only jQuery. It is provided by core for use with
-  # pre-existing libraries that expect the jQuery UI position API.
-  version: VERSION
-  js:
-    misc/position.js: {}
-  dependencies:
-    - core/jquery
 
 normalize:
   remote: https://github.com/necolas/normalize.css

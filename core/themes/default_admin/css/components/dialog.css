@@ -164,11 +164,6 @@
   background: var(--admin-color-bg-surface-nested);
 }
 
-.ui-widget.ui-widget-content {
-  padding: 0;
-  border: 1px solid var(--admin-color-border);
-}
-
 #drupal-modal .sticky-form-actions.form-actions {
   display: none;
 }

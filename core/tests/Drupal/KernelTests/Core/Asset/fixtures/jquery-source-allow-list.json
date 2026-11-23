@@ -4,20 +4,8 @@
       "owner": "Z",
       "references": 1
     },
-    "misc/autocomplete.js": {
-      "owner": "C",
-      "references": 1
-    },
     "misc/jquery.no-conflict.js": {
       "owner": "B",
-      "references": 1
-    },
-    "misc/position.js": {
-      "owner": "D",
-      "references": 1
-    },
-    "modules/ckeditor5/js/build/drupalEntityLinkSuggestions.js": {
-      "owner": "C",
       "references": 1
     },
     "modules/ckeditor5/js/ckeditor5.admin.js": {
@@ -26,10 +14,6 @@
     },
     "modules/ckeditor5/js/ckeditor5.js": {
       "owner": "M",
-      "references": 1
-    },
-    "modules/ckeditor5/js/ckeditor5_plugins/drupalEntityLinkSuggestions/src/autocomplete.js": {
-      "owner": "C",
       "references": 1
     },
     "modules/contextual/js/contextual.js": {
@@ -92,42 +76,12 @@
       "owner": "M",
       "references": 1
     },
-    "themes/default_admin/js/autocomplete.js": {
-      "owner": "C",
-      "references": 1
-    },
     "themes/default_admin/js/media-library.ui.js": {
       "owner": "M",
       "references": 1
     }
   },
   "distribution": {
-    "assets/vendor/jquery.ui/ui/data-min.js": "7bc89710f467ee048c463e942656bd52a4fc5a8e5862156ba3c5db7ae3dbaa28",
-    "assets/vendor/jquery.ui/ui/data.js": "1f0dbd26f38607482376e8622b16fae465edbdaccd69bf826911bb3a57948f13",
-    "assets/vendor/jquery.ui/ui/disable-selection-min.js": "2eb3f40bb886ba92c127e50e5ec306f77ffa9e740c341155487a5e22872bdd2e",
-    "assets/vendor/jquery.ui/ui/disable-selection.js": "fad16893ebe225bff0a3ab626c3657d26e11db92436f12c221b71d7b7c99a9fb",
-    "assets/vendor/jquery.ui/ui/focusable-min.js": "d1917a8ac4f8c67c6f83465612d46ddea44e20602931c23469134b1a5ea83035",
-    "assets/vendor/jquery.ui/ui/focusable.js": "cf7c4fea886038c5275ff706a7dd36233026f7ceb7fde2ac9ef151c91fb36ae5",
-    "assets/vendor/jquery.ui/ui/jquery-patch-min.js": "8b9f0ecb4964782da161e005f33691c06965ec6bffa5d8ccf191e9fd987e2596",
-    "assets/vendor/jquery.ui/ui/jquery-patch.js": "8e80b7a1173d591c9f2d42388db25498ee000b2da9f8bb901c48e35a638d64b0",
-    "assets/vendor/jquery.ui/ui/keycode-min.js": "f6c1c5c64dd0a6f7519bf23cb15eef58d3d6c14320227d941d602d0dca065ff7",
-    "assets/vendor/jquery.ui/ui/keycode.js": "96f967ed2f419923178d79354fcfdc3368dfe0840baf89b35dd3f14f4b93c4ea",
-    "assets/vendor/jquery.ui/ui/labels-min.js": "317ebb9b7062eaa549bd63866c3fd0542eb9d15358dc2803e9e6cb7696dd4c7a",
-    "assets/vendor/jquery.ui/ui/labels.js": "aa057589bdc2195d135dc2f03ae46d6a58416caa815ad67d44f287dcb570a669",
-    "assets/vendor/jquery.ui/ui/plugin-min.js": "df36bd3eaeaa26aabe1340eae4c157fe22e10b9dd53a9977299f36b1d64706ab",
-    "assets/vendor/jquery.ui/ui/plugin.js": "f3e127447a9b12419b6c417bd670986f69146ad83296243faf9de845b712d29e",
-    "assets/vendor/jquery.ui/ui/scroll-parent-min.js": "8ca31c18f0e5747547e7f46c4040f77a40caff8d8487c81a7773cef3562c5066",
-    "assets/vendor/jquery.ui/ui/scroll-parent.js": "800278cc474dab72e36f61e6ecfe6b8a963968615b067f04acc8e347e22f3dc9",
-    "assets/vendor/jquery.ui/ui/unique-id-min.js": "51f875918ba0e366ac7f7b2314530f7b2108f771014a601342977716fdd9ffce",
-    "assets/vendor/jquery.ui/ui/unique-id.js": "b229d94fad68dd92ba588011c35c0d8a86cb8ceea1b8d218a1e25798567baaaa",
-    "assets/vendor/jquery.ui/ui/version-min.js": "6ebe8937bee22c7f7286960f60cf3ea218f63b14b5062980971c24f02ba3abfd",
-    "assets/vendor/jquery.ui/ui/version.js": "36b25d2e6fbd9b3ebb836207885bd3c701803b222b1d2ced4ccbfa44e2f8a451",
-    "assets/vendor/jquery.ui/ui/widget-min.js": "4d1b434b5f202bd2144bdce3de0f6fa0a53923c123b4a7c99bf85e322880424c",
-    "assets/vendor/jquery.ui/ui/widget.js": "d50b39d3a03aed723335188a428bca4a783b211368e8b13ae024fea22cad34f3",
-    "assets/vendor/jquery.ui/ui/widgets/autocomplete-min.js": "74a6c5ad994ace2c431c5bdfe50d5efd1de5409f9143840339f3149cf97b08ac",
-    "assets/vendor/jquery.ui/ui/widgets/autocomplete.js": "afb139fd4ec0c980b0eadd74ab594972c1b9bb7da846e0ad1fe631e3feffc4e0",
-    "assets/vendor/jquery.ui/ui/widgets/menu-min.js": "ac3e4fc5c95a61bb1995545883cacced5d01ce9137e92ef555567912db1255f9",
-    "assets/vendor/jquery.ui/ui/widgets/menu.js": "515a841bde819d41e14adfcf9899c17af0c03485ce40d0c4e13f73459bd1d5c8",
     "assets/vendor/jquery/jquery.js": "f5fb077959ca06faa1dc50761d8bbb836c6c78067932537a2b3fea9e401257c5",
     "assets/vendor/jquery/jquery.min.js": "39a546ea9ad97f8bfaf5d3e0e8f8556adb415e470e59007ada9759dce472adaa"
   },

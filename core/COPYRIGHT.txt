@@ -30,8 +30,6 @@ JavaScript
 
   jQuery - Copyright (c) OpenJS Foundation and other contributors
 
-  jQuery UI - Copyright (c) OpenJS Foundation and other contributors
-
   LoadJS - Copyright (c) 2015 Andres Morey
 
   Sortable - Copyright (c) 2019 All contributors to Sortable

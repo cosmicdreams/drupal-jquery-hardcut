@@ -79,15 +79,10 @@
   --dropbutton-widget-z-index: 100;
 
   /**
-   * jQuery.UI dropdown.
+   * Autocomplete and overlay styling.
    */
-  --jui-dropdown-fg-color: var(--admin-color-gray-800);
-  --jui-dropdown-bg-color: var(--admin-color-bg-raised);
-  /* Fixed white: text on the active item's blue fill (--jui-dropdown--active-bg-color). */
-  --jui-dropdown--active-fg-color: var(--admin-color-white);
-  --jui-dropdown--active-bg-color: var(--admin-color-link);
-  --jui-dropdown-border-color: rgb(216, 217, 224, 0.8); /* Light gray with 0.8 opacity. */
-  --jui-dropdown-shadow-color: rgb(34, 35, 48, 0.1); /* Text color with 0.1 opacity. */
+  --autocomplete-border-color: rgb(216, 217, 224, 0.8); /* Light gray with 0.8 opacity. */
+  --autocomplete-shadow-color: rgb(34, 35, 48, 0.1); /* Text color with 0.1 opacity. */
 
   /**
    * Progress bar.

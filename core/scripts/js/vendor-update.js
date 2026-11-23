@@ -10,7 +10,6 @@
 const path = require('node:path');
 const { copyFile, writeFile, readFile, chmod, mkdir } = require('node:fs').promises;
 const ckeditor5Files = require('./assets/ckeditor5Files');
-const jQueryUIProcess = require('./assets/process/jqueryui');
 const mapProcess = require('./assets/process/map');
 
 const coreFolder = path.resolve(__dirname, '../../');
@@ -129,41 +128,6 @@ const assetsFolder = `${coreFolder}/assets/vendor`;
       files: [
         { from: 'dist/browser/bundle.umd.min.js', to: 'bundle.umd.min.js' },
         { from: 'dist/browser/bundle.umd.min.js.map', to: 'bundle.umd.min.js.map' },
-      ],
-    },
-    {
-      pack: 'jquery-ui',
-      folder: 'jquery.ui',
-      process: {
-        // This will automatically minify the files and update the destination
-        // filename before saving.
-        '.js': jQueryUIProcess,
-      },
-      files: [
-        'themes/base/autocomplete.css',
-        'themes/base/core.css',
-        'themes/base/images/ui-bg_flat_0_aaaaaa_40x100.png',
-        'themes/base/images/ui-icons_444444_256x240.png',
-        'themes/base/images/ui-icons_555555_256x240.png',
-        'themes/base/images/ui-icons_777620_256x240.png',
-        'themes/base/images/ui-icons_777777_256x240.png',
-        'themes/base/images/ui-icons_cc0000_256x240.png',
-        'themes/base/images/ui-icons_ffffff_256x240.png',
-        'themes/base/menu.css',
-        'themes/base/theme.css',
-        'ui/data.js',
-        'ui/disable-selection.js',
-        'ui/focusable.js',
-        'ui/jquery-patch.js',
-        'ui/keycode.js',
-        'ui/labels.js',
-        'ui/plugin.js',
-        'ui/scroll-parent.js',
-        'ui/unique-id.js',
-        'ui/version.js',
-        'ui/widget.js',
-        'ui/widgets/autocomplete.js',
-        'ui/widgets/menu.js',
       ],
     },
     {

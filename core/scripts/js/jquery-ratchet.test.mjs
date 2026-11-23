@@ -93,13 +93,7 @@ test('accepts ordinary local names and properties', () => {
   assert.deepEqual(lint(source), []);
 });
 
-test('checks a wrapped legacy asset and neutral vendor minification', () => {
-  const jqueryUi = 'assets/vendor/jquery.ui/ui/widget-min.js';
-  assert.ok(
-    lintFile(jqueryUi, readFileSync(join(core, jqueryUi))).some(
-      ({ ruleId }) => ruleId === 'drupal-jquery/no-reference',
-    ),
-  );
+test('checks neutral vendor minification', () => {
   for (const path of [
     'assets/vendor/ckeditor5/ckeditor5.umd.js',
     'assets/vendor/floating-ui/floating-ui.dom.umd.min.js',

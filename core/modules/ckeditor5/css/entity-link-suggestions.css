@@ -3,48 +3,31 @@
  * Styles for Entity Link Suggestions in CKEditor 5.
  */
 
-/* Override the default jQuery UI theme and CKEditor defaults */
-.ck-reset_all .entity-link-suggestions-ui-autocomplete {
-  overflow: auto;
-  max-height: calc((100vh - 80px) / 2);
-  &.ck-reset_all-excluded {
-    max-width: 500px;
-    white-space: break-spaces;
+.autocomplete-list.entity-link-suggestions-autocomplete {
+  max-width: min(500px, var(--autocomplete-available-width, 100vw));
+  max-height: min(calc((100vh - 80px) / 2), var(--autocomplete-available-height, 100vh));
+  white-space: break-spaces;
+  font-size: 0.9em;
+
+  & [role="option"] {
+    padding: 5px 7px;
+    border-bottom: 1px solid #bfbfbf;
   }
-}
 
-.entity-link-suggestions-ui-autocomplete.ui-widget {
-  font-size: 0.9em;
-}
+  & [aria-selected="true"] {
+    color: #fff;
+    background: #0075ba;
+  }
 
-.entity-link-suggestions-ui-autocomplete.ui-menu .entity-link-suggestions-result-line-wrapper {
-  margin: 0;
-  padding: 5px 7px;
-}
-
-.entity-link-suggestions-ui-autocomplete.ui-menu .entity-link-suggestions-result-line-wrapper.ui-state-focus,
-.entity-link-suggestions-ui-autocomplete.ui-menu .entity-link-suggestions-result-line-wrapper.ui-state-active {
-  color: #fff;
-  border: 0;
-  border-bottom: 1px solid #bfbfbf;
-  background: #0075ba;
-}
-
-.entity-link-suggestions-result-line:not(:last-of-type) {
-  border-bottom: 1px solid #bfbfbf;
-}
-
-.ui-menu .entity-link-suggestions-result-line--group.ui-menu-divider {
-  height: auto;
-  margin: 0;
-  padding: 3px;
-  text-align: center;
-  color: #555;
-  border-bottom: 1px solid #bfbfbf;
-  background-color: #e7e7e7;
-  font-size: 0.9em;
-  font-weight: 600;
-  line-height: inherit;
+  & .autocomplete-group {
+    padding: 3px;
+    text-align: center;
+    color: #555;
+    border-bottom: 1px solid #bfbfbf;
+    background-color: #e7e7e7;
+    font-size: 0.9em;
+    font-weight: 600;
+  }
 }
 
 .entity-link-suggestions-result-line--title {

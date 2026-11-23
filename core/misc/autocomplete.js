@@ -1,293 +1,435 @@
 /**
  * @file
- * Autocomplete based on jQuery UI.
+ * Accessible autocomplete for Drupal forms and CKEditor link suggestions.
  */
 
-// cspell:ignore autocompletecreate autocompleteresponse
+((Drupal, once, { autoUpdate, computePosition, flip, hide, shift, size }) => {
+  const controllers = new WeakMap();
+  const cache = new Map();
+  let nextId = 0;
 
-(function ($, Drupal) {
-  let autocomplete;
-
-  // The widget puts its status live region on the body by default. Keep it
-  // with the autocomplete field so a modal does not make it inert.
-  $(document).on('autocompletecreate autocompleteresponse', ({ target }) => {
-    const parent = target.closest('dialog.drupal-dialog') || document.body;
-    const { liveRegion } = $(target).autocomplete('instance');
-    if (liveRegion[0].parentElement !== parent) {
-      liveRegion.appendTo(parent);
-    }
-  });
-
-  /**
-   * Helper splitting terms from the autocomplete value.
-   *
-   * @function Drupal.autocomplete.splitValues
-   *
-   * @param {string} value
-   *   The value being entered by the user.
-   *
-   * @return {Array}
-   *   Array of values, split by comma.
-   */
-  function autocompleteSplitValues(value) {
-    // We will match the value against comma-separated terms.
-    const result = [];
-    let quote = false;
-    let current = '';
-    const valueLength = value.length;
-    let character;
-
-    for (let i = 0; i < valueLength; i++) {
-      character = value.charAt(i);
-      if (character === '"') {
-        current += character;
-        quote = !quote;
-      } else if (character === ',' && !quote) {
-        result.push(current.trim());
-        current = '';
-      } else {
-        current += character;
+  function splitValues(value) {
+    const terms = [];
+    let quoted = false;
+    let start = 0;
+    for (let index = 0; index < value.length; index++) {
+      if (value[index] === '"') {
+        quoted = !quoted;
+      } else if (value[index] === ',' && !quoted) {
+        terms.push(value.slice(start, index).trim());
+        start = index + 1;
       }
     }
-    if (value.length > 0) {
-      result.push(current.trim());
-    }
-
-    return result;
+    terms.push(value.slice(start).trim());
+    return terms;
   }
 
   /**
-   * Returns the last value of a multi-value textfield.
-   *
-   * @function Drupal.autocomplete.extractLastTerm
-   *
-   * @param {string} terms
-   *   The value of the field.
-   *
-   * @return {string}
-   *   The last value of the input field.
+   * Attaches a combobox to an input using a Drupal suggestion endpoint.
    */
-  function extractLastTerm(terms) {
-    return autocomplete.splitValues(terms).pop();
-  }
+  Drupal.autocomplete = (input, url, options = {}) => {
+    const {
+      multiple = false,
+      query = {},
+      renderOption = (option, item) => {
+        option.innerHTML = item.label;
+      },
+      selectItem = (item, terms) => {
+        input.value = [...terms.slice(0, -1), item.value].join(', ');
+      },
+      searchOnClick = false,
+      classes = [],
+    } = options;
+    const list = document.createElement('ul');
+    const supportsPopover = typeof list.showPopover === 'function';
+    const listeners = new AbortController();
+    const { signal } = listeners;
+    const attributes = {
+      role: 'combobox',
+      'aria-autocomplete': 'list',
+      'aria-controls': `drupal-autocomplete-${++nextId}`,
+      'aria-expanded': 'false',
+      autocomplete: 'off',
+    };
+    const previous = Object.entries(attributes).map(([name, value]) => {
+      const original = input.getAttribute(name);
+      input.setAttribute(name, value);
+      return [name, original];
+    });
+    let composing = false;
+    let timer;
+    let request;
+    let stopPositioning;
+    let active = -1;
+    let rows = [];
 
-  /**
-   * The search handler is called before a search is performed.
-   *
-   * @function Drupal.autocomplete.options.search
-   *
-   * @param {object} event
-   *   The event triggered.
-   *
-   * @return {boolean}
-   *   Whether to perform a search or not.
-   */
-  function searchHandler(event) {
-    const options = autocomplete.options;
+    list.id = attributes['aria-controls'];
+    list.classList.add('autocomplete-list', ...classes);
+    list.setAttribute('role', 'listbox');
+    const label = input.labels?.[0]?.textContent.trim();
+    list.setAttribute('aria-label', label || Drupal.t('Suggestions'));
+    list.hidden = true;
+    if (supportsPopover) {
+      list.popover = 'manual';
+    }
+    input.parentElement.append(list);
+    let placement;
 
-    if (options.isComposing) {
-      return false;
+    function loading(value) {
+      input.classList.toggle('is-autocompleting', value);
     }
 
-    const term = autocomplete.extractLastTerm(event.target.value);
-    // Abort search if the first character is in firstCharacterDenyList.
-    if (term.length > 0 && options.firstCharacterDenyList.includes(term[0])) {
-      return false;
-    }
-    // Only search when the term is at least the minimum length.
-    return term.length >= options.minLength;
-  }
-
-  /**
-   * JQuery UI autocomplete source callback.
-   *
-   * @param {object} request
-   *   The request object.
-   * @param {function} response
-   *   The function to call with the response.
-   */
-  function sourceData(request, response) {
-    const elementId = this.element.attr('id');
-
-    if (!(elementId in autocomplete.cache)) {
-      autocomplete.cache[elementId] = {};
+    function close() {
+      clearTimeout(timer);
+      timer = undefined;
+      request?.abort();
+      request = undefined;
+      loading(false);
+      stopPositioning?.();
+      stopPositioning = undefined;
+      placement = undefined;
+      if (supportsPopover && list.matches(':popover-open')) {
+        list.hidePopover();
+      }
+      list.hidden = true;
+      list.replaceChildren();
+      rows = [];
+      active = -1;
+      input.setAttribute('aria-expanded', 'false');
+      input.removeAttribute('aria-activedescendant');
     }
 
-    /**
-     * Filter through the suggestions removing all terms already tagged and
-     * display the available terms to the user.
-     *
-     * @param {object} suggestions
-     *   Suggestions returned by the server.
-     */
-    function showSuggestions(suggestions) {
-      const tagged = autocomplete.splitValues(request.term);
-      const il = tagged.length;
-      for (let i = 0; i < il; i++) {
-        if (suggestions.includes(tagged[i])) {
-          suggestions.splice(suggestions.indexOf(tagged[i]), 1);
+    function activate(index, scroll = false) {
+      rows[active]?.option.setAttribute('aria-selected', 'false');
+      const { option } = rows[index];
+      active = index;
+      option.setAttribute('aria-selected', 'true');
+      input.setAttribute('aria-activedescendant', option.id);
+      if (scroll) {
+        option.scrollIntoView({ block: 'nearest' });
+      }
+    }
+
+    function terms() {
+      return multiple ? splitValues(input.value) : [input.value];
+    }
+
+    function select(index) {
+      const { item } = rows[index];
+      close();
+      selectItem(item, terms());
+    }
+
+    function show(items, direction) {
+      const groups = new Map();
+      items.forEach((item) => {
+        const group = item.group || '';
+        if (!groups.has(group)) {
+          groups.set(group, []);
+        }
+        groups.get(group).push(item);
+      });
+      groups.forEach((itemsInGroup, group) => {
+        let parent = list;
+        if (group) {
+          const wrapper = document.createElement('li');
+          wrapper.setAttribute('role', 'presentation');
+          const heading = document.createElement('div');
+          heading.className = 'autocomplete-group';
+          heading.textContent = group;
+          heading.setAttribute('aria-hidden', 'true');
+          parent = document.createElement('ul');
+          parent.setAttribute('role', 'group');
+          parent.setAttribute('aria-label', group);
+          wrapper.append(heading, parent);
+          list.append(wrapper);
+        }
+        itemsInGroup.forEach((item) => {
+          const option = document.createElement('li');
+          const index = rows.length;
+          option.id = `${list.id}-option-${index}`;
+          option.dataset.optionIndex = index;
+          option.setAttribute('role', 'option');
+          option.setAttribute('aria-selected', 'false');
+          renderOption(option, item);
+          rows.push({ option, item });
+          parent.append(option);
+        });
+      });
+
+      Drupal.announce(
+        Drupal.formatPlural(
+          rows.length,
+          '1 result is available.',
+          '@count results are available.',
+        ),
+      );
+      if (!rows.length) {
+        return;
+      }
+
+      // Keep the popover in the field's DOM subtree, including inside modals
+      // and editor balloons. Without popovers, use a fixed overlay in the
+      // containing dialog or page to escape scrolling containers.
+      if (!supportsPopover) {
+        (input.closest('dialog') || document.body).append(list);
+      }
+      list.hidden = false;
+      list.style.visibility = 'hidden';
+      list.style.removeProperty('--autocomplete-available-width');
+      list.style.removeProperty('--autocomplete-available-height');
+      list.scrollTop = 0;
+      if (supportsPopover) {
+        list.showPopover();
+      }
+      input.setAttribute('aria-expanded', 'true');
+      const placementSession = {};
+      placement = placementSession;
+      const position = () =>
+        computePosition(input, list, {
+          strategy: 'fixed',
+          placement: 'bottom-start',
+          middleware: [
+            flip({ rootBoundary: 'viewport' }),
+            shift({ padding: 4 }),
+            size({
+              padding: 4,
+              apply({ availableWidth, availableHeight, rects }) {
+                if (placement === placementSession) {
+                  list.style.setProperty(
+                    '--autocomplete-available-width',
+                    `${Math.max(0, availableWidth)}px`,
+                  );
+                  list.style.setProperty(
+                    '--autocomplete-available-height',
+                    `${Math.max(0, availableHeight)}px`,
+                  );
+                  list.style.minWidth = `${Math.min(rects.reference.width, Math.max(0, availableWidth))}px`;
+                }
+              },
+            }),
+            hide(),
+          ],
+        }).then(({ x, y, middlewareData }) => {
+          if (placement === placementSession) {
+            list.style.left = `${x}px`;
+            list.style.top = `${y}px`;
+            list.style.visibility = middlewareData.hide.referenceHidden
+              ? 'hidden'
+              : '';
+          }
+        });
+      stopPositioning = autoUpdate(input, list, position, {
+        animationFrame: true,
+      });
+      if (direction) {
+        activate(direction > 0 ? 0 : rows.length - 1, true);
+      }
+    }
+
+    async function search(direction) {
+      timer = undefined;
+      const value = input.value;
+      const term = terms().at(-1);
+      const denyList = input.dataset.autocompleteFirstCharacterDenylist || '';
+      if (!term.length || denyList.includes(term[0])) {
+        return;
+      }
+      const endpoint = new URL(url, document.baseURI);
+      Object.entries(query).forEach(([key, param]) => {
+        endpoint.searchParams.set(key, param);
+      });
+      endpoint.searchParams.set('q', term);
+      const key = endpoint.href;
+      const current = new AbortController();
+      request = current;
+      try {
+        let items = cache.get(key);
+        if (!items) {
+          loading(true);
+          const response = await fetch(endpoint, {
+            signal: current.signal,
+            headers: { Accept: 'application/json' },
+          });
+          if (!response.ok) {
+            return;
+          }
+          const data = await response.json();
+          items = data.suggestions ?? data;
+          if (!current.signal.aborted) {
+            cache.set(key, items);
+          }
+        }
+        if (
+          !current.signal.aborted &&
+          input.isConnected &&
+          document.activeElement === input &&
+          input.value === value
+        ) {
+          const taken = terms().slice(0, -1);
+          show(
+            items.filter((item) => !taken.includes(item.value)),
+            direction,
+          );
+        }
+      } catch (error) {
+        if (!current.signal.aborted) {
+          console.error(error);
+        }
+      } finally {
+        if (request === current) {
+          request = undefined;
+          loading(false);
         }
       }
-      response(suggestions);
     }
 
-    // Get the desired term and construct the autocomplete URL for it.
-    const term = autocomplete.extractLastTerm(request.term);
-
-    /**
-     * Transforms the data object into an array and update autocomplete results.
-     *
-     * @param {object} data
-     *   The data sent back from the server.
-     */
-    function sourceCallbackHandler(data) {
-      autocomplete.cache[elementId][term] = data;
-
-      // Send the new string array of terms to the jQuery UI list.
-      showSuggestions(data);
+    function schedule() {
+      close();
+      if (!composing) {
+        timer = setTimeout(search, 300);
+      }
     }
 
-    // Check if the term is already cached.
-    if (autocomplete.cache[elementId].hasOwnProperty(term)) {
-      showSuggestions(autocomplete.cache[elementId][term]);
-    } else {
-      const options = $.extend(
-        { success: sourceCallbackHandler, data: { q: term } },
-        autocomplete.ajax,
+    input.addEventListener('input', schedule, { signal });
+    input.addEventListener(
+      'compositionstart',
+      () => {
+        composing = true;
+        close();
+      },
+      { signal },
+    );
+    input.addEventListener(
+      'compositionend',
+      () => {
+        composing = false;
+        schedule();
+      },
+      { signal },
+    );
+    input.addEventListener('blur', close, { signal });
+    if (searchOnClick) {
+      input.addEventListener(
+        'click',
+        () => {
+          close();
+          if (!composing) {
+            search();
+          }
+        },
+        { signal },
       );
-      $.ajax(this.element.attr('data-autocomplete-path'), options);
     }
-  }
+    input.addEventListener(
+      'keydown',
+      (event) => {
+        const { key } = event;
+        if (composing || event.isComposing) {
+          return;
+        }
+        if (key === 'Tab') {
+          if (active >= 0) {
+            select(active);
+          } else {
+            close();
+          }
+          return;
+        }
+        if (key === 'ArrowDown' || key === 'ArrowUp') {
+          const direction = key === 'ArrowDown' ? 1 : -1;
+          if (!rows.length) {
+            if (!terms().at(-1).length) {
+              return;
+            }
+            close();
+            search(direction);
+          } else {
+            const next =
+              active < 0 && direction < 0
+                ? rows.length - 1
+                : (active + direction + rows.length) % rows.length;
+            activate(next, true);
+          }
+        } else if (key === 'Enter' && active >= 0) {
+          select(active);
+        } else if (key === 'Escape' && (rows.length || request || timer)) {
+          close();
+        } else {
+          return;
+        }
+        event.preventDefault();
+        event.stopImmediatePropagation();
+      },
+      { capture: true, signal },
+    );
 
-  /**
-   * Handles an autocomplete focus event.
-   *
-   * @return {boolean}
-   *   Always returns false.
-   */
-  function focusHandler() {
-    return false;
-  }
+    // Keep DOM focus on the input during pointer selection.
+    list.addEventListener('mousedown', (event) => event.preventDefault(), {
+      signal,
+    });
+    list.addEventListener(
+      'pointermove',
+      (event) => {
+        const option = event.target.closest('[data-option-index]');
+        if (option && Number(option.dataset.optionIndex) !== active) {
+          activate(Number(option.dataset.optionIndex));
+        }
+      },
+      { signal },
+    );
+    list.addEventListener(
+      'click',
+      (event) => {
+        const option = event.target.closest('[data-option-index]');
+        if (option) {
+          select(Number(option.dataset.optionIndex));
+        }
+      },
+      { signal },
+    );
 
-  /**
-   * Handles an autocomplete select event.
-   *
-   * @param {jQuery.Event} event
-   *   The event triggered.
-   * @param {object} ui
-   *   The jQuery UI settings object.
-   *
-   * @return {boolean}
-   *   Returns false to indicate the event status.
-   */
-  function selectHandler(event, ui) {
-    const terms = autocomplete.splitValues(event.target.value);
-    // Remove the current input.
-    terms.pop();
-    // Add the selected item.
-    terms.push(ui.item.value);
+    return {
+      close,
+      destroy() {
+        close();
+        listeners.abort();
+        list.remove();
+        previous.forEach(([name, original]) => {
+          if (original === null) {
+            input.removeAttribute(name);
+          } else {
+            input.setAttribute(name, original);
+          }
+        });
+      },
+    };
+  };
 
-    event.target.value = terms.join(', ');
-    // Return false to tell jQuery UI that we've filled in the value already.
-    return false;
-  }
-
-  /**
-   * Override jQuery UI _renderItem function to output HTML by default.
-   *
-   * @param {jQuery} ul
-   *   jQuery collection of the ul element.
-   * @param {object} item
-   *   The list item to append.
-   *
-   * @return {jQuery}
-   *   jQuery collection of the ul element.
-   */
-  function renderItem(ul, item) {
-    return $('<li>').append($('<a>').html(item.label)).appendTo(ul);
-  }
-
-  /**
-   * Attaches the autocomplete behavior to all required fields.
-   *
-   * @type {Drupal~behavior}
-   *
-   * @prop {Drupal~behaviorAttach} attach
-   *   Attaches the autocomplete behaviors.
-   * @prop {Drupal~behaviorDetach} detach
-   *   Detaches the autocomplete behaviors.
-   */
   Drupal.behaviors.autocomplete = {
     attach(context) {
-      // Act on textfields with the "form-autocomplete" class.
-      once('autocomplete', 'input.form-autocomplete', context).forEach(
-        (element) => {
-          const $autocomplete = $(element);
-          const denyList = $autocomplete.attr(
-            'data-autocomplete-first-character-denylist',
-          );
-          $.extend(autocomplete.options, {
-            firstCharacterDenyList: denyList,
-          });
-          // Use jQuery UI Autocomplete on the textfield.
-          $autocomplete.autocomplete(autocomplete.options).each(function () {
-            $(this).data('ui-autocomplete')._renderItem =
-              autocomplete.options.renderItem;
-          });
-
-          // Use CompositionEvent to handle IME inputs. It requests remote server on "compositionend" event only.
-          $autocomplete.on('compositionstart.autocomplete', () => {
-            autocomplete.options.isComposing = true;
-          });
-          $autocomplete.on('compositionend.autocomplete', () => {
-            autocomplete.options.isComposing = false;
-          });
-        },
-      );
+      const selector = 'input.form-autocomplete';
+      const inputs = context.matches?.(selector) ? context : selector;
+      once('autocomplete', inputs, context).forEach((input) => {
+        controllers.set(
+          input,
+          Drupal.autocomplete(input, input.dataset.autocompletePath, {
+            multiple: true,
+          }),
+        );
+      });
     },
     detach(context, settings, trigger) {
       if (trigger === 'unload') {
-        $(
-          once.remove('autocomplete', 'input.form-autocomplete', context),
-        ).autocomplete('destroy');
+        const selector = 'input.form-autocomplete';
+        const elements = context.matches?.(selector)
+          ? once.remove('autocomplete', context)
+          : once.remove('autocomplete', selector, context);
+        elements.forEach((input) => {
+          controllers.get(input)?.destroy();
+          controllers.delete(input);
+        });
       }
     },
   };
-
-  /**
-   * Autocomplete object implementation.
-   *
-   * @namespace Drupal.autocomplete
-   */
-  autocomplete = {
-    cache: {},
-    // Exposes options to allow overriding by contrib.
-    splitValues: autocompleteSplitValues,
-    extractLastTerm,
-    // jQuery UI autocomplete options.
-
-    /**
-     * JQuery UI option object.
-     *
-     * @name Drupal.autocomplete.options
-     */
-    options: {
-      source: sourceData,
-      focus: focusHandler,
-      search: searchHandler,
-      select: selectHandler,
-      renderItem,
-      minLength: 1,
-      // Custom options, used by Drupal.autocomplete.
-      firstCharacterDenyList: '',
-      // Custom options, indicate IME usage status.
-      isComposing: false,
-    },
-    ajax: {
-      dataType: 'json',
-      jsonp: false,
-    },
-  };
-
-  Drupal.autocomplete = autocomplete;
-})(jQuery, Drupal);
+})(Drupal, once, FloatingUIDOM);
