@@ -61,6 +61,7 @@ class DisplayTest extends WebDriverTestBase {
       'administer site configuration',
       'administer views',
       'administer nodes',
+      'administer blocks',
       'access content overview',
       'access contextual links',
     ]);
@@ -135,6 +136,36 @@ class DisplayTest extends WebDriverTestBase {
       $dialog_buttons->pressButton('Apply');
       $this->assertJsCondition("document.title === '" . $new_title . " (Content) | " . \Drupal::config('system.site')->get('name') . "'");
     }
+  }
+
+  /**
+   * Tests selection from the Views tag and block category suggestion routes.
+   */
+  public function testDisplayAutocomplete(): void {
+    View::load('test_content_ajax')->set('tag', 'Editorial review')->save();
+    $this->drupalGet('admin/structure/views/view/test_display/edit/block_1');
+    $page = $this->getSession()->getPage();
+    $assert = $this->assertSession();
+
+    $page->clickLink('Edit view name/description');
+    $tag = $assert->waitForField('Administrative tags');
+    $tag->focus();
+    $tag->setValue('review');
+    $this->assertNotNull($suggestion = $assert->waitOnAutocomplete());
+    $this->assertSame('Editorial review', $suggestion->getText());
+    $suggestion->click();
+    $this->assertSame('Editorial review', $tag->getValue());
+    $page->find('css', '.drupal-dialog-buttonset')->pressButton('Apply');
+    $assert->assertNoElementAfterWait('css', 'dialog[open]');
+
+    $page->find('css', 'a[href*="/display/test_display/block_1/block_category"]')->click();
+    $category = $assert->waitForField('block_category');
+    $category->focus();
+    $category->setValue('Syste');
+    $this->assertNotNull($suggestion = $assert->waitOnAutocomplete());
+    $this->assertSame('System', $suggestion->getText());
+    $suggestion->click();
+    $this->assertSame('System', $category->getValue());
   }
 
   /**
