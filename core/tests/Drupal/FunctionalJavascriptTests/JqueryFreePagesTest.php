@@ -34,8 +34,8 @@ class JqueryFreePagesTest extends WebDriverTestBase {
    * Expected jQuery-family edges, keyed by page and edge.
    *
    * Values name the owner and removal slice, in that order. Default Admin's
-   * styling still loads jQuery. The node form also loads jQuery UI for
-   * autocomplete. Remove entries as
+   * styling still loads jQuery and its jQuery UI stylesheet. The node form
+   * adds the jQuery UI autocomplete widget. Remove entries as
    * their last paths disappear. The remaining core/jquery library loads the
    * vendor script and bootstrap.
    */
@@ -44,46 +44,53 @@ class JqueryFreePagesTest extends WebDriverTestBase {
       'global:jQuery' => ['Z', 'Z'],
       'library:jquery' => ['Z', 'Z'],
       'library:jquery-bootstrap' => ['B', 'Z'],
+      'library:jquery-ui-css' => ['Z', 'Z'],
     ],
     'field-display' => [
       'global:jQuery' => ['Z', 'Z'],
       'library:jquery' => ['Z', 'Z'],
       'library:jquery-bootstrap' => ['B', 'Z'],
+      'library:jquery-ui-css' => ['Z', 'Z'],
     ],
     'front' => [
       'global:jQuery' => ['Z', 'Z'],
       'library:jquery' => ['Z', 'Z'],
       'library:jquery-bootstrap' => ['B', 'Z'],
+      'library:jquery-ui-css' => ['Z', 'Z'],
     ],
     'modal' => [
       'global:jQuery' => ['Z', 'Z'],
       'library:jquery' => ['Z', 'Z'],
       'library:jquery-bootstrap' => ['B', 'Z'],
+      'library:jquery-ui-css' => ['Z', 'Z'],
     ],
     'node-add' => [
       'global:jQuery' => ['Z', 'Z'],
       'global:jQuery.ui' => ['C', 'C'],
       'library:jquery' => ['Z', 'Z'],
       'library:jquery-bootstrap' => ['B', 'Z'],
+      'library:jquery-ui-css' => ['Z', 'Z'],
       'library:jquery-position' => ['C', 'C'],
       'library:jquery-ui-autocomplete' => ['C', 'C'],
-      'library:jquery-ui-css' => ['C', 'C'],
       'library:jquery-ui-js' => ['C', 'C'],
     ],
     'off-canvas' => [
       'global:jQuery' => ['Z', 'Z'],
       'library:jquery' => ['Z', 'Z'],
       'library:jquery-bootstrap' => ['B', 'Z'],
+      'library:jquery-ui-css' => ['Z', 'Z'],
     ],
     'permissions' => [
       'global:jQuery' => ['Z', 'Z'],
       'library:jquery' => ['Z', 'Z'],
       'library:jquery-bootstrap' => ['B', 'Z'],
+      'library:jquery-ui-css' => ['Z', 'Z'],
     ],
     'vertical-tabs' => [
       'global:jQuery' => ['Z', 'Z'],
       'library:jquery' => ['Z', 'Z'],
       'library:jquery-bootstrap' => ['B', 'Z'],
+      'library:jquery-ui-css' => ['Z', 'Z'],
     ],
   ];
 

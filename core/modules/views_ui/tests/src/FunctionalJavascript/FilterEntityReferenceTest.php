@@ -78,9 +78,9 @@ class FilterEntityReferenceTest extends WebDriverTestBase {
       ->isVisible());
     $page->findField('name[node__field_test.field_test_target_id]')
       ->click();
-    $this->assertTrue($page->find('css', 'button.button.button--primary.form-submit.ui-button')
+    $this->assertTrue($page->find('css', '.drupal-dialog-buttonset .button--primary.form-submit')
       ->isVisible());
-    $page->find('css', 'button.button.button--primary.form-submit.ui-button')
+    $page->find('css', '.drupal-dialog-buttonset .button--primary.form-submit')
       ->click();
 
     // Wait for the selection handler to show up.
@@ -196,7 +196,7 @@ class FilterEntityReferenceTest extends WebDriverTestBase {
     // Test that the entity_reference option is visible.
     $this->assertTrue($page->findField('name[node__field_test_config.field_test_config_target_id]')->isVisible());
     $page->findField('name[node__field_test_config.field_test_config_target_id]')->click();
-    $submitButton = $page->find('css', 'button.button.button--primary.form-submit.ui-button');
+    $submitButton = $page->find('css', '.drupal-dialog-buttonset .button--primary.form-submit');
     $this->assertTrue($submitButton->isVisible());
     $submitButton->click();
 
