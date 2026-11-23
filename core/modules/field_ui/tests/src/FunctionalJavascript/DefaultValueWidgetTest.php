@@ -76,8 +76,8 @@ class DefaultValueWidgetTest extends WebDriverTestBase {
     $page->findField('set_default_value')->check();
 
     $default_value_field = $page->findField('default_value_input[field_' . $field_name . '][0][target_id]');
+    $default_value_field->focus();
     $default_value_field->setValue('r');
-    $this->getSession()->getDriver()->keyDown($default_value_field->getXpath(), ' ');
     $this->assertSession()->waitOnAutocomplete();
 
     // Check the autocomplete results.

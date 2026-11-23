@@ -6,6 +6,7 @@ namespace Drupal\Tests\navigation\FunctionalJavascript;
 
 use Drupal\FunctionalJavascriptTests\WebDriverTestBase;
 use Drupal\layout_builder\Entity\LayoutBuilderEntityViewDisplay;
+use Drupal\workspaces\Entity\Workspace;
 use PHPUnit\Framework\Attributes\Group;
 use PHPUnit\Framework\Attributes\RunTestsInSeparateProcesses;
 
@@ -77,6 +78,36 @@ class NavigationWorkspacesDialogTest extends WebDriverTestBase {
     $tray->pressButton('Close');
     $this->assertSession()->assertNoElementAfterWait('css', 'dialog#drupal-off-canvas-wrapper');
     $this->assertJsCondition('Drupal.displace.offsets.top < 161');
+  }
+
+  /**
+   * Tests viewport-centered confirmation from a narrow Workspaces tray.
+   */
+  public function testConfirmationFromNarrowTray(): void {
+    Workspace::create(['id' => 'stage', 'label' => 'Stage'])->save();
+    $this->drupalLogin($this->drupalCreateUser([
+      'access navigation',
+      'administer workspaces',
+    ]));
+    $this->getSession()->resizeWindow(390, 440);
+    $this->drupalGet('<front>');
+    $assert = $this->assertSession();
+    $assert->elementExists('css', 'a.toolbar-button--icon--workspaces[data-hx-get]')->click();
+    $tray = $assert->waitForElementVisible('css', 'dialog#drupal-off-canvas-wrapper[open]');
+    $this->assertNotNull($tray);
+    $this->assertJsCondition('Drupal.displace.offsets.top >= window.innerHeight * 0.9');
+    $tray->clickLink('Stage');
+    $this->assertNotNull($assert->waitForElementVisible('css', 'dialog:modal'));
+    $this->assertJsCondition(<<<'JS'
+      (() => {
+        const modal = document.querySelector('dialog:modal');
+        const rect = modal.getBoundingClientRect();
+        return getComputedStyle(modal).inset === '0px' &&
+          rect.height > 100 &&
+          Math.abs(rect.top + rect.height / 2 - window.innerHeight / 2) < 2;
+      })()
+      JS);
+    $assert->elementTextContains('css', 'dialog:modal', 'Would you like to activate');
   }
 
   /**

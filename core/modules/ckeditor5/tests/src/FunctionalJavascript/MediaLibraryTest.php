@@ -241,12 +241,25 @@ class MediaLibraryTest extends WebDriverTestBase {
     $assert = $this->assertSession();
     $editable = $assert->waitForElementVisible('css', '#drupal-off-canvas .ck-editor__editable');
     $this->assertNotNull($editable);
+    $resize = $assert->elementExists('css', '#drupal-off-canvas-wrapper [role="separator"]');
+    $resize->focus();
+    $resize->keyDown(35);
+    $this->assertJsCondition('Drupal.displace.offsets.right >= window.innerWidth - 1');
     $editable->click();
     $insert_media = $assert->waitForElementVisible('xpath', '//div[@id="drupal-off-canvas"]//button[span[text()="Insert Media"]]');
     $this->assertNotNull($insert_media);
     $insert_media->click();
     $this->assertNotNull($assert->waitForElementVisible('css', '#drupal-modal #media-library-wrapper'));
     $this->assertJsCondition('document.querySelector("#drupal-modal").parentElement.matches(":modal")');
+    $this->assertJsCondition(<<<'JS'
+      (() => {
+        const modal = document.querySelector('dialog:modal');
+        const rect = modal.getBoundingClientRect();
+        return getComputedStyle(modal).inset === '0px' &&
+          rect.width >= 300 &&
+          Math.abs(rect.left + rect.width / 2 - window.innerWidth / 2) < 2;
+      })()
+      JS);
     $assert->elementExists('css', '#drupal-modal .js-media-library-item')->click();
     $modal = $assert->elementExists('css', '#drupal-modal')->getParent();
     $assert->elementExists('css', '.drupal-dialog-buttonpane', $modal)->pressButton('Insert selected');

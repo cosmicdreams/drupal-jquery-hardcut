@@ -280,6 +280,7 @@ class OffCanvasTest extends OffCanvasTestBase {
       Response.prototype.text = async function () {
         const body = await text.call(this);
         if (this.url.includes('off-canvas-thing1')) {
+          Response.prototype.text = text;
           links.find((link) => link.textContent === 'Open panel 2').click();
           await new Promise((resolve) => setTimeout(resolve, 300));
           window.firstTrayResponseRead = true;
@@ -294,6 +295,33 @@ class OffCanvasTest extends OffCanvasTestBase {
     $this->assertSession()->elementAttributeContains('css', 'dialog#drupal-off-canvas-wrapper', 'style', 'width: 555px');
     $this->assertSame($page_title, $session->evaluateScript('document.title'));
     $this->assertCount(1, $session->getPage()->findAll('css', 'dialog#drupal-off-canvas-wrapper'));
+
+    // An unload listener can supersede a swap after behaviors were detached.
+    // The previously open tray must stay interactive while the new open waits.
+    $session->executeScript(<<<'JS'
+      const tray = document.getElementById('drupal-off-canvas');
+      Drupal.behaviors.trayProbe = {
+        attach(context) {
+          if (context === tray) {
+            tray.dataset.probeAttached = '';
+          }
+        },
+        detach(context, settings, trigger) {
+          if (context === tray && trigger === 'unload') {
+            delete tray.dataset.probeAttached;
+          }
+        },
+      };
+      Drupal.attachBehaviors(tray);
+      tray.addEventListener('htmx:drupal:unload', () => {
+        Drupal.dialog.beginOpenRequest('#drupal-off-canvas');
+        window.supersededOnUnload = true;
+      }, { once: true });
+      [...document.links].find((link) => link.textContent === 'Open panel 1').click();
+      JS);
+    $this->assertJsCondition('window.supersededOnUnload && document.querySelector("#drupal-off-canvas[data-probe-attached]")');
+    $this->assertSession()->elementTextContains('css', '#drupal-off-canvas', 'Thing 2 says hello');
+    $session->executeScript('Drupal.dialog.finishOpenRequest()');
 
     // A removed initiator cannot open a tray after its response loads.
     $session->executeScript(<<<'JS'

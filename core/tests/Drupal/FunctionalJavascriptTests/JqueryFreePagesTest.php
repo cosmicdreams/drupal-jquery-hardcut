@@ -34,10 +34,8 @@ class JqueryFreePagesTest extends WebDriverTestBase {
    * Expected jQuery-family edges, keyed by page and edge.
    *
    * Values name the owner and removal slice, in that order. Default Admin's
-   * styling still loads jQuery and its jQuery UI stylesheet. The node form
-   * adds the jQuery UI autocomplete widget. Remove entries as
-   * their last paths disappear. The remaining core/jquery library loads the
-   * vendor script and bootstrap.
+   * styling still loads jQuery. Remove entries as each slice converts
+   * its dependencies.
    */
   private const EXPECTED = [
     'block-layout' => [
@@ -128,8 +126,8 @@ class JqueryFreePagesTest extends WebDriverTestBase {
 
     $this->drupalGet('node/add/article');
     $reference = $assert_session->elementExists('css', 'input[name="field_reference[0][target_id]"]');
+    $reference->focus();
     $reference->setValue('Harness example');
-    $this->getSession()->getDriver()->keyDown($reference->getXpath(), ' ');
     $suggestion = $assert_session->waitOnAutocomplete();
     $this->assertNotNull($suggestion);
     $suggestion->click();

@@ -306,7 +306,7 @@ JS);
   /**
    * Waits for the jQuery autocomplete delay duration.
    *
-   * @see https://api.jqueryui.com/autocomplete/#option-delay
+   * @see core/misc/autocomplete.js
    */
   public function waitOnAutocomplete(): ?NodeElement {
     // Wait for the autocomplete to be visible.

@@ -94,8 +94,8 @@ class EntityReferenceAutocompleteWidgetTest extends WebDriverTestBase {
     $assert_session = $this->assertSession();
 
     $autocomplete_field = $assert_session->waitForElement('css', '[name="' . $field_name . '[0][target_id]"][role="combobox"]');
+    $autocomplete_field->focus();
     $autocomplete_field->setValue('Test');
-    $this->getSession()->getDriver()->keyDown($autocomplete_field->getXpath(), ' ');
     $assert_session->waitOnAutocomplete();
 
     $results = $page->findAll('css', '.autocomplete-list [role=option]');
@@ -172,8 +172,8 @@ class EntityReferenceAutocompleteWidgetTest extends WebDriverTestBase {
     $modal = $assert_session->waitForElementVisible('css', 'dialog[open]');
     $this->assertNotNull($modal);
     $input = $modal->findField($field_name . '[0][target_id]');
+    $input->focus();
     $input->setValue('Test');
-    $session->getDriver()->keyDown($input->getXpath(), ' ');
     $this->assertNotNull($assert_session->waitForElementVisible('css', 'dialog[open] .autocomplete-list [role=option]'));
     $this->assertCount(2, $modal->findAll('css', '.autocomplete-list [role=option]'));
     $this->assertJsCondition(<<<'JS'
@@ -217,8 +217,8 @@ class EntityReferenceAutocompleteWidgetTest extends WebDriverTestBase {
     // Trigger the autocomplete.
     $page = $this->getSession()->getPage();
     $autocomplete_field = $page->findField($field_name . '[0][target_id]');
+    $autocomplete_field->focus();
     $autocomplete_field->setValue('dark');
-    $this->getSession()->getDriver()->keyDown($autocomplete_field->getXpath(), ' ');
     $this->assertSession()->waitOnAutocomplete();
 
     // Check the autocomplete results.
@@ -236,8 +236,8 @@ class EntityReferenceAutocompleteWidgetTest extends WebDriverTestBase {
    */
   protected function doAutocomplete(string $field_name): void {
     $autocomplete_field = $this->getSession()->getPage()->findField($field_name . '[0][target_id]');
+    $autocomplete_field->focus();
     $autocomplete_field->setValue('Test');
-    $this->getSession()->getDriver()->keyDown($autocomplete_field->getXpath(), ' ');
     $this->assertSession()->waitOnAutocomplete();
   }
 

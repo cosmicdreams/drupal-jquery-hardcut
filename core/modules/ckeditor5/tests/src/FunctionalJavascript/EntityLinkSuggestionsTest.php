@@ -131,7 +131,7 @@ class EntityLinkSuggestionsTest extends CKEditor5TestBase {
     $autocomplete_container = $assert_session->elementExists('css', '.ck-link-form .entity-link-suggestions-autocomplete');
     $this->assertFalse($autocomplete_container->isVisible());
 
-    // Trigger a keydown event to activate an autocomplete search.
+    // Type to show matching suggestions.
     $autocomplete_field->setValue('f');
     $this->assertTrue($this->getSession()->wait(5000, "document.querySelectorAll('.entity-link-suggestions-result-line[role=option]').length > 0"));
 
@@ -146,8 +146,7 @@ class EntityLinkSuggestionsTest extends CKEditor5TestBase {
 
     // Make the search term longer to narrow down the results.
     $autocomplete_field->setValue('fo');
-    $assert_session->assertWaitOnAjaxRequest();
-    $assert_session->waitForElementRemoved('xpath', '//span[@class="entity-link-suggestions-result-line--title" and text()="Foo"]');
+    $this->assertNotNull($assert_session->waitOnAutocomplete());
 
     // Find all the autocomplete results.
     $results = $page->findAll('css', '.entity-link-suggestions-result-line[role=option]');
@@ -227,6 +226,41 @@ class EntityLinkSuggestionsTest extends CKEditor5TestBase {
     $this->assertNotNull($changed_link);
     foreach (['data-entity-type', 'data-entity-uuid'] as $attribute_name) {
       $this->assertFalse($changed_link->hasAttribute($attribute_name), "Link should no longer have $attribute_name");
+    }
+  }
+
+  /**
+   * Tests link suggestions in editor balloons inside dialogs and trays.
+   */
+  public function testLinkSuggestionsInDialogs(): void {
+    $entity = $this->drupalCreateNode(['type' => 'page', 'title' => 'Foo']);
+    $assert = $this->assertSession();
+    $session = $this->getSession();
+
+    foreach ([['modal', NULL], ['dialog', 'off_canvas']] as [$type, $renderer]) {
+      $this->drupalGet('ckeditor5_test/off_canvas');
+      $session->executeScript(sprintf(<<<'JS'
+        Drupal.ajax({
+          url: Drupal.url('node/add/page'),
+          dialogType: %s,
+          dialogRenderer: %s,
+        }).execute();
+        JS, json_encode($type), json_encode($renderer)));
+      $this->assertNotNull($assert->waitForElementVisible('css', 'dialog[open] .ck-editor__editable'));
+      $this->pressEditorButton('Link');
+      $balloon = $this->assertVisibleBalloon('.ck-link-form');
+      $field = $balloon->find('css', '[role="combobox"]');
+      $this->assertNotNull($field);
+      $field->setValue('Foo');
+      $suggestion = $assert->waitForElementVisible('css', '.ck-link-form [role="option"]');
+      $this->assertNotNull($suggestion);
+      $suggestion->click();
+      $this->assertSame($entity->toUrl()->toString(), $field->getValue());
+      $balloon->pressButton('Insert');
+      $this->assertBalloonClosed();
+      $link = $assert->waitForElementVisible('css', 'dialog[open] .ck-content a');
+      $this->assertNotNull($link);
+      $this->assertSame($entity->uuid(), $link->getAttribute('data-entity-uuid'));
     }
   }
 

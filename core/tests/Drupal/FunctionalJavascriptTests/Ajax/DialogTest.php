@@ -364,8 +364,8 @@ class DialogTest extends WebDriverTestBase {
       $this->assertSame('second', $dialog->findField('Choice')->getValue());
 
       $field = $dialog->findField('Suggestions');
+      $field->focus();
       $field->setValue('label');
-      $session->getDriver()->keyDown($field->getXpath(), ' ');
       $menu = $assert->waitForElementVisible('css', 'dialog[open] .autocomplete-list [role=option]');
       $this->assertNotNull($menu);
       $this->assertJsCondition(<<<'JS'
@@ -409,6 +409,115 @@ class DialogTest extends WebDriverTestBase {
       }
       $assert->assertNoElementAfterWait('css', 'dialog[open]');
     }
+  }
+
+  /**
+   * Tests keyboard selection and autocomplete request cancellation.
+   */
+  public function testAutocompleteKeyboardAndRequests(): void {
+    $this->container->get('module_installer')->install(['form_test']);
+    $this->drupalLogin($this->drupalCreateUser(['access autocomplete test']));
+    $this->drupalGet('ajax-test/dialog');
+    $session = $this->getSession();
+    $assert = $this->assertSession();
+    $session->executeScript(<<<'JS'
+      Drupal.ajax({
+        url: Drupal.url('ajax-test/dialog-widgets'),
+        dialogType: 'modal',
+      }).execute();
+      JS);
+    $this->assertNotNull($assert->waitForElementVisible('css', 'dialog:modal'));
+    $session->executeScript(<<<'JS'
+      window.field = document.querySelector('dialog:modal input.form-autocomplete');
+      window.pending = new Map();
+      const fetch = window.fetch;
+      window.fetch = (url, options) => {
+        if (!String(url).includes(field.dataset.autocompletePath.split('?')[0])) {
+          return fetch(url, options);
+        }
+        return new Promise((resolve) => {
+          pending.set(url.searchParams.get('q'), {
+            signal: options.signal,
+            respond: (...values) => resolve(new Response(JSON.stringify(
+              values.map((value) => ({ label: value, value })),
+            ))),
+          });
+        });
+      };
+      window.type = (value) => {
+        field.focus();
+        field.value = value;
+        field.dispatchEvent(new Event('input', { bubbles: true }));
+      };
+      window.list = document.getElementById(field.getAttribute('aria-controls'));
+      type('"Red, orange", s');
+      JS);
+    $this->assertJsCondition("pending.has('s') && field.classList.contains('is-autocompleting')");
+    $this->assertJsCondition(<<<'JS'
+      field.getAttribute('role') === 'combobox' &&
+        field.getAttribute('aria-autocomplete') === 'list' &&
+        field.getAttribute('aria-expanded') === 'false' &&
+        list.getAttribute('role') === 'listbox'
+      JS);
+    $session->executeScript('type(\'"Red, orange", se\')');
+    $this->assertJsCondition("pending.get('s').signal.aborted && pending.has('se')");
+    $session->executeScript("pending.get('se').respond('Second', 'Seventh')");
+    $this->assertNotNull($assert->waitOnAutocomplete());
+    $session->executeScript("pending.get('s').respond('Stale')");
+    $this->assertJsCondition(<<<'JS'
+      field.getAttribute('aria-expanded') === 'true' &&
+        !field.classList.contains('is-autocompleting') &&
+        document.querySelector('dialog:modal #drupal-live-announce').textContent.includes('2 results are available.')
+      JS);
+    $assert->elementTextNotContains('css', 'dialog:modal .autocomplete-list', 'Stale');
+
+    $driver = $session->getDriver();
+    $this->assertInstanceOf(DrupalSelenium2Driver::class, $driver);
+    $webdriver = $driver->getWebDriverSession();
+    $press = static function (string $value) use ($webdriver): void {
+      $webdriver->postActions(['actions' => [[
+        'type' => 'key',
+        'id' => 'keyboard',
+        'actions' => [
+          ['type' => 'keyDown', 'value' => $value],
+          ['type' => 'keyUp', 'value' => $value],
+        ],
+      ]]]);
+    };
+    $press("\u{E015}");
+    $this->assertJsCondition(<<<'JS'
+      document.activeElement === field &&
+        document.getElementById(field.getAttribute('aria-activedescendant')) === list.children[0] &&
+        list.children[0].getAttribute('aria-selected') === 'true'
+      JS);
+    $press("\u{E013}");
+    $this->assertJsCondition(<<<'JS'
+      document.getElementById(field.getAttribute('aria-activedescendant')) === list.children[1] &&
+        list.children[0].getAttribute('aria-selected') === 'false'
+      JS);
+    $press("\u{E007}");
+    $this->assertJsCondition(<<<'JS'
+      field.value === '"Red, orange", Seventh' &&
+        field.getAttribute('aria-expanded') === 'false' &&
+        !field.hasAttribute('aria-activedescendant')
+      JS);
+
+    $session->executeScript("type('se')");
+    $this->assertNotNull($assert->waitOnAutocomplete());
+    $press("\u{E00C}");
+    $this->assertJsCondition("field.closest(':modal') && field.value === 'se' && list.hidden");
+
+    $session->executeScript("type('se')");
+    $this->assertNotNull($assert->waitOnAutocomplete());
+    $press("\u{E004}");
+    $this->assertJsCondition("document.activeElement !== field && field.value === 'se' && list.hidden");
+
+    // The late response must not reopen a closed dialog or leave an orphan menu.
+    $session->executeScript("type('slow')");
+    $this->assertJsCondition("pending.has('slow')");
+    $assert->elementExists('css', 'dialog:modal')->pressButton('Close');
+    $session->executeScript("pending.get('slow').respond('Late')");
+    $this->assertJsCondition("pending.get('slow').signal.aborted && !field.isConnected && !list.isConnected");
   }
 
   /**

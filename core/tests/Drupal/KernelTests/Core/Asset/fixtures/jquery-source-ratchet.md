@@ -12,13 +12,12 @@ literal PHP attachments and stylesheet references.
 
 - CKEditor 5 builds come from `js/ckeditor5_plugins/<plugin>/src/index.js`.
   The test rebuilds with the existing webpack configuration in a temporary
-  directory and compares every tracked output byte for byte. C owns entity
-  link suggestions. M owns the other four outputs.
+  directory and compares every tracked output byte for byte. M owns the remaining legacy builds.
 - Default Admin migration scripts are tracked source and shipped assets. The
   theme declares them in `default_admin.libraries.yml` or substitutes them in
   `default_admin.info.yml`. T owns the two legacy table scripts. The vendored
   Scroll Sync script has a clean syntax scan.
-- Z owns the pinned jQuery and jQuery UI distribution files. The listed
+- Z owns the pinned jQuery distribution files. The listed
   SHA-256 fingerprints cover source and minified JavaScript. The scan flags
   byte-identical copies outside those paths. Sortable also has a Z-owned
   source exception. Its upstream build checks `window.jQuery` when cloning.
