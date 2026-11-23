@@ -2011,13 +2011,14 @@
 
   /**
    * Finds the replacement for a detached focus target within its owning form.
-   *
    * @param {Element} element
    *   The original focus target.
    * @param {HTMLFormElement|null} form
    *   The original owning form, if any.
    * @param {Node[]} children
    *   The nodes inserted by the command.
+   * @return {Element|undefined}
+   *   The replacement target, if found.
    */
   function findReplacementFocusTarget(element, form, children) {
     const selector = element.getAttribute('data-drupal-selector');
