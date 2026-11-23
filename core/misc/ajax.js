@@ -2270,7 +2270,13 @@
           if (selector === null) {
             return;
           }
-          const match = `[data-drupal-selector="${CSS.escape(selector)}"]`;
+          let match = `[data-drupal-selector="${CSS.escape(selector)}"]`;
+          // An explicitly generated form ID can carry its unique suffix into
+          // data-drupal-selector. Look for the same base ID within this insert.
+          if (element.id) {
+            const base = CSS.escape(element.id.split('--')[0]);
+            match += `, #${base}, [id^="${base}--"]`;
+          }
           const matches = children
             .filter((child) => child.nodeType === Node.ELEMENT_NODE)
             .flatMap((child) => [

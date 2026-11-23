@@ -130,10 +130,11 @@ class BlockExposedFilterAJAXTest extends WebDriverTestBase {
     $assert->elementTextNotContains('css', '#block-second-view', 'Article A');
     $this->assertJsCondition("document.activeElement.matches('#block-second-view select[name=type]')");
 
-    // Give the focused field a selector that the response will not contain.
+    // Give the focused field an identity that the response will not contain.
     // Focus should fall back to this view's Apply control.
     $session->executeScript(<<<'JS'
       const form = document.querySelector('#block-second-view form');
+      form.elements.type.id = 'removed-filter';
       form.elements.type.dataset.drupalSelector = 'removed-filter';
       form.elements.type.focus();
       form.querySelector('[type="submit"]').click();
