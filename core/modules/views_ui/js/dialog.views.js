@@ -37,6 +37,7 @@
 
     // Measure the options at their natural height and reserve space for
     // everything outside the scroll area, including messages and actions.
+    const scrollTop = scroll.scrollTop;
     scroll.style.maxHeight = '';
     const outside = content.scrollHeight - scroll.offsetHeight;
     const styles = getComputedStyle(scroll);
@@ -50,6 +51,7 @@
             'borderBottomWidth',
           ].reduce((sum, side) => sum + Number.parseFloat(styles[side]), 0);
     scroll.style.maxHeight = `${Math.max(0, content.clientHeight - outside - decoration)}px`;
+    scroll.scrollTop = scrollTop;
   });
 
   document.addEventListener(

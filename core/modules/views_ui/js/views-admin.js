@@ -125,6 +125,7 @@
                 checked.delete(checkbox);
               }
               updateSelected();
+              notifyResize();
             });
             return {
               row,

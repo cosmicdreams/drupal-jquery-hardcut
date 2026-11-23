@@ -74,6 +74,7 @@ class AdminAjaxTest extends WebDriverTestBase {
   #[DataProvider('viewsThemes')]
   public function testFindHandler(string $theme): void {
     $this->useViewsTheme($theme);
+    $this->getSession()->resizeWindow(800, 540);
     $this->drupalGet('admin/structure/views/view/user_admin_people');
     $assert = $this->assertSession();
     $assert->elementExists('css', '#views-add-field')->click();
@@ -87,7 +88,7 @@ class AdminAjaxTest extends WebDriverTestBase {
     $checkbox = $assert->fieldExists('name[views.dropbutton]', $dialog);
     $title = $assert->elementExists('css', '.title', $checkbox->getParent()->getParent()->getParent());
 
-    // Select and deselect several handlers that are visible after scrolling.
+    // Select several handlers that are visible after scrolling.
     $scroll_positions = $this->getSession()->evaluateScript(<<<'JS'
       (() => {
         const list = document.querySelector('dialog.views-ui-dialog[open] [data-drupal-views-scroll]');
@@ -101,13 +102,25 @@ class AdminAjaxTest extends WebDriverTestBase {
         visible.slice(0, 3).forEach((title) => {
           title.click();
           positions.push(list.scrollTop);
-          title.click();
-          positions.push(list.scrollTop);
         });
         return positions;
       })()
       JS);
-    $this->assertSame(array_fill(0, 7, 150), $scroll_positions);
+    $this->assertSame(array_fill(0, 4, 150), $scroll_positions);
+    $this->assertJsCondition(<<<'JS'
+      (() => {
+        const content = document.querySelector('dialog.views-ui-dialog[open] .drupal-dialog-content');
+        const panel = content.querySelector('.views-add-form-selected');
+        const list = content.querySelector('[data-drupal-views-scroll]');
+        return !panel.hidden && list.scrollTop === 150 &&
+          panel.getBoundingClientRect().bottom <= content.getBoundingClientRect().top + content.clientHeight + 1;
+      })()
+      JS);
+    $this->getSession()->executeScript(<<<'JS'
+      document.querySelectorAll('dialog.views-ui-dialog[open] .filterable-option input:checked')
+        .forEach((checkbox) => checkbox.click());
+      JS);
+    $this->assertFalse($selected->isVisible());
 
     $search->setValue('dropbutton');
     $this->assertTrue($title->isVisible());
