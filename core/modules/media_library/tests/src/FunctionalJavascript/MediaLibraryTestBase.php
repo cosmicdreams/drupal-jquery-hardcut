@@ -233,7 +233,7 @@ abstract class MediaLibraryTestBase extends WebDriverTestBase {
    *   The final word of the button to be clicked.
    */
   protected function saveAnd($operation) {
-    $this->assertElementExistsAfterWait('css', '.ui-dialog-buttonpane')->pressButton("Save and $operation");
+    $this->assertElementExistsAfterWait('css', '.drupal-dialog-buttonpane')->pressButton("Save and $operation");
 
     // assertWaitOnAjaxRequest() required for input "id" attributes to
     // consistently match their label's "for" attribute.
@@ -248,7 +248,7 @@ abstract class MediaLibraryTestBase extends WebDriverTestBase {
    *   pressed. Defaults to FALSE.
    */
   protected function pressSaveButton($expect_errors = FALSE) {
-    $buttons = $this->assertElementExistsAfterWait('css', '.ui-dialog-buttonpane');
+    $buttons = $this->assertElementExistsAfterWait('css', '.drupal-dialog-buttonpane');
     $buttons->pressButton('Save');
 
     // If no validation errors are expected, wait for the "Insert selected"
@@ -367,7 +367,7 @@ abstract class MediaLibraryTestBase extends WebDriverTestBase {
    */
   protected function pressInsertSelected($expected_announcement = NULL, bool $should_close = TRUE) {
     $this->assertSession()
-      ->elementExists('css', '.ui-dialog-buttonpane')
+      ->elementExists('css', '.drupal-dialog-buttonpane')
       ->pressButton('Insert selected');
 
     if ($should_close) {

@@ -11,15 +11,14 @@
  * links, and controls.
  */
 
-.ui-dialog {
-  position: absolute;
+.drupal-dialog {
   border-radius: var(--admin-radius-m);
   outline: none;
   background: var(--admin-color-bg-surface);
   box-shadow: var(--admin-shadow-1);
   font-family: var(--admin-font-family);
 
-  .ui-dialog-titlebar {
+  .drupal-dialog-titlebar {
     position: relative;
     padding: var(--admin-space-m) var(--admin-space-l);
     /* Fixed white (not a surface token): text sits on the always-dark titlebar
@@ -35,7 +34,7 @@
     }
   }
 
-  .ui-dialog-titlebar-close {
+  .drupal-dialog-titlebar-close {
     position: absolute;
     width: 2rem;
     height: 2rem;
@@ -52,7 +51,8 @@
       opacity: 1;
     }
 
-    .ui-icon-closethick {
+    &::before {
+      content: "";
       width: 100%;
       height: 100%;
       inset-block-start: 0;
@@ -71,12 +71,12 @@
     }
   }
 
-  .ui-dialog-title {
+  .drupal-dialog-title {
     padding-inline-end: var(--admin-space-xl);
     font-size: var(--admin-font-size-h6);
   }
 
-  .ui-dialog-content {
+  .drupal-dialog-content {
     color: var(--admin-color-text);
 
     &:first-of-type {
@@ -85,16 +85,13 @@
     }
   }
 
-  .ui-widget-content {
+  .drupal-dialog-content {
     padding-inline: var(--admin-space-l);
     background: var(--admin-color-bg-surface);
 
-    &.ui-dialog-content {
-      overflow: auto;
-    }
   }
 
-  .ui-widget-content.ui-dialog-buttonpane {
+  .drupal-dialog-buttonpane {
     padding: var(--admin-space-s) var(--admin-space-l);
     border-block-start: 1px solid var(--admin-color-border-soft);
     background: var(--admin-color-bg);
@@ -110,7 +107,7 @@
     }
   }
 
-  .ui-dialog-buttonset {
+  .drupal-dialog-buttonset {
     margin: 0;
   }
 
@@ -163,7 +160,7 @@
   }
 }
 
-.ui-widget-overlay {
+.drupal-dialog::backdrop {
   opacity: 0.9;
   background: var(--admin-color-bg-surface-nested);
 }

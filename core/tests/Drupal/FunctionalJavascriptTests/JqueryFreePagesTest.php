@@ -34,92 +34,56 @@ class JqueryFreePagesTest extends WebDriverTestBase {
    * Expected jQuery-family edges, keyed by page and edge.
    *
    * Values name the owner and removal slice, in that order. Default Admin's
-   * styling still loads jQuery. The shared dialog path loads jQuery UI, and
-   * the node form also loads the autocomplete widget. Remove entries as
+   * styling still loads jQuery. The node form also loads jQuery UI for
+   * autocomplete. Remove entries as
    * their last paths disappear. The remaining core/jquery library loads the
    * vendor script and bootstrap.
    */
   private const EXPECTED = [
     'block-layout' => [
       'global:jQuery' => ['Z', 'Z'],
-      'global:jQuery.ui' => ['D', 'D'],
       'library:jquery' => ['Z', 'Z'],
       'library:jquery-bootstrap' => ['B', 'Z'],
-      'library:jquery-position' => ['D', 'D'],
-      'library:jquery-ui-css' => ['D', 'D'],
-      'library:jquery-ui-dialog' => ['D', 'D'],
-      'library:jquery-ui-js' => ['D', 'D'],
     ],
     'field-display' => [
       'global:jQuery' => ['Z', 'Z'],
-      'global:jQuery.ui' => ['D', 'D'],
       'library:jquery' => ['Z', 'Z'],
       'library:jquery-bootstrap' => ['B', 'Z'],
-      'library:jquery-position' => ['D', 'D'],
-      'library:jquery-ui-css' => ['D', 'D'],
-      'library:jquery-ui-dialog' => ['D', 'D'],
-      'library:jquery-ui-js' => ['D', 'D'],
     ],
     'front' => [
       'global:jQuery' => ['Z', 'Z'],
-      'global:jQuery.ui' => ['D', 'D'],
       'library:jquery' => ['Z', 'Z'],
       'library:jquery-bootstrap' => ['B', 'Z'],
-      'library:jquery-position' => ['D', 'D'],
-      'library:jquery-ui-css' => ['D', 'D'],
-      'library:jquery-ui-dialog' => ['D', 'D'],
-      'library:jquery-ui-js' => ['D', 'D'],
     ],
     'modal' => [
       'global:jQuery' => ['Z', 'Z'],
-      'global:jQuery.ui' => ['D', 'D'],
       'library:jquery' => ['Z', 'Z'],
       'library:jquery-bootstrap' => ['B', 'Z'],
-      'library:jquery-position' => ['D', 'D'],
-      'library:jquery-ui-css' => ['D', 'D'],
-      'library:jquery-ui-dialog' => ['D', 'D'],
-      'library:jquery-ui-js' => ['D', 'D'],
     ],
     'node-add' => [
       'global:jQuery' => ['Z', 'Z'],
-      'global:jQuery.ui' => ['D', 'C'],
+      'global:jQuery.ui' => ['C', 'C'],
       'library:jquery' => ['Z', 'Z'],
       'library:jquery-bootstrap' => ['B', 'Z'],
-      'library:jquery-position' => ['D', 'C'],
+      'library:jquery-position' => ['C', 'C'],
       'library:jquery-ui-autocomplete' => ['C', 'C'],
-      'library:jquery-ui-css' => ['D', 'C'],
-      'library:jquery-ui-dialog' => ['D', 'D'],
-      'library:jquery-ui-js' => ['D', 'C'],
+      'library:jquery-ui-css' => ['C', 'C'],
+      'library:jquery-ui-js' => ['C', 'C'],
     ],
     'off-canvas' => [
       'global:jQuery' => ['Z', 'Z'],
-      'global:jQuery.ui' => ['D', 'D'],
       'library:jquery' => ['Z', 'Z'],
       'library:jquery-bootstrap' => ['B', 'Z'],
-      'library:jquery-position' => ['D', 'D'],
-      'library:jquery-ui-css' => ['D', 'D'],
-      'library:jquery-ui-dialog' => ['D', 'D'],
-      'library:jquery-ui-js' => ['D', 'D'],
     ],
     'permissions' => [
       'global:jQuery' => ['Z', 'Z'],
-      'global:jQuery.ui' => ['D', 'D'],
       'library:jquery' => ['Z', 'Z'],
       'library:jquery-bootstrap' => ['B', 'Z'],
-      'library:jquery-position' => ['D', 'D'],
-      'library:jquery-ui-css' => ['D', 'D'],
-      'library:jquery-ui-dialog' => ['D', 'D'],
-      'library:jquery-ui-js' => ['D', 'D'],
     ],
     'vertical-tabs' => [
       'global:jQuery' => ['Z', 'Z'],
-      'global:jQuery.ui' => ['D', 'D'],
       'library:jquery' => ['Z', 'Z'],
       'library:jquery-bootstrap' => ['B', 'Z'],
-      'library:jquery-position' => ['D', 'D'],
-      'library:jquery-ui-css' => ['D', 'D'],
-      'library:jquery-ui-dialog' => ['D', 'D'],
-      'library:jquery-ui-js' => ['D', 'D'],
     ],
   ];
 
@@ -189,7 +153,7 @@ class JqueryFreePagesTest extends WebDriverTestBase {
     $assert_session->assertWaitOnAjaxRequest();
     $assert_session->elementExists('css', '#drupal-modal a.use-ajax[href*="/admin/structure/block/add/"]')->click();
     $assert_session->assertWaitOnAjaxRequest();
-    $assert_session->elementTextContains('css', '[role="dialog"]', 'Configure block');
+    $assert_session->elementTextContains('css', 'dialog[open]', 'Configure block');
     $actual['block-layout'] = $this->observedEdges();
 
     $this->drupalGet('admin/structure/types/manage/article/display/default');
@@ -210,7 +174,7 @@ class JqueryFreePagesTest extends WebDriverTestBase {
     $this->drupalGet('ajax-test/dialog');
     $this->clickLink('Link 1 (modal)');
     $assert_session->assertWaitOnAjaxRequest();
-    $assert_session->elementExists('css', '[aria-modal="true"] #drupal-modal');
+    $assert_session->elementExists('css', 'dialog[open] #drupal-modal');
     $actual['modal'] = $this->observedEdges();
 
     $this->drupalGet('off-canvas-test-links');

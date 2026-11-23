@@ -117,7 +117,7 @@ class EntityReferenceWidgetTest extends MediaLibraryTestBase {
 
     // Assert generic media library elements.
     $this->openMediaLibraryForField('field_unlimited_media');
-    $assert_session->elementExists('css', '.ui-dialog-titlebar-close')->click();
+    $assert_session->elementExists('css', '.drupal-dialog-titlebar-close')->click();
 
     // Assert that the media type menu is available when more than 1 type is
     // configured for the field.
@@ -133,14 +133,14 @@ class EntityReferenceWidgetTest extends MediaLibraryTestBase {
     // Assert the focus is set to the first tabbable element when a vertical tab
     // is clicked.
     $this->assertJsCondition('document.activeElement === tabbable.tabbable(document.getElementById("media-library-content"))[0]');
-    $assert_session->elementExists('css', '.ui-dialog-titlebar-close')->click();
+    $assert_session->elementExists('css', '.drupal-dialog-titlebar-close')->click();
 
     // Assert that there are no links in the media library view.
     $this->openMediaLibraryForField('field_unlimited_media');
     $assert_session->elementNotExists('css', '.media-library-item__name a');
     $assert_session->elementNotExists('css', '.view-media-library .media-library-item__edit');
     $assert_session->elementNotExists('css', '.view-media-library .media-library-item__remove');
-    $assert_session->elementExists('css', '.ui-dialog-titlebar-close')->click();
+    $assert_session->elementExists('css', '.drupal-dialog-titlebar-close')->click();
 
     // Assert that the media type menu is available when the target_bundles
     // setting for the entity reference field is null. All types should be
@@ -175,7 +175,7 @@ class EntityReferenceWidgetTest extends MediaLibraryTestBase {
     $assert_session->hiddenFieldValueEquals('media-library-modal-selection', '4');
     $this->assertSelectedMediaCount('1 of 1 item selected');
     $assert_session->elementNotExists('css', '.js-media-library-menu');
-    $assert_session->elementExists('css', '.ui-dialog-titlebar-close')->click();
+    $assert_session->elementExists('css', '.drupal-dialog-titlebar-close')->click();
 
     // Assert the menu links can be sorted through the widget configuration.
     $this->openMediaLibraryForField('field_twin_media');
@@ -214,7 +214,7 @@ class EntityReferenceWidgetTest extends MediaLibraryTestBase {
     $this->assertSame(
       $link_titles,
       ['Show Type One media (selected)', 'Show Type Three media', 'Show Type Four media', 'Show Type Two media']);
-    $assert_session->elementExists('css', '.ui-dialog-titlebar-close')->click();
+    $assert_session->elementExists('css', '.drupal-dialog-titlebar-close')->click();
 
     // Assert the announcements for media type navigation in the media library.
     $this->openMediaLibraryForField('field_unlimited_media');
@@ -225,7 +225,7 @@ class EntityReferenceWidgetTest extends MediaLibraryTestBase {
     // Assert the links can be triggered by via the space bar.
     $assert_session->elementExists('named', ['link', 'Type Three'])->keyPress(32);
     $this->assertAnnounceContains('Showing Type Three media.');
-    $assert_session->elementExists('css', '.ui-dialog-titlebar-close')->click();
+    $assert_session->elementExists('css', '.drupal-dialog-titlebar-close')->click();
 
     // Assert media is only visible on the tab for the related media type.
     $this->openMediaLibraryForField('field_unlimited_media');
@@ -238,7 +238,7 @@ class EntityReferenceWidgetTest extends MediaLibraryTestBase {
     $assert_session->pageTextNotContains('Dog');
     $assert_session->pageTextNotContains('Bear');
     $assert_session->pageTextNotContains('Turtle');
-    $assert_session->elementExists('css', '.ui-dialog-titlebar-close')->click();
+    $assert_session->elementExists('css', '.drupal-dialog-titlebar-close')->click();
 
     // Assert the exposed name filter of the view.
     $this->openMediaLibraryForField('field_unlimited_media');
@@ -253,7 +253,7 @@ class EntityReferenceWidgetTest extends MediaLibraryTestBase {
     $assert_session->assertExpectedAjaxRequest(10);
     $assert_session->pageTextContains('Dog');
     $assert_session->pageTextContains('Bear');
-    $assert_session->elementExists('css', '.ui-dialog-titlebar-close')->click();
+    $assert_session->elementExists('css', '.drupal-dialog-titlebar-close')->click();
 
     // Assert adding a single media item and removing it.
     $this->openMediaLibraryForField('field_twin_media');
@@ -425,7 +425,7 @@ class EntityReferenceWidgetTest extends MediaLibraryTestBase {
     $this->assertFalse($checkboxes[2]->isChecked());
     $this->assertFalse($checkboxes[3]->isChecked());
     // Close the dialog, reopen it and assert not is selected again.
-    $assert_session->elementExists('css', '.ui-dialog-titlebar-close')->click();
+    $assert_session->elementExists('css', '.drupal-dialog-titlebar-close')->click();
     $this->openMediaLibraryForField('field_unlimited_media');
     $checkboxes = $this->getCheckboxes();
     $this->assertGreaterThanOrEqual(4, count($checkboxes));
@@ -433,7 +433,7 @@ class EntityReferenceWidgetTest extends MediaLibraryTestBase {
     $this->assertFalse($checkboxes[1]->isChecked());
     $this->assertFalse($checkboxes[2]->isChecked());
     $this->assertFalse($checkboxes[3]->isChecked());
-    $assert_session->elementExists('css', '.ui-dialog-titlebar-close')->click();
+    $assert_session->elementExists('css', '.drupal-dialog-titlebar-close')->click();
 
     // Finally, save the form.
     $assert_session->elementExists('css', '.js-media-library-widget-toggle-weight')->click();

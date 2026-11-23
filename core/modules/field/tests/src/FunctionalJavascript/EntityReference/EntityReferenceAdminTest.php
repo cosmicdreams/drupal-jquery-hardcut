@@ -263,7 +263,7 @@ class EntityReferenceAdminTest extends WebDriverTestBase {
     $this->getSession()->resizeWindow(1200, 1500);
     usleep(5000);
 
-    $page->find('css', '.ui-dialog-buttonset')->pressButton('Save');
+    $page->find('css', '.drupal-dialog-buttonset')->pressButton('Save');
 
     $this->assertTrue($assert_session->waitForText('Saved Test configuration.'));
 
@@ -277,7 +277,7 @@ class EntityReferenceAdminTest extends WebDriverTestBase {
     $this->clickLink('Edit', 1);
 
     $assert_session->assertExpectedAjaxRequest(1);
-    $this->assertNotNull($button_set = $assert_session->waitForElement('css', '.ui-dialog-buttonset'));
+    $this->assertNotNull($button_set = $assert_session->waitForElement('css', '.drupal-dialog-buttonset'));
     $button_set->pressButton('Save settings');
     $this->assertTrue($assert_session->waitForText('Saved Test configuration.'));
 

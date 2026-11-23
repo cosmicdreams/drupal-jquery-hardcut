@@ -135,12 +135,13 @@
           '%text_format': $(select).find('option:selected')[0].textContent,
         },
       );
-      const confirmationDialog = Drupal.dialog(`<div>${message}</div>`, {
+      const content = document.createElement('div');
+      content.innerHTML = message;
+      const confirmationDialog = Drupal.dialog(content, {
         title: Drupal.t('Change text format?'),
         classes: {
-          'ui-dialog': 'editor-change-text-format-modal',
+          'drupal-dialog': 'editor-change-text-format-modal',
         },
-        resizable: false,
         buttons: [
           {
             text: Drupal.t('Continue'),
@@ -165,17 +166,10 @@
             },
           },
         ],
-        // Prevent this modal from being closed without the user making a choice
-        // as per http://stackoverflow.com/a/5438771.
+        // Require an explicit choice before changing the active format.
         closeOnEscape: false,
-        create() {
-          $(this).parent().find('.ui-dialog-titlebar-close').remove();
-        },
-        beforeClose: false,
-        close(event) {
-          // Automatically destroy the DOM element that was used for the dialog.
-          $(event.target).remove();
-        },
+        closeButton: false,
+        removeOnClose: true,
       });
 
       confirmationDialog.showModal();

@@ -251,15 +251,6 @@ class Ckeditor5Hooks {
         ],
       ];
     }
-    if ($extension === 'core') {
-      // CSS rule to resolve the conflict with z-index between CKEditor 5 and
-      // jQuery UI.
-      $libraries['drupal.dialog']['css']['component']['modules/ckeditor5/css/ckeditor5.dialog.fix.css'] = [];
-      // Fix the CKEditor 5 focus management in dialogs. Modify the library
-      // declaration to ensure this file is always loaded after
-      // drupal.dialog.jquery-ui.js.
-      $libraries['drupal.dialog']['js']['modules/ckeditor5/js/ckeditor5.dialog.fix.js'] = [];
-    }
     // Only add translation processing if the locale module is enabled.
     if (!$this->moduleHandler->moduleExists('locale')) {
       return;

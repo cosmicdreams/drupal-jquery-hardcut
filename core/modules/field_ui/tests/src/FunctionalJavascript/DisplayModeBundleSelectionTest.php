@@ -82,7 +82,7 @@ class DisplayModeBundleSelectionTest extends WebDriverTestBase {
     $this->assertNotEmpty($assert_session->waitForText("Add new Content $display_mode mode"));
     $page->find('css', '[data-drupal-selector="edit-label"]')->setValue('test');
     $page->find('css', '[data-drupal-selector="edit-bundles-by-entity-article"]')->check();
-    $page->find('css', '.ui-dialog-buttonset')->pressButton('Save');
+    $page->find('css', '.drupal-dialog-buttonset')->pressButton('Save');
 
     // Verify that test display mode is selected for article content type.
     $this->drupalGet("/admin/structure/types/manage/article/$path");
@@ -130,7 +130,7 @@ class DisplayModeBundleSelectionTest extends WebDriverTestBase {
     $this->assertNotEmpty($assert_session->waitForText("Add new Content $display_mode mode"));
     $page->find('css', '[data-drupal-selector="edit-label"]')->setValue('test2');
     $page->find('css', '[data-drupal-selector="edit-bundles-by-entity-article"]')->check();
-    $page->find('css', '.ui-dialog-buttonset')->pressButton('Save');
+    $page->find('css', '.drupal-dialog-buttonset')->pressButton('Save');
 
     // Verify that test2 display mode is selected for article content type.
     $this->drupalGet("/admin/structure/types/manage/article/$path");
@@ -195,7 +195,7 @@ class DisplayModeBundleSelectionTest extends WebDriverTestBase {
     $page->find('xpath', '//ul[@class = "dropbutton"]/li[1]/a')->click();
     $this->assertNotEmpty($assert_session->waitForText("This $display_mode mode will still be available for the rest of the Content types if not checked here, but it will not be enabled by default."));
     $page->find('css', '[data-drupal-selector="edit-bundles-by-entity-article"]')->check();
-    $page->find('css', '.ui-dialog-buttonset')->pressButton('Save');
+    $page->find('css', '.drupal-dialog-buttonset')->pressButton('Save');
 
     // Verify that display mode is selected on article content type.
     if ($display_mode === 'view') {

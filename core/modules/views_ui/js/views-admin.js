@@ -1279,7 +1279,7 @@
               submit.value = Drupal.t('Apply (this display)');
             }
             if (context !== document) {
-              const dialog = context.closest('.ui-dialog-content');
+              const dialog = context.closest('.drupal-dialog-content');
               dialog?.dispatchEvent(new CustomEvent('dialogButtonsChange'));
             }
           })

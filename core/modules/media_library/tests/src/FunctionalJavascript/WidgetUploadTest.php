@@ -291,7 +291,7 @@ class WidgetUploadTest extends MediaLibraryTestBase {
     // Assert the focus is shifted to the first tabbable element of the add
     // form, which should be the source field.
     $this->assertNoMediaAdded();
-    $assert_session->elementExists('css', '.ui-dialog-titlebar-close')->click();
+    $assert_session->elementExists('css', '.drupal-dialog-titlebar-close')->click();
 
     // Assert uploading multiple files.
     $this->openMediaLibraryForField('field_unlimited_media');
@@ -618,7 +618,7 @@ class WidgetUploadTest extends MediaLibraryTestBase {
     $this->waitForText(Media::load(1)->label());
     $this->waitForText(Media::load(2)->label());
     $assert_session->pageTextNotContains('Mosquito');
-    $page->find('css', '.ui-dialog-titlebar-close')->click();
+    $page->find('css', '.drupal-dialog-titlebar-close')->click();
 
     // Assert we can also remove selected items from the selection area in the
     // upload form.
@@ -670,7 +670,7 @@ class WidgetUploadTest extends MediaLibraryTestBase {
     // Assert the remove message is shown.
     $this->waitForText("The media item $png_image->filename has been removed.");
     $this->assertNoMediaAdded();
-    $assert_session->elementExists('css', '.ui-dialog-titlebar-close')->click();
+    $assert_session->elementExists('css', '.drupal-dialog-titlebar-close')->click();
 
     // Assert uploading multiple files.
     $this->openMediaLibraryForField('field_unlimited_media');

@@ -94,8 +94,8 @@ class AdminModalDisplayTest extends MediaLibraryTestBase {
     $this->assertJsCondition('document.activeElement.matches("' . $selector . '")');
 
     // Assert that the 'add another item' button is not in the dialog footer.
-    $assert_session->elementNotExists('css', '.ui-dialog-buttonset .field-add-more-submit');
-    $assert_session->elementExists('css', '.ui-dialog-content .field-add-more-submit');
+    $assert_session->elementNotExists('css', '.drupal-dialog-buttonset .field-add-more-submit');
+    $assert_session->elementExists('css', '.drupal-dialog-content .field-add-more-submit');
   }
 
 }

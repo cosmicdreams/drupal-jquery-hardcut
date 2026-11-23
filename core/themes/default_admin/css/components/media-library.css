@@ -184,11 +184,11 @@
 
 .media-library-widget-modal {
   /* By default, the dialog is too narrow to be usable. @see Drupal.ckeditor5.openDialog() */
-  &.ui-dialog--narrow {
+  &.drupal-dialog--narrow {
     min-width: min(75%, 93.75rem);
   }
 
-  .ui-dialog-buttonpane {
+  .drupal-dialog-buttonpane {
     display: flex;
     flex-direction: column;
     align-items: center;

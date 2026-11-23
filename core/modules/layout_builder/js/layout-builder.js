@@ -217,8 +217,8 @@
 
   // After a dialog opens, highlight element that the dialog is acting on.
   window.addEventListener('dialog:aftercreate', (e) => {
-    const $element = $(e.target);
-    if (Drupal.offCanvas.isOffCanvas($element)) {
+    if (Drupal.offCanvas.isOffCanvas(e.target)) {
+      const $element = $(e.target);
       // Start by removing any existing highlighted elements.
       $('.is-layout-builder-highlighted').removeClass(
         'is-layout-builder-highlighted',
@@ -302,8 +302,7 @@
   }
 
   window.addEventListener('dialog:afterclose', (e) => {
-    const $element = $(e.target);
-    if (Drupal.offCanvas.isOffCanvas($element)) {
+    if (Drupal.offCanvas.isOffCanvas(e.target)) {
       // Remove the highlight from all elements.
       $('.is-layout-builder-highlighted').removeClass(
         'is-layout-builder-highlighted',

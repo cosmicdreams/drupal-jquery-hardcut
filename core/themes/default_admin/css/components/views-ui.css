@@ -845,7 +845,7 @@ html:not(.no-touchevents) {
   }
 }
 
-.views-ui-dialog.views-ui-dialog > .ui-dialog-content {
+.views-ui-dialog.views-ui-dialog > .drupal-dialog-content {
   padding: 0;
 }
 
@@ -1020,7 +1020,7 @@ html:not(.no-touchevents) {
   padding-block: 0;
 }
 
-.views-ui-dialog.views-ui-dialog-scroll .ui-dialog-titlebar {
+.views-ui-dialog.views-ui-dialog-scroll .drupal-dialog-titlebar {
   border: none;
 }
 

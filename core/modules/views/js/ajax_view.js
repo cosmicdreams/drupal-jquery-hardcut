@@ -239,7 +239,7 @@
    */
   Drupal.AjaxCommands.prototype.setBrowserUrl = (ajax, response) => {
     // Do not change browser URL if we are in a dialog wrapper.
-    if (ajax.element && !ajax.element.closest('.ui-dialog-content')) {
+    if (ajax.element && !ajax.element.closest('.drupal-dialog-content')) {
       window.history.replaceState(null, '', response.url);
     }
   };

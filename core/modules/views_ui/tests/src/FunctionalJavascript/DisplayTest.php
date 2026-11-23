@@ -129,7 +129,7 @@ class DisplayTest extends WebDriverTestBase {
 
       $admin_name_field = $this->assertSession()
         ->waitForField('Administrative name');
-      $dialog_buttons = $page->find('css', '.ui-dialog-buttonset');
+      $dialog_buttons = $page->find('css', '.drupal-dialog-buttonset');
       $admin_name_field->setValue($new_title);
 
       $dialog_buttons->pressButton('Apply');

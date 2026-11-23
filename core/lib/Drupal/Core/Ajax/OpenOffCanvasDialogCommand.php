@@ -28,8 +28,7 @@ class OpenOffCanvasDialogCommand extends OpenDialogCommand {
    *   The content that will be placed in the dialog, either a render array
    *   or an HTML string.
    * @param array $dialog_options
-   *   (optional) Settings to be passed to the dialog implementation. Any
-   *   jQuery UI option can be used. See http://api.jqueryui.com/dialog.
+   *   (optional) Settings to be passed to the dialog implementation.
    * @param array|null $settings
    *   (optional) Custom settings that will be passed to the Drupal behaviors
    *   on the content of the dialog. If left empty, the settings will be
@@ -39,25 +38,20 @@ class OpenOffCanvasDialogCommand extends OpenDialogCommand {
    */
   public function __construct(string|\Stringable|null $title, $content, array $dialog_options = [], $settings = NULL, $position = 'side') {
     $classes = [];
-    if (isset($dialog_options['classes']['ui-dialog'])) {
-      $classes[] = $dialog_options['classes']['ui-dialog'];
+    if (isset($dialog_options['classes']['drupal-dialog'])) {
+      $classes[] = $dialog_options['classes']['drupal-dialog'];
     }
-    $classes[] = 'ui-dialog-off-canvas';
-    $classes[] = "ui-dialog-position-$position";
-    $dialog_options['classes']['ui-dialog'] = implode(' ', $classes);
+    $classes[] = 'drupal-dialog-off-canvas';
+    $classes[] = "drupal-dialog-position-$position";
+    $dialog_options['classes']['drupal-dialog'] = implode(' ', $classes);
 
     parent::__construct('#drupal-off-canvas', $title, $content, $dialog_options, $settings);
     $this->dialogOptions['modal'] = FALSE;
-    $this->dialogOptions['autoResize'] = FALSE;
-    $this->dialogOptions['resizable'] = 'w';
-    $this->dialogOptions['draggable'] = FALSE;
     $this->dialogOptions['drupalAutoButtons'] = FALSE;
     $this->dialogOptions['drupalOffCanvasPosition'] = $position;
 
-    // Add CSS class to #drupal-off-canvas element. This enables developers to
-    // select previous versions of off-canvas styles by using custom selector:
-    // #drupal-off-canvas:not(.drupal-off-canvas-reset).
-    $this->dialogOptions['classes']['ui-dialog-content'] = 'drupal-off-canvas-reset';
+    // Scope the off-canvas content styles.
+    $this->dialogOptions['classes']['drupal-dialog-content'] = 'drupal-off-canvas-reset';
     // If no width option is provided then use the default width to avoid the
     // dialog staying at the width of the previous instance when opened
     // more than once, with different widths, on a single page.

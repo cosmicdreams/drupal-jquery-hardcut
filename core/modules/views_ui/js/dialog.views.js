@@ -3,7 +3,7 @@
  * Views dialog behaviors.
  */
 
-(function ($, Drupal, drupalSettings, bodyScrollLock) {
+(function ($, Drupal) {
   function handleDialogResize(e) {
     const $modal = $(e.currentTarget);
     const $viewsOverride = $modal.find('[data-drupal-views-offset]');
@@ -52,7 +52,7 @@
     attach(context) {
       $(once('viewsDialog', 'body')).on(
         'dialogContentResize.viewsDialog',
-        '.ui-dialog-content',
+        '.drupal-dialog-content',
         handleDialogResize,
       );
       // When expanding details, make sure the modal is resized.
@@ -73,22 +73,10 @@
     },
   };
 
-  /**
-   * Binds a listener on dialog creation to handle Views modal scroll.
-   *
-   * @param {jQuery.Event} e
-   *   The event triggered.
-   * @param {Drupal.dialog~dialogDefinition} dialog
-   *   The dialog instance.
-   * @param {jQuery} $element
-   *   The jQuery collection of the dialog element.
-   */
-  window.addEventListener('dialog:aftercreate', (e) => {
-    const $element = $(e.target);
-    const $scroll = $element.find('.scroll');
-    if ($scroll.length) {
-      bodyScrollLock.unlock($element.get(0));
-      bodyScrollLock.lock($scroll.get(0));
+  window.addEventListener('dialog:beforecreate', ({ target, settings }) => {
+    const scroll = target.querySelector('.scroll');
+    if (scroll) {
+      settings.scrollTarget = scroll;
     }
   });
-})(jQuery, Drupal, drupalSettings, bodyScrollLock);
+})(jQuery, Drupal);

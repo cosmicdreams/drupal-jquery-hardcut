@@ -85,7 +85,7 @@ class FieldUiIntegrationTest extends MediaLibraryTestBase {
     $this->assertElementExistsAfterWait('css', '[name="settings[handler_settings][target_bundles][type_two]"][checked="checked"]');
     $page->checkField('settings[handler_settings][target_bundles][type_three]');
     $this->assertElementExistsAfterWait('css', '[name="settings[handler_settings][target_bundles][type_three]"][checked="checked"]');
-    $page->find('css', '.ui-dialog-buttonset')->pressButton('Save');
+    $page->find('css', '.drupal-dialog-buttonset')->pressButton('Save');
     $this->assertTrue($assert_session->waitForText('Saved Shatner configuration.'));
 
     $this->drupalGet('/admin/structure/types/manage/article/fields/node.article.field_shatner');

@@ -70,7 +70,7 @@ class CKEditor5DialogTest extends CKEditor5TestBase {
 
     $this->drupalGet('/ckeditor5_test/dialog');
     $page->clickLink('Add Node');
-    $assert_session->waitForElementVisible('css', '[role="dialog"]');
+    $this->assertNotNull($assert_session->waitForElementVisible('css', 'dialog[open]'));
     $assert_session->assertWaitOnAjaxRequest();
 
     $content_area = $assert_session->waitForElementVisible('css', '.ck-editor__editable');
@@ -172,19 +172,19 @@ class CKEditor5DialogTest extends CKEditor5TestBase {
     JS);
     $this->assertTrue($result);
 
-    // The ui-dialog--narrow class must always be appended, even alongside
+    // The drupal-dialog--narrow class must always be appended, even alongside
     // custom existing classes.
     $result = $this->getSession()->evaluateScript(<<<JS
       (function() {
         let captured = null;
         const originalAjax = Drupal.ajax;
         Drupal.ajax = function(settings) { captured = settings; return { execute: function() {} }; };
-        Drupal.ckeditor5.openDialog('/test', function() {}, { classes: { 'ui-dialog': 'my-custom-class' } });
+        Drupal.ckeditor5.openDialog('/test', function() {}, { classes: { 'drupal-dialog': 'my-custom-class' } });
         Drupal.ajax = originalAjax;
-        return captured.dialog.classes['ui-dialog'];
+        return captured.dialog.classes['drupal-dialog'];
       })()
     JS);
-    $this->assertStringContainsString('ui-dialog--narrow', $result);
+    $this->assertStringContainsString('drupal-dialog--narrow', $result);
     $this->assertStringContainsString('my-custom-class', $result);
   }
 

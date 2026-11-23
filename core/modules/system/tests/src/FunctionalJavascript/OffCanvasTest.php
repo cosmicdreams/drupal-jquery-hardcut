@@ -59,23 +59,23 @@ class OffCanvasTest extends OffCanvasTestBase {
     // removed.
     foreach ([1, 2, 1] as $link_index) {
       $this->assertOffCanvasDialog($link_index, 'side');
-      $header_text = $this->getOffCanvasDialog()->find('css', '.ui-dialog-title')->getText();
+      $header_text = $this->getOffCanvasDialog()->find('css', '.drupal-dialog-title')->getText();
       if ($link_index === 2) {
         // Check no title behavior.
-        $web_assert->elementExists('css', '.ui-dialog-empty-title');
-        $this->assertEquals(' ', $header_text);
+        $web_assert->elementExists('css', '.drupal-dialog-empty-title');
+        $web_assert->elementExists('css', '.drupal-dialog-title[hidden]');
 
-        $style = $page->find('css', '.ui-dialog-off-canvas')->getAttribute('style');
+        $style = $page->find('css', '.drupal-dialog-off-canvas')->getAttribute('style');
         $this->assertStringContainsString('width: 555px;', $style, 'Dialog width respected.');
         $page->clickLink("Open side panel 1");
         $this->waitForOffCanvasToOpen();
-        $style = $page->find('css', '.ui-dialog-off-canvas')->getAttribute('style');
+        $style = $page->find('css', '.drupal-dialog-off-canvas')->getAttribute('style');
         $this->assertStringNotContainsString('width: 555px;', $style, 'Dialog width reset to default.');
       }
       else {
         // Check that header is correct.
         $this->assertEquals("Thing $link_index", $header_text);
-        $web_assert->elementNotExists('css', '.ui-dialog-empty-title');
+        $web_assert->elementNotExists('css', '.drupal-dialog-empty-title');
       }
     }
 
@@ -83,11 +83,8 @@ class OffCanvasTest extends OffCanvasTestBase {
     foreach ([1, 2] as $link_index) {
       $this->assertOffCanvasDialog($link_index, 'top');
 
-      $style = $page->find('css', '.ui-dialog-off-canvas')->getAttribute('style');
-      if ($link_index === 1) {
-        $this->assertStringContainsString('height: auto;', $style);
-      }
-      else {
+      if ($link_index === 2) {
+        $style = $page->find('css', '.drupal-dialog-off-canvas')->getAttribute('style');
         $this->assertStringContainsString('height: 421px;', $style);
       }
     }
@@ -101,7 +98,7 @@ class OffCanvasTest extends OffCanvasTestBase {
     // Click off-canvas link inside off-canvas dialog.
     $page->clickLink('Off_canvas link!');
     $this->waitForOffCanvasToOpen();
-    $web_assert->elementTextContains('css', '.ui-dialog[aria-describedby="drupal-off-canvas"]', 'Thing 2 says hello');
+    $web_assert->elementTextContains('css', '#drupal-off-canvas-wrapper', 'Thing 2 says hello');
 
     // Ensure an off-canvas link opened from inside the off-canvas dialog will
     // work after another dialog has been opened.
@@ -114,7 +111,7 @@ class OffCanvasTest extends OffCanvasTestBase {
     // Click off-canvas link inside off-canvas dialog.
     $page->clickLink('Off_canvas link!');
     $this->waitForOffCanvasToOpen();
-    $web_assert->elementTextContains('css', '.ui-dialog[aria-describedby="drupal-off-canvas"]', 'Thing 2 says hello');
+    $web_assert->elementTextContains('css', '#drupal-off-canvas-wrapper', 'Thing 2 says hello');
   }
 
   /**
@@ -143,6 +140,16 @@ class OffCanvasTest extends OffCanvasTestBase {
       });
       $web_assert->elementAttributeContains('css', '.dialog-off-canvas-main-canvas', 'style', 'padding-right');
 
+      $this->assertJsCondition(<<<'JS'
+        (() => {
+          const tray = document.getElementById('drupal-off-canvas-wrapper');
+          return Drupal.displace.offsets.right === tray.getBoundingClientRect().width;
+        })()
+        JS);
+      $page->pressButton('Close');
+      $this->waitForOffCanvasToClose();
+      $this->assertJsCondition('Drupal.displace.offsets.right === 0');
+
       // Testing at the narrower width.
       $this->getSession()->resizeWindow($narrow_width_breakpoint - $offset, $height);
       $this->drupalGet('/off-canvas-test-links');
@@ -151,6 +158,35 @@ class OffCanvasTest extends OffCanvasTestBase {
       $this->waitForOffCanvasToOpen();
       $this->assertFalse($page->find('css', '.dialog-off-canvas-main-canvas')->hasAttribute('style'), 'Body not padded on narrow page with tray open.');
     }
+  }
+
+  /**
+   * Tests that a superseded htmx response cannot overwrite the newer tray.
+   */
+  public function testOffCanvasHtmxRequests(): void {
+    $this->drupalGet('/off-canvas-test-htmx-links');
+    $session = $this->getSession();
+    $page_title = $session->evaluateScript('document.title');
+    $session->executeScript(<<<'JS'
+      const links = [...document.links];
+      const text = Response.prototype.text;
+      Response.prototype.text = async function () {
+        const body = await text.call(this);
+        if (this.url.includes('off-canvas-thing1')) {
+          links.find((link) => link.textContent === 'Open panel 2').click();
+          await new Promise((resolve) => setTimeout(resolve, 300));
+          window.firstTrayResponseRead = true;
+        }
+        return body;
+      };
+      links.find((link) => link.textContent === 'Open panel 1').click();
+      JS);
+    $this->waitForOffCanvasToOpen();
+    $this->assertJsCondition('window.firstTrayResponseRead === true');
+    $this->assertSession()->elementTextContains('css', '#drupal-off-canvas', 'Thing 2 says hello');
+    $this->assertSession()->elementAttributeContains('css', 'dialog#drupal-off-canvas-wrapper', 'style', 'width: 555px');
+    $this->assertSame($page_title, $session->evaluateScript('document.title'));
+    $this->assertCount(1, $session->getPage()->findAll('css', 'dialog#drupal-off-canvas-wrapper'));
   }
 
   /**

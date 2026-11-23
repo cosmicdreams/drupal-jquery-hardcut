@@ -3,7 +3,7 @@
 namespace Drupal\Core\Ajax;
 
 /**
- * Defines an AJAX command that sets jQuery UI dialog properties.
+ * Defines an AJAX command that sets native dialog options.
  *
  * @ingroup ajax
  */

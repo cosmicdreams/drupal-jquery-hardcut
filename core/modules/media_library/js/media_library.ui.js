@@ -387,7 +387,7 @@
         // Since the dialog HTML is not part of the context, we can't use
         // context here.
         const $buttonPane = $(
-          '.media-library-widget-modal .ui-dialog-buttonpane',
+          '.media-library-widget-modal .drupal-dialog-buttonpane',
         );
         if (!$buttonPane.length) {
           return;

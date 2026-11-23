@@ -180,7 +180,7 @@ class ExposedFilterAJAXTest extends WebDriverTestBase {
 
     // Search for "Page One".
     $session->getPage()->fillField('title', 'Page One');
-    $assert->elementExists('css', '.ui-dialog-buttonpane')->pressButton('Filter');
+    $assert->elementExists('css', '.drupal-dialog-buttonpane')->pressButton('Filter');
     $this->assertSession()->assertWaitOnAjaxRequest();
 
     // Verify that only the "Page One" Node is present.
@@ -200,7 +200,7 @@ class ExposedFilterAJAXTest extends WebDriverTestBase {
 
     // Search for "Page One".
     $session->getPage()->fillField('title', 'Page One');
-    $assert->elementExists('css', '.ui-dialog-buttonpane')->pressButton('Filter');
+    $assert->elementExists('css', '.drupal-dialog-buttonpane')->pressButton('Filter');
     $this->assertSession()->assertWaitOnAjaxRequest();
 
     // Verify that only the "Page One" Node is present.

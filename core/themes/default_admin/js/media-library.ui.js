@@ -31,7 +31,7 @@
 
         const $buttonPane = $element
           .closest('.media-library-widget-modal')
-          .find('.ui-dialog-buttonpane');
+          .find('.drupal-dialog-buttonpane');
         if (!$buttonPane.length) {
           return;
         }

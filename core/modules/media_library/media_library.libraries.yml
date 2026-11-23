@@ -20,6 +20,7 @@ widget:
   js:
     js/media_library.widget.js: {}
   dependencies:
+    - core/jquery
     - core/drupal.dialog.ajax
     - core/once
     - core/sortable

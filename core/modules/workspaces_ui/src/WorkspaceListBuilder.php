@@ -215,7 +215,7 @@ class WorkspaceListBuilder extends EntityListBuilder {
    */
   public function render() {
     $build = parent::render();
-    if ($this->isAjax()) {
+    if ($this->isAjax() || $this->getRequestWrapperFormat() === 'drupal_htmx') {
       $this->offCanvasRender($build);
     }
     else {

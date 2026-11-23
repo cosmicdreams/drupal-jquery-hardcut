@@ -150,9 +150,9 @@ class ManageFieldsTest extends WebDriverTestBase {
     $page->clickLink('Delete');
 
     // Asserts a dialog opens with the expected text.
-    $this->assertEquals('Are you sure you want to delete the field Body?', $assert_session->waitForElement('css', '.ui-dialog-title')->getText());
+    $this->assertEquals('Are you sure you want to delete the field Body?', $assert_session->waitForElement('css', '.drupal-dialog-title')->getText());
 
-    $page->find('css', '.ui-dialog-buttonset')->pressButton('Delete');
+    $page->find('css', '.drupal-dialog-buttonset')->pressButton('Delete');
     $assert_session->waitForText('The field Body has been deleted from the Article content type.');
   }
 
@@ -172,7 +172,7 @@ class ManageFieldsTest extends WebDriverTestBase {
     $this->clickLink('Number');
     $assert_session->assertWaitOnAjaxRequest();
     $assert_session->waitForText('Add field: Number');
-    $buttons = $this->assertSession()->elementExists('css', '.ui-dialog-buttonpane');
+    $buttons = $this->assertSession()->elementExists('css', '.drupal-dialog-buttonpane');
     // Test validation.
     $buttons->pressButton('Continue');
     $assert_session->assertWaitOnAjaxRequest();
@@ -181,7 +181,7 @@ class ManageFieldsTest extends WebDriverTestBase {
     $assert_session->elementExists('css', '[name="label"].error');
     $assert_session->elementExists('css', '[name="field_options_wrapper"].error');
     $page->fillField('label', $field_name);
-    $buttons = $this->assertSession()->elementExists('css', '.ui-dialog-buttonpane');
+    $buttons = $this->assertSession()->elementExists('css', '.drupal-dialog-buttonpane');
     $buttons->pressButton('Continue');
     $assert_session->assertWaitOnAjaxRequest();
 
@@ -189,7 +189,7 @@ class ManageFieldsTest extends WebDriverTestBase {
 
     $assert_session->elementNotExists('css', '[name="label"].error');
     $assert_session->elementExists('css', '[name="field_options_wrapper"].error');
-    $buttons = $this->assertSession()->elementExists('css', '.ui-dialog-buttonpane');
+    $buttons = $this->assertSession()->elementExists('css', '.drupal-dialog-buttonpane');
     $buttons->pressButton('Change field type');
     $this->assertSession()->assertWaitOnAjaxRequest();
 
@@ -198,7 +198,7 @@ class ManageFieldsTest extends WebDriverTestBase {
     $assert_session->assertWaitOnAjaxRequest();
     $assert_session->pageTextNotContains('Choose a field type');
     $assert_session->elementExists('css', '[name="label"]');
-    $buttons = $this->assertSession()->elementExists('css', '.ui-dialog-buttonpane');
+    $buttons = $this->assertSession()->elementExists('css', '.drupal-dialog-buttonpane');
     $buttons->pressButton('Change field type');
     $this->assertSession()->assertWaitOnAjaxRequest();
 
@@ -211,7 +211,7 @@ class ManageFieldsTest extends WebDriverTestBase {
     $this->assertNotEmpty($text_plain = $page->find('xpath', '//*[text() = "Short text"]')->getParent());
     $text_plain->click();
     $this->assertTrue($assert_session->elementExists('css', '[name="field_options_wrapper"][value="string"]')->isSelected());
-    $buttons = $this->assertSession()->elementExists('css', '.ui-dialog-buttonpane');
+    $buttons = $this->assertSession()->elementExists('css', '.drupal-dialog-buttonpane');
     $buttons->pressButton('Continue');
     $this->assertSession()->assertWaitOnAjaxRequest();
 
@@ -255,7 +255,7 @@ class ManageFieldsTest extends WebDriverTestBase {
     // Set a default value that is under the new limit.
     $default_input_1->setValue('Five!');
 
-    $buttons = $this->assertSession()->elementExists('css', '.ui-dialog-buttonpane');
+    $buttons = $this->assertSession()->elementExists('css', '.drupal-dialog-buttonpane');
     $buttons->pressButton('Save');
     $this->assertTrue($assert_session->waitForText('Saved ' . $field_name . ' configuration.'));
     $this->assertNotNull($field_storage = FieldStorageConfig::loadByName('node', "field_$field_name"));
@@ -274,7 +274,7 @@ class ManageFieldsTest extends WebDriverTestBase {
     $number_integer->click();
     $this->assertTrue($assert_session->elementExists('css', '[name="field_options_wrapper"][value="integer"]')->isSelected());
 
-    $buttons = $this->assertSession()->elementExists('css', '.ui-dialog-buttonpane');
+    $buttons = $this->assertSession()->elementExists('css', '.drupal-dialog-buttonpane');
     $buttons->pressButton('Change field type');
     $this->assertSession()->assertWaitOnAjaxRequest();
     $this->assertNotEmpty($test_field = $page->find('xpath', '//*[text() = "Test field"]')->getParent());
@@ -284,10 +284,10 @@ class ManageFieldsTest extends WebDriverTestBase {
     $page->fillField('label', $field_name);
     $assert_session->pageTextNotContains('Choose a field type');
 
-    $buttons = $this->assertSession()->elementExists('css', '.ui-dialog-buttonpane');
+    $buttons = $this->assertSession()->elementExists('css', '.drupal-dialog-buttonpane');
     $buttons->pressButton('Continue');
     $this->assertSession()->assertWaitOnAjaxRequest();
-    $buttons = $this->assertSession()->elementExists('css', '.ui-dialog-buttonpane');
+    $buttons = $this->assertSession()->elementExists('css', '.drupal-dialog-buttonpane');
     $buttons->pressButton('Save');
     $this->assertTrue($assert_session->waitForText('Saved ' . $field_name . ' configuration.'));
     $this->assertNotNull($field_storage = FieldStorageConfig::loadByName('node', "field_$field_name"));
@@ -364,7 +364,7 @@ class ManageFieldsTest extends WebDriverTestBase {
     $this->assertSession()->assertWaitOnAjaxRequest();
     $this->clickLink('Plain text');
     $this->assertSession()->assertWaitOnAjaxRequest();
-    $buttons = $this->assertSession()->elementExists('css', '.ui-dialog-buttonpane');
+    $buttons = $this->assertSession()->elementExists('css', '.drupal-dialog-buttonpane');
     $buttons->pressButton('Continue');
     $this->assertSession()->assertWaitOnAjaxRequest();
     $this->assertSession()->pageTextContains('Label field is required.');

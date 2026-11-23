@@ -35,9 +35,9 @@
           event.preventDefault();
           const previewDialog = document.createElement('div');
           previewDialog.innerHTML = Drupal.theme('nodePreviewModal');
-          document.body.append(previewDialog);
           const confirmationDialog = Drupal.dialog(previewDialog, {
             title: Drupal.t('Leave preview?'),
+            removeOnClose: true,
             buttons: [
               {
                 text: Drupal.t('Cancel'),

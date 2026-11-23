@@ -162,7 +162,7 @@ class AggregationAjaxTest extends WebDriverTestBase {
    */
   protected function pressDialogButton(string $text): void {
     $this->assertSession()
-      ->elementExists('css', sprintf('.ui-dialog-buttonset button:contains("%s")', $text))
+      ->elementExists('css', sprintf('.drupal-dialog-buttonset button:contains("%s")', $text))
       ->press();
   }
 

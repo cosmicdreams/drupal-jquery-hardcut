@@ -84,7 +84,7 @@ class WidgetViewsTest extends MediaLibraryTestBase {
     $this->openMediaLibraryForField('field_unlimited_media');
 
     // Assert the 'Apply filter' button is not moved to the button pane.
-    $button_pane = $assert_session->elementExists('css', '.ui-dialog-buttonpane');
+    $button_pane = $assert_session->elementExists('css', '.drupal-dialog-buttonpane');
     $assert_session->buttonExists('Insert selected', $button_pane);
     $assert_session->buttonNotExists('Apply filters', $button_pane);
 

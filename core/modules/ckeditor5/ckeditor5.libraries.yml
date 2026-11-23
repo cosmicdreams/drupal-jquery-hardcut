@@ -37,6 +37,7 @@ internal.drupal.ckeditor5:
     - core/drupal
     - core/drupal.ajax
     - core/drupal.debounce
+    - core/drupal.displace
     - core/ckeditor5
     - editor/drupal.editor
     - ckeditor5/internal.drupal.ckeditor5.stylesheets

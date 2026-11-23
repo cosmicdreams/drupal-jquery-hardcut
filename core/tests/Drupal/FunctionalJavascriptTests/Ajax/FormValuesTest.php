@@ -52,7 +52,7 @@ class FormValuesTest extends WebDriverTestBase {
       $this->drupalGet('ajax_forms_test_dialog_form_link');
       $assertSession->waitForElementVisible('css', '[data-once="ajax"]');
       $this->clickLink("Open form in $form_mode");
-      $this->assertNotEmpty($assertSession->waitForElementVisible('css', '.ui-dialog [data-drupal-selector="edit-select"]'));
+      $this->assertNotEmpty($assertSession->waitForElementVisible('css', '.drupal-dialog [data-drupal-selector="edit-select"]'));
     }
 
     // Verify form values of a select element.

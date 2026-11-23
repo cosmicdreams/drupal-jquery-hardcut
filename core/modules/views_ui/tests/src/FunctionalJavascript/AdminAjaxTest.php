@@ -57,7 +57,7 @@ class AdminAjaxTest extends WebDriverTestBase {
     $page->clickLink('User: Name (Username)');
     $assert_session->waitForElementVisible('css', '.views-ui-dialog');
     $page->fillField('Label', 'New Title');
-    $page->find('css', '.ui-dialog-buttonset button:contains("Apply")')->press();
+    $page->find('css', '.drupal-dialog-buttonset button:contains("Apply")')->press();
     $assert_session->waitForElementRemoved('css', '.views-ui-dialog');
     $assert_session->pageTextContains('This is text added to the display tabs at the top');
     $assert_session->pageTextContains('This is text added to the display edit form');
@@ -73,10 +73,10 @@ class AdminAjaxTest extends WebDriverTestBase {
       $page->find('css', '#views-add-field')->click();
       $this->assertSession()->assertWaitOnAjaxRequest();
       $page->checkField($field);
-      $page->find('css', '.ui-dialog-buttonset')->pressButton('Add and configure fields');
+      $page->find('css', '.drupal-dialog-buttonset')->pressButton('Add and configure fields');
       $this->assertSession()->assertWaitOnAjaxRequest();
       $this->assertJsCondition('document.documentElement.style.overflow === "hidden"');
-      $page->find('css', '.ui-dialog-buttonset')->pressButton('Apply');
+      $page->find('css', '.drupal-dialog-buttonset')->pressButton('Apply');
       $this->assertSession()->assertWaitOnAjaxRequest();
 
       // Check overflow.

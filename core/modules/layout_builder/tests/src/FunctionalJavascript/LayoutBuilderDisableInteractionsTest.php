@@ -224,7 +224,7 @@ class LayoutBuilderDisableInteractionsTest extends WebDriverTestBase {
     $this->drupalGet($this->getUrl());
 
     $this->clickContextualLink('.block-field-blocknodebundle-with-section-fieldbody [data-contextual-id^="layout_builder_block"]', 'Configure');
-    $this->assertNotEmpty($assert_session->waitForElementVisible('css', '.ui-dialog-titlebar [title="Close"]'));
+    $this->assertNotEmpty($assert_session->waitForElementVisible('css', '.drupal-dialog-titlebar [title="Close"]'));
     // We explicitly wait for the off-canvas area to be fully resized before
     // trying to press the Close button, instead of waiting for the Close button
     // itself to become visible. This is to prevent a regularly occurring random

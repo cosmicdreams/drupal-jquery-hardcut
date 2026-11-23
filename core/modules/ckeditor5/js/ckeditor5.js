@@ -382,6 +382,12 @@
       const id = setElementId(element);
       const { ClassicEditor } = CKEDITOR;
 
+      // A modal makes overlays outside its subtree inert.
+      const dialog = element.closest('dialog');
+      if (dialog) {
+        editorConfig.ui = { ...editorConfig.ui, overlayContainer: dialog };
+      }
+
       ClassicEditor.create(element, editorConfig)
         .then((editor) => {
           /**
@@ -457,12 +463,20 @@
           // Integrate CKEditor 5 viewport offset with Drupal displace.
           // @see \Drupal\Tests\ckeditor5\FunctionalJavascript\CKEditor5ToolbarTest
           // @see https://ckeditor.com/docs/ckeditor5/latest/api/module_core_editor_editorui-EditorUI.html#member-viewportOffset
-          $(document).on(
-            `drupalViewportOffsetChange.ckeditor5.${id}`,
-            (event, offsets) => {
-              editor.ui.viewportOffset = offsets;
-            },
+          const updateViewportOffset = ({ detail }) => {
+            editor.ui.viewportOffset = detail;
+          };
+          editor.ui.viewportOffset = Drupal.displace.offsets;
+          document.addEventListener(
+            'drupalViewportOffsetChange',
+            updateViewportOffset,
           );
+          editor.once('destroy', () => {
+            document.removeEventListener(
+              'drupalViewportOffsetChange',
+              updateViewportOffset,
+            );
+          });
 
           editor.model.document.on('change:data', () => {
             const callback = callbacks.get(id);
@@ -505,8 +519,6 @@
       if (!editor) {
         return;
       }
-
-      $(document).off(`drupalViewportOffsetChange.ckeditor5.${id}`);
 
       if (trigger === 'serialize') {
         editor.updateSourceElement();
@@ -607,7 +619,7 @@
     /**
      * Open a dialog for a Drupal-based plugin.
      *
-     * This dynamically loads jQuery UI (if necessary) using the Drupal AJAX
+     * This dynamically loads the native dialog code using the Drupal Ajax
      * framework, then opens a dialog at the specified Drupal path.
      *
      * @param {string} url
@@ -615,16 +627,16 @@
      * @param {function} saveCallback
      *   A function to be called upon saving the dialog.
      * @param {object} dialogSettings
-     *   An object containing settings to be passed to the jQuery UI.
+     *   An object containing settings for the dialog.
      */
     openDialog(url, saveCallback, dialogSettings) {
       // Add a consistent dialog class.
       dialogSettings.classes = dialogSettings.classes || {};
-      const classes = dialogSettings.classes['ui-dialog']
-        ? dialogSettings.classes['ui-dialog'].split(' ')
+      const classes = dialogSettings.classes['drupal-dialog']
+        ? dialogSettings.classes['drupal-dialog'].split(' ')
         : [];
-      classes.push('ui-dialog--narrow');
-      dialogSettings.classes['ui-dialog'] = classes.join(' ');
+      classes.push('drupal-dialog--narrow');
+      dialogSettings.classes['drupal-dialog'] = classes.join(' ');
       if (typeof dialogSettings.autoResize === 'undefined') {
         dialogSettings.autoResize =
           window.matchMedia('(min-width: 600px)').matches;

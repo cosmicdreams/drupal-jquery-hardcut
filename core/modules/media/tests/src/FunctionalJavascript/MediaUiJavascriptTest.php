@@ -194,7 +194,7 @@ class MediaUiJavascriptTest extends MediaJavascriptTestBase {
     $assert_session->assertWaitOnAjaxRequest();
     $this->assertNotEmpty($assert_session->waitForElementVisible('css', '#drupal-modal'));
     $assert_session->addressEquals('admin/structure/media/manage/' . $this->testMediaType->id());
-    $this->click('.ui-dialog button:contains("Delete")');
+    $this->click('.drupal-dialog button:contains("Delete")');
     $assert_session->addressEquals('admin/structure/media');
     $assert_session->pageTextContains('The media type ' . $new_name . ' has been deleted.');
 
@@ -209,7 +209,7 @@ class MediaUiJavascriptTest extends MediaJavascriptTestBase {
     $assert_session->assertWaitOnAjaxRequest();
     $this->assertNotEmpty($assert_session->waitForElementVisible('css', '#drupal-modal'));
     $assert_session->addressEquals('admin/structure/media/manage/' . $media_type2->id());
-    $assert_session->elementNotExists('css', '.ui-dialog button:contains("Delete")');
+    $assert_session->elementNotExists('css', '.drupal-dialog button:contains("Delete")');
     $assert_session->pageTextContains("$label2 is used by 1 media item on your site. You may not remove this media type until you have removed all of the $label2 media items.");
   }
 

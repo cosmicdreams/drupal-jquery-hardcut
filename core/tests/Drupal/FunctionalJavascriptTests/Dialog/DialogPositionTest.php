@@ -41,13 +41,13 @@ class DialogPositionTest extends WebDriverTestBase {
     $this->assertTrue($placeBlockLink->isVisible(), 'Place block button exists.');
     $placeBlockLink->click();
     $assert_session->assertWaitOnAjaxRequest();
-    $dialog = $page->find('css', '.ui-dialog');
+    $dialog = $page->find('css', '.drupal-dialog');
     $this->assertTrue($dialog->isVisible(), 'Dialog is opened after clicking the Place block button.');
 
     // Close the dialog again.
-    $closeButton = $page->find('css', '.ui-dialog-titlebar-close');
+    $closeButton = $page->find('css', '.drupal-dialog-titlebar-close');
     $closeButton->click();
-    $dialog = $page->find('css', '.ui-dialog');
+    $dialog = $page->find('css', '.drupal-dialog');
     $this->assertNull($dialog, 'Dialog is closed after clicking the close button.');
 
     // Resize the window. The test should pass after waiting for JavaScript to

@@ -13,7 +13,7 @@
 #drupal-off-canvas-wrapper.workspaces-dialog {
   padding-bottom: calc(var(--off-canvas-padding) / 2);
 
-  & .ui-dialog-content > div {
+  & .drupal-dialog-content > div {
     @media (min-width: 47.9375rem) {
       display: flex;
       align-items: flex-end;
@@ -22,7 +22,7 @@
     }
   }
 
-  & + .ui-dialog .ui-dialog-content {
+  & + .drupal-dialog .drupal-dialog-content {
     @media (max-width: 47.9375rem) {
       max-height: unset !important; /* Override the max-height added by JS. */
     }
@@ -32,18 +32,18 @@
    * The Workspace UI hides the titlebar, but we need to show and correctly
    * position the close button that is nested within it.
    */
-  & .ui-dialog-titlebar {
+  & .drupal-dialog-titlebar {
     all: revert;
 
     &::before {
       content: none;
     }
 
-    & .ui-dialog-title {
+    & .drupal-dialog-title {
       display: none;
     }
 
-    & .ui-dialog-titlebar-close {
+    & .drupal-dialog-titlebar-close {
       inset-block-start: 1em;
       inset-inline-end: 1em;
       z-index: 1;
