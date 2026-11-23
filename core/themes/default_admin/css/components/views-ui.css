@@ -1517,10 +1517,6 @@ a.views-field-excluded {
   margin-block-end: var(--admin-space-l);
 }
 
-.form-item--options-value-all {
-  display: none;
-}
-
 .js-only {
   display: none;
 }

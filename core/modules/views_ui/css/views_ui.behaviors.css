@@ -7,7 +7,7 @@
   display: none !important;
 }
 
-.form-item-options-value-all:not(.views-select-all-ready) {
+.js-form-item-options-value-all:not(.views-select-all-ready) {
   display: none;
 }
 

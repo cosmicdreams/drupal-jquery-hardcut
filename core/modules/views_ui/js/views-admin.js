@@ -97,6 +97,7 @@
           '[data-drupal-selector="edit-override-controls-group"]',
         );
         const selected = form.querySelector('.views-selected-options');
+        const selectedPanel = selected.closest('.views-add-form-selected');
         const checked = new Map();
         const options = Array.from(
           form.querySelectorAll('.filterable-option'),
@@ -135,7 +136,7 @@
         /** Shows the selection, including filtered-out handlers. */
         function updateSelected() {
           selected.textContent = [...checked.values()].join(', ');
-          selected.parentElement.hidden = !checked.size;
+          selectedPanel.hidden = !checked.size;
         }
 
         /** Matches the category and every word of the search. */
