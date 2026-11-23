@@ -191,9 +191,9 @@ class ExposedFilterAJAXTest extends WebDriverTestBase {
       const addCss = Drupal.AjaxCommands.prototype.add_css;
       prototype.commandExecutionQueue = function (response, status) {
         prototype.commandExecutionQueue = queue;
-        this.commands.add_css = (...args) => addCss(...args).then(
-          () => new Promise((resolve) => { window.finishLoadingRefreshAssets = resolve; }),
-        );
+        this.commands.add_css = (...args) => new Promise((resolve) => {
+          window.finishLoadingRefreshAssets = () => resolve(addCss(...args));
+        });
         const asset = { command: 'add_css', data: [{ href: 'data:text/css,.views-refresh-test%7Bcolor:inherit%7D' }] };
         return queue.call(this, [asset, ...Object.values(response)], status);
       };
@@ -203,7 +203,12 @@ class ExposedFilterAJAXTest extends WebDriverTestBase {
     $this->assertJsCondition('typeof window.finishLoadingRefreshAssets === "function"');
     $this->submitForm(['title' => 'Page Two'], 'Filter');
     $this->assertJsCondition('new URL(location.href).searchParams.get("title") === "Page Two"');
-    $this->assertJsCondition('document.querySelector(".view-content").textContent.includes("Page Two") && !document.querySelector(".view-content").textContent.includes("Page One")');
+    $this->assertJsCondition(<<<'JS'
+      (() => {
+        const results = document.querySelector('table tbody')?.textContent ?? '';
+        return results.includes('Page Two') && !results.includes('Page One');
+      })()
+      JS);
     $session->executeScript('window.finishLoadingRefreshAssets()');
     $this->assertSession()->assertWaitOnAjaxRequest();
     $this->assertSession()->pageTextNotContains('Page One');
