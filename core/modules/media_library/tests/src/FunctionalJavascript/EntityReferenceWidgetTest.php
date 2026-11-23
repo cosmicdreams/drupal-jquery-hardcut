@@ -394,11 +394,9 @@ class EntityReferenceWidgetTest extends MediaLibraryTestBase {
     $this->assertTrue($checkboxes[3]->hasAttribute('disabled'));
     // Select the items.
     $this->pressInsertSelected('Added 2 media items.');
-    // Assert the open button is disabled.
-    $open_button = $this->assertElementExistsAfterWait('css', '.js-media-library-open-button[name^="field_twin_media"]');
-    $this->assertTrue($open_button->hasAttribute('data-disabled-focus'));
-    $this->assertTrue($open_button->hasAttribute('disabled'));
-    $this->assertJsCondition('document.querySelector("#field_twin_media-media-library-wrapper .js-media-library-open-button")?.matches(":disabled")');
+    // The open button is disabled after the focus delay.
+    $open_button_selector = '#field_twin_media-media-library-wrapper .js-media-library-open-button';
+    $this->assertElementExistsAfterWait('css', $open_button_selector . '[data-disabled-focus][disabled]');
 
     // Ensure that the selection completed successfully.
     $assert_session->pageTextNotContains('Add or select media');
@@ -417,7 +415,7 @@ class EntityReferenceWidgetTest extends MediaLibraryTestBase {
     $assert_session->elementTextNotContains('css', '#field_twin_media-media-library-wrapper', 'Cat');
     $assert_session->elementTextContains('css', '#field_twin_media-media-library-wrapper', 'Turtle');
     // Assert the open button is no longer disabled.
-    $open_button = $assert_session->elementExists('css', '.js-media-library-open-button[name^="field_twin_media"]');
+    $open_button = $assert_session->elementExists('css', $open_button_selector);
     $this->assertFalse($open_button->hasAttribute('data-disabled-focus'));
     $this->assertFalse($open_button->hasAttribute('disabled'));
     $this->assertJsCondition('document.querySelector("#field_twin_media-media-library-wrapper .js-media-library-open-button")?.matches(":not(:disabled)")');
@@ -430,10 +428,7 @@ class EntityReferenceWidgetTest extends MediaLibraryTestBase {
     $assert_session->elementTextNotContains('css', '#field_twin_media-media-library-wrapper', 'Cat');
     $assert_session->elementTextContains('css', '#field_twin_media-media-library-wrapper', 'Turtle');
     $assert_session->elementTextNotContains('css', '#field_twin_media-media-library-wrapper', 'Snake');
-    // Assert the open button is disabled.
-    $this->assertTrue($assert_session->elementExists('css', '.js-media-library-open-button[name^="field_twin_media"]')->hasAttribute('data-disabled-focus'));
-    $this->assertTrue($assert_session->elementExists('css', '.js-media-library-open-button[name^="field_twin_media"]')->hasAttribute('disabled'));
-    $this->assertJsCondition('document.querySelector("#field_twin_media-media-library-wrapper .js-media-library-open-button")?.matches(":disabled")');
+    $this->assertElementExistsAfterWait('css', $open_button_selector . '[data-disabled-focus][disabled]');
 
     // Assert the selection is cleared when the modal is closed.
     $this->openMediaLibraryForField('field_unlimited_media');
