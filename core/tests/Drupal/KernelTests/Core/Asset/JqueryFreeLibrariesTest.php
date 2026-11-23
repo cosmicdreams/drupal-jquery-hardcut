@@ -80,7 +80,7 @@ class JqueryFreeLibrariesTest extends KernelTestBase {
     }
 
     $actual = [];
-    foreach (array_keys($this->coreLibrariesByTheme()) as $theme) {
+    foreach ($this->coreLibrariesByTheme() as $theme => $libraries) {
       $discovery = $this->container->get('library.discovery');
       // Expose declarations to the dependency resolver without enabling their
       // extensions. Use production library lookups for other dependencies.

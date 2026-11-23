@@ -89,12 +89,12 @@ class NavigationWorkspacesDialogTest extends WebDriverTestBase {
       'access navigation',
       'administer workspaces',
     ]));
-    $this->getSession()->resizeWindow(390, 440);
     $this->drupalGet('<front>');
     $assert = $this->assertSession();
     $assert->elementExists('css', 'a.toolbar-button--icon--workspaces[data-hx-get]')->click();
     $tray = $assert->waitForElementVisible('css', 'dialog#drupal-off-canvas-wrapper[open]');
     $this->assertNotNull($tray);
+    $this->getSession()->resizeWindow(640, 480);
     $this->assertJsCondition('Drupal.displace.offsets.top >= window.innerHeight * 0.9');
     $tray->clickLink('Stage');
     $this->assertNotNull($assert->waitForElementVisible('css', 'dialog[open] > #drupal-modal'));
