@@ -141,6 +141,25 @@ class FilterCriteriaTest extends WebDriverTestBase {
 
     $remove_link = $page->findLink('Remove group');
     $this->assertFalse($remove_link->isVisible(), 'Remove group should be invisible after drag.');
+
+    // Persist the rearrangement through the same controls an editor uses.
+    $groups = [];
+    foreach ($page->findAll('css', 'select.views-group-select') as $group) {
+      $groups[$group->getAttribute('name')] = $group->getValue();
+    }
+    $this->assertNotEmpty($groups);
+    $operator_values = [];
+    foreach ($page->findAll('css', '.views-group-title select, select[name="filter_groups[operator]"]') as $operator) {
+      $operator_values[$operator->getAttribute('name')] = $operator->getValue();
+    }
+    $this->assertContains('OR', $operator_values);
+    $assert_session->elementExists('css', '.drupal-dialog-buttonpane')->pressButton('Apply');
+    $assert_session->assertWaitOnAjaxRequest();
+    $page->pressButton('Save');
+    $this->openFilterDialog();
+    foreach ($groups + $operator_values as $name => $value) {
+      $assert_session->fieldValueEquals($name, $value);
+    }
   }
 
   /**
