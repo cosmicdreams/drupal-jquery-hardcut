@@ -94,6 +94,8 @@
     }
   }
 
+  const flushAnnouncements = debounce(announce, 200);
+
   /**
    * Triggers audio UAs to read the supplied text.
    *
@@ -111,12 +113,11 @@
    *   A string to indicate the priority of the message. Can be either
    *   'polite' or 'assertive'.
    *
-   * @return {function}
+   * @return {Function}
    *   Cancels this announcement if it is still queued.
    *
    * @see https://www.w3.org/WAI/PF/aria-practices/#liveprops
    */
-  const flushAnnouncements = debounce(announce, 200);
   Drupal.announce = function (text, priority) {
     const message = { text, priority };
     announcements.push(message);
