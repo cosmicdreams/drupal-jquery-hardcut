@@ -28,6 +28,7 @@ class EntityReferenceAutocompleteWidgetTest extends WebDriverTestBase {
    * {@inheritdoc}
    */
   protected static $modules = [
+    'ajax_test',
     'node',
     'field_ui',
     'entity_test',
@@ -167,6 +168,7 @@ class EntityReferenceAutocompleteWidgetTest extends WebDriverTestBase {
     $this->assertCount(2, $page->findAll('css', '.autocomplete-list [role=option]'));
 
     // Open an entity form in a modal and search in its autocomplete field.
+    $this->drupalGet('ajax-test/dialog');
     $session = $this->getSession();
     $session->executeScript("Drupal.ajax({ url: Drupal.url('node/add/page'), dialogType: 'modal' }).execute()");
     $modal = $assert_session->waitForElementVisible('css', 'dialog[open]');

@@ -97,7 +97,7 @@ class NavigationWorkspacesDialogTest extends WebDriverTestBase {
     $this->assertNotNull($tray);
     $this->assertJsCondition('Drupal.displace.offsets.top >= window.innerHeight * 0.9');
     $tray->clickLink('Stage');
-    $this->assertNotNull($assert->waitForElementVisible('css', 'dialog:modal'));
+    $this->assertNotNull($assert->waitForElementVisible('css', 'dialog[open] > #drupal-modal'));
     $this->assertJsCondition(<<<'JS'
       (() => {
         const modal = document.querySelector('dialog:modal');
@@ -107,7 +107,7 @@ class NavigationWorkspacesDialogTest extends WebDriverTestBase {
           Math.abs(rect.top + rect.height / 2 - window.innerHeight / 2) < 2;
       })()
       JS);
-    $assert->elementTextContains('css', 'dialog:modal', 'Would you like to activate');
+    $assert->elementTextContains('css', '#drupal-modal', 'Would you like to activate');
   }
 
   /**

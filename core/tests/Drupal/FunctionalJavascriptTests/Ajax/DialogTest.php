@@ -426,7 +426,7 @@ class DialogTest extends WebDriverTestBase {
         dialogType: 'modal',
       }).execute();
       JS);
-    $this->assertNotNull($assert->waitForElementVisible('css', 'dialog:modal'));
+    $this->assertNotNull($assert->waitForElementVisible('css', 'dialog[open] > #drupal-modal'));
     $session->executeScript(<<<'JS'
       window.field = document.querySelector('dialog:modal input.form-autocomplete');
       window.pending = new Map();
@@ -469,7 +469,7 @@ class DialogTest extends WebDriverTestBase {
         !field.classList.contains('is-autocompleting') &&
         document.querySelector('dialog:modal #drupal-live-announce').textContent.includes('2 results are available.')
       JS);
-    $assert->elementTextNotContains('css', 'dialog:modal .autocomplete-list', 'Stale');
+    $assert->elementTextNotContains('css', '#drupal-modal .autocomplete-list', 'Stale');
 
     $driver = $session->getDriver();
     $this->assertInstanceOf(DrupalSelenium2Driver::class, $driver);
@@ -515,7 +515,7 @@ class DialogTest extends WebDriverTestBase {
     // The late response must not reopen a closed dialog or leave an orphan menu.
     $session->executeScript("type('slow')");
     $this->assertJsCondition("pending.has('slow')");
-    $assert->elementExists('css', 'dialog:modal')->pressButton('Close');
+    $assert->elementExists('css', '#drupal-modal')->getParent()->pressButton('Close');
     $session->executeScript("pending.get('slow').respond('Late')");
     $this->assertJsCondition("pending.get('slow').signal.aborted && !field.isConnected && !list.isConnected");
   }
