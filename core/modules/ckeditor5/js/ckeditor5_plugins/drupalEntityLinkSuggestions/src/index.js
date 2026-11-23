@@ -118,7 +118,8 @@ class DrupalEntityLinkSuggestions extends Plugin {
       'set:visibleView',
       (evt, propertyName, view) => {
         if (view !== linkFormView) {
-          this.autocomplete?.close();
+          this.autocomplete?.destroy();
+          this.autocomplete = undefined;
           return;
         }
         if (this.autocomplete) {

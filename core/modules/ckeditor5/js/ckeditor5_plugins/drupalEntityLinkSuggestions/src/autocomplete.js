@@ -35,5 +35,6 @@ export default function initializeAutocomplete(
     renderOption,
     searchOnClick: true,
     classes: ['ck-reset_all-excluded', 'entity-link-suggestions-autocomplete'],
+    fallbackContainer: input.closest('.ck-link-form'),
   });
 }

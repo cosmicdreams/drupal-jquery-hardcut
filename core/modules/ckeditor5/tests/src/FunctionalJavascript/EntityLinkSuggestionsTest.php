@@ -133,7 +133,7 @@ class EntityLinkSuggestionsTest extends CKEditor5TestBase {
 
     // Type to show matching suggestions.
     $autocomplete_field->setValue('f');
-    $this->assertTrue($this->getSession()->wait(5000, "document.querySelectorAll('.entity-link-suggestions-result-line[role=option]').length > 0"));
+    $this->assertNotNull($assert_session->waitOnAutocomplete());
 
     // Make sure the autocomplete result container is visible.
     $this->assertTrue($autocomplete_container->isVisible());
@@ -262,6 +262,28 @@ class EntityLinkSuggestionsTest extends CKEditor5TestBase {
       $this->assertNotNull($link);
       $this->assertSame($entity->uuid(), $link->getAttribute('data-entity-uuid'));
     }
+  }
+
+  /**
+   * Tests mouse selection inside a link balloon without native popovers.
+   */
+  public function testLinkSuggestionsWithoutPopover(): void {
+    $entity = $this->drupalCreateNode(['type' => 'page', 'title' => 'Fallback link']);
+    $this->drupalGet('node/add/page');
+    $this->waitForEditor();
+    $this->getSession()->executeScript('delete HTMLElement.prototype.showPopover');
+    $this->pressEditorButton('Link');
+    $balloon = $this->assertVisibleBalloon('.ck-link-form');
+    $field = $balloon->find('css', '[role="combobox"]');
+    $this->assertNotNull($field);
+    $field->setValue('Fallback link');
+    $suggestion = $this->assertSession()->waitForElementVisible('css', '.ck-link-form .autocomplete-list:not([popover]) [role="option"]');
+    $this->assertNotNull($suggestion);
+    $suggestion->click();
+    $this->assertSame($entity->toUrl()->toString(), $field->getValue());
+    $balloon->pressButton('Insert');
+    $this->assertBalloonClosed();
+    $this->assertSession()->elementAttributeContains('css', '.ck-content a', 'data-entity-uuid', $entity->uuid());
   }
 
 }
