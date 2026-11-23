@@ -164,7 +164,7 @@ class AdminAjaxTest extends WebDriverTestBase {
   }
 
   /**
-   * Tests closing a rearrange dialog before its updated contents arrive.
+   * Tests replacing a rearrange dialog while its response is loading assets.
    */
   public function testCloseWhileAddingFilterGroup(): void {
     $this->drupalGet('admin/structure/views/view/user_admin_people');
@@ -175,18 +175,27 @@ class AdminAjaxTest extends WebDriverTestBase {
 
     $session = $this->getSession();
     $session->executeScript(<<<'JS'
-      const send = XMLHttpRequest.prototype.send;
-      XMLHttpRequest.prototype.send = function (...args) {
-        XMLHttpRequest.prototype.send = send;
-        window.sendFilterGroup = () => send.apply(this, args);
+      const prototype = Drupal.Ajax.prototype;
+      const queue = prototype.commandExecutionQueue;
+      prototype.commandExecutionQueue = function (response, status) {
+        prototype.commandExecutionQueue = queue;
+        this.commands.add_css = () => new Promise((resolve) => {
+          window.finishFilterGroupAssets = resolve;
+        });
+        return queue.call(this, [{ command: 'add_css', data: [] }, ...Object.values(response)], status);
       };
       JS);
     $assert->elementExists('css', '#views-add-group-link')->click();
-    $this->assertJsCondition('typeof window.sendFilterGroup === "function"');
-    $assert->buttonExists('Close', $assert->elementExists('css', 'dialog.views-ui-dialog[open]'))->press();
-    $session->executeScript('window.sendFilterGroup()');
+    $this->assertJsCondition('typeof window.finishFilterGroupAssets === "function"');
+    $dialog = $assert->elementExists('css', 'dialog.views-ui-dialog[open]');
+    $assert->buttonExists('Close', $dialog)->press();
+    $assert->elementExists('css', '#views-add-field')->click();
+    $this->assertJsCondition('document.querySelector("dialog[open] .views-selected-options") !== null');
+
+    $session->executeScript('window.finishFilterGroupAssets()');
     $assert->assertWaitOnAjaxRequest();
-    $assert->elementNotExists('css', 'dialog.views-ui-dialog[open]');
+    $assert->elementExists('css', 'dialog[open] .views-selected-options');
+    $assert->elementNotExists('css', 'dialog[open] #views-add-group-link');
   }
 
   /**
