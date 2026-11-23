@@ -15,9 +15,10 @@
     attach(context) {
       once('views-filter-text', 'input.views-filter-text', context).forEach(
         (input) => {
+          const listing = input.closest('#views-entity-list');
           const filter = () => {
             const query = input.value.toLowerCase();
-            const rows = document.querySelectorAll(
+            const rows = listing.querySelectorAll(
               `:is(${input.dataset.table}) tbody tr`,
             );
             rows.forEach((row) => {

@@ -87,6 +87,28 @@ class AdminAjaxTest extends WebDriverTestBase {
     $checkbox = $assert->fieldExists('name[views.dropbutton]', $dialog);
     $title = $assert->elementExists('css', '.title', $checkbox->getParent()->getParent()->getParent());
 
+    // Select and deselect several handlers that are visible after scrolling.
+    $scroll_positions = $this->getSession()->evaluateScript(<<<'JS'
+      (() => {
+        const list = document.querySelector('dialog.views-ui-dialog[open] [data-drupal-views-scroll]');
+        list.scrollTop = 150;
+        const positions = [list.scrollTop];
+        const bounds = list.getBoundingClientRect();
+        const visible = [...list.querySelectorAll('.filterable-option .title')].filter((title) => {
+          const row = title.getBoundingClientRect();
+          return row.top >= bounds.top && row.bottom <= bounds.bottom;
+        });
+        visible.slice(0, 3).forEach((title) => {
+          title.click();
+          positions.push(list.scrollTop);
+          title.click();
+          positions.push(list.scrollTop);
+        });
+        return positions;
+      })()
+      JS);
+    $this->assertSame(array_fill(0, 7, 150), $scroll_positions);
+
     $search->setValue('dropbutton');
     $this->assertTrue($title->isVisible());
     $this->assertCount(1, $this->getSession()->getPage()->findAll('css', '.filterable-option:not([hidden])'));

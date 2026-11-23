@@ -117,7 +117,6 @@
                 checked.delete(checkbox);
               }
               updateSelected();
-              notifyResize();
             });
             return {
               row,
@@ -557,8 +556,12 @@
         link.addEventListener('click', (event) => {
           event.preventDefault();
           const [prefix, id] = link.id.split('-remove-link-');
-          document.getElementById(`${prefix}-row-${id}`).hidden = true;
-          document.getElementById(`${prefix}-removed-${id}`).checked = true;
+          const form = link.closest('form');
+          form.querySelector(`#${CSS.escape(`${prefix}-row-${id}`)}`).hidden =
+            true;
+          form.querySelector(
+            `#${CSS.escape(`${prefix}-removed-${id}`)}`,
+          ).checked = true;
         });
       });
     },
