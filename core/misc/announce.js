@@ -17,8 +17,9 @@
  * });
  */
 
-(function (Drupal, debounce) {
+(function (Drupal) {
   let liveElement;
+  let flushTimer;
   const announcements = [];
 
   /**
@@ -61,6 +62,7 @@
    * Concatenates announcements to a single string; appends to the live region.
    */
   function announce() {
+    flushTimer = undefined;
     const text = [];
     let priority = 'polite';
     let announcement;
@@ -94,18 +96,11 @@
     }
   }
 
-  const flushAnnouncements = debounce(announce, 200);
-
   /**
    * Triggers audio UAs to read the supplied text.
    *
-   * The aria-live region will only read the text that currently populates its
-   * text node. Replacing text quickly in rapid calls to announce results in
-   * only the text from the most recent call to {@link Drupal.announce} being
-   * read. By wrapping the call to announce in a debounce function, we allow for
-   * time for multiple calls to {@link Drupal.announce} to queue up their
-   * messages. These messages are then joined and append to the aria-live region
-   * as one text node.
+   * Calls within 200 ms of the first queued announcement are joined and
+   * added to the aria-live region together.
    *
    * @param {string} text
    *   A string to be read by the UA.
@@ -121,16 +116,17 @@
   Drupal.announce = function (text, priority) {
     const message = { text, priority };
     announcements.push(message);
-    flushAnnouncements();
+    flushTimer ??= setTimeout(announce, 200);
 
     return () => {
       const index = announcements.indexOf(message);
       if (index !== -1) {
         announcements.splice(index, 1);
         if (!announcements.length) {
-          flushAnnouncements.cancel();
+          clearTimeout(flushTimer);
+          flushTimer = undefined;
         }
       }
     };
   };
-})(Drupal, Drupal.debounce);
+})(Drupal);

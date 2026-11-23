@@ -219,7 +219,6 @@ isam
 jangregor
 javascripts
 jessebeach
-jqueryui
 justinrainbow
 keypresses
 kinberg

@@ -14,6 +14,11 @@
     border-bottom: 1px solid #bfbfbf;
   }
 
+  & > [role="option"]:last-child,
+  & > li:last-child [role="option"]:last-child {
+    border-bottom: 0;
+  }
+
   & [aria-selected="true"] {
     color: #fff;
     background: #0075ba;

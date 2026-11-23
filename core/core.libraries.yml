@@ -241,7 +241,6 @@ drupal.announce:
     misc/announce.js: {}
   dependencies:
     - core/drupal
-    - core/drupal.debounce
 
 loadjs:
   aggregate_target:

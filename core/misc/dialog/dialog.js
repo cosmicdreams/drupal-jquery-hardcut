@@ -248,7 +248,7 @@
         'drupal-dialog--viewport-centered',
         settings.autoResize === false ||
           settings.autoResize === 'false' ||
-          (settings.modal && !!opener?.closest('#drupal-off-canvas-wrapper')),
+          settings.modal,
       );
       const previousContentClasses = (content.dataset.dialogClasses || '')
         .split(/\s+/)

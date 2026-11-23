@@ -70,9 +70,16 @@
 .autocomplete-list {
   color: var(--admin-color-text);
   border: var(--input-border-size) solid var(--autocomplete-border-color);
+  border-block-start: 0;
   border-radius: 0 0 var(--admin-radius-m) var(--admin-radius-m);
   background: var(--admin-color-bg-input);
   box-shadow: 0 0.125rem 0.25rem var(--autocomplete-shadow-color);
+
+  &.autocomplete-list--above {
+    border-block-start: var(--input-border-size) solid var(--autocomplete-border-color);
+    border-block-end: 0;
+    border-radius: var(--admin-radius-m) var(--admin-radius-m) 0 0;
+  }
 
   & [role="option"] {
     padding: 0.75rem 0.9375rem;

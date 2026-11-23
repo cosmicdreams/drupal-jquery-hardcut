@@ -5,7 +5,6 @@
 
 ((Drupal, once, { autoUpdate, computePosition, flip, hide, shift, size }) => {
   const controllers = new Map();
-  const cache = new Map();
   let nextId = 0;
 
   // One observer covers removals that bypass Drupal's behavior lifecycle.
@@ -63,6 +62,7 @@
     } = options;
     const list = document.createElement('ul');
     const supportsPopover = typeof list.showPopover === 'function';
+    const cache = new Map();
     const listeners = new AbortController();
     const { signal } = listeners;
     nextId += 1;
@@ -85,6 +85,8 @@
     let stopPositioning;
     let active = -1;
     let rows = [];
+    let resultsValue;
+    let resultsKey;
 
     list.id = attributes['aria-controls'];
     list.classList.add('autocomplete-list', ...classes);
@@ -111,12 +113,15 @@
       input.setAttribute('aria-expanded', 'false');
     }
 
-    function close() {
+    function cancelSearch() {
       clearTimeout(timer);
       timer = undefined;
       request?.abort();
       request = undefined;
       loading(false);
+    }
+
+    function clearResults() {
       stopPositioning?.();
       stopPositioning = undefined;
       placement = undefined;
@@ -127,6 +132,13 @@
       collapse();
       list.replaceChildren();
       rows = [];
+      resultsValue = undefined;
+      resultsKey = undefined;
+    }
+
+    function close() {
+      cancelSearch();
+      clearResults();
     }
 
     function destroy() {
@@ -134,6 +146,7 @@
         return;
       }
       close();
+      cache.clear();
       listeners.abort();
       list.remove();
       previous.forEach(([name, original]) => {
@@ -207,13 +220,31 @@
       return multiple ? splitValues(input.value) : [input.value];
     }
 
+    function searchTerm() {
+      const term = terms().at(-1);
+      const denyList = input.dataset.autocompleteFirstCharacterDenylist || '';
+      return denyList.includes(term[0]) ? '' : term;
+    }
+
     function select(index) {
+      if (index < 0 || resultsValue !== input.value) {
+        return false;
+      }
       const { item } = rows[index];
       close();
       selectItem(item, terms());
+      return true;
     }
 
-    function show(items) {
+    function show(items, value) {
+      const key = JSON.stringify(items);
+      if (key === resultsKey) {
+        resultsValue = value;
+        return;
+      }
+      clearResults();
+      resultsKey = key;
+      resultsValue = value;
       const groups = new Map();
       items.forEach((item) => {
         const group = item.group || '';
@@ -272,6 +303,7 @@
       if (supportsPopover) {
         list.showPopover();
       }
+      let announced = false;
       const placementSession = {};
       placement = placementSession;
       const position = () => {
@@ -303,7 +335,7 @@
             }),
             hide(),
           ],
-        }).then(({ x, y, middlewareData }) => {
+        }).then(({ x, y, placement: side, middlewareData }) => {
           if (placement !== placementSession) {
             return;
           }
@@ -322,9 +354,16 @@
           }
           list.style.left = `${x}px`;
           list.style.top = `${y}px`;
+          list.classList.toggle(
+            'autocomplete-list--above',
+            side.startsWith('top'),
+          );
           if (list.style.visibility === 'hidden') {
             list.style.visibility = '';
             input.setAttribute('aria-expanded', 'true');
+          }
+          if (!announced) {
+            announced = true;
             cancelAnnouncement = Drupal.announce(
               Drupal.formatPlural(
                 rows.length,
@@ -346,9 +385,9 @@
         return;
       }
       const value = input.value;
-      const term = terms().at(-1);
-      const denyList = input.dataset.autocompleteFirstCharacterDenylist || '';
-      if (!term.length || denyList.includes(term[0])) {
+      const term = searchTerm();
+      if (!term) {
+        clearResults();
         return;
       }
       const endpoint = new URL(url, document.baseURI);
@@ -378,7 +417,10 @@
         }
         if (!current.signal.aborted && canSearch() && input.value === value) {
           const taken = terms().slice(0, -1);
-          show(items.filter((item) => !taken.includes(item.value)));
+          show(
+            items.filter((item) => !taken.includes(item.value)),
+            value,
+          );
         }
       } catch (error) {
         if (!current.signal.aborted) {
@@ -393,9 +435,14 @@
     }
 
     function schedule() {
-      close();
-      if (!composing) {
+      cancelSearch();
+      if (!composing && searchTerm()) {
+        // Keep the old list visible while waiting for results for the new
+        // value. Its options cannot be selected until the results match.
+        activate(-1);
         timer = setTimeout(search, 300);
+      } else {
+        clearResults();
       }
     }
 
@@ -417,6 +464,19 @@
       { signal },
     );
     input.addEventListener('blur', close, { signal });
+    document.addEventListener(
+      'pointerdown',
+      ({ target }) => {
+        if (
+          (resultsValue !== undefined || timer !== undefined || request) &&
+          target !== input &&
+          !list.contains(target)
+        ) {
+          close();
+        }
+      },
+      { capture: true, signal },
+    );
     window.addEventListener(
       'dialog:beforeclose',
       ({ target }) => {
@@ -443,7 +503,7 @@
       input.addEventListener(
         'click',
         () => {
-          close();
+          cancelSearch();
           if (!composing) {
             search();
           }
@@ -462,9 +522,7 @@
           input.getAttribute('aria-expanded') === 'true' &&
           (!supportsPopover || list.matches(':popover-open'));
         if (key === 'Tab') {
-          if (expanded && active >= 0) {
-            select(active);
-          } else {
+          if (!expanded || !select(active)) {
             close();
           }
           return;
@@ -473,19 +531,22 @@
         if (byPage || key === 'ArrowDown' || key === 'ArrowUp') {
           const direction = key === 'ArrowDown' || key === 'PageDown' ? 1 : -1;
           if (!expanded) {
-            if (placement || !terms().at(-1).length) {
+            if (placement || !searchTerm()) {
               return;
             }
             close();
             search();
-          } else {
+          } else if (resultsValue === input.value) {
             move(direction, byPage);
+          } else {
+            return;
           }
-        } else if (key === 'Enter' && expanded && active >= 0) {
-          select(active);
-        } else if (key === 'Escape' && (expanded || request || timer)) {
+        } else if (key === 'Escape') {
           close();
-        } else {
+          if (!expanded) {
+            return;
+          }
+        } else if (key !== 'Enter' || !expanded || !select(active)) {
           return;
         }
         event.preventDefault();
@@ -502,12 +563,17 @@
       'pointermove',
       (event) => {
         const option = event.target.closest('[data-option-index]');
-        if (option && Number(option.dataset.optionIndex) !== active) {
-          activate(Number(option.dataset.optionIndex));
+        const index =
+          option && resultsValue === input.value
+            ? Number(option.dataset.optionIndex)
+            : -1;
+        if (index !== active) {
+          activate(index);
         }
       },
       { signal },
     );
+    list.addEventListener('pointerleave', () => activate(-1), { signal });
     list.addEventListener(
       'click',
       (event) => {
