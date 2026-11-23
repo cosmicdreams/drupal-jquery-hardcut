@@ -285,7 +285,6 @@ ndocs
 newcol
 newwin
 nids
-nightwatch
 nntp
 nocase
 nodir

@@ -9,11 +9,7 @@ import jsdoc from 'eslint-plugin-jsdoc';
 import js from '@eslint/js';
 import globals from 'globals';
 
-import {
-  jqueryPlugin,
-  jqueryRules,
-  nightwatchPaths,
-} from './scripts/js/jquery-ratchet.mjs';
+import { jqueryPlugin, jqueryRules } from './scripts/js/jquery-ratchet.mjs';
 const jqueryRatchet = JSON.parse(
   readFileSync(
     new URL(
@@ -123,7 +119,7 @@ export default defineConfig(
   },
   {
     files: ['**/*.{js,mjs,cjs}'],
-    ignores: [...nightwatchPaths, ...Object.keys(jqueryRatchet.sources)],
+    ignores: Object.keys(jqueryRatchet.sources),
     plugins: { 'drupal-jquery': jqueryPlugin },
     rules: jqueryRules,
   },

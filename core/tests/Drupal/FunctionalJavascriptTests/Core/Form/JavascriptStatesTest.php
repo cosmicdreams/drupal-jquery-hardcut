@@ -82,7 +82,7 @@ class JavascriptStatesTest extends WebDriverTestBase {
   }
 
   /**
-   * Tests a number control's native change event and Nightwatch-parity cases.
+   * Tests native number changes and dependent textfield visibility.
    */
   public function testNumberTrigger(): void {
     $this->drupalGet('form-test/javascript-states-form');
@@ -90,11 +90,8 @@ class JavascriptStatesTest extends WebDriverTestBase {
     $page = $this->getSession()->getPage();
 
     $session = $this->getSession();
-    // Nightwatch parity (statesTest.js): textfield starts hidden and responds
-    // to the OR condition on select and number controls. Zero-deprecation
-    // assertions for the native CSS selector copy live in
-    // NativeStatesPublicationTest::testNativeNightwatchParityNoDeprecations()
-    // while form_test's JavascriptStatesForm awaits slice U selector migration.
+    // The textfield starts hidden. Either the select or the number control can
+    // make it visible.
     $textfield = $assert->elementExists('css', 'input[name="textfield"]');
     $this->assertFalse($textfield->isVisible());
     $page->findField('select')->setValue('1');

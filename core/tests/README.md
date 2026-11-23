@@ -88,68 +88,6 @@ chromedriver using port 4444, and keep it running:
 /path/to/chromedriver --port=4444
 ```
 
-## Running Nightwatch tests
-
-* Ensure your vendor directory is populated
-  (e.g. by running `composer install`)
-* Install [Node.js](https://nodejs.org/en/download/) and
-  [yarn](https://yarnpkg.com/en/docs/install). The versions required are
-  specified inside core/package.json in the `engines` field. You can use
-  [nvm](https://github.com/nvm-sh/nvm) and [yvm](https://github.com/tophat/yvm)
-  to manage your local versions of these.
-* Install
-  [Google Chrome](https://www.google.com/chrome/browser/desktop/index.html)
-* Inside the `core` folder, run `yarn install`
-* Configure the nightwatch settings by copying `.env.example` to `.env` and
-  editing as necessary.
-* Ensure you have a web server running (as instructed in `.env`)
-* Again inside the `core` folder, run `yarn test:nightwatch --env local` to run
-  the tests.
-  By default this will output reports to `core/reports`
-* Nightwatch will run tests for core, as well as contrib and custom modules and
-  themes. It will search for tests located under folders with the pattern
-  `**/tests/**/Nightwatch/(Tests|Commands|Assertions)`
-* To run only core tests, run `yarn test:nightwatch --tag core`
-* To skip running core tests, run `yarn test:nightwatch --skiptags core`
-* To run a single test, run e.g.
-  `yarn test:nightwatch tests/Drupal/Nightwatch/Tests/loginTest.js`
-* To run a11y tests for both the admin and default themes.
-  `yarn test:nightwatch --tag a11y`
-* To run a11y tests for the admin theme only.
-  `yarn test:nightwatch --tag a11y:admin`
-* To run a11y tests for the default theme only.
-  `yarn test:nightwatch --tag a11y:default`
-* To run an a11y test for a custom theme used as the default theme.
-  `yarn test:nightwatch --tag a11y:default --defaultTheme my_theme`
-* To run an a11y test for a custom admin theme.
-  `yarn test:nightwatch --tag a11y:admin --adminTheme my_admin_theme`
-
-Nightwatch tests, as well as custom commands, assertions and pages, can be
-placed in any folder with the pattern
-`**/tests/**/Nightwatch/(Tests|Commands|Assertions|Pages)`. For example:
-```
-tests/Nightwatch/Tests
-src/tests/Nightwatch/Tests
-tests/src/Nightwatch/Tests
-tests/Nightwatch/Commands
-tests/src/Nightwatch/Assertions
-tests/src/Nightwatch/Pages
-```
-
-It's helpful to follow existing patterns for test placement, so for the action
-module they would go in `core/modules/action/tests/src/Nightwatch`.
-The Nightwatch configuration, as well as global tests, commands, and assertions
-which span many modules/systems, are located in `core/tests/Drupal/Nightwatch`.
-
-If your core directory is located in a subfolder (e.g. `docroot`), then you can
-edit the search directory in `.env` to pick up tests outside of your Drupal
-directory. Tests outside of the `core` folder will run in the version of node
-you have installed. If you want to transpile with babel (e.g. to use `import`
-statements) outside of core, then add your own babel config to the root of your
-project. For example, if core is located under `docroot/core`, then you could
-run `yarn add babel-preset-env` inside `docroot`, then copy the babel settings
-from `docroot/core/package.json` into `docroot/package.json`.
-
 ## Troubleshooting test running
 
 If you run into file permission problems while running tests, you may need to

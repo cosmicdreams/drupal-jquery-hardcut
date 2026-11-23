@@ -8,15 +8,11 @@ import { execFileSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { mkdtempSync, readdirSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join, matchesGlob } from 'node:path';
+import { join } from 'node:path';
 import { test } from 'node:test';
 import { fileURLToPath } from 'node:url';
 import { Linter } from 'eslint';
-import {
-  jqueryPlugin,
-  jqueryRules,
-  nightwatchPaths,
-} from './jquery-ratchet.mjs';
+import { jqueryPlugin, jqueryRules } from './jquery-ratchet.mjs';
 const allowList = JSON.parse(
   readFileSync(
     new URL(
@@ -120,11 +116,7 @@ const files = [
       encoding: 'utf8',
     })
       .split('\0')
-      .filter(
-        (path) =>
-          path &&
-          !nightwatchPaths.some((pattern) => matchesGlob(path, pattern)),
-      ),
+      .filter(Boolean),
   ),
 ];
 

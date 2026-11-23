@@ -115,17 +115,10 @@ trait CoreLibraryDiscoveryTrait {
     foreach ($files as $file) {
       $path = 'core/' . $file->getRelativePathname();
       $info = substr($file->getPathname(), 0, -strlen('.libraries.yml')) . '.info.yml';
-      if (!self::isNightwatchPath($path) && is_file($info)) {
+      if (is_file($info)) {
         yield $path => Yaml::decode($file->getContents()) ?? [];
       }
     }
-  }
-
-  /**
-   * Identifies paths outside the Nightwatch-free ratchets.
-   */
-  protected static function isNightwatchPath(string $path): bool {
-    return preg_match('#^core/(?:tests/Drupal/Nightwatch/|(?:.*/)?tests/(?:src/Nightwatch/|(?:modules|profiles)/nightwatch_[^/]*/)|profiles/tests/nightwatch_[^/]*/)#', $path) === 1;
   }
 
 }

@@ -8,7 +8,7 @@ use Drupal\Core\Form\FormBase;
 use Drupal\Core\Form\FormStateInterface;
 
 /**
- * Provides a native CSS-selector copy of the Nightwatch States fixture.
+ * Provides a form for testing States with native CSS selectors.
  *
  * @internal
  */

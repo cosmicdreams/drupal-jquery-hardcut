@@ -44,7 +44,6 @@ class JqueryFreeAssetsTest extends KernelTestBase {
           foreach ($library[$type] as $asset) {
             $path = $asset['data'];
             if (isset($seen[$path])
-              || self::isNightwatchPath($path)
               || in_array($path, self::GENERATED_ASSETS, TRUE)) {
               continue;
             }
@@ -97,9 +96,6 @@ class JqueryFreeAssetsTest extends KernelTestBase {
             if (($options['type'] ?? NULL) !== 'external' && !str_contains($uri, '://') && !str_starts_with($uri, '//')) {
               $asset_path = str_starts_with($uri, '/') ? substr($uri, 1) : dirname($path) . '/' . $uri;
               $asset_path = Path::canonicalize(preg_split('/[?#]/', $asset_path, 2)[0]);
-              if (self::isNightwatchPath($asset_path)) {
-                continue;
-              }
               $file = "$this->root/$asset_path";
               // Some attachment fixtures use synthetic paths to test sorting
               // or URL handling. Scan shipped bytes where there is a file.
@@ -201,7 +197,7 @@ class JqueryFreeAssetsTest extends KernelTestBase {
     $paths = [];
     foreach ($sources as $file) {
       $path = substr($file->getPathname(), strlen($this->root) + 1);
-      if (self::isNightwatchPath($path) || str_contains($path, '/tests/') !== $test_sources) {
+      if (str_contains($path, '/tests/') !== $test_sources) {
         continue;
       }
       foreach (token_get_all($file->getContents()) as $token) {

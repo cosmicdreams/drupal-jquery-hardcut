@@ -1080,7 +1080,7 @@
 /**
  * @defgroup testing Automated tests
  * @{
- * Overview of PHPUnit and Nightwatch automated tests.
+ * Overview of PHPUnit automated tests.
  *
  * The Drupal project has embraced a philosophy of using automated tests,
  * consisting of both unit tests (which test the functionality of classes at a
@@ -1160,11 +1160,6 @@
  * - In some cases, you may need to write a test module to support your test;
  *   put such modules under the your_module/tests/modules directory.
  *
- * Besides the PHPUnit tests described above, Drupal Core also includes a few
- * JavaScript-only tests, which use the Nightwatch.js framework to test
- * JavaScript code using only JavaScript. These are located in
- * core/tests/Drupal/Nightwatch.
- *
  * For more details, see:
  * - core/tests/README.md for instructions on running tests
  * - https://www.drupal.org/phpunit for full documentation on how to write
@@ -1172,8 +1167,6 @@
  * - http://phpunit.de for general information on the PHPUnit framework.
  * - @link oo_conventions Object-oriented programming topic @endlink for more
  *   on PSR-4, namespaces, and where to place classes.
- * - http://nightwatchjs.org/ for information about Nightwatch testing for
- *   JavaScript
  * @}
  */
 

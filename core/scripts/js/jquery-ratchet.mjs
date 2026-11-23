@@ -21,14 +21,6 @@ function propertyName(node) {
     : literalString(node.key);
 }
 
-export const nightwatchPaths = [
-  'tests/Drupal/Nightwatch/**',
-  '**/tests/src/Nightwatch/**',
-  '**/tests/modules/nightwatch_*/**',
-  '**/tests/profiles/nightwatch_*/**',
-  'profiles/tests/nightwatch_*/**',
-];
-
 export const jqueryRules = {
   'drupal-jquery/no-reference': 'error',
 };

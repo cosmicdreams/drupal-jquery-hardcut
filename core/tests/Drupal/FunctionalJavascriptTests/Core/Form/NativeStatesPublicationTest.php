@@ -360,9 +360,9 @@ final class NativeStatesPublicationTest extends WebDriverTestBase {
   }
 
   /**
-   * Tests Nightwatch textfield and number-spinner parity with zero deprecations.
+   * Tests native textfield visibility and number changes without deprecations.
    */
-  public function testNativeNightwatchParityNoDeprecations(): void {
+  public function testNativeNumberTriggerNoDeprecations(): void {
     $this->drupalGet('states-test/native-form');
     $session = $this->getSession();
     $assert = $this->assertSession();

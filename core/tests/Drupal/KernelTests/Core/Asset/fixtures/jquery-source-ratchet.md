@@ -3,7 +3,7 @@
 From `core/`, run `node --test scripts/js/jquery-ratchet.test.mjs` alongside
 the regular ESLint and Kernel asset tests. The Node test scans tracked
 JavaScript with the same rule, including files skipped by style linting.
-It ignores the five Nightwatch trees and disallows inline lint suppressions.
+The check disallows inline lint suppressions.
 
 The source list records reference counts and owners at `92e5c3a3047`. Reduce
 the counts as each slice converts its files and remove rows once clean. The
