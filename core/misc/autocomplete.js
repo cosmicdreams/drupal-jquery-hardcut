@@ -113,6 +113,9 @@
       input.setAttribute('aria-expanded', 'false');
     }
 
+    /**
+     * Cancels pending search work without changing the visible results.
+     */
     function cancelSearch() {
       clearTimeout(timer);
       timer = undefined;
@@ -121,6 +124,9 @@
       loading(false);
     }
 
+    /**
+     * Removes the current results and stops tracking their position.
+     */
     function clearResults() {
       stopPositioning?.();
       stopPositioning = undefined;
@@ -220,6 +226,12 @@
       return multiple ? splitValues(input.value) : [input.value];
     }
 
+    /**
+     * Returns the current term if it can be searched.
+     *
+     * @return {string}
+     *   The searchable term, or an empty string.
+     */
     function searchTerm() {
       const term = terms().at(-1);
       const denyList = input.dataset.autocompleteFirstCharacterDenylist || '';

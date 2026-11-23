@@ -116,7 +116,9 @@
   Drupal.announce = function (text, priority) {
     const message = { text, priority };
     announcements.push(message);
-    flushTimer ??= setTimeout(announce, 200);
+    if (flushTimer === undefined) {
+      flushTimer = setTimeout(announce, 200);
+    }
 
     return () => {
       const index = announcements.indexOf(message);

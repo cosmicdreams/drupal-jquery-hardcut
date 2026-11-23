@@ -246,9 +246,7 @@
       element.classList.add('drupal-dialog', ...dialogClasses);
       element.classList.toggle(
         'drupal-dialog--viewport-centered',
-        settings.autoResize === false ||
-          settings.autoResize === 'false' ||
-          settings.modal,
+        settings.autoResize === false || settings.autoResize === 'false',
       );
       const previousContentClasses = (content.dataset.dialogClasses || '')
         .split(/\s+/)
