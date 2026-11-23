@@ -103,13 +103,19 @@
       input.classList.toggle('is-autocompleting', value);
     }
 
+    function collapse() {
+      cancelAnnouncement?.();
+      cancelAnnouncement = undefined;
+      list.style.visibility = 'hidden';
+      activate(-1);
+      input.setAttribute('aria-expanded', 'false');
+    }
+
     function close() {
       clearTimeout(timer);
       timer = undefined;
       request?.abort();
       request = undefined;
-      cancelAnnouncement?.();
-      cancelAnnouncement = undefined;
       loading(false);
       stopPositioning?.();
       stopPositioning = undefined;
@@ -118,10 +124,9 @@
         list.hidePopover();
       }
       list.hidden = true;
-      activate(-1);
+      collapse();
       list.replaceChildren();
       rows = [];
-      input.setAttribute('aria-expanded', 'false');
     }
 
     function destroy() {
@@ -303,11 +308,16 @@
             return;
           }
           if (
-            middlewareData.hide.referenceHidden ||
             !input.getClientRects().length ||
             (supportsPopover && !list.matches(':popover-open'))
           ) {
             close();
+            return;
+          }
+          if (middlewareData.hide.referenceHidden) {
+            // Keep tracking the anchor so scrolling back can restore the
+            // suggestions without restoring an active option.
+            collapse();
             return;
           }
           list.style.left = `${x}px`;
@@ -463,7 +473,7 @@
         if (byPage || key === 'ArrowDown' || key === 'ArrowUp') {
           const direction = key === 'ArrowDown' || key === 'PageDown' ? 1 : -1;
           if (!expanded) {
-            if (!terms().at(-1).length) {
+            if (placement || !terms().at(-1).length) {
               return;
             }
             close();

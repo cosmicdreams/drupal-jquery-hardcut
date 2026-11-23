@@ -615,19 +615,30 @@ class DialogTest extends WebDriverTestBase {
         scroller.scrollTop = 200;
         JS);
       $this->assertJsCondition(<<<'JS'
-        document.activeElement === field && list.hidden &&
+        document.activeElement === field && getComputedStyle(list).visibility === 'hidden' &&
           field.getAttribute('aria-expanded') === 'false' &&
           !field.hasAttribute('aria-activedescendant') &&
           option?.getAttribute('aria-selected') === 'false'
         JS);
       $this->assertJsCondition(<<<'JS'
-        ['Enter', 'Tab'].every((key) =>
-          field.dispatchEvent(new KeyboardEvent('keydown', { key, cancelable: true })) &&
+        field.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', cancelable: true })) &&
           field.value === 'label'
-        )
         JS);
       $session->executeScript('scroller.scrollTop = 0');
-      $this->assertJsCondition("field.getBoundingClientRect().bottom <= scroller.getBoundingClientRect().bottom && list.hidden");
+      $this->assertJsCondition(<<<'JS'
+        getComputedStyle(list).visibility === 'visible' &&
+          field.getAttribute('aria-expanded') === 'true' &&
+          !field.hasAttribute('aria-activedescendant')
+        JS);
+      $session->executeScript(<<<'JS'
+        field.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown', cancelable: true }));
+        scroller.scrollTop = 200;
+        JS);
+      $this->assertJsCondition("field.getAttribute('aria-expanded') === 'false'");
+      $this->assertJsCondition(<<<'JS'
+        field.dispatchEvent(new KeyboardEvent('keydown', { key: 'Tab', cancelable: true })) &&
+          field.value === 'label' && list.hidden
+        JS);
     }
   }
 
@@ -651,7 +662,7 @@ class DialogTest extends WebDriverTestBase {
           // before the queued text reaches the live region.
           queueMicrotask(() => {
             announce('Independent announcement');
-            field.closest('dialog').querySelector('.drupal-dialog-close').click();
+            field.closest('dialog').querySelector('.drupal-dialog-titlebar-close').click();
           });
         }
         return cancel;

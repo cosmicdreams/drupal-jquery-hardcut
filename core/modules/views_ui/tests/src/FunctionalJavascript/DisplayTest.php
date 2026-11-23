@@ -161,11 +161,11 @@ class DisplayTest extends WebDriverTestBase {
     $page->find('css', 'a[href*="/display/test_display/block_1/block_category"]')->click();
     $category = $assert->waitForField('block_category');
     $category->focus();
-    $category->setValue('Syste');
+    $category->setValue('Menus');
     $this->assertNotNull($suggestion = $assert->waitOnAutocomplete());
-    $this->assertSame('System', $suggestion->getText());
+    $this->assertSame('Menus', $suggestion->getText());
     $suggestion->click();
-    $this->assertSame('System', $category->getValue());
+    $this->assertSame('Menus', $category->getValue());
   }
 
   /**
