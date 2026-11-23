@@ -72,7 +72,7 @@
         tray.append(handle);
         const direction = edge === 'right' ? -1 : 1;
         function setWidth(width) {
-          tray.style.width = `${Math.max(minimumWidth, Math.min(width, maximumWidth()))}px`;
+          tray.style.width = `${Math.min(Math.max(width, minimumWidth), maximumWidth())}px`;
         }
         handle.addEventListener('pointerdown', (event) => {
           if (event.button !== 0) {

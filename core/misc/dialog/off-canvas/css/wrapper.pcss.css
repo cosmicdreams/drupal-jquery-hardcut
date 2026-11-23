@@ -10,7 +10,7 @@
   --off-canvas-wrapper-border-width: 1px;
 
   z-index: 501; /* Layer the dialog just under the toolbar. */
-  max-width: none;
+  max-width: 100%;
   max-height: none;
   margin: 0;
   border: 0;

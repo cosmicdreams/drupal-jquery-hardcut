@@ -204,6 +204,69 @@ class OffCanvasTest extends OffCanvasTestBase {
   }
 
   /**
+   * Tests that a wide tray and its handle fit after the viewport shrinks.
+   */
+  public function testResizeToViewport(): void {
+    $session = $this->getSession();
+    $session->resizeWindow(1200, 800);
+    $this->drupalGet('/off-canvas-test-links');
+    $this->clickLink('Open side panel 1');
+    $this->waitForOffCanvasToOpen();
+
+    $driver = $session->getDriver();
+    $this->assertInstanceOf(DrupalSelenium2Driver::class, $driver);
+    $grip = $session->evaluateScript(<<<'JS'
+      (() => {
+        const { x, y, width, height } = document.querySelector('#drupal-off-canvas-wrapper .drupal-dialog-resize').getBoundingClientRect();
+        return { x: Math.round(x + width / 2), y: Math.round(y + height / 2) };
+      })()
+      JS);
+    $driver->getWebDriverSession()->postActions(['actions' => [[
+      'type' => 'pointer',
+      'id' => 'tray-resize',
+      'parameters' => ['pointerType' => 'mouse'],
+      'actions' => [
+        ['type' => 'pointerMove', 'x' => $grip['x'], 'y' => $grip['y']],
+        ['type' => 'pointerDown', 'button' => 0],
+        ['type' => 'pointerMove', 'x' => 0, 'y' => $grip['y']],
+        ['type' => 'pointerUp', 'button' => 0],
+      ],
+    ]]]);
+    $this->assertJsCondition(<<<'JS'
+      (() => {
+        const width = document.getElementById('drupal-off-canvas-wrapper').getBoundingClientRect().width;
+        const viewport = document.documentElement.clientWidth;
+        return width <= viewport && width > viewport - 10;
+      })()
+      JS);
+
+    $session->executeScript(<<<'JS'
+      const handle = document.querySelector('#drupal-off-canvas-wrapper .drupal-dialog-resize');
+      handle.focus();
+      handle.dispatchEvent(new KeyboardEvent('keydown', { key: 'End', bubbles: true }));
+      JS);
+    $this->assertJsCondition('document.getElementById("drupal-off-canvas-wrapper").getBoundingClientRect().width === document.documentElement.clientWidth');
+
+    // Stay above the breakpoint that hides the resize handle.
+    $session->resizeWindow(900, 800);
+    $this->assertJsCondition(<<<'JS'
+      (() => {
+        const viewport = document.documentElement.clientWidth;
+        const tray = document.getElementById('drupal-off-canvas-wrapper');
+        const handle = tray.querySelector('.drupal-dialog-resize');
+        const bounds = tray.getBoundingClientRect();
+        const grip = handle.getBoundingClientRect();
+        return bounds.width === viewport && bounds.left >= 0 && bounds.right <= viewport &&
+          grip.width > 0 && grip.left >= 0 && grip.right <= viewport &&
+          Number(handle.getAttribute('aria-valuenow')) === viewport &&
+          Number(handle.getAttribute('aria-valuemax')) === viewport &&
+          Drupal.displace.offsets.right === bounds.width &&
+          parseFloat(document.querySelector('[data-off-canvas-main-canvas]').style.paddingRight) === bounds.width;
+      })()
+      JS);
+  }
+
+  /**
    * Tests that a superseded htmx response cannot overwrite the newer tray.
    */
   public function testOffCanvasHtmxRequests(): void {

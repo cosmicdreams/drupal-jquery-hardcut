@@ -16,7 +16,7 @@
   --off-canvas-wrapper-border-width: 1px;
 
   z-index: 501; /* Layer the dialog just under the toolbar. */
-  max-width: none;
+  max-width: 100%;
   max-height: none;
   margin: 0;
   border: 0;
@@ -37,7 +37,7 @@
   &.drupal-dialog-position-top {
     inset: 0 0 auto;
     width: 100% !important;
-    min-height: 30px;
+    min-height: 1.875rem;
     max-height: 100dvh;
 
     [data-admin-toolbar] & {
@@ -58,7 +58,7 @@
     position: absolute;
     inset-block: 0;
     inset-inline-start: 0;
-    width: 8px;
+    width: 0.5rem;
     padding: 0;
     cursor: ew-resize;
     border: 0;
