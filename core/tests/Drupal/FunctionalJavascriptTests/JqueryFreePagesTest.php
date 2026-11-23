@@ -189,7 +189,11 @@ class JqueryFreePagesTest extends WebDriverTestBase {
     $this->config('views.view.content')->set('display.default.display_options.use_ajax', TRUE)->save();
     $this->config('system.performance')->set('js.preprocess', FALSE)->save();
     $this->installAssetObserver();
-    $this->drupalLogin($this->createUser(['administer views', 'access content overview', 'view the administration theme']));
+    $this->drupalLogin($this->createUser([
+      'administer views',
+      'access content overview',
+      'view the administration theme',
+    ]));
 
     $this->drupalGet('admin/structure/views');
     $this->assertSession()->elementExists('css', 'input.views-filter-text');

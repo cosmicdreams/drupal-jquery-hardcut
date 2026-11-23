@@ -30,14 +30,13 @@
     if (!view) {
       return;
     }
-    const exposedForms = [
-      ...document.querySelectorAll(
-        `form#views-exposed-form-${settings.view_name.replace(
-          /_/g,
-          '-',
-        )}-${settings.view_display_id.replace(/_/g, '-')}`,
-      ),
-    ];
+    const formSelector = `form#views-exposed-form-${settings.view_name.replaceAll('_', '-')}-${settings.view_display_id.replaceAll('_', '-')}`;
+    const inlineForms = view.querySelectorAll(formSelector);
+    const exposedForms = Array.from(
+      inlineForms.length
+        ? inlineForms
+        : document.querySelectorAll(formSelector),
+    );
 
     // Retrieve the path to use for views' ajax.
     let ajaxPath = drupalSettings.views.ajax_path;
@@ -82,7 +81,7 @@
     const submit =
       ':is(input[type=submit], button[type=submit], input[type=image]):not([data-drupal-selector=edit-reset])';
     once(
-      `views-exposed-${settings.view_dom_id}`,
+      'views-exposed',
       exposedForms.flatMap((form) => [...form.querySelectorAll(submit)]),
     ).forEach((element) => {
       element.dataset.refocusBlur = 'true';
@@ -134,9 +133,9 @@
       target = document.querySelector(ajax.selector);
       const result = beforeSend.call(this, xhr, options);
       if (target && result !== false) {
-        latestRequests.set(target, xhr);
+        request = Symbol();
+        latestRequests.set(target, request);
       }
-      request = xhr;
       return result;
     };
     const { success } = ajax;
