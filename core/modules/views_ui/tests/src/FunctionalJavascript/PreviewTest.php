@@ -213,7 +213,7 @@ class PreviewTest extends WebDriverTestBase {
     $dialog = $assert->waitForElementVisible('css', 'dialog.views-ui-dialog[open]');
     $this->assertNotNull($dialog);
     $assert->fieldExists('Label', $dialog)->setValue('Queued preview label');
-    $assert->buttonExists('Apply', $dialog)->press();
+    $assert->elementExists('css', '.drupal-dialog-buttonset', $dialog)->pressButton('Apply');
     $assert->waitForElementRemoved('css', 'dialog.views-ui-dialog[open]');
     $this->assertJsCondition('![...Drupal.ajax.pendingRequests()].some(({ wrapper }) => wrapper !== "#views-preview-wrapper")');
     $this->assertJsCondition('window.previewRequests === 1');

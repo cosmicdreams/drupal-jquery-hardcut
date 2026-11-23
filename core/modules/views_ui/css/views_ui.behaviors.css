@@ -3,7 +3,7 @@
  * Visibility rules for Views UI behaviors across themes.
  */
 
-:where(.views-admin, .views-ui-dialog, .views-listing-table) [hidden] {
+:where(.views-admin, .views-ui-dialog, .views-listing-table) [hidden]:not([hidden="until-found"]) {
   display: none !important;
 }
 

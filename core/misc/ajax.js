@@ -2226,7 +2226,7 @@
      *   An optional array of settings that will be used.
      * @param {number} [status]
      *   The XMLHttpRequest status.
-     * @param {function} [isCurrent]
+     * @param {Function} [isCurrent]
      *   Whether this insert is still current after detaching behaviors.
      * @return {Element[]|undefined}
      *   Inserted elements, if this command performed the insertion.
