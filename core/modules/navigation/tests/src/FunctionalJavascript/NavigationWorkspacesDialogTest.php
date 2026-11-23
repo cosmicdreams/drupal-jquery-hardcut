@@ -210,6 +210,19 @@ class NavigationWorkspacesDialogTest extends WebDriverTestBase {
       $this->assertNotNull($assert->waitForElementVisible('css', "$tray:contains('Current workspace:')"));
     }
 
+    // A public listener can claim the same content just before the swap.
+    $session->executeScript(<<<'JS'
+      window.addEventListener('htmx:before:swap', () => {
+        const content = document.getElementById('drupal-off-canvas');
+        content.prepend('Kept by the newer open');
+        Drupal.dialog.get(content).show();
+        window.beforeSwapClaimed = true;
+      }, { once: true });
+      window.openers.workspaces.click();
+      JS);
+    $this->assertJsCondition('window.beforeSwapClaimed && !window.openers.workspaces.classList.contains("htmx-request")');
+    $assert->elementTextContains('css', "$tray #drupal-off-canvas", 'Kept by the newer open');
+
     // Closing a tray cancels requests launched from within that tray, for
     // either transport. The existing test covers the external Workspaces link.
     foreach (['layout', 'workspaces'] as $name) {
@@ -249,16 +262,24 @@ class NavigationWorkspacesDialogTest extends WebDriverTestBase {
     $tray = $assert->waitForElementVisible('css', 'dialog#drupal-off-canvas-wrapper[open]');
     $this->assertNotNull($tray);
     $original_title = $session->evaluateScript('document.title');
+    // Workspaces has no visible title by default. Set one so the assertions
+    // can detect a failed response replacing the tray title.
+    $session->executeScript("Drupal.dialog.get(document.getElementById('drupal-off-canvas')).update({ title: 'Workspace switcher' })");
 
-    foreach ([403, 500] as $status) {
+    foreach ([403, 500, 0] as $status) {
+      $fetch = $status ? <<<JS
+        async () => new Response(
+          '<title>Failed response</title><p>Failure $status</p>',
+          { status: $status, headers: { 'HX-Trigger': 'failed-tray-response' } },
+        )
+        JS : "async () => { throw new TypeError('Network request failed'); }";
       $session->executeScript(<<<JS
         window.failedResponseRead = false;
+        window.failedResponseTriggered = false;
         document.querySelector('.toolbar-button--icon--workspaces')
-          .addEventListener('htmx:before:request', ({ detail: { ctx } }) => {
-            ctx.fetch = async () => new Response(
-              '<title>Failed response</title><p>Failure $status</p>',
-              { status: $status, headers: { 'HX-Trigger': 'failed-tray-response' } },
-            );
+          .addEventListener('htmx:before:request', ({ currentTarget, detail: { ctx } }) => {
+            window.failedRequestLoading = currentTarget.classList.contains('htmx-request');
+            ctx.fetch = $fetch;
           }, { once: true });
         document.addEventListener('failed-tray-response', () => {
           window.failedResponseTriggered = true;
@@ -269,10 +290,12 @@ class NavigationWorkspacesDialogTest extends WebDriverTestBase {
         JS);
       $opener->click();
       $this->assertJsCondition('window.failedResponseRead');
+      $this->assertJsCondition('window.failedRequestLoading && !document.querySelector(".toolbar-button--icon--workspaces").classList.contains("htmx-request")');
       $this->assertJsCondition('!window.failedResponseTriggered');
       $assert->elementTextContains('css', '[data-drupal-message-type="error"]', 'Oops, something went wrong.');
       $assert->pageTextNotContains("Failure $status");
       $this->assertStringContainsString('Current workspace:', $tray->getText());
+      $this->assertSame('Workspace switcher', $session->evaluateScript('document.querySelector("#drupal-off-canvas-wrapper .drupal-dialog-title").textContent'));
       $this->assertSame($original_title, $session->evaluateScript('document.title'));
       $session->executeScript('new Drupal.Message().clear()');
     }

@@ -151,7 +151,7 @@
       history.path = url.toString();
     },
 
-    htmx_before_swap(elt, detail) {
+    htmx_before_insert(elt, detail) {
       // Get a set of unique targets for behavior processing.
       const processTargets = new Set();
       // eslint-disable-next-line no-restricted-syntax

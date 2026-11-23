@@ -1288,8 +1288,12 @@ var htmx = (() => {
                 if(!this.#trigger(ctx.sourceElement, "htmx:before:swap", {ctx, tasks})){
                     return
                 }
+                // Public listeners can invalidate a response before behaviors are detached.
+                if (ctx.swapGuard && !ctx.swapGuard()) return;
+                if (!this.#triggerExtensions(ctx.sourceElement, "htmx:before:insert", {ctx, tasks})) return;
 
                 this.#handleHistoryUpdate(ctx);
+                if (ctx.swapGuard && !ctx.swapGuard()) return;
 
                 let swapPromises = [];
                 let transitionTasks = [];

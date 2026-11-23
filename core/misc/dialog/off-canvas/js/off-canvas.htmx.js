@@ -20,6 +20,18 @@
     );
   }
 
+  /**
+   * Displays the standard request failure message.
+   */
+  function showRequestError() {
+    new Drupal.Message().add(
+      Drupal.t(
+        "Oops, something went wrong. Check your browser's developer console for more details.",
+      ),
+      { type: 'error' },
+    );
+  }
+
   function getTarget() {
     let target = document.getElementById('drupal-off-canvas');
     if (!target) {
@@ -75,18 +87,23 @@
       }
       if (!ok) {
         delete ctx.hx.trigger;
-        new Drupal.Message().add(
-          Drupal.t(
-            "Oops, something went wrong. Check your browser's developer console for more details.",
-          ),
-          { type: 'error' },
-        );
+        showRequestError();
         console.error(
           `htmx off-canvas request failed (${status}): ${ctx.request.action}`,
         );
         return false;
       }
       return true;
+    },
+
+    htmx_error(elt, { ctx }) {
+      const request = requests.get(ctx);
+      if (request && canSwap(request)) {
+        showRequestError();
+      }
+      if (request && ctx.hx) {
+        delete ctx.hx.trigger;
+      }
     },
 
     htmx_after_request(elt, { ctx }) {
@@ -109,8 +126,14 @@
       if (!request) {
         return true;
       }
-      if (!canSwap(request)) {
+      ctx.swapGuard = () => {
+        if (canSwap(request)) {
+          return true;
+        }
         delete ctx.hx.trigger;
+        return false;
+      };
+      if (!ctx.swapGuard()) {
         return false;
       }
       const task = tasks.find(({ type }) => type === 'main');
