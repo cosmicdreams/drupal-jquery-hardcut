@@ -495,6 +495,8 @@ class DialogTest extends WebDriverTestBase {
         list.children[0].getAttribute('aria-selected') === 'true'
       JS);
     $press("\u{E013}");
+    $this->assertJsCondition("!field.hasAttribute('aria-activedescendant')");
+    $press("\u{E013}");
     $this->assertJsCondition(<<<'JS'
       document.getElementById(field.getAttribute('aria-activedescendant')) === list.children[1] &&
         list.children[0].getAttribute('aria-selected') === 'false'

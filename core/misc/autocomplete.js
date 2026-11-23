@@ -112,8 +112,12 @@
 
     function activate(index, scroll = false) {
       rows[active]?.option.setAttribute('aria-selected', 'false');
-      const { option } = rows[index];
       active = index;
+      const option = rows[index]?.option;
+      if (!option) {
+        input.removeAttribute('aria-activedescendant');
+        return;
+      }
       option.setAttribute('aria-selected', 'true');
       input.setAttribute('aria-activedescendant', option.id);
       if (scroll) {
@@ -357,10 +361,8 @@
             search(direction);
           } else {
             const next =
-              active < 0 && direction < 0
-                ? rows.length - 1
-                : (active + direction + rows.length) % rows.length;
-            activate(next, true);
+              active < 0 && direction < 0 ? rows.length - 1 : active + direction;
+            activate(next < rows.length ? next : -1, true);
           }
         } else if (key === 'Enter' && active >= 0) {
           select(active);
