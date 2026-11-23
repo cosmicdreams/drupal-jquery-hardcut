@@ -513,6 +513,7 @@
   const preparedRequests = new WeakSet();
   const receivedRequests = new WeakSet();
   const startedRequests = new WeakSet();
+  let requestSequence = 0;
 
   /**
    * Fired on document before Drupal Ajax calls the beforeSend method.
@@ -1223,6 +1224,8 @@
       },
       beforeSend(xmlhttprequest, options) {
         ajax.ajaxing = true;
+        // Dialog commands may load their handlers after this request starts.
+        ajax.requestSequence = ++requestSequence;
         const wasDisabled = ajax.element?.disabled;
         startedRequests.add(ajax);
         document.dispatchEvent(

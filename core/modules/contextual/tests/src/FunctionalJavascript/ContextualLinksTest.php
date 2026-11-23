@@ -98,7 +98,7 @@ class ContextualLinksTest extends WebDriverTestBase {
     $this->assertSession()->elementContains('css', '#drupal-modal', 'Everything is contextual!');
     $this->getSession()->executeScript('document.querySelector("#block-branding .trigger").addEventListener("focus", (e) => e.target.classList.add("i-am-focused"))');
     $this->getSession()->getPage()->pressButton('Close');
-    $this->assertSession()->assertNoElementAfterWait('css', 'ui.dialog');
+    $this->assertSession()->assertNoElementAfterWait('css', 'dialog[open]');
 
     // When the dialog is closed, the opening contextual link is now inside a
     // collapsed container, so focus should be routed to the contextual link

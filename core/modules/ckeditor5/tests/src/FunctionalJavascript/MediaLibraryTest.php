@@ -226,6 +226,35 @@ class MediaLibraryTest extends WebDriverTestBase {
   }
 
   /**
+   * Tests opening the Media Library modal from an editor in a tray.
+   */
+  public function testMediaLibraryFromOffCanvas(): void {
+    $this->container->get('module_installer')->install(['ckeditor5_test']);
+    $this->drupalGet('/ckeditor5_test/off_canvas');
+    $this->getSession()->executeScript(<<<'JS'
+      Drupal.ajax({
+        url: Drupal.url('node/add/blog'),
+        dialogType: 'dialog',
+        dialogRenderer: 'off_canvas',
+      }).execute();
+      JS);
+    $assert = $this->assertSession();
+    $editable = $assert->waitForElementVisible('css', '#drupal-off-canvas .ck-editor__editable');
+    $this->assertNotNull($editable);
+    $editable->click();
+    $insert_media = $assert->waitForElementVisible('xpath', '//div[@id="drupal-off-canvas"]//button[span[text()="Insert Media"]]');
+    $this->assertNotNull($insert_media);
+    $insert_media->click();
+    $this->assertNotNull($assert->waitForElementVisible('css', '#drupal-modal #media-library-wrapper'));
+    $this->assertJsCondition('document.querySelector("#drupal-modal").parentElement.matches(":modal")');
+    $assert->elementExists('css', '#drupal-modal .js-media-library-item')->click();
+    $modal = $assert->elementExists('css', '#drupal-modal')->getParent();
+    $assert->elementExists('css', '.drupal-dialog-buttonpane', $modal)->pressButton('Insert selected');
+    $assert->assertNoElementAfterWait('css', '#drupal-modal');
+    $this->assertNotNull($assert->waitForElementVisible('css', '#drupal-off-canvas .ck-content .ck-widget.drupal-media .media'));
+  }
+
+  /**
    * Tests the allowed media types setting on the MediaEmbed filter.
    */
   public function testAllowedMediaTypes(): void {

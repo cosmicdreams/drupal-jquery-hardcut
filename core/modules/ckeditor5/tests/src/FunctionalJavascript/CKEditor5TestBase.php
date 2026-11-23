@@ -7,6 +7,7 @@ namespace Drupal\Tests\ckeditor5\FunctionalJavascript;
 use Behat\Mink\Element\TraversableElement;
 use Drupal\editor\Entity\Editor;
 use Drupal\filter\Entity\FilterFormat;
+use Drupal\FunctionalJavascriptTests\DrupalSelenium2Driver;
 use Drupal\FunctionalJavascriptTests\WebDriverTestBase;
 use Drupal\user\RoleInterface;
 
@@ -75,6 +76,66 @@ abstract class CKEditor5TestBase extends WebDriverTestBase {
         'status' => FALSE,
       ],
     ])->save();
+  }
+
+  /**
+   * Chooses Heading 2 from the editor's Heading dropdown.
+   */
+  protected function chooseEditorHeading(): void {
+    $assert = $this->assertSession();
+    $toggle = $assert->waitForElementVisible('css', '.ck-heading-dropdown .ck-dropdown__button');
+    $this->assertNotNull($toggle);
+    $toggle->click();
+    $heading = $assert->waitForElementVisible('css', '.ck-dropdown__panel-visible .ck-heading_heading2');
+    $this->assertNotNull($heading);
+    $heading->click();
+    $assert->elementExists('css', '.ck-editor__editable h2');
+  }
+
+  /**
+   * Asserts that the link balloon is positioned next to the editable area.
+   */
+  protected function assertLinkBalloonPosition(): void {
+    $this->assertJsCondition(<<<'JS'
+      (() => {
+        const editable = document.querySelector('.ck-editor__editable');
+        const input = document.querySelector('.ck-balloon-panel_visible input.ck-input-text');
+        if (!editable || !input) {
+          return false;
+        }
+        const editor = editable.getBoundingClientRect();
+        const field = input.getBoundingClientRect();
+        const panel = input.closest('.ck-balloon-panel');
+        const balloon = panel.getBoundingClientRect();
+        const hit = document.elementFromPoint(
+          field.left + field.width / 2,
+          field.top + field.height / 2,
+        );
+        return getComputedStyle(panel).position === 'absolute' && hit === input &&
+          balloon.left < editor.right && balloon.right > editor.left &&
+          balloon.top < editor.bottom + 24 && balloon.bottom > editor.top - 24;
+      })()
+      JS);
+  }
+
+  /**
+   * Dismisses a CKEditor overlay with Escape.
+   */
+  protected function dismissEditorOverlay(): void {
+    $driver = $this->getSession()->getDriver();
+    $this->assertInstanceOf(DrupalSelenium2Driver::class, $driver);
+    $driver->getWebDriverSession()->postActions([
+      'actions' => [
+        [
+          'type' => 'key',
+          'id' => 'keyboard',
+          'actions' => [
+            ['type' => 'keyDown', 'value' => "\u{E00C}"],
+            ['type' => 'keyUp', 'value' => "\u{E00C}"],
+          ],
+        ],
+      ],
+    ]);
   }
 
   /**

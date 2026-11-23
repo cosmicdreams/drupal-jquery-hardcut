@@ -42,21 +42,31 @@
 
       url.searchParams.set('_wrapper_format', 'drupal_htmx');
       ctx.request.action = url.pathname + url.search;
-      ctx.target = getTarget();
       ctx.swap = 'innerHTML';
       ctx.request.headers['HX-Target'] = 'div#drupal-off-canvas';
-      if (latest?.source !== source) {
+      requests.set(ctx, { source, request: ctx.request, position });
+    },
+
+    htmx_before_request(elt, { ctx }) {
+      const request = requests.get(ctx);
+      if (request) {
         latest?.request.abort();
+        latest = request;
       }
-      latest = { source, request: ctx.request, position };
-      requests.set(ctx, latest);
     },
 
     htmx_after_request(elt, { ctx }) {
-      // A response can already be waiting on assets when another link is
-      // clicked. htmx handles ordering repeated requests from the same link.
       const request = requests.get(ctx);
-      return !request || request.source === latest.source;
+      if (request) {
+        // A response may wait on assets even after a newer request aborts it.
+        if (request !== latest || !request.source.isConnected) {
+          return false;
+        }
+        // Resolve the tray after loading. The user may have closed or
+        // replaced it since the request started.
+        ctx.target = getTarget();
+      }
+      return true;
     },
 
     htmx_before_swap(elt, { ctx, tasks }) {
@@ -65,17 +75,18 @@
         const task = tasks.find(({ type }) => type === 'main');
         if (task) {
           // The response title belongs in the tray, not in the document head.
-          swaps.set(task, { ...request, title: ctx.title });
+          swaps.set(task, { request, title: ctx.title });
         }
         ctx.title = null;
       }
     },
 
     htmx_after_settle(elt, { task }) {
-      const request = swaps.get(task);
-      if (!request || request.source !== latest.source) {
+      const swap = swaps.get(task);
+      if (!swap || swap.request !== latest || !task.target.isConnected) {
         return;
       }
+      const { request, title } = swap;
       const content = task.target;
       const previous = Drupal.dialog.get(content);
       if (previous?.open) {
@@ -99,7 +110,7 @@
             .join(' '),
           'drupal-dialog-content': 'drupal-off-canvas-reset',
         },
-        title: request.title,
+        title,
         opener: request.source,
         drupalAutoButtons: false,
         drupalOffCanvasPosition: position,

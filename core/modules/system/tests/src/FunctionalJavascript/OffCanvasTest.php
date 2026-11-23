@@ -230,6 +230,30 @@ class OffCanvasTest extends OffCanvasTestBase {
     $this->assertSession()->elementAttributeContains('css', 'dialog#drupal-off-canvas-wrapper', 'style', 'width: 555px');
     $this->assertSame($page_title, $session->evaluateScript('document.title'));
     $this->assertCount(1, $session->getPage()->findAll('css', 'dialog#drupal-off-canvas-wrapper'));
+
+    // A removed initiator cannot open a tray after its response loads.
+    $session->executeScript(<<<'JS'
+      const link = [...document.links].find((item) => item.textContent === 'Open panel 2');
+      link.addEventListener('htmx:before:request', ({ detail: { ctx } }) => {
+        const fetch = ctx.fetch;
+        ctx.fetch = async (...args) => {
+          const response = await fetch(...args);
+          await new Promise((resolve) => { window.resumeRemovedLink = resolve; });
+          return response;
+        };
+      }, { once: true });
+      document.addEventListener('htmx:finally:request', () => {
+        window.removedLinkFinished = true;
+      }, { once: true });
+      link.click();
+      link.replaceWith(link.cloneNode(true));
+      JS);
+    $this->assertJsCondition('typeof window.resumeRemovedLink === "function"');
+    $this->getOffCanvasDialog()->pressButton('Close');
+    $this->waitForOffCanvasToClose();
+    $session->executeScript('window.resumeRemovedLink()');
+    $this->assertJsCondition('window.removedLinkFinished === true');
+    $this->assertSession()->elementNotExists('css', 'dialog#drupal-off-canvas-wrapper');
   }
 
   /**

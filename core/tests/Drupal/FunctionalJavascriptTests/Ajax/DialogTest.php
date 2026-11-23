@@ -230,6 +230,142 @@ class DialogTest extends WebDriverTestBase {
   }
 
   /**
+   * Tests overlapping responses and cancellation of a dialog request.
+   */
+  public function testStaleDialogResponses(): void {
+    $this->drupalGet('ajax-test/dialog');
+    $session = $this->getSession();
+    $assert = $this->assertSession();
+    $session->executeScript(<<<'JS'
+      window.pauseNextAjax = () => {
+        delete window.resumeAjax;
+        document.addEventListener('drupal:ajax-before-send', ({ detail: { ajax } }) => {
+          const receive = ajax.receiveResponse;
+          ajax.receiveResponse = (...args) => {
+            ajax.receiveResponse = receive;
+            return new Promise((resolve) => {
+              window.resumeAjax = () => resolve(receive.apply(ajax, args));
+            });
+          };
+        }, { once: true });
+      };
+      window.pauseNextAjax();
+      JS);
+
+    $this->clickLink('Link 1 (modal)');
+    $this->assertJsCondition('typeof window.resumeAjax === "function"');
+    $this->clickLink('Link 2 (modal)');
+    $this->assertNotNull($assert->waitForElementVisible('css', 'dialog[open]'));
+    $session->executeScript('window.resumeAjax()');
+    $assert->assertWaitOnAjaxRequest();
+    $this->assertJsCondition('document.querySelector("dialog[open]").style.width === "400px"');
+
+    // A nested request is still pending when the user cancels the dialog that
+    // opened it. Its response must not open a new dialog.
+    $session->executeScript(<<<'JS'
+      window.pauseNextAjax();
+      const source = document.querySelector('dialog[open] a.dialog-cancel');
+      Drupal.ajax({
+        element: source,
+        event: null,
+        keypress: false,
+        url: Drupal.url('ajax-test/dialog-contents'),
+        dialogType: 'dialog',
+      }).execute();
+      JS);
+    $this->assertJsCondition('typeof window.resumeAjax === "function"');
+    $this->clickLink('Cancel');
+    $assert->assertNoElementAfterWait('css', 'dialog[open]');
+    $session->executeScript('window.resumeAjax()');
+    $assert->assertWaitOnAjaxRequest();
+    $assert->elementNotExists('css', 'dialog[open]');
+
+    // An outstanding close command for the old dialog must leave its
+    // replacement open, even when both use the same selector.
+    $this->clickLink('Link 3 (non-modal)');
+    $original = $assert->waitForElementVisible('css', '#ajax-test-dialog-wrapper-1');
+    $this->assertNotNull($original);
+    $session->executeScript('window.pauseNextAjax()');
+    $this->clickLink('Link 4 (close non-modal if open)');
+    $this->assertJsCondition('typeof window.resumeAjax === "function"');
+    $original->getParent()->pressButton('Close');
+    $assert->assertNoElementAfterWait('css', '#ajax-test-dialog-wrapper-1');
+    $this->clickLink('Link 3 (non-modal)');
+    $this->assertNotNull($assert->waitForElementVisible('css', '#ajax-test-dialog-wrapper-1'));
+    $session->executeScript('window.resumeAjax()');
+    $assert->assertWaitOnAjaxRequest();
+    $assert->elementExists('css', '#ajax-test-dialog-wrapper-1');
+  }
+
+  /**
+   * Tests nested autocomplete, details and select controls in dialogs.
+   */
+  public function testNestedFormWidgets(): void {
+    $this->container->get('module_installer')->install(['form_test', 'contextual_test']);
+    $this->drupalLogin($this->drupalCreateUser([
+      'access autocomplete test',
+      'access contextual links',
+    ]));
+    $assert = $this->assertSession();
+    $session = $this->getSession();
+
+    foreach ([['modal', NULL], ['dialog', NULL], ['dialog', 'off_canvas']] as [$type, $renderer]) {
+      $this->drupalGet('ajax-test/dialog');
+      $session->executeScript(sprintf(<<<'JS'
+        Drupal.ajax({
+          url: Drupal.url('ajax-test/dialog-widgets'),
+          dialogType: %s,
+          dialogRenderer: %s,
+        }).execute();
+        JS, json_encode($type), json_encode($renderer)));
+      $dialog = $assert->waitForElementVisible('css', 'dialog[open]');
+      $this->assertNotNull($dialog);
+      $dialog->find('css', 'summary')->click();
+      $assert->elementExists('css', 'details[open]', $dialog);
+      $dialog->selectFieldOption('Choice', 'second');
+      $this->assertSame('second', $dialog->findField('Choice')->getValue());
+
+      $field = $dialog->findField('Suggestions');
+      $field->setValue('label');
+      $session->getDriver()->keyDown($field->getXpath(), ' ');
+      $menu = $assert->waitForElementVisible('css', 'dialog[open] .ui-autocomplete li');
+      $this->assertNotNull($menu);
+      $this->assertJsCondition(<<<'JS'
+        (() => {
+          const input = document.querySelector('dialog[open] input.form-autocomplete');
+          const item = document.querySelector('dialog[open] .ui-autocomplete li');
+          const anchor = input.getBoundingClientRect();
+          const option = item.getBoundingClientRect();
+          return getComputedStyle(item.parentElement).position === 'absolute' &&
+            Math.abs(option.left - anchor.left) < 10 &&
+            Math.abs(option.top - anchor.bottom) < 10 &&
+            item.contains(document.elementFromPoint(
+              option.left + option.width / 2,
+              option.top + option.height / 2,
+            ));
+        })()
+        JS);
+      $menu->click();
+      $this->assertSame('value', $field->getValue());
+
+      $region = $dialog->find('css', '.contextual-region');
+      $session->getDriver()->mouseOver($region->getXpath());
+      $trigger = $assert->waitForElementVisible('css', 'dialog[open] .contextual button.trigger');
+      $this->assertNotNull($trigger);
+      $trigger->click();
+      $link = $assert->waitForElementVisible('css', 'dialog[open] .contextual a.use-ajax');
+      $this->assertNotNull($link);
+      $link->click();
+      $this->assertJsCondition('document.querySelector("dialog:modal")?.textContent.includes("Everything is contextual!")');
+      $assert->elementExists('css', '#drupal-modal')->getParent()->pressButton('Close');
+      if ($type !== 'modal') {
+        $dialog->pressButton('Close');
+      }
+      $assert->assertNoElementAfterWait('css', 'dialog[open]');
+    }
+  }
+
+  /**
    * Tests dialog link opener with different HTTP methods.
    */
   public function testHttpMethod(): void {

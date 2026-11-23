@@ -115,15 +115,17 @@
    * @param {string} edge
    *   The name of the edge to calculate. Can be 'top', 'right',
    *   'bottom' or 'left'.
+   * @param {HTMLElement} [exclude]
+   *   An element to ignore when measuring the edge.
    *
    * @return {number}
    *   The viewport displacement distance for the requested edge.
    */
-  function calculateOffset(edge) {
+  function calculateOffset(edge, exclude) {
     let edgeOffset = 0;
     document.querySelectorAll(`[data-offset-${edge}]`).forEach((el) => {
       // Hidden elements do not displace the viewport.
-      if (!el.getClientRects().length) {
+      if (el === exclude || !el.getClientRects().length) {
         return;
       }
       // If the offset data attribute contains a displacing value, use it.

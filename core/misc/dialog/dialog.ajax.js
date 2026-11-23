@@ -4,6 +4,63 @@
  */
 
 (function (Drupal) {
+  const requests = new WeakMap();
+  const openVersions = new WeakMap();
+  const selectorVersions = new Map();
+
+  window.addEventListener('dialog:aftercreate', ({ dialog }) => {
+    openVersions.set(dialog.element, {});
+  });
+
+  document.addEventListener(
+    'drupal:ajax-before-send',
+    ({ detail: { ajax } }) => {
+      const source =
+        ajax.element ||
+        (ajax.elementSettings.dialogType && document.activeElement);
+      const origin = source?.closest?.('dialog[open]');
+      requests.set(ajax, {
+        origin,
+        opened: openVersions.get(origin),
+      });
+    },
+  );
+
+  document.addEventListener('drupal:ajax-complete', ({ detail: { ajax } }) => {
+    requests.delete(ajax);
+    if (!Drupal.ajax.instances.some((instance) => instance?.ajaxing)) {
+      selectorVersions.clear();
+    }
+  });
+
+  function acceptsCommand(ajax, selector) {
+    const { origin, opened } = requests.get(ajax) || {};
+    if (
+      origin &&
+      (!origin.isConnected ||
+        !origin.open ||
+        openVersions.get(origin) !== opened)
+    ) {
+      return false;
+    }
+    if (selector && ajax.requestSequence) {
+      if (ajax.requestSequence < (selectorVersions.get(selector) || 0)) {
+        return false;
+      }
+      selectorVersions.set(selector, ajax.requestSequence);
+    }
+    return true;
+  }
+
+  function closeFromResponse(ajax, dialog) {
+    const request = requests.get(ajax);
+    if (request?.origin === dialog.element) {
+      // Commands later in this same response may open another dialog.
+      request.origin = null;
+    }
+    dialog.close();
+  }
+
   function syncButtons(content, dialog) {
     const originals = content.querySelectorAll(
       '.form-actions input[type=submit], .form-actions a.button, .form-actions a.action-link',
@@ -53,10 +110,13 @@
     if (!response.selector) {
       return false;
     }
+    if (!acceptsCommand(ajax, response.selector)) {
+      return;
+    }
     let content = document.querySelector(response.selector);
     const previous = content && Drupal.dialog.get(content);
     if (previous?.open) {
-      previous.close();
+      closeFromResponse(ajax, previous);
       content = document.querySelector(response.selector);
     }
     if (!content) {
@@ -102,15 +162,21 @@
   };
 
   Drupal.AjaxCommands.prototype.closeDialog = function (ajax, response) {
+    if (!acceptsCommand(ajax, response.selector)) {
+      return;
+    }
     const content = document.querySelector(response.selector);
     const dialog = content && Drupal.dialog.get(content);
     if (dialog) {
       dialog.settings.removeOnClose = !response.persist;
-      dialog.close();
+      closeFromResponse(ajax, dialog);
     }
   };
 
   Drupal.AjaxCommands.prototype.setDialogOption = function (ajax, response) {
+    if (!acceptsCommand(ajax, response.selector)) {
+      return;
+    }
     const content = document.querySelector(response.selector);
     if (content) {
       Drupal.dialog.get(content)?.update({
@@ -123,6 +189,9 @@
     ajax,
     response,
   ) {
+    if (!acceptsCommand(ajax)) {
+      return;
+    }
     Drupal.ajax({
       progress: { type: 'throbber' },
       dialogType: 'modal',

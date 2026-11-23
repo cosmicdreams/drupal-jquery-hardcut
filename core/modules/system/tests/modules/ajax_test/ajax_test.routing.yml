@@ -6,6 +6,13 @@ ajax_test.dialog_contents:
   requirements:
     _access: 'TRUE'
 
+ajax_test.dialog_widgets:
+  path: '/ajax-test/dialog-widgets'
+  defaults:
+    _controller: '\Drupal\ajax_test\Controller\AjaxTestController::dialogWidgets'
+  requirements:
+    _permission: 'access autocomplete test'
+
 ajax_test.ajax_render_types:
   path: '/ajax-test/dialog-contents-types/{type}'
   defaults:

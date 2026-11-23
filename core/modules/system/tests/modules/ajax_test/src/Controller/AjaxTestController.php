@@ -5,12 +5,14 @@ declare(strict_types=1);
 namespace Drupal\ajax_test\Controller;
 
 use Drupal\Component\Serialization\Json;
+use Drupal\contextual\ContextualLinksSerializer;
 use Drupal\Core\Ajax\AjaxResponse;
 use Drupal\Core\Ajax\AlertCommand;
 use Drupal\Core\Ajax\CloseDialogCommand;
 use Drupal\Core\Ajax\HtmlCommand;
 use Drupal\Core\Render\Markup;
 use Drupal\Core\Url;
+use Drupal\form_test\FormTestAutocompleteForm;
 use Symfony\Component\HttpFoundation\File\UploadedFile;
 use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\HttpFoundation\Request;
@@ -47,6 +49,44 @@ class AjaxTestController {
     ];
 
     return $content;
+  }
+
+  /**
+   * Provides nested form widgets for dialog tests.
+   */
+  public function dialogWidgets(): array {
+    $serializer = \Drupal::service(ContextualLinksSerializer::class);
+    $suggestions = \Drupal::formBuilder()->getForm(FormTestAutocompleteForm::class)['autocomplete_1'];
+    $suggestions['#title'] = 'Suggestions';
+    $suggestions['#size'] = 20;
+    return [
+      '#title' => 'Dialog widgets',
+      '#type' => 'container',
+      'region' => [
+        '#type' => 'inline_template',
+        '#template' => '<div class="contextual-region">{{ placeholder }}Test region</div>',
+        '#context' => [
+          'placeholder' => [
+            '#type' => 'contextual_links_placeholder',
+            '#id' => $serializer->linksToId([
+              'contextual_test' => ['route_parameters' => []],
+            ]),
+          ],
+        ],
+      ],
+      'options' => [
+        '#type' => 'details',
+        '#title' => 'Options',
+        'choice' => [
+          '#type' => 'select',
+          '#title' => 'Choice',
+          '#id' => 'dialog-choice',
+          '#name' => 'choice',
+          '#options' => ['first' => 'First', 'second' => 'Second'],
+        ],
+        'suggestions' => $suggestions,
+      ],
+    ];
   }
 
   /**

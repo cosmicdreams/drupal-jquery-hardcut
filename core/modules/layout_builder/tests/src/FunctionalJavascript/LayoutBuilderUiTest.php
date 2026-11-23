@@ -96,6 +96,32 @@ class LayoutBuilderUiTest extends WebDriverTestBase {
   }
 
   /**
+   * Tests reordering a Layout Builder block from the off-canvas tray.
+   */
+  public function testReorderBlockInTray(): void {
+    $this->drupalGet(static::FIELD_UI_PREFIX . '/display/default/layout');
+    $body = '.block-field-blocknodebundle-with-section-fieldbody';
+    $block_selector = '[data-region="content"] [data-layout-block-uuid]';
+    $page = $this->getSession()->getPage();
+    $assert = $this->assertSession();
+    $this->assertFalse($page->find('css', $block_selector)->hasClass(substr($body, 1)));
+
+    $this->clickContextualLink($body, 'Move');
+    $tray = $assert->waitForElementVisible('css', 'dialog#drupal-off-canvas-wrapper[open]');
+    $this->assertNotNull($tray);
+    $handle = $assert->elementExists('css', 'tr.draggable:contains("Body") .tabledrag-handle', $tray);
+    $handle->focus();
+    $handle->keyDown(38);
+    $handle->keyUp(38);
+    $handle->blur();
+    $first_row = $assert->elementExists('css', 'tr.draggable:first-child', $tray);
+    $this->assertStringContainsString('Body', $first_row->getText());
+    $tray->pressButton('Move');
+    $assert->assertNoElementAfterWait('css', 'dialog#drupal-off-canvas-wrapper');
+    $this->assertTrue($page->find('css', $block_selector)->hasClass(substr($body, 1)));
+  }
+
+  /**
    * Tests the message indicating unsaved changes.
    */
   public function testUnsavedChangesMessage(): void {

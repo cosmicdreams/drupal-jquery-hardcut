@@ -265,8 +265,8 @@
    * box-sizing, margin, padding, position, text-decoration, transition,
    * vertical-align and word-wrap.
    *
-   * All .ck* CSS rules are duplicated and prefixed with the off canvas selector
-   * To ensure they have higher specificity and are not reset too aggressively.
+   * Single selectors starting with .ck are duplicated with the off-canvas
+   * scope to give them higher specificity.
    *
    * @param {CSSRule} rule
    *  A single CSS rule to be analyzed and changed if necessary.
@@ -276,41 +276,18 @@
     if (rule.cssRules) {
       processRules(rule);
     }
-    if (!rule.selectorText) {
+    const selector = rule.selectorText;
+    // Splitting a selector list on commas would also split functional
+    // selectors such as :not(), altering the styles outside the tray.
+    if (!selector || selector.includes(',')) {
       return;
     }
     const offCanvasId = '#drupal-off-canvas';
-    const CKEditorClass = '.ck';
     const styleFence = '[data-drupal-ck-style-fence]';
-    if (
-      rule.selectorText.includes(offCanvasId) ||
-      rule.selectorText.includes(CKEditorClass)
-    ) {
-      rule.selectorText = rule.selectorText
-        .split(/,/g)
-        .map((selector) => {
-          // Only change rules that include #drupal-off-canvas in the selector.
-          if (selector.includes(offCanvasId)) {
-            return `${selector.trim()}:not(${styleFence} *)`;
-          }
-          // Duplicate CKEditor 5 styles with higher specificity for proper
-          // display in off canvas elements.
-          if (selector.includes(CKEditorClass)) {
-            // Return both rules to avoid replacing the existing rules.
-            return [
-              selector.trim(),
-              selector
-                .trim()
-                .replace(
-                  CKEditorClass,
-                  `${offCanvasId} ${styleFence} ${CKEditorClass}`,
-                ),
-            ];
-          }
-          return selector;
-        })
-        .flat()
-        .join(', ');
+    if (selector.includes(offCanvasId)) {
+      rule.selectorText = `${selector}:not(${styleFence} *)`;
+    } else if (selector.startsWith('.ck')) {
+      rule.selectorText = `${selector}, ${offCanvasId} ${styleFence} ${selector}`;
     }
   }
 
@@ -382,9 +359,11 @@
       const id = setElementId(element);
       const { ClassicEditor } = CKEDITOR;
 
-      // A modal makes overlays outside its subtree inert.
+      // Keep overlays above the editor within regular dialogs. Trays use the
+      // body so their style reset and scroll container do not affect overlays.
       const dialog = element.closest('dialog');
-      if (dialog) {
+      const isOffCanvas = Boolean(element.closest('#drupal-off-canvas'));
+      if (dialog && !isOffCanvas) {
         editorConfig.ui = { ...editorConfig.ui, overlayContainer: dialog };
       }
 
@@ -463,10 +442,21 @@
           // Integrate CKEditor 5 viewport offset with Drupal displace.
           // @see \Drupal\Tests\ckeditor5\FunctionalJavascript\CKEditor5ToolbarTest
           // @see https://ckeditor.com/docs/ckeditor5/latest/api/module_core_editor_editorui-EditorUI.html#member-viewportOffset
+          const tray = isOffCanvas ? dialog : null;
           const updateViewportOffset = ({ detail }) => {
-            editor.ui.viewportOffset = detail;
+            const offsets = { ...detail };
+            // The tray displaces the page, but an editor inside it still
+            // needs to position its overlays in that part of the viewport.
+            if (tray) {
+              Object.keys(offsets).forEach((edge) => {
+                if (tray.hasAttribute(`data-offset-${edge}`)) {
+                  offsets[edge] = Drupal.displace.calculateOffset(edge, tray);
+                }
+              });
+            }
+            editor.ui.viewportOffset = offsets;
           };
-          editor.ui.viewportOffset = Drupal.displace.offsets;
+          updateViewportOffset({ detail: Drupal.displace.offsets });
           document.addEventListener(
             'drupalViewportOffsetChange',
             updateViewportOffset,
@@ -486,8 +476,6 @@
               callback();
             }
           });
-
-          const isOffCanvas = element.closest('#drupal-off-canvas');
 
           if (isOffCanvas) {
             offCanvasCss(element);

@@ -29,3 +29,16 @@
 .ck-toolbar__items .ck.ck-button.ck-on {
   border: 1px solid var(--ck-color-button-on-color);
 }
+
+/* Fit toolbar dropdowns within a dialog's scrollable content. */
+.drupal-dialog .ck-editor__top {
+  container-type: inline-size;
+}
+
+.drupal-dialog .ck.ck-dropdown__panel {
+  --ck-dropdown-max-width: calc(100cqi - 1rem);
+}
+
+.drupal-dialog .ck.ck-heading-dropdown .ck-dropdown__panel .ck-list__item {
+  min-width: min(var(--ck-heading-dropdown-list-item-min-width), calc(100cqi - 2rem));
+}
