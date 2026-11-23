@@ -622,7 +622,14 @@ class DialogTest extends WebDriverTestBase {
     $this->assertNotNull($option);
     $driver->mouseOver($option->getXpath());
     $this->assertJsCondition("field.hasAttribute('aria-activedescendant')");
-    $session->executeScript("list.dispatchEvent(new PointerEvent('pointermove', { bubbles: true }))");
+    $session->executeScript(<<<'JS'
+      const heading = document.createElement('li');
+      heading.setAttribute('role', 'presentation');
+      heading.textContent = 'Option group heading';
+      list.append(heading);
+      JS);
+    $heading = $assert->elementExists('css', '#drupal-modal .autocomplete-list > [role="presentation"]');
+    $driver->mouseOver($heading->getXpath());
     $this->assertJsCondition("!field.hasAttribute('aria-activedescendant')");
     $outside = $assert->elementExists('css', '#drupal-modal form button');
     $driver->mouseOver($outside->getXpath());

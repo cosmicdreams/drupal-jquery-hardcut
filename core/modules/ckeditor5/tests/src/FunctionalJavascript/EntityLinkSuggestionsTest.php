@@ -145,6 +145,14 @@ class EntityLinkSuggestionsTest extends CKEditor5TestBase {
     $this->assertSame('Foo', $results[0]->find('css', '.entity-link-suggestions-result-line--title')->getText());
     $this->assertSame('Information about screaming hairy armadillo', $results[1]->find('css', '.entity-link-suggestions-result-line--title')->getText());
 
+    $this->assertJsCondition(<<<'JS'
+      (() => {
+        const options = Array.from(document.querySelectorAll('.ck-link-form [role="option"]'));
+        return getComputedStyle(options[0]).borderBottomWidth === '1px' &&
+          getComputedStyle(options.at(-1)).borderBottomWidth === '0px';
+      })()
+      JS);
+
     // Find the first result and click it.
     $results[0]->click();
 
