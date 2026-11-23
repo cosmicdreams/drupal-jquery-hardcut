@@ -205,7 +205,10 @@ class OffCanvasTest extends OffCanvasTestBase {
   /**
    * Tests viewport centering when a modal is opened from outside the tray.
    */
-  public function testModalWithExpandedTray(): void {
+  #[TestWith(['stark'])]
+  #[TestWith(['default_admin'])]
+  public function testModalWithExpandedTray(string $theme): void {
+    $this->enableTheme($theme);
     $session = $this->getSession();
     $session->resizeWindow(1200, 800);
     $this->drupalGet('/off-canvas-test-links');
@@ -220,7 +223,7 @@ class OffCanvasTest extends OffCanvasTestBase {
       opener.addEventListener('click', () => {
         const content = document.createElement('div');
         content.textContent = 'Viewport modal content';
-        Drupal.dialog(content, { removeOnClose: true }).showModal();
+        Drupal.dialog(content, { width: 1000, removeOnClose: true }).showModal();
       });
       document.body.prepend(opener);
       JS);
@@ -234,10 +237,16 @@ class OffCanvasTest extends OffCanvasTestBase {
         }
         const { left, top, width, height } = modal.getBoundingClientRect();
         return document.querySelector('#drupal-off-canvas-wrapper[open]') &&
+          width >= 1000 &&
           Math.abs(left + width / 2 - window.innerWidth / 2) < 2 &&
           Math.abs(top + height / 2 - window.innerHeight / 2) < 2;
       })()
       JS);
+
+    if ($theme === 'default_admin') {
+      $session->resizeWindow(640, 480);
+      $this->assertJsCondition("getComputedStyle(document.querySelector('dialog:modal')).maxWidth === '92%'");
+    }
   }
 
   /**
