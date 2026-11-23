@@ -95,6 +95,10 @@ class NavigationWorkspacesDialogTest extends WebDriverTestBase {
     $tray = $assert->waitForElementVisible('css', 'dialog#drupal-off-canvas-wrapper[open]');
     $this->assertNotNull($tray);
     $this->getSession()->resizeWindow(640, 480);
+    $overlay = $assert->waitForElementVisible('css', '.admin-toolbar-overlay');
+    $this->assertNotNull($overlay);
+    $overlay->click();
+    $this->assertJsCondition('document.documentElement.dataset.adminToolbar === "collapsed"');
     $this->assertJsCondition('Drupal.displace.offsets.top >= window.innerHeight * 0.9');
     $tray->clickLink('Stage');
     $this->assertNotNull($assert->waitForElementVisible('css', 'dialog[open] > #drupal-modal'));
