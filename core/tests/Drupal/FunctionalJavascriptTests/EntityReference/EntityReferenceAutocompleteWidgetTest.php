@@ -165,6 +165,24 @@ class EntityReferenceAutocompleteWidgetTest extends WebDriverTestBase {
 
     $this->doAutocomplete($field_name);
     $this->assertCount(2, $page->findAll('css', '.ui-autocomplete li'));
+
+    // Open an entity form in a modal and search in its autocomplete field.
+    $session = $this->getSession();
+    $session->executeScript("Drupal.ajax({ url: Drupal.url('node/add/page'), dialogType: 'modal' }).execute()");
+    $modal = $assert_session->waitForElementVisible('css', 'dialog[open]');
+    $this->assertNotNull($modal);
+    $input = $modal->findField($field_name . '[0][target_id]');
+    $input->setValue('Test');
+    $session->getDriver()->keyDown($input->getXpath(), ' ');
+    $this->assertNotNull($assert_session->waitForElementVisible('css', 'dialog[open] .ui-autocomplete li'));
+    $this->assertCount(2, $modal->findAll('css', '.ui-autocomplete li'));
+    $this->assertJsCondition(<<<'JS'
+      (() => {
+        const status = document.querySelector('dialog [role="status"][aria-live="assertive"]');
+        return status?.closest(':modal') && !status.closest('[inert]') &&
+          status.textContent.includes('2 results are available');
+      })()
+      JS);
   }
 
   /**

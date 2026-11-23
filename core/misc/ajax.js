@@ -1697,8 +1697,29 @@
     this.progress.elementNode = progressElement(
       Drupal.theme('ajaxProgressIndicatorFullscreen'),
     );
-    document.body.append(this.progress.elementNode);
+    const parent = Drupal.dialog?.getOpenModal() || document.body;
+    parent.append(this.progress.elementNode);
   };
+
+  /**
+   * Keeps pending fullscreen indicators above the current modal backdrop.
+   */
+  function placeFullscreenIndicators() {
+    const parent = Drupal.dialog?.getOpenModal() || document.body;
+    startedRequests.forEach(({ progress }) => {
+      const node = progress?.elementNode;
+      if (
+        progress?.type === 'fullscreen' &&
+        node?.isConnected &&
+        node.parentElement !== parent
+      ) {
+        parent.append(node);
+      }
+    });
+  }
+
+  window.addEventListener('dialog:aftercreate', placeFullscreenIndicators);
+  window.addEventListener('dialog:afterclose', placeFullscreenIndicators);
 
   /**
    * Optional callback called with the response and status after the successful

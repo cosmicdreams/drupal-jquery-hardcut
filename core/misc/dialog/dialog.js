@@ -6,6 +6,7 @@
 (function (Drupal, drupalSettings, { isFocusable, tabbable }, bodyScrollLock) {
   const dialogs = new WeakMap();
   const openSessions = new WeakMap();
+  const openModals = new Set();
   const latestOpen = new Map();
   let openGeneration = 0;
   let pendingOpens = 0;
@@ -322,6 +323,7 @@
       if (modal) {
         scrollTarget = settings.scrollTarget || content;
         bodyScrollLock.lock(scrollTarget);
+        openModals.add(element);
         element.showModal();
       } else {
         element.show();
@@ -349,6 +351,7 @@
       resizeObserver.disconnect();
       resizeObserver = null;
       element.close(value);
+      openModals.delete(element);
       if (settings.removeOnClose) {
         Drupal.detachBehaviors(content, null, 'unload');
       }
@@ -443,6 +446,8 @@
 
   Object.assign(Drupal.dialog, {
     get: (element) => dialogs.get(element),
+    getOpenModal: () =>
+      Array.from(openModals).findLast((element) => element.matches(':modal')),
     claimOpen,
     isLatestOpen,
     requestOrigin,

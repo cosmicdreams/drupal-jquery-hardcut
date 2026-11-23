@@ -22,6 +22,20 @@
   const announcements = [];
 
   /**
+   * Keeps the live region in the part of the page that is accessible.
+   */
+  function placeLiveElement() {
+    const parent = Drupal.dialog?.getOpenModal() || document.body;
+    if (liveElement && liveElement.parentElement !== parent) {
+      liveElement.replaceChildren();
+      parent.append(liveElement);
+    }
+  }
+
+  window.addEventListener('dialog:aftercreate', placeLiveElement);
+  window.addEventListener('dialog:afterclose', placeLiveElement);
+
+  /**
    * Builds a div element with the aria-live attribute and add it to the DOM.
    *
    * @type {Drupal~behavior}
@@ -38,7 +52,7 @@
         liveElement.className = 'visually-hidden';
         liveElement.setAttribute('aria-live', 'polite');
         liveElement.setAttribute('aria-busy', 'false');
-        document.body.appendChild(liveElement);
+        placeLiveElement();
       }
     },
   };
@@ -65,6 +79,7 @@
     }
 
     if (text.length) {
+      placeLiveElement();
       // Clear the liveElement so that repeated strings will be read.
       liveElement.innerHTML = '';
       // Set the busy state to true until the node changes are complete.

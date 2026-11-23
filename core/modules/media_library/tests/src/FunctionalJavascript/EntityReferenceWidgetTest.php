@@ -126,7 +126,37 @@ class EntityReferenceWidgetTest extends MediaLibraryTestBase {
     $this->assertFalse($menu->hasLink('Type Two'));
     $this->assertTrue($menu->hasLink('Type Three'));
     $this->assertFalse($menu->hasLink('Type Four'));
-    $this->switchToMediaType('Three');
+    $session = $this->getSession();
+    $session->executeScript(<<<'JS'
+      document.addEventListener('drupal:ajax-before-send', ({ detail: { ajax } }) => {
+        const receive = ajax.receiveResponse;
+        ajax.receiveResponse = (...args) => new Promise((resolve) => {
+          window.resumeTab = () => resolve(receive.apply(ajax, args));
+        });
+      }, { once: true });
+      JS);
+    $menu->clickLink('Type Three');
+    $this->assertJsCondition('typeof window.resumeTab === "function"');
+    $this->assertJsCondition(<<<'JS'
+      (() => {
+        const progress = document.querySelector('.ajax-progress-fullscreen, .ajax-progress--fullscreen');
+        if (!progress?.closest(':modal')) {
+          return false;
+        }
+        const { x, y, width, height } = progress.getBoundingClientRect();
+        return progress.contains(document.elementFromPoint(x + width / 2, y + height / 2));
+      })()
+      JS);
+    $session->executeScript(<<<'JS'
+      window.nestedProgressModal = Drupal.dialog(document.createElement('div'), { removeOnClose: true });
+      window.nestedProgressModal.showModal();
+      JS);
+    $this->assertJsCondition('document.querySelector(".ajax-progress-fullscreen, .ajax-progress--fullscreen").closest(":modal") === window.nestedProgressModal.element');
+    $session->executeScript('window.nestedProgressModal.close()');
+    $this->assertJsCondition('document.querySelector(".ajax-progress-fullscreen, .ajax-progress--fullscreen").closest(":modal").querySelector("#drupal-modal") !== null');
+    $session->executeScript('window.resumeTab()');
+    $assert_session->assertWaitOnAjaxRequest();
+    $assert_session->elementNotExists('css', '.ajax-progress-fullscreen, .ajax-progress--fullscreen');
     // Assert the active tab is set correctly.
     $this->assertFalse($menu->hasLink('Show Type One media (selected)'));
     $this->assertTrue($menu->hasLink('Show Type Three media (selected)'));

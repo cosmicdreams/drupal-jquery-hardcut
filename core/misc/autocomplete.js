@@ -6,6 +6,16 @@
 (function ($, Drupal) {
   let autocomplete;
 
+  // The widget puts its status live region on the body by default. Keep it
+  // with the autocomplete field so a modal does not make it inert.
+  $(document).on('autocompletecreate autocompleteresponse', ({ target }) => {
+    const parent = target.closest('dialog.drupal-dialog') || document.body;
+    const { liveRegion } = $(target).autocomplete('instance');
+    if (liveRegion[0].parentElement !== parent) {
+      liveRegion.appendTo(parent);
+    }
+  });
+
   /**
    * Helper splitting terms from the autocomplete value.
    *

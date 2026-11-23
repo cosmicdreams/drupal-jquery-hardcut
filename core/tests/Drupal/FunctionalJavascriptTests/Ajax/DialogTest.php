@@ -230,6 +230,44 @@ class DialogTest extends WebDriverTestBase {
   }
 
   /**
+   * Tests that live announcements follow the topmost modal.
+   */
+  public function testModalAnnouncements(): void {
+    $this->drupalGet('ajax-test/dialog');
+    $session = $this->getSession();
+    $this->clickLink('Link 1 (modal)');
+    $this->assertNotNull($this->assertSession()->waitForElementVisible('css', 'dialog[open]'));
+    $session->executeScript(<<<'JS'
+      window.firstModal = Drupal.dialog.get(document.getElementById('drupal-modal'));
+      window.secondModal = Drupal.dialog(document.createElement('div'), { removeOnClose: true });
+      window.secondModal.showModal();
+      Drupal.announce('Announcement in nested modal');
+      JS);
+    $this->assertJsCondition(<<<'JS'
+      (() => {
+        const region = document.getElementById('drupal-live-announce');
+        return region.textContent === 'Announcement in nested modal' &&
+          !region.closest('[inert]') && region.closest(':modal') === window.secondModal.element;
+      })()
+      JS);
+    $session->executeScript("window.secondModal.close(); Drupal.announce('Announcement in first modal');");
+    $this->assertJsCondition(<<<'JS'
+      (() => {
+        const region = document.getElementById('drupal-live-announce');
+        return region.textContent === 'Announcement in first modal' &&
+          !region.closest('[inert]') && region.closest(':modal') === window.firstModal.element;
+      })()
+      JS);
+    $session->executeScript("window.firstModal.close(); Drupal.announce('Announcement on the page');");
+    $this->assertJsCondition(<<<'JS'
+      (() => {
+        const region = document.getElementById('drupal-live-announce');
+        return region.textContent === 'Announcement on the page' && region.parentElement === document.body;
+      })()
+      JS);
+  }
+
+  /**
    * Tests overlapping responses and cancellation of a dialog request.
    */
   public function testStaleDialogResponses(): void {
