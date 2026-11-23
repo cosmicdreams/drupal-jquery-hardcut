@@ -50,7 +50,6 @@
             : Drupal.t('Edit summary');
           (visible ? summaryLabel : fullLabel).append(link);
         };
-        // An owned binding also answers a legacy synthetic click.
         Drupal.formEvents.listen(link, 'click', (event) => {
           event.preventDefault();
           toggle();

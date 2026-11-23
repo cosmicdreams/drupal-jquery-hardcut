@@ -99,10 +99,8 @@ class EffectiveAssetResolutionTest extends KernelTestBase {
    */
   #[TestWith(['neutral'], 'neutral render attachment')]
   #[TestWith(['already-loaded'], 'shared libraries already loaded')]
-  #[TestWith(['explicit-legacy'], 'explicit legacy render attachment')]
   public function testAggregateProvenance(string $context): void {
     $already_loaded = $context === 'already-loaded';
-    $legacy = $context === 'explicit-legacy';
     $loaded = $already_loaded ? ['core/drupal.checkbox', 'system/base'] : [];
     // The fixture records groups at 92e5c3a3047.
     $baseline = Json::decode(file_get_contents(__DIR__ . '/fixtures/effective-assets-pinned.json'));
@@ -114,10 +112,6 @@ class EffectiveAssetResolutionTest extends KernelTestBase {
     $this->container->get('library.discovery')->clear();
 
     $libraries = ['common_test/aggregation', 'core/drupal.checkbox', 'system/base', 'common_test/external'];
-    $legacy_library = 'core/internal.jquery.form';
-    if ($legacy) {
-      $libraries[] = $legacy_library;
-    }
     $build['content'] = ['#markup' => 'Asset provenance', '#attached' => ['library' => $libraries]];
     $this->container->get('renderer')->renderRoot($build);
     $assets = AttachedAssets::createFromRenderArray($build);
@@ -140,9 +134,6 @@ class EffectiveAssetResolutionTest extends KernelTestBase {
     $this->assertSame(!$already_loaded, isset($footer['core/misc/drupal.js']));
     $this->assertSame(!$already_loaded, isset($footer['core/misc/checkbox.js']));
     $this->assertArrayHasKey('core/misc/debounce.js', $footer);
-    $this->assertSame($legacy, isset($footer['core/assets/vendor/jquery/jquery.min.js']));
-    $this->assertSame($legacy, isset($footer['core/misc/jquery.no-conflict.js']));
-    $this->assertSame($legacy, isset($footer['core/misc/jquery.form.js']));
 
     $optimized_css = $resolver->getCssAssets($assets, TRUE);
     [$optimized_header, $optimized_footer] = $resolver->getJsAssets($assets, TRUE);
@@ -162,14 +153,6 @@ class EffectiveAssetResolutionTest extends KernelTestBase {
     $this->assertSame($already_loaded, $exclusions !== []);
     foreach ($exclusions as $exclude) {
       $this->assertSame($loaded, explode(',', UrlHelper::uncompressQueryParameter($exclude)));
-    }
-    // The explicit jQuery bootstrap follows the vendor.
-    if ($legacy) {
-      $jquery_group = array_search(['core/assets/vendor/jquery/jquery.min.js'], $expected_groups['js'], TRUE);
-      $this->assertNotFalse($jquery_group);
-      array_splice($expected_groups['js'], $jquery_group + 1, 0, [
-        ['core/misc/jquery.no-conflict.js'],
-      ]);
     }
     $this->assertAggregates('js', array_filter($footer, $files_only), $optimized_footer, $expected_groups['js']);
   }

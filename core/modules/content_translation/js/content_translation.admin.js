@@ -6,7 +6,6 @@
 ((Drupal, drupalSettings) => {
   const inputTypes = ['input', 'select', 'textarea', 'button'];
   const input = `:is(${inputTypes.join(', ')})`;
-  // The legacy event bridge also passes these selectors to jQuery delegation.
   const translatableInputs = (group) =>
     inputTypes
       .map((type) => `table .${group}-settings .translatable ${type}`)

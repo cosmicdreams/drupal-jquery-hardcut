@@ -186,23 +186,6 @@
         ["core/assets/vendor/loadjs/loadjs.min.js"],
         ["core/misc/debounce.js"]
       ]
-    },
-    "explicit-legacy": {
-      "css": [
-        ["core/modules/system/css/components/align.module.css", "core/modules/system/css/components/container-inline.module.css", "core/modules/system/css/components/clearfix.module.css", "core/modules/system/css/components/hidden.module.css", "core/modules/system/css/components/js.module.css"],
-        ["http://example.com/stylesheet.css"],
-        ["core/assets/vendor/normalize-css/normalize.css"]
-      ],
-      "js": [
-        ["core/misc/drupalSettingsLoader.js"],
-        ["http://example.com/script.js"],
-        ["core/assets/vendor/jquery/jquery.min.js"],
-        ["core/misc/drupal.js", "core/misc/drupal.init.js"],
-        ["core/misc/jquery.form.js"],
-        ["core/assets/vendor/once/once.min.js"],
-        ["core/assets/vendor/loadjs/loadjs.min.js"],
-        ["core/misc/debounce.js", "core/misc/checkbox.js"]
-      ]
     }
   }
 }

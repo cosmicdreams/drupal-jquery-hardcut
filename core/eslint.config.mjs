@@ -28,7 +28,6 @@ export default defineConfig(
       '**/js_test_files/**/*',
       '**/build/**/*',
       'modules/locale/tests/js/locale_test.js',
-      'misc/jquery.form.js',
 
       // Ignore deliberately malformed YAML files.
       'modules/system/tests/fixtures/HtaccessTest/access_test.yml',

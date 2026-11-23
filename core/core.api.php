@@ -2528,13 +2528,11 @@ function hook_validation_constraint_alter(array &$definitions) {
  *   the callback should be placed. Note that callbacks have a choice of
  *   returning content or JavaScript commands; 'wrapper' is used for content
  *   returns.
- * - method: The jQuery method for placing the new content (used with
- *   'wrapper'). Valid options are 'replaceWith' (default), 'append', 'prepend',
- *   'before', 'after', or 'html'. See
- *   http://api.jquery.com/category/manipulation/ for more information on these
- *   methods.
- * - effect: The jQuery effect to use when placing the new HTML (used with
- *   'wrapper'). Valid options are 'none' (default), 'slide', or 'fade'.
+ * - method: How to insert the new content into or around the wrapper. Valid
+ *   options are 'replaceWith' (default), 'append', 'prepend', 'before',
+ *   'after', or 'html'.
+ * - effect: The effect to use when displaying inserted content. Supported
+ *   values are 'none' (default) and 'fade'.
  * - speed: The effect speed to use (used with 'effect' and 'wrapper'). Valid
  *   options are 'slow' (default), 'fast', or the number of milliseconds the
  *   effect should run.

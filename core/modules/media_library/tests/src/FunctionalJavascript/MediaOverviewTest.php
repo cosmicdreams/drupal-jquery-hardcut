@@ -117,6 +117,30 @@ class MediaOverviewTest extends MediaLibraryTestBase {
     $page->selectFieldOption('Action', 'Delete media');
     $this->waitForText('Dog');
 
+    // Leaving a checkbox nested inside a preview keeps the item hovered.
+    $hover_states = $this->getSession()->evaluateScript(<<<'JS'
+      (() => {
+        const trigger = document.querySelector('.js-click-to-select-trigger');
+        const item = trigger.closest('.js-click-to-select');
+        const checkbox = item.querySelector('.js-click-to-select-checkbox');
+        const next = checkbox.nextSibling;
+        const parent = checkbox.parentNode;
+        trigger.append(checkbox);
+
+        trigger.dispatchEvent(new MouseEvent('mouseenter'));
+        checkbox.dispatchEvent(new MouseEvent('mouseenter'));
+        const entered = item.classList.contains('is-hover');
+        checkbox.dispatchEvent(new MouseEvent('mouseleave', { relatedTarget: trigger }));
+        const overPreview = item.classList.contains('is-hover');
+        trigger.dispatchEvent(new MouseEvent('mouseleave', { relatedTarget: document.body }));
+        const left = item.classList.contains('is-hover');
+
+        parent.insertBefore(checkbox, next);
+        return [entered, overPreview, left];
+      })()
+      JS);
+    $this->assertSame([TRUE, TRUE, FALSE], $hover_states);
+
     // This tests that anchor tags clicked inside the preview are suppressed.
     $this->getSession()->executeScript('document.querySelectorAll(".js-click-to-select-trigger a")[4].click()');
     $this->submitForm([], 'Apply to selected items');

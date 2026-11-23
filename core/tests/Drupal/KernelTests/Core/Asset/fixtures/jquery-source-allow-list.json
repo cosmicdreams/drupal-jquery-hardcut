@@ -32,10 +32,6 @@
       "owner": "D",
       "references": 1
     },
-    "misc/jquery.form.js": {
-      "owner": "A",
-      "references": 4
-    },
     "misc/jquery.no-conflict.js": {
       "owner": "B",
       "references": 1

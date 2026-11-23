@@ -81,8 +81,8 @@ class FormTestController extends ControllerBase {
   /**
    * Renders a dropbutton with a primary and secondary action.
    */
-  public function dropbutton(Request $request): array {
-    $build = [
+  public function dropbutton(): array {
+    return [
       'actions' => [
         '#type' => 'dropbutton',
         '#links' => [
@@ -90,10 +90,7 @@ class FormTestController extends ControllerBase {
           'secondary' => ['title' => 'Secondary action', 'url' => Url::fromRoute('<front>')],
         ],
       ],
-      '#cache' => ['contexts' => ['url.query_args:legacy']],
     ];
-    $this->attachLegacyJquery($build, $request);
-    return $build;
   }
 
   /**
@@ -171,14 +168,7 @@ class FormTestController extends ControllerBase {
     if ($request->query->getBoolean('preview')) {
       $build['#attached']['library'][] = 'node/drupal.node.preview';
     }
-    $this->attachLegacyJquery($build, $request);
     return $build;
-  }
-
-  /**
-   * Attaches the explicit jQuery library when requested by query parameter.
-   */
-  private function attachLegacyJquery(array &$build, Request $request): void {
   }
 
 }

@@ -392,12 +392,12 @@ class AjaxTestController {
   }
 
   /**
-   * Returns a page from which to test Ajax global events.
+   * Provides a page for testing native Ajax transport and commands.
    *
    * @return array
    *   The render array.
    */
-  public function globalEvents() {
+  public function nativeTransport() {
     return [
       '#attached' => [
         'library' => [
@@ -405,24 +405,8 @@ class AjaxTestController {
           'core/drupal.xhr',
         ],
       ],
-      '#markup' => implode('', [
-        '<div id="test_global_events_log"></div>',
-        '<a id="test_global_events_drupal_ajax_link" class="use-ajax" href="' . Url::fromRoute('ajax_test.global_events_clear_log')->toString() . '">Drupal Ajax</a>',
-        '<div id="test_global_events_log2"></div>',
-      ]),
+      '#markup' => '<div id="native-transport-result"></div>',
     ];
-  }
-
-  /**
-   * Returns an AjaxResponse with command to clear the 'test_global_events_log'.
-   *
-   * @return \Drupal\Core\Ajax\AjaxResponse
-   *   The JSON response object.
-   */
-  public function globalEventsClearLog() {
-    $response = new AjaxResponse();
-    $response->addCommand(new HtmlCommand('#test_global_events_log', ''));
-    return $response;
   }
 
   /**
@@ -430,7 +414,7 @@ class AjaxTestController {
    */
   public function echoHeader(Request $request): AjaxResponse {
     $response = new AjaxResponse();
-    $response->addCommand(new HtmlCommand('#test_global_events_log', [
+    $response->addCommand(new HtmlCommand('#native-transport-result', [
       '#plain_text' => $request->headers->get('X-Test-Ajax-Send', 'missing'),
     ]));
     return $response;

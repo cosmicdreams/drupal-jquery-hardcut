@@ -4,13 +4,14 @@ declare(strict_types=1);
 
 namespace Drupal\FunctionalJavascriptTests\Core\Form;
 
+use Drupal\FunctionalJavascriptTests\DrupalSelenium2Driver;
 use Drupal\FunctionalJavascriptTests\WebDriverTestBase;
 use PHPUnit\Framework\Attributes\Group;
 use PHPUnit\Framework\Attributes\RunTestsInSeparateProcesses;
 use WebDriver\Key;
 
 /**
- * Tests the native and legacy views of an owned States event.
+ * Tests native States events and dependent fields.
  */
 #[Group('javascript')]
 #[RunTestsInSeparateProcesses]
@@ -83,6 +84,47 @@ final class NativeStatesPublicationTest extends WebDriverTestBase {
     $assert->elementExists('css', 'input[name="choice[1]"]')->check();
     $this->assertTrue($native->isVisible());
     $this->assertTrue($normalized->isVisible());
+  }
+
+  /**
+   * Tests that unloading a dependent leaves other dependents working.
+   */
+  public function testAjaxDependentRemoval(): void {
+    $this->drupalGet('states-test');
+    $assert = $this->assertSession();
+    $session = $this->getSession();
+    $first = $assert->elementExists('css', 'input[name="choice[1]"]');
+    $second = $assert->elementExists('css', 'input[name="choice[2]"]');
+    $native = $assert->elementExists('css', '#states-test-native');
+    $other = $assert->elementExists('css', '#states-test-second');
+
+    $session->executeScript(<<<'JS'
+      window.groupVisibilityUpdates = [];
+      document.querySelector('#states-test-group').addEventListener('state:visible', (event) => {
+        window.groupVisibilityUpdates.push(event.detail.value);
+      });
+      JS);
+
+    // The group watches both checkboxes and the other fields watch only the
+    // first. Check the second while the group is still attached.
+    $this->assertFalse($native->isVisible());
+    $this->assertFalse($other->isVisible());
+    $second->check();
+    $this->assertTrue($assert->elementExists('css', '#states-test-group')->isVisible());
+    $this->assertSame([TRUE], $session->evaluateScript('window.groupVisibilityUpdates'));
+
+    $this->clickLink('Remove group dependent');
+    $assert->assertExpectedAjaxRequest(1);
+    $assert->elementNotExists('css', '#states-test-group');
+
+    $second->uncheck();
+    $first->check();
+    $this->assertTrue($native->isVisible());
+    $this->assertTrue($other->isVisible());
+    $first->uncheck();
+    $this->assertFalse($native->isVisible());
+    $this->assertFalse($other->isVisible());
+    $this->assertSame([TRUE], $session->evaluateScript('window.groupVisibilityUpdates'));
   }
 
   /**
@@ -390,7 +432,9 @@ final class NativeStatesPublicationTest extends WebDriverTestBase {
         window.statesSpinnerChange = event.isTrusted;
       });
       JS);
-    $session->getDriver()->getWebDriverSession()
+    $driver = $session->getDriver();
+    $this->assertInstanceOf(DrupalSelenium2Driver::class, $driver);
+    $driver->getWebDriverSession()
       ->element('css selector', 'input[name="number_trigger"]')
       ->postValue(['text' => Key::UP_ARROW . Key::TAB]);
     $this->assertTrue($session->evaluateScript('window.statesSpinnerChange'));

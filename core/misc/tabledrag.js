@@ -1,10 +1,10 @@
 /**
  * @file
- * Provide dragging capabilities to admin uis.
+ * Provides drag-and-drop row ordering for administrative tables.
  */
 
 /**
- * Triggers when weights columns are toggled.
+ * Triggers when weight columns are toggled.
  *
  * @event columnschange
  */
@@ -139,6 +139,7 @@
   Drupal.tableDrag = function (table, tableSettings) {
     const self = this;
     /**
+     * The table whose rows can be dragged.
      *
      * @type {HTMLElement}
      */

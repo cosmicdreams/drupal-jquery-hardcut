@@ -119,9 +119,32 @@ class FileManagedFileElementTest extends WebDriverTestBase {
     file_put_contents($filename, 'Managed file upload with progress.');
 
     $this->drupalGet('file/test/0/0/0', ['query' => ['upload_progress' => 1]]);
+    $session = $this->getSession();
     $this->assertJsCondition('Object.values(drupalSettings.ajax).some((settings) => settings.event === "fileUpload")');
-    $this->getSession()->getPage()->attachFileToField('files[file]', $file_system->realpath($filename));
+    // Only web servers with the UploadProgress extension provide an upload
+    // identifier and polling endpoint. The fallback fixture still exercises
+    // the event and the progress bar with its initial message.
+    if ($session->getPage()->has('css', 'input.file-progress')) {
+      $this->assertJsCondition('Object.values(drupalSettings.ajax).some((settings) => settings.event === "fileUpload" && settings.progress.url)');
+    }
+
+    // Fast uploads can finish before WebDriver inspects the page. Record the
+    // indicator when Ajax inserts it.
+    $session->executeScript(<<<'JS'
+      const widget = document.querySelector('.js-form-managed-file');
+      const observer = new MutationObserver(() => {
+        const indicator = widget.querySelector('.ajax-progress-bar .progress__description');
+        if (indicator) {
+          window.managedFileProgressMessage = indicator.textContent.trim();
+          observer.disconnect();
+        }
+      });
+      observer.observe(widget, { childList: true, subtree: true });
+      JS);
+    $session->getPage()->attachFileToField('files[file]', $file_system->realpath($filename));
     $this->assertNotNull($this->assertSession()->waitForLink(basename($filename)));
+    $this->assertSame('Processing...', $session->evaluateScript('window.managedFileProgressMessage'));
+    $this->assertSession()->elementNotExists('css', '.js-form-managed-file .ajax-progress-bar');
     $this->assertGreaterThan(0, $this->getLastFileId());
   }
 

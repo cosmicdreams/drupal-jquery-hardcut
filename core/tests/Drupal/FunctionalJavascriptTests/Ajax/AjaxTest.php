@@ -478,7 +478,7 @@ class AjaxTest extends WebDriverTestBase {
    * Tests the native default action of keyboard activation.
    */
   public function testKeyboardActivation(): void {
-    $this->drupalGet('ajax-test/global-events');
+    $this->drupalGet('ajax-test/native-transport');
     $result = $this->getSession()->evaluateScript(<<<'JS'
       (() => {
         const checkbox = document.body.appendChild(document.createElement('input'));
@@ -487,17 +487,25 @@ class AjaxTest extends WebDriverTestBase {
         const ajax = Drupal.ajax({ element: checkbox, event: 'click', keypress: true, url: location.href });
         ajax.eventResponse = (element, event) => trace.push([element.checked, event instanceof MouseEvent]);
         checkbox.dispatchEvent(new KeyboardEvent('keypress', { key: 'Enter', bubbles: true, cancelable: true }));
+        const custom = document.body.appendChild(document.createElement('button'));
+        const customAjax = Drupal.ajax({
+          element: custom, event: 'fileUpload', keypress: true, url: location.href,
+        });
+        customAjax.eventResponse = (element, event) => trace.push([
+          event.type, event.constructor === Event, event.bubbles, event.cancelable,
+        ]);
+        custom.dispatchEvent(new KeyboardEvent('keypress', { key: 'Enter', bubbles: true, cancelable: true }));
         return [checkbox.checked, trace];
       })()
       JS);
-    $this->assertSame([TRUE, [[TRUE, TRUE]]], $result);
+    $this->assertSame([TRUE, [[TRUE, TRUE], ['fileUpload', TRUE, TRUE, TRUE]]], $result);
   }
 
   /**
    * Tests preserving the submitter during an Ajax submission.
    */
   public function testNativeSubmitter(): void {
-    $this->drupalGet('ajax-test/global-events');
+    $this->drupalGet('ajax-test/native-transport');
     $session = $this->getSession();
     $session->executeScript(<<<'JS'
       const result = document.body.appendChild(document.createElement('div'));
@@ -572,7 +580,7 @@ class AjaxTest extends WebDriverTestBase {
    * Tests native request completion separately from the Ajax command queue.
    */
   public function testNativeCommandRequest(): void {
-    $this->drupalGet('ajax-test/global-events');
+    $this->drupalGet('ajax-test/native-transport');
     $session = $this->getSession();
     $session->executeScript(<<<'JS'
       const url = Drupal.url('ajax-test/echo-header');
@@ -596,7 +604,7 @@ class AjaxTest extends WebDriverTestBase {
         status, xhr.status, ajax.ajaxing,
       ]);
       request.commands.then(() => {
-        window.nativeCommands = [ajax.ajaxing, document.getElementById('test_global_events_log').textContent];
+        window.nativeCommands = [ajax.ajaxing, document.getElementById('native-transport-result').textContent];
       });
       JS);
     $this->assertSame(['success', 200, TRUE], $session->evaluateScript('window.nativeNetwork'));
@@ -687,7 +695,7 @@ class AjaxTest extends WebDriverTestBase {
    * Tests command completion and synchronous requests.
    */
   public function testNativeRequestCompletion(): void {
-    $this->drupalGet('ajax-test/global-events');
+    $this->drupalGet('ajax-test/native-transport');
     $session = $this->getSession();
     $session->executeScript(<<<'JS'
       const url = Drupal.url('ajax-test/echo-header');
@@ -707,7 +715,7 @@ class AjaxTest extends WebDriverTestBase {
         window.nativeNetworkDone = true;
       });
       handle.commands.then(() => {
-        window.nativeArrayCommands = [ajax.ajaxing, document.getElementById('test_global_events_log').textContent];
+        window.nativeArrayCommands = [ajax.ajaxing, document.getElementById('native-transport-result').textContent];
       });
 
       // A synchronous request runs its callbacks before it returns.

@@ -109,17 +109,10 @@ ajax_test.promise:
   requirements:
     _access: 'TRUE'
 
-ajax_test.global_events:
-  path: '/ajax-test/global-events'
+ajax_test.native_transport:
+  path: '/ajax-test/native-transport'
   defaults:
-    _controller: '\Drupal\ajax_test\Controller\AjaxTestController::globalEvents'
-  requirements:
-    _access: 'TRUE'
-
-ajax_test.global_events_clear_log:
-  path: '/ajax-test/global-events/clear-log'
-  defaults:
-    _controller: '\Drupal\ajax_test\Controller\AjaxTestController::globalEventsClearLog'
+    _controller: '\Drupal\ajax_test\Controller\AjaxTestController::nativeTransport'
   requirements:
     _access: 'TRUE'
 

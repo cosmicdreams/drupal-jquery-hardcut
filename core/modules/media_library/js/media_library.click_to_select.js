@@ -4,6 +4,10 @@
  */
 
 ((Drupal, once) => {
+  const itemSelector = '.js-click-to-select';
+  const checkboxSelector = '.js-click-to-select-checkbox';
+  const hoverSelector = `.js-click-to-select-trigger, ${checkboxSelector}`;
+
   /**
    * Allows users to select an element which checks a hidden checkbox.
    *
@@ -17,12 +21,16 @@
         context,
       ).forEach((trigger) => {
         trigger.addEventListener('click', (event) => {
-          // Select the item instead of following a link in its preview.
-          event.preventDefault();
           const checkbox = trigger
-            .closest('.js-click-to-select')
-            .querySelector('.js-click-to-select-checkbox input');
-          if (checkbox) {
+            .closest(itemSelector)
+            ?.querySelector(`${checkboxSelector} input`);
+          if (
+            checkbox &&
+            event.target.closest(hoverSelector) !==
+              checkbox.closest(checkboxSelector)
+          ) {
+            // Select the item instead of following a link in its preview.
+            event.preventDefault();
             checkbox.checked = !checkbox.checked;
             checkbox.dispatchEvent(new Event('change', { bubbles: true }));
           }
@@ -34,7 +42,10 @@
         '.js-click-to-select-checkbox input',
         context,
       ).forEach((checkbox) => {
-        const item = checkbox.closest('.js-click-to-select');
+        const item = checkbox.closest(itemSelector);
+        if (!item) {
+          return;
+        }
         checkbox.addEventListener('change', () => {
           item.classList.toggle('checked', checkbox.checked);
         });
@@ -48,16 +59,25 @@
 
       once(
         'media-library-click-to-select-hover',
-        '.js-click-to-select-trigger, .js-click-to-select-checkbox',
+        hoverSelector,
         context,
       ).forEach((region) => {
-        const item = region.closest('.js-click-to-select');
+        const item = region.closest(itemSelector);
+        if (!item) {
+          return;
+        }
         region.addEventListener('mouseenter', () =>
           item.classList.add('is-hover'),
         );
-        region.addEventListener('mouseleave', () =>
-          item.classList.remove('is-hover'),
-        );
+        region.addEventListener('mouseleave', ({ relatedTarget }) => {
+          // The pointer may still be over another selection region of this item.
+          if (
+            !(relatedTarget instanceof Element) ||
+            relatedTarget.closest(hoverSelector)?.closest(itemSelector) !== item
+          ) {
+            item.classList.remove('is-hover');
+          }
+        });
       });
     },
   };

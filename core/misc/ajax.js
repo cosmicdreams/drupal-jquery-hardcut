@@ -193,7 +193,7 @@
   }
 
   /**
-   * Returns the value a form control submits, as the jQuery Form plugin did.
+   * Returns the submitted value of a form control.
    *
    * @param {HTMLElement} element
    *   The form control.
@@ -248,7 +248,7 @@
   }
 
   /**
-   * Collects the successful controls of a form in the jQuery Form plugin order.
+   * Collects the successful controls of a form in submission order.
    *
    * @param {HTMLFormElement} form
    *   The form, including its clicked control in `form.clk`.
@@ -673,7 +673,7 @@
       const { beforeSend } = upload;
       upload.beforeSend = function (xhr, requestSettings) {
         requestSettings.data = settings.formData || body;
-        // Unlike the jQuery Form plugin, honor a veto from beforeSend.
+        // Cancel the request if beforeSend vetoes it.
         if (beforeSend) {
           return beforeSend.call(this, xhr, requestSettings);
         }
@@ -1020,7 +1020,7 @@
    *   CSS selector targeting the element to bind events to or used with
    *   {@link Drupal.AjaxCommands}.
    * @prop {string} [effect='none']
-   *   Name of the effect to use for displaying new Ajax content.
+   *   Effect for displaying new Ajax content: 'none' or 'fade'.
    * @prop {string|number} [speed='none']
    *   Speed with which to apply the effect.
    * @prop {string} [method]
@@ -1419,8 +1419,14 @@
       event.stopPropagation();
       const [name] = eventNames(ajax.elementSettings.event);
       if (name) {
+        const EventType =
+          /^(?:click|dblclick|auxclick|contextmenu|mouse(?:down|up|move|over|out|enter|leave))$/.test(
+            name,
+          )
+            ? MouseEvent
+            : Event;
         element.dispatchEvent(
-          new MouseEvent(name, {
+          new EventType(name, {
             bubbles: true,
             cancelable: true,
           }),

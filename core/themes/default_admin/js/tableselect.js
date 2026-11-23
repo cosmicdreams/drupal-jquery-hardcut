@@ -9,8 +9,7 @@
     tableInteraction.tableSelect?.isSelectionChange(event);
 
   /**
-   * Adds sticky bulk actions.
-   *
+   * Adds sticky bulk actions for tables with selectable rows.
    */
   Drupal.DefaultAdminBulkActions = class {
     constructor(bulkActions) {

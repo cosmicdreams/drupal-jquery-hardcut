@@ -38,7 +38,6 @@
 - core/misc/dialog/dialog.position.js
 - core/misc/dialog/off-canvas/js/off-canvas.js
 - core/misc/displace.js
-- core/misc/jquery.form.js
 - core/misc/jquery.no-conflict.js
 - core/misc/position.js
 - core/modules/ckeditor5/js/build/drupalEntityLinkSuggestions.js

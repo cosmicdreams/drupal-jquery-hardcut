@@ -693,18 +693,6 @@ jquery:
     assets/vendor/jquery/jquery.min.js: { preprocess: false, minified: true, preserve_override_order: true }
     misc/jquery.no-conflict.js: { preprocess: false, minified: false }
 
-internal.jquery.form:
-  # Drupal maintains this modified copy of jQuery Form.
-  version: "4.3.0"
-  license:
-    name: GPL-2.0-or-later
-    url: https://raw.githubusercontent.com/jquery-form/form/master/LICENSE
-    gpl-compatible: true
-  js:
-    misc/jquery.form.js: {}
-  dependencies:
-    - core/jquery
-
 drupal.jquery.position:
   # This is a modified version of jQuery UI position for that does not require
   # any jQuery UI assets, only jQuery. It is provided by core for use with

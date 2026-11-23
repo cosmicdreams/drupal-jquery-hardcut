@@ -20,6 +20,7 @@ final class StatesTestController {
    * Builds a States fixture without the general form libraries.
    */
   public function form(): array {
+    $first_choice = ':is(input[name="choice[1]"], input[data-unused=":eq(0)"]):not(.unused)';
     return [
       '#type' => 'container',
       '#attributes' => ['id' => 'states-test-content'],
@@ -28,15 +29,7 @@ final class StatesTestController {
         'form' => ['#attributes' => ['id' => 'states-test-form']],
       ],
       '#attached' => ['library' => ['core/drupal.ajax']],
-      'first' => [
-        '#type' => 'html_tag',
-        '#tag' => 'input',
-        '#attributes' => [
-          'name' => 'choice[1]',
-          'type' => 'checkbox',
-          'class' => ['states-test-choice'],
-        ],
-      ],
+      // Start the group selector with the checkbox used only by the group.
       'second' => [
         '#type' => 'html_tag',
         '#tag' => 'input',
@@ -47,19 +40,48 @@ final class StatesTestController {
           'data-states-test-pseudo' => 'yes',
         ],
       ],
+      'first' => [
+        '#type' => 'html_tag',
+        '#tag' => 'input',
+        '#attributes' => [
+          'name' => 'choice[1]',
+          'type' => 'checkbox',
+          'class' => ['states-test-choice'],
+        ],
+      ],
       'dependent' => [
         '#type' => 'container',
         '#attributes' => ['id' => 'states-test-native', 'class' => ['js-form-wrapper']],
         '#states' => [
           'visible' => [
-            ':is(input[name="choice[1]"], input[data-unused=":eq(0)"]):not(.unused)' => ['checked' => TRUE],
+            $first_choice => ['checked' => TRUE],
           ],
         ],
         'text' => ['#plain_text' => 'Native dependent'],
       ],
+      'group_dependent' => [
+        '#type' => 'container',
+        '#attributes' => ['id' => 'states-test-group', 'class' => ['js-form-wrapper']],
+        '#states' => [
+          'visible' => [
+            '.states-test-choice' => ['checked' => TRUE],
+          ],
+        ],
+        'text' => ['#plain_text' => 'Group dependent'],
+      ],
+      'second_dependent' => [
+        '#type' => 'container',
+        '#attributes' => ['id' => 'states-test-second', 'class' => ['js-form-wrapper']],
+        '#states' => [
+          'visible' => [
+            $first_choice => ['checked' => TRUE],
+          ],
+        ],
+        'text' => ['#plain_text' => 'Second dependent'],
+      ],
       'remove_dependent' => [
         '#type' => 'link',
-        '#title' => 'Remove native dependent',
+        '#title' => 'Remove group dependent',
         '#url' => Url::fromRoute('states_test.remove_dependent'),
         '#attributes' => ['class' => ['use-ajax']],
       ],
@@ -73,11 +95,11 @@ final class StatesTestController {
   }
 
   /**
-   * Removes the native dependent element itself via Ajax.
+   * Removes the dependent that watches both checkboxes.
    */
   public function removeDependent(): AjaxResponse {
     $response = new AjaxResponse();
-    $response->addCommand(new RemoveCommand('#states-test-native'));
+    $response->addCommand(new RemoveCommand('#states-test-group'));
     return $response;
   }
 

@@ -16,7 +16,6 @@
    * likely break layouts, but it provides the user with a means to access
    * data, which is a guiding principle of responsive design.
    *
-   *
    * @constructor Drupal.TableResponsive
    *
    * @param {HTMLElement} table

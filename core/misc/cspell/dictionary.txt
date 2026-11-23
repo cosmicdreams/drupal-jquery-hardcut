@@ -206,7 +206,6 @@ htmx
 httponly
 icann
 idekey
-iframeupload
 imageavif
 imagecache
 inglés

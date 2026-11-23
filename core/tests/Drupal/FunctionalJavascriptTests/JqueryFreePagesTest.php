@@ -300,7 +300,6 @@ class JqueryFreePagesTest extends WebDriverTestBase {
           ['library:jquery-ui-dialog', /\/jquery\.ui\/.*\/dialog(?:-min)?\.js$/],
           ['library:jquery-ui-js', /\/assets\/vendor\/jquery\.ui\/.*\.js$/],
           ['library:jquery-ui-css', /\/(assets\/vendor|css\/components)\/jquery\.ui\/.*\.css$/],
-          ['library:jquery-form', /\/misc\/jquery\.form\.js$/],
           ['library:jquery-position', /\/misc\/position\.js$/],
           ['library:jquery-bootstrap', /\/misc\/jquery\.no-conflict\.js$/],
         ];
