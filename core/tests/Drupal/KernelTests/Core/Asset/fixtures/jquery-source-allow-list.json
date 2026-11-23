@@ -56,26 +56,6 @@
       "owner": "U",
       "references": 1
     },
-    "modules/views/js/base.js": {
-      "owner": "M",
-      "references": 1
-    },
-    "modules/views_ui/js/ajax.js": {
-      "owner": "A",
-      "references": 1
-    },
-    "modules/views_ui/js/dialog.views.js": {
-      "owner": "M",
-      "references": 1
-    },
-    "modules/views_ui/js/views-admin.js": {
-      "owner": "M",
-      "references": 1
-    },
-    "modules/views_ui/js/views_ui.listing.js": {
-      "owner": "M",
-      "references": 1
-    },
     "themes/default_admin/js/media-library.ui.js": {
       "owner": "M",
       "references": 1

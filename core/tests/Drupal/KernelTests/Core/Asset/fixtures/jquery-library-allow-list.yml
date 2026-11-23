@@ -13,9 +13,6 @@
 - default_admin/media_library/ui
 - default_admin/media_library/view
 - default_admin/media_library/widget
-- default_admin/views/views.ajax
-- default_admin/views_ui/views_ui.admin
-- default_admin/views_ui/views_ui.listing
 - stark/ckeditor5/internal.admin
 - stark/ckeditor5/internal.drupal.ckeditor5
 - stark/contextual/drupal.contextual-links
@@ -29,9 +26,6 @@
 - stark/media/type_form
 - stark/media_library/ui
 - stark/media_library/widget
-- stark/views/views.ajax
-- stark/views_ui/views_ui.admin
-- stark/views_ui/views_ui.listing
 - starterkit_theme/ckeditor5/internal.admin
 - starterkit_theme/ckeditor5/internal.drupal.ckeditor5
 - starterkit_theme/contextual/drupal.contextual-links
@@ -45,9 +39,6 @@
 - starterkit_theme/media/type_form
 - starterkit_theme/media_library/ui
 - starterkit_theme/media_library/widget
-- starterkit_theme/views/views.ajax
-- starterkit_theme/views_ui/views_ui.admin
-- starterkit_theme/views_ui/views_ui.listing
 - umami/ckeditor5/internal.admin
 - umami/ckeditor5/internal.drupal.ckeditor5
 - umami/contextual/drupal.contextual-links
@@ -61,6 +52,3 @@
 - umami/media/type_form
 - umami/media_library/ui
 - umami/media_library/widget
-- umami/views/views.ajax
-- umami/views_ui/views_ui.admin
-- umami/views_ui/views_ui.listing

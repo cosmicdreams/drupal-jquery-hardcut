@@ -13,9 +13,4 @@
 - core/modules/media/js/type_form.js
 - core/modules/media_library/js/media_library.ui.js
 - core/modules/media_library/js/media_library.widget.js
-- core/modules/views/js/base.js
-- core/modules/views_ui/js/ajax.js
-- core/modules/views_ui/js/dialog.views.js
-- core/modules/views_ui/js/views-admin.js
-- core/modules/views_ui/js/views_ui.listing.js
 - core/themes/default_admin/js/media-library.ui.js

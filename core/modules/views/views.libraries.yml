@@ -10,7 +10,6 @@ views.ajax:
     js/base.js: {}
     js/ajax_view.js: {}
   dependencies:
-    - core/jquery
     - core/drupal
     - core/drupalSettings
     - core/once

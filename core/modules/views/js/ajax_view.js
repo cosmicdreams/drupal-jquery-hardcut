@@ -3,7 +3,7 @@
  * Handles AJAX fetching of views, including filter submission and response.
  */
 
-((Drupal, drupalSettings) => {
+((Drupal, drupalSettings, once) => {
   /**
    * Attaches the AJAX behavior to exposed filters forms and key View links.
    *
@@ -14,29 +14,20 @@
    */
   Drupal.behaviors.ViewsAjaxView = {};
   Drupal.behaviors.ViewsAjaxView.attach = function (context, settings) {
-    if (settings?.views?.ajaxViews) {
-      const {
-        views: { ajaxViews },
-      } = settings;
-      Object.keys(ajaxViews || {}).forEach((i) => {
-        Drupal.views.instances[i] = new Drupal.views.ajaxView(ajaxViews[i]);
-      });
-    }
+    Object.entries(settings?.views?.ajaxViews ?? {}).forEach(([key, config]) => {
+      const instance = new Drupal.views.ajaxView(config);
+      if (instance.view) {
+        Drupal.views.instances[key] = instance;
+      }
+    });
   };
   Drupal.behaviors.ViewsAjaxView.detach = (context, settings, trigger) => {
     if (trigger === 'unload') {
-      if (settings?.views?.ajaxViews) {
-        const {
-          views: { ajaxViews },
-        } = settings;
-        Object.keys(ajaxViews || {}).forEach((i) => {
-          const selector = `.js-view-dom-id-${ajaxViews[i].view_dom_id}`;
-          if (context.querySelector(selector)) {
-            delete Drupal.views.instances[i];
-            delete settings.views.ajaxViews[i];
-          }
-        });
-      }
+      Object.entries(Drupal.views.instances).forEach(([key, { view }]) => {
+        if (context.contains(view)) {
+          delete Drupal.views.instances[key];
+        }
+      });
     }
   };
 
@@ -62,7 +53,10 @@
    */
   Drupal.views.ajaxView = function (settings) {
     const selector = `.js-view-dom-id-${settings.view_dom_id}`;
-    this.views = [...document.querySelectorAll(selector)];
+    this.view = document.querySelector(selector);
+    if (!this.view) {
+      return;
+    }
     this.exposedForms = [
       ...document.querySelectorAll(
         `form#views-exposed-form-${settings.view_name.replace(
@@ -81,47 +75,24 @@
       ajaxPath = ajaxPath[0];
     }
 
-    // Check if there are any GET parameters to send to views.
-    let queryString = window.location.search || '';
-    if (queryString !== '') {
-      // Remove the question mark and Drupal path component if any.
-      queryString = queryString.slice(1);
-
-      // Collect the base names of every named field in the exposed form. The
-      // trailing `[…]` is stripped so a multi-select field named `type[]`
-      // matches URL params serialized by PHP as `type[0]`, `type[1]`, or
-      // `type[]`.
-      const stripArraySuffix = (name) => name.replace(/\[.*$/, '');
-      const exposedFieldBaseNames = new Set(
-        this.exposedForms
-          .flatMap((form) => [...form.querySelectorAll('[name]')])
-          .map((element) => stripArraySuffix(element.name)),
-      );
-
-      // Remove current exposed filters.
-      const params = decodeURI(queryString)
-        .split('&')
-        .filter((param) => {
-          const [name] = param.split('=');
-          return (
-            !exposedFieldBaseNames.has(stripArraySuffix(name)) &&
-            /*
-            Submitting filters should reset paging and sorting
-            because that is what happens without AJAX.
-             */
-            !['page', 'reset', 'sort', 'order', 'q', 'render'].includes(name)
-          );
-        });
-      queryString = encodeURI(params.join('&'));
-      // If there is a '?' in ajaxPath, clean URL are on and & should be
-      // used to add parameters.
-      if (queryString !== '') {
-        queryString = (ajaxPath.includes('?') ? '&' : '?') + queryString;
+    // Submitting filters resets paging and sorting. Remove all previous
+    // values of exposed fields, including multi-select array parameters.
+    const stripArraySuffix = (name) => name.split('[')[0];
+    const excluded = new Set([
+      'page', 'reset', 'sort', 'order', 'q', 'render',
+      ...this.exposedForms.flatMap((form) =>
+        Array.from(form.elements, ({ name }) => stripArraySuffix(name)),
+      ),
+    ]);
+    const url = new URL(ajaxPath, document.baseURI);
+    new URLSearchParams(window.location.search).forEach((value, name) => {
+      if (!excluded.has(stripArraySuffix(name))) {
+        url.searchParams.append(name, value);
       }
-    }
+    });
 
     this.element_settings = {
-      url: ajaxPath + queryString,
+      url: url.href,
       submit: settings,
       httpMethod: 'GET',
       setClick: true,
@@ -132,99 +103,79 @@
 
     this.settings = settings;
 
-    // Add the ajax to exposed forms.
-    once('exposed-form', this.exposedForms).forEach(
-      this.attachExposedFormAjax.bind(this),
-    );
-
-    // Add the ajax to pagers.
+    // Separate exposed blocks can outlive the view markup.
+    const submit = ':is(input[type=submit], button[type=submit], input[type=image]):not([data-drupal-selector=edit-reset])';
     once(
-      'ajax-pager',
-      this.views
-        // Don't attach to nested views. Doing so would attach multiple behaviors
-        // to a given element.
-        .filter(this.filterNestedViews.bind(this)),
-    ).forEach(this.attachPagerAjax.bind(this));
+      `views-exposed-${settings.view_dom_id}`,
+      this.exposedForms.flatMap((form) => [...form.querySelectorAll(submit)]),
+    ).forEach((element) => {
+      Drupal.ajax.elementData.set(element, 'refocus-blur', true);
+      this.bind({ base: element.id, element });
+    });
 
-    // Add a trigger to update this view specifically. In order to trigger a
-    // refresh use the following code.
-    //
-    // @code
-    // document.querySelector('.view-name').dispatchEvent(new Event('RefreshView'));
-    // @endcode
-    const selfSettings = {
-      ...this.element_settings,
-      event: 'RefreshView',
-      base: this.selector,
-      httpMethod: 'GET',
-      element: this.views[0],
-    };
-    this.refreshViewAjax = Drupal.ajax(selfSettings);
-  };
-
-  /**
-   * @method
-   */
-  Drupal.views.ajaxView.prototype.attachExposedFormAjax = function () {
-    // Exclude reset buttons so AJAX does not interfere with form reset.
-    const selector =
-      ':is(input[type=submit], button[type=submit], input[type=image]):not([data-drupal-selector=edit-reset])';
-    this.exposedFormAjax = this.exposedForms
-      .flatMap((form) => [...form.querySelectorAll(selector)])
-      .map((element) =>
-        Drupal.ajax({
-          ...this.element_settings,
-          base: element.id,
+    if (!this.view.parentElement?.closest('.view')) {
+      once(
+        'views-pager',
+        '.js-pager__items a[href], th.views-field a[href], .attachment .views-summary a[href]',
+        this.view,
+      ).forEach((element) => {
+        const href = new URL(element.href);
+        this.bind({
+          base: false,
           element,
-        }),
-      );
+          submit: {
+            ...this.settings,
+            ...Drupal.Views.parseQueryString(href.search),
+            ...Drupal.Views.parseViewArgs(href.href, this.settings.view_base_path),
+          },
+        });
+      });
+    }
+
+    // Dispatch RefreshView on the view element to update it in place.
+    once('views-refresh', this.view).forEach((element) => {
+      this.refreshViewAjax = this.bind({ element, event: 'RefreshView' });
+    });
   };
 
-  /**
-   * @return {boolean}
-   *   If there is at least one parent with a view class return false.
-   */
-  Drupal.views.ajaxView.prototype.filterNestedViews = function () {
-    // If there is at least one parent with a view class, this view
-    // is nested (e.g., an attachment). Bail.
-    return this.views.every((view) => !view.parentElement?.closest('.view'));
-  };
+  const latestRequests = new WeakMap();
 
   /**
-   * Attach the ajax behavior to each link.
+   * Binds an Ajax request and discards responses superseded for the same view.
    */
-  Drupal.views.ajaxView.prototype.attachPagerAjax = function () {
-    const selector =
-      '.js-pager__items a, th.views-field a, .attachment .views-summary a';
-    const links = new Set(
-      this.views.flatMap((view) => [...view.querySelectorAll(selector)]),
-    );
-    [...links].forEach((link, index) => this.attachPagerLinkAjax(index, link));
-  };
-
-  /**
-   * Attach the ajax behavior to a singe link.
-   *
-   * @param {string} [id]
-   *   The ID of the link.
-   * @param {HTMLElement} link
-   *   The link element.
-   */
-  Drupal.views.ajaxView.prototype.attachPagerLinkAjax = function (id, link) {
-    const href = link.getAttribute('href');
-    const viewData = {
-      ...this.settings,
-      ...Drupal.Views.parseQueryString(href),
-      ...Drupal.Views.parseViewArgs(href, this.settings.view_base_path),
+  Drupal.views.ajaxView.prototype.bind = function (settings) {
+    const ajax = Drupal.ajax({ ...this.element_settings, ...settings });
+    let target;
+    const { beforeSend } = ajax.options;
+    ajax.options.beforeSend = function (xhr, options) {
+      target = document.querySelector(ajax.selector);
+      const result = beforeSend.call(this, xhr, options);
+      if (target && result !== false) {
+        latestRequests.set(target, xhr);
+      }
+      ajax.request = xhr;
+      return result;
     };
-    const selfSettings = {
-      ...this.element_settings,
-      submit: viewData,
-      base: false,
-      element: link,
-      httpMethod: 'GET',
+    const { success } = ajax;
+    ajax.success = function (response, status) {
+      if (
+        !target?.isConnected ||
+        latestRequests.get(target) !== this.request ||
+        !this.element.isConnected
+      ) {
+        // Use the common cleanup without changing the current focus.
+        const focus = Drupal.ajax.elementData.get(this.element, 'disable-refocus');
+        const refocus = Drupal.ajax.elementData.get(this.element, 'refocus-blur');
+        Drupal.ajax.elementData.set(this.element, 'disable-refocus', true);
+        Drupal.ajax.elementData.set(this.element, 'refocus-blur', false);
+        return success.call(this, [], status).finally(() => {
+          Drupal.ajax.elementData.set(this.element, 'disable-refocus', focus);
+          Drupal.ajax.elementData.set(this.element, 'refocus-blur', refocus);
+        });
+      }
+      return success.call(this, response, status);
     };
-    this.pagerAjax = Drupal.ajax(selfSettings);
+    return ajax;
   };
 
   /**
@@ -239,8 +190,8 @@
    */
   Drupal.AjaxCommands.prototype.setBrowserUrl = (ajax, response) => {
     // Do not change browser URL if we are in a dialog wrapper.
-    if (ajax.element && !ajax.element.closest('.drupal-dialog-content')) {
+    if (ajax.element && !ajax.dialogOrigin && !ajax.element.closest('.drupal-dialog-content')) {
       window.history.replaceState(null, '', response.url);
     }
   };
-})(Drupal, drupalSettings);
+})(Drupal, drupalSettings, once);

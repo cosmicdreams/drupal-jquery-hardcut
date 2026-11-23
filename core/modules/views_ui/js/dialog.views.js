@@ -1,82 +1,43 @@
 /**
  * @file
- * Views dialog behaviors.
+ * Keeps the Views dialog header and actions in view while its options scroll.
  */
 
-(function ($, Drupal) {
-  function handleDialogResize(e) {
-    const $modal = $(e.currentTarget);
-    const $viewsOverride = $modal.find('[data-drupal-views-offset]');
-    const $scroll = $modal.find('[data-drupal-views-scroll]');
-    let offset = 0;
-    let modalHeight;
-    if ($scroll.length) {
-      // Add a class to do some styles adjustments.
-      $modal.closest('.views-ui-dialog').addClass('views-ui-dialog-scroll');
-      // Let scroll element take all the height available.
-      $scroll.each(function () {
-        Object.assign(this.style, {
-          overflow: 'visible',
-          height: 'auto',
-        });
-      });
-      modalHeight = $modal.height();
-      $viewsOverride.each(function () {
-        offset += $(this).outerHeight();
-      });
-
-      // Take internal padding into account.
-      const scrollOffset = $scroll.outerHeight() - $scroll.height();
-      $scroll.height(modalHeight - offset - scrollOffset);
-      // Reset scrolling properties.
-      $modal.each(function () {
-        this.style.overflow = 'hidden';
-      });
-      $scroll.each(function () {
-        this.style.overflow = 'auto';
-      });
+((Drupal) => {
+  window.addEventListener('dialog:beforecreate', ({ target, dialog, settings }) => {
+    if (!dialog.element.matches('.views-ui-dialog') && !settings.classes?.['drupal-dialog']?.split(' ').includes('views-ui-dialog')) {
+      return;
     }
-  }
-
-  /**
-   * Functionality for views modals.
-   *
-   * @type {Drupal~behavior}
-   *
-   * @prop {Drupal~behaviorAttach} attach
-   *   Attaches modal functionality for views.
-   * @prop {Drupal~behaviorDetach} detach
-   *   Detaches the modal functionality.
-   */
-  Drupal.behaviors.viewsModalContent = {
-    attach(context) {
-      $(once('viewsDialog', 'body')).on(
-        'dialogContentResize.viewsDialog',
-        '.drupal-dialog-content',
-        handleDialogResize,
-      );
-      // When expanding details, make sure the modal is resized.
-      $(once('detailsUpdate', '.scroll', context)).on(
-        'click',
-        'summary',
-        (e) => {
-          e.currentTarget?.dispatchEvent(
-            new CustomEvent('dialogContentResize', { bubbles: true }),
-          );
-        },
-      );
-    },
-    detach(context, settings, trigger) {
-      if (trigger === 'unload') {
-        $(once.remove('viewsDialog', 'body')).off('.viewsDialog');
-      }
-    },
-  };
-
-  window.addEventListener('dialog:beforecreate', ({ target, settings }) => {
-    const scroll = target.querySelector('.scroll');
+    const scroll = target.querySelector('[data-drupal-views-scroll]');
     if (scroll) {
       settings.scrollTarget = scroll;
+      dialog.element.classList.add('views-ui-dialog-scroll');
     }
   });
-})(jQuery, Drupal);
+
+  document.addEventListener('dialogContentResize', ({ target }) => {
+    const content = target.closest('.views-ui-dialog .drupal-dialog-content');
+    const scroll = content?.querySelector('[data-drupal-views-scroll]');
+    if (!scroll || !Drupal.elementIsVisible(content)) {
+      return;
+    }
+
+    // Measure the options at their natural height and reserve space for
+    // everything outside the scroll area, including messages and actions.
+    scroll.style.maxHeight = '';
+    const outside = content.scrollHeight - scroll.offsetHeight;
+    const styles = getComputedStyle(scroll);
+    const decoration =
+      styles.boxSizing === 'border-box'
+        ? 0
+        : ['paddingTop', 'paddingBottom', 'borderTopWidth', 'borderBottomWidth']
+            .reduce((sum, side) => sum + Number.parseFloat(styles[side]), 0);
+    scroll.style.maxHeight = `${Math.max(0, content.clientHeight - outside - decoration)}px`;
+  });
+
+  document.addEventListener('toggle', ({ target }) => {
+    if (target.matches('details') && target.closest('[data-drupal-views-scroll]')) {
+      target.dispatchEvent(new Event('dialogContentResize', { bubbles: true }));
+    }
+  }, true);
+})(Drupal);
