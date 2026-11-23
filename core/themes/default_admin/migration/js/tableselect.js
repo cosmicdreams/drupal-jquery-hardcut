@@ -228,5 +228,4 @@
   tableSelect.isSelectionChange = (event) => selectionChanges.has(event);
   tableSelect.checkboxContent = () => Drupal.theme('checkbox');
   tableInteraction.tableSelect = tableSelect;
-  document.dispatchEvent(new Event('drupal:tableselect-ready'));
 })(Drupal, once);

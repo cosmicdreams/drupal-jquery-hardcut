@@ -19,7 +19,7 @@
       // document is an instance of Document, replace it with the html Element.
       once('adminDetails', context === document ? 'html' : context).forEach(
         (element) => {
-          Drupal.form.listen(element, 'click', undefined, (event) => {
+          Drupal.form.listen(element, 'click', (event) => {
             if (event.target.nodeName === 'SUMMARY') {
               event.target.focus();
             }

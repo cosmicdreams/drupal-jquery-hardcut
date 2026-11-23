@@ -285,9 +285,7 @@ class AjaxCommandsTest extends UnitTestCase {
    *
    * @see \Drupal\Core\Ajax\CssCommand
    */
-  #[IgnoreDeprecations]
   public function testCssCommand(): void {
-    $this->expectUserDeprecationMessage('CssCommand without native: TRUE is deprecated in drupal:12.0.0 and is removed from drupal:13.0.0. Use native: TRUE with CSS selectors and absolute values. See https://www.drupal.org/node/CHANGE_RECORD.');
     $command = new CssCommand('#page-title', ['text-decoration' => 'blink']);
     $command->setProperty('font-size', '40px')->setProperty('font-weight', 'bold');
 
@@ -309,9 +307,7 @@ class AjaxCommandsTest extends UnitTestCase {
    *
    * @see \Drupal\Core\Ajax\DataCommand
    */
-  #[IgnoreDeprecations]
   public function testDataCommand(): void {
-    $this->expectUserDeprecationMessage('DataCommand without native: TRUE is deprecated in drupal:12.0.0 and is removed from drupal:13.0.0. Use native: TRUE with Drupal.ajax.elementData. See https://www.drupal.org/node/CHANGE_RECORD.');
     $command = new DataCommand('#page-title', 'my-data', ['key' => 'value']);
 
     $expected = [
@@ -333,8 +329,8 @@ class AjaxCommandsTest extends UnitTestCase {
     self::assertSame(['command' => 'dispatchEvent', 'selector' => '#target', 'event' => 'change'], new DispatchEventCommand('#target', 'change')->render());
     self::assertSame(['command' => 'toggleClass', 'selector' => '#target', 'className' => 'active', 'enabled' => FALSE], new ToggleClassCommand('#target', 'active', FALSE)->render());
     self::assertSame(['command' => 'setAttribute', 'selector' => '#target', 'name' => 'title', 'value' => 'New'], new SetAttributeCommand('#target', 'title', 'New')->render());
-    self::assertSame(['command' => 'css', 'selector' => '#target', 'argument' => ['color' => 'blue'], 'native' => TRUE], new CssCommand('#target', ['color' => 'blue'], native: TRUE)->render());
-    self::assertSame(['command' => 'data', 'selector' => '#target', 'name' => 'value', 'value' => 0, 'native' => TRUE], new DataCommand('#target', 'value', 0, native: TRUE)->render());
+    self::assertSame(['command' => 'css', 'selector' => '#target', 'argument' => ['color' => 'blue']], new CssCommand('#target', ['color' => 'blue'])->render());
+    self::assertSame(['command' => 'data', 'selector' => '#target', 'name' => 'value', 'value' => 0], new DataCommand('#target', 'value', 0)->render());
   }
 
   /**

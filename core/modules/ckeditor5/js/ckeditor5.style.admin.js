@@ -3,7 +3,7 @@
  * CKEditor 5 Style admin behavior.
  */
 
-(function ($, Drupal) {
+(function (Drupal) {
   /**
    * Provides the summary for the "style" plugin settings vertical tab.
    *
@@ -14,8 +14,11 @@
    */
   Drupal.behaviors.ckeditor5StyleSettingsSummary = {
     attach() {
-      $('[data-ckeditor5-plugin-id="ckeditor5_style"]').drupalSetSummary(
-        (context) => {
+      Drupal.form.setSummary(
+        document.querySelectorAll(
+          '[data-ckeditor5-plugin-id="ckeditor5_style"]',
+        ),
+        () => {
           const stylesElement = document.querySelector(
             '[data-drupal-selector="edit-editor-settings-plugins-ckeditor5-style-styles"]',
           );
@@ -36,4 +39,4 @@
       );
     },
   };
-})(jQuery, Drupal);
+})(Drupal);

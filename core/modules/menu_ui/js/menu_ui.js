@@ -64,12 +64,12 @@
           linkTitles.forEach((field) => overrides.add(field));
         }
         linkTitles.forEach((field) => {
-          Drupal.formEvents.listen(field, 'keyup', undefined, () => {
+          Drupal.formEvents.listen(field, 'keyup', () => {
             linkTitles.forEach((input) => overrides.add(input));
           });
         });
         checkboxes.forEach((field) => {
-          Drupal.formEvents.listen(field, 'change', undefined, () => {
+          Drupal.formEvents.listen(field, 'change', () => {
             if (checkbox.checked) {
               if (!overrides.has(linkTitle)) {
                 linkTitle.value = title.value;
@@ -88,7 +88,7 @@
           });
         });
         titles.forEach((field) => {
-          Drupal.formEvents.listen(field, 'keyup', undefined, () => {
+          Drupal.formEvents.listen(field, 'keyup', () => {
             if (!overrides.has(linkTitle) && checkbox.checked) {
               linkTitle.value = title.value;
               linkTitles.forEach((input) =>

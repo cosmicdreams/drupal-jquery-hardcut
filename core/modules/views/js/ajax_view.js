@@ -243,5 +243,4 @@
       window.history.replaceState(null, '', response.url);
     }
   };
-  document.dispatchEvent(new CustomEvent('drupal:views-ajax-ready'));
 })(Drupal, drupalSettings);

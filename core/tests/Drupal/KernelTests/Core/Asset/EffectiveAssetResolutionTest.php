@@ -11,7 +11,6 @@ use Drupal\KernelTests\KernelTestBase;
 use Drupal\system\Controller\CssAssetController;
 use Drupal\system\Controller\JsAssetController;
 use PHPUnit\Framework\Attributes\Group;
-use PHPUnit\Framework\Attributes\IgnoreDeprecations;
 use PHPUnit\Framework\Attributes\RunTestsInSeparateProcesses;
 use PHPUnit\Framework\Attributes\TestWith;
 use Symfony\Component\HttpFoundation\BinaryFileResponse;
@@ -98,7 +97,6 @@ class EffectiveAssetResolutionTest extends KernelTestBase {
   /**
    * Tests constituent provenance in lazy aggregates and their responses.
    */
-  #[IgnoreDeprecations]
   #[TestWith(['neutral'], 'neutral render attachment')]
   #[TestWith(['already-loaded'], 'shared libraries already loaded')]
   #[TestWith(['explicit-legacy'], 'explicit legacy render attachment')]
@@ -118,7 +116,6 @@ class EffectiveAssetResolutionTest extends KernelTestBase {
     $libraries = ['common_test/aggregation', 'core/drupal.checkbox', 'system/base', 'common_test/external'];
     $legacy_library = 'core/internal.jquery.form';
     if ($legacy) {
-      $this->expectUserDeprecationMessage($legacy_library . ' is deprecated in drupal:12.0.0 and is removed from drupal:13.0.0. Use Drupal AJAX with native form options, or supply your own form plugin. See https://www.drupal.org/node/CHANGE_RECORD.');
       $libraries[] = $legacy_library;
     }
     $build['content'] = ['#markup' => 'Asset provenance', '#attached' => ['library' => $libraries]];
@@ -145,12 +142,6 @@ class EffectiveAssetResolutionTest extends KernelTestBase {
     $this->assertArrayHasKey('core/misc/debounce.js', $footer);
     $this->assertSame($legacy, isset($footer['core/assets/vendor/jquery/jquery.min.js']));
     $this->assertSame($legacy, isset($footer['core/misc/jquery.no-conflict.js']));
-    $this->assertSame($legacy, isset($footer['core/misc/jquery.drupal-bc.js']));
-    $this->assertSame($legacy, isset($footer['core/misc/jquery.drupal-ajax-bc.js']));
-    $this->assertSame($legacy, isset($footer['core/misc/jquery.tabledrag.bc.js']));
-    $this->assertSame($legacy, isset($footer['core/misc/jquery.drupal-form-bc.js']));
-    $this->assertSame($legacy, isset($footer['core/misc/jquery.states.bc.js']));
-    $this->assertArrayNotHasKey('core/misc/states.jquery.js', $footer);
     $this->assertSame($legacy, isset($footer['core/misc/jquery.form.js']));
 
     $optimized_css = $resolver->getCssAssets($assets, TRUE);
@@ -172,17 +163,12 @@ class EffectiveAssetResolutionTest extends KernelTestBase {
     foreach ($exclusions as $exclude) {
       $this->assertSame($loaded, explode(',', UrlHelper::uncompressQueryParameter($exclude)));
     }
-    // The explicit jQuery bootstrap and adapter follow the vendor.
+    // The explicit jQuery bootstrap follows the vendor.
     if ($legacy) {
       $jquery_group = array_search(['core/assets/vendor/jquery/jquery.min.js'], $expected_groups['js'], TRUE);
       $this->assertNotFalse($jquery_group);
       array_splice($expected_groups['js'], $jquery_group + 1, 0, [
         ['core/misc/jquery.no-conflict.js'],
-        ['core/misc/jquery.drupal-bc.js'],
-        ['core/misc/jquery.drupal-ajax-bc.js'],
-        ['core/misc/jquery.tabledrag.bc.js'],
-        ['core/misc/jquery.drupal-form-bc.js'],
-        ['core/misc/jquery.states.bc.js'],
       ]);
     }
     $this->assertAggregates('js', array_filter($footer, $files_only), $optimized_footer, $expected_groups['js']);

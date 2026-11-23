@@ -26,9 +26,6 @@ class FormTestMachineNameForm extends FormBase {
    * {@inheritdoc}
    */
   public function buildForm(array $form, FormStateInterface $form_state) {
-    if ($this->getRequest()->query->getBoolean('legacy-machine-name')) {
-      $form['#attached']['library'][] = 'core/jquery';
-    }
     if ($this->getRequest()->query->getBoolean('ajax')) {
       $form['#attached']['library'][] = 'core/drupal.ajax';
     }

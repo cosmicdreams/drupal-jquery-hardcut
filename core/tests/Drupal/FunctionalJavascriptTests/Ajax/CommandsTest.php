@@ -4,10 +4,8 @@ declare(strict_types=1);
 
 namespace Drupal\FunctionalJavascriptTests\Ajax;
 
-use Drupal\FunctionalJavascriptTests\DrupalSelenium2Driver;
 use Drupal\FunctionalJavascriptTests\WebDriverTestBase;
 use PHPUnit\Framework\Attributes\Group;
-use PHPUnit\Framework\Attributes\IgnoreDeprecations;
 use PHPUnit\Framework\Attributes\RunTestsInSeparateProcesses;
 
 /**
@@ -78,7 +76,7 @@ class CommandsTest extends WebDriverTestBase {
       ajax.commandExecutionQueue([
         { command: 'insert', selector: '#native-commands .target', method: 'append',
           data: '<!-- fixture -->first <span>second</span><script>document.currentScript && (window.nativeScriptRuns = (window.nativeScriptRuns || 0) + 1);</script><script type="application/json">{"fixture":true}</script>' },
-        { command: 'css', selector: '#typed-command-input', argument: { minWidth: 42, 'opacity': 0.5, '--custom-value': 3 }, native: true },
+        { command: 'css', selector: '#typed-command-input', argument: { minWidth: 42, 'opacity': 0.5, '--custom-value': 3 } },
         { command: 'setValue', selector: '#typed-command-input', value: 'selected' },
         { command: 'dispatchEvent', selector: '#typed-command-input', event: 'command-event' },
         { command: 'toggleClass', selector: '#typed-command-input', className: 'error', enabled: true },
@@ -114,7 +112,7 @@ class CommandsTest extends WebDriverTestBase {
   }
 
   /**
-   * Tests safe unmarked commands on a page without jQuery.
+   * Tests common Ajax commands on a page without jQuery.
    */
   public function testCouncilNativeCommands(): void {
     $this->drupalGet('ajax-test/native-request', ['query' => ['commands' => 1]]);
@@ -139,70 +137,6 @@ class CommandsTest extends WebDriverTestBase {
   }
 
   /**
-   * Tests unmarked commands when only the request adapter is loaded.
-   */
-  #[IgnoreDeprecations]
-  public function testMixedUnmarkedCommands(): void {
-    $this->expectUserDeprecationMessage('Javascript Deprecation: Using jQuery Ajax selector, method or effect inputs is deprecated in drupal:12.0.0 and is removed from drupal:13.0.0. Use a CSS selector and supported native command options. See https://www.drupal.org/node/CHANGE_RECORD.');
-    $this->expectUserDeprecationMessage("Javascript Deprecation: DataCommand's jQuery-data semantics is deprecated in drupal:12.0.0 and is removed from drupal:13.0.0. Use Drupal's element data API. See https://www.drupal.org/node/CHANGE_RECORD.");
-    $this->drupalGet('ajax-test/global-events');
-    $result = $this->getSession()->evaluateScript(<<<'JS'
-      (async () => {
-        const target = document.body.appendChild(document.createElement('div'));
-        target.id = 'mixed-command';
-        jQuery.cssHooks.probeStyle = {
-          set(element, value) { element.dataset.probeStyle = value; },
-        };
-        const ajax = Drupal.ajax({ url: location.href });
-        await ajax.commandExecutionQueue([
-          { command: 'css', selector: '#mixed-command', argument: { probeStyle: 'hook' } },
-          { command: 'data', selector: '#mixed-command', name: 'probeValue', value: 'legacy' },
-          { command: 'data', native: true, selector: '#mixed-command', name: 'nativeValue', value: 'native' },
-        ]);
-        return [typeof Drupal.ajax.commandCompatibility, target.dataset.probeStyle,
-          jQuery(target).data('probeValue'), jQuery(target).data('nativeValue'),
-          Drupal.ajax.elementData.get(target, 'nativeValue')];
-      })()
-      JS);
-    $driver = $this->getSession()->getDriver();
-    assert($driver instanceof DrupalSelenium2Driver);
-    $driver->processJavascriptDeprecations();
-    $this->assertSame(['undefined', 'hook', 'legacy', NULL, 'native'], $result);
-  }
-
-  /**
-   * Tests scoped data reads without the optional command adapter.
-   */
-  public function testMixedAjaxScopedDataReads(): void {
-    $this->drupalGet('ajax-test/global-events');
-    $result = $this->getSession()->evaluateScript(<<<'JS'
-      (async () => {
-        drupalSettings.suppressDeprecationErrors = true;
-        const selector = '#test_global_events_drupal_ajax_link';
-        const link = document.querySelector(selector);
-        const settings = { width: 640 };
-        jQuery(link).data({
-          'dialog-options': settings,
-          'ajax-http-method': 'GET',
-          'refocus-blur': false,
-          'private-value': 'legacy',
-        });
-        const ajax = Drupal.ajax({ url: location.href });
-        await ajax.commandExecutionQueue([
-          { command: 'data', native: true, selector, name: 'disable-refocus', value: false },
-          { command: 'data', selector, name: 'disable-refocus', value: true },
-        ]);
-        const commandValue = Drupal.ajax.elementData.get(link, 'disable-refocus');
-        jQuery(link).data('disable-refocus', 'direct');
-        const keys = ['disable-refocus', 'dialog-options', 'ajax-http-method', 'refocus-blur', 'private-value'];
-        return [typeof Drupal.ajax.commandCompatibility, commandValue, jQuery(link).data('disable-refocus'),
-          ...keys.map((key) => Drupal.ajax.elementData.get(link, key))];
-      })()
-      JS);
-    $this->assertSame(['undefined', TRUE, 'direct', 'direct', ['width' => 640], 'GET', FALSE, NULL], $result);
-  }
-
-  /**
    * Tests native selectors and numerical style units.
    */
   public function testNativeSelectorAndStyleUnits(): void {
@@ -217,12 +151,12 @@ class CommandsTest extends WebDriverTestBase {
           fontSize: 21, borderRadius: 3, gap: 8, flex: 1, opacity: 0.5, lineHeight: 2,
           minWidth: 21, paddingTop: 8, borderWidth: 3, '--size': 7,
         };
-        await ajax.commands.css(ajax, { native: true, selector: '#native-selector', argument: styles });
-        await ajax.commands.css(ajax, { native: true, selector: '#native-selector', argument: {
+        await ajax.commands.css(ajax, { selector: '#native-selector', argument: styles });
+        await ajax.commands.css(ajax, { selector: '#native-selector', argument: {
           width: -2, height: '-.5em', padding: -3, borderWidth: '-1px', marginLeft: -7,
         } });
         const signed = ['width', 'height', 'paddingLeft', 'borderWidth', 'marginLeft'].map((key) => target.style[key]);
-        await ajax.commands.css(ajax, { native: true, selector: '#native-selector', argument: styles });
+        await ajax.commands.css(ajax, { selector: '#native-selector', argument: styles });
         let selected;
         try {
           await ajax.commands.data(ajax, {
@@ -235,20 +169,11 @@ class CommandsTest extends WebDriverTestBase {
           selected = error.message;
         }
         ajax.commands.data(ajax, {
-          native: true, selector: '#native-selector:has(.skip)', name: 'hasChild', value: true,
+          selector: '#native-selector:has(.skip)', name: 'hasChild', value: true,
         });
-        const legacy = [];
-        for (const selector of [':visible', 'span:eq(0)', 'span:contains(foo)', 'div:has(span)']) {
-          try {
-            ajax.commands.remove(ajax, { selector });
-          }
-          catch (error) {
-            legacy.push(error.message.includes('requires the core/drupal.ajax.jquery library'));
-          }
-        }
         return [selected, Drupal.ajax.elementData.get(target, 'hasChild'),
           Object.keys(styles).filter((key) => key !== 'flex').map((key) => key.startsWith('--')
-          ? target.style.getPropertyValue(key) : target.style[key]), target.style.flexGrow, legacy, signed];
+          ? target.style.getPropertyValue(key) : target.style[key]), target.style.flexGrow, signed];
       })()
       JS);
     $this->assertSame([
@@ -256,118 +181,8 @@ class CommandsTest extends WebDriverTestBase {
       TRUE,
       ['', '', '', '0.5', '2', '21px', '8px', '3px', '7'],
       '1',
-      [TRUE, TRUE, TRUE, TRUE],
       ['0px', '0em', '0px', '0px', '-7px'],
     ], $result);
-  }
-
-  /**
-   * Tests that mixed-page insertion clones legacy data and handlers.
-   */
-  #[IgnoreDeprecations]
-  public function testLegacyThemeClonesContent(): void {
-    $this->expectUserDeprecationMessage('Javascript Deprecation: Drupal.theme.ajaxWrapperNewContent() with a jQuery collection is deprecated in drupal:12.0.0 and is removed from drupal:13.0.0. Use an array of native nodes. See https://www.drupal.org/node/CHANGE_RECORD.');
-    $this->drupalGet('ajax-test/global-events');
-    $result = $this->getSession()->evaluateScript(<<<'JS'
-      (async () => {
-        const holder = document.body.appendChild(document.createElement('div'));
-        holder.id = 'legacy-clone';
-        holder.innerHTML = '<div></div><div></div>';
-        let calls = 0;
-        Drupal.theme.ajaxWrapperNewContent = (content) => {
-          content.data('root', 1).on('probe-root', () => calls++);
-          content.find('span').data('child', 2).on('probe-child', () => calls++);
-          return content;
-        };
-        const ajax = Drupal.ajax({ url: location.href });
-        await ajax.commands.insert(ajax, {
-          selector: '#legacy-clone > div', method: 'append', data: '<p><span>Child</span></p>',
-        });
-        const values = [...holder.querySelectorAll('p')].map((node) => {
-          const root = jQuery(node).trigger('probe-root');
-          const child = root.find('span').trigger('probe-child');
-          return [root.data('root'), child.data('child')];
-        });
-        return [values, calls];
-      })()
-      JS);
-    $driver = $this->getSession()->getDriver();
-    assert($driver instanceof DrupalSelenium2Driver);
-    $driver->processJavascriptDeprecations();
-    $this->assertSame([[[1, 2], [1, 2]], 4], $result);
-  }
-
-  /**
-   * Tests mixed-page removal and compatibility data reads.
-   */
-  public function testCouncilMixedCommands(): void {
-    $this->drupalGet('ajax_forms_test_ajax_commands_form', ['query' => ['legacy_commands' => 1]]);
-    $result = $this->getSession()->evaluateScript(<<<'JS'
-      (async () => {
-        const parent = document.createElement('div');
-        parent.id = 'native-removal-parent';
-        parent.innerHTML = '<div id="native-removed"></div>';
-        document.body.append(parent);
-        const node = parent.firstElementChild;
-        let calls = 0;
-        jQuery(node).data({ dialogType: 'modal', dialogTitle: 'Settings' }).on('probe', () => ++calls);
-        const values = ['dialog-type', 'dialog-title'].map((key) => Drupal.ajax.elementData.get(node, key));
-        const ajax = Drupal.ajax({ url: location.href });
-        await ajax.commandExecutionQueue([
-          { command: 'insert', selector: '#native-removal-parent', method: 'html', data: '' },
-        ]);
-        parent.append(node);
-        jQuery(node).trigger('probe');
-        return [values, jQuery.hasData(node), calls];
-      })()
-      JS);
-    $this->assertSame([['modal', 'Settings'], FALSE, 0], $result);
-  }
-
-  /**
-   * Tests the type passed to overridden themes without the command adapter.
-   */
-  #[IgnoreDeprecations]
-  public function testCouncilThemeOverrides(): void {
-    foreach (['ajaxWrapperNewContent', 'ajaxWrapperMultipleRootElements'] as $hook) {
-      $this->expectUserDeprecationMessage("Javascript Deprecation: Drupal.theme.$hook() with a jQuery collection is deprecated in drupal:12.0.0 and is removed from drupal:13.0.0. Use an array of native nodes. See https://www.drupal.org/node/CHANGE_RECORD.");
-    }
-    $this->expectUserDeprecationMessage('Javascript Deprecation: Drupal.Ajax#progress.element is deprecated in drupal:12.0.0 and is removed from drupal:13.0.0. Use the native elementNode property. See https://www.drupal.org/node/CHANGE_RECORD.');
-    $this->expectUserDeprecationMessage('Javascript Deprecation: Drupal.theme.ajaxProgressBar() with a jQuery collection is deprecated in drupal:12.0.0 and is removed from drupal:13.0.0. Use the native progress bar element. See https://www.drupal.org/node/CHANGE_RECORD.');
-    $this->drupalGet('ajax-test/global-events');
-    $result = $this->getSession()->evaluateScript(<<<'JS'
-      (async () => {
-        const trace = [typeof Drupal.ajax.commandCompatibility];
-        const target = document.createElement('div');
-        target.id = 'theme-target';
-        document.body.append(target);
-        const ajax = Drupal.ajax({ url: location.href, element: target });
-        const hooks = ['ajaxWrapperNewContent', 'ajaxWrapperMultipleRootElements', 'ajaxProgressBar'];
-        const originals = Object.fromEntries(hooks.map((name) => [name, Drupal.theme[name]]));
-        const assign = (native) => hooks.forEach((name) => {
-          const override = (input, ...args) => {
-            trace.push(native ? (name === 'ajaxProgressBar' ? input instanceof HTMLElement : Array.isArray(input)) : input instanceof jQuery);
-            return originals[name](input, ...args);
-          };
-          Drupal.theme[name] = native ? (Drupal.ajax.useNativeCallback?.(override) ?? override) : override;
-        });
-        for (const native of [false, true]) {
-          assign(native);
-          await ajax.commandExecutionQueue([
-            { command: 'insert', selector: '#theme-target', method: 'html',
-              data: '<span>First</span><span>Second</span>', effect: 'fade', speed: 0 },
-          ]);
-          ajax.setProgressIndicatorBar();
-        }
-        const nodes = target.querySelectorAll('span');
-        return [trace, originals.ajaxWrapperMultipleRootElements(nodes)[0].children.length,
-          ajax.progress.element[0] === ajax.progress.elementNode];
-      })()
-      JS);
-    $driver = $this->getSession()->getDriver();
-    assert($driver instanceof DrupalSelenium2Driver);
-    $driver->processJavascriptDeprecations();
-    $this->assertSame([['undefined', TRUE, TRUE, TRUE, TRUE, TRUE, TRUE], 2, TRUE], $result);
   }
 
   /**
@@ -401,72 +216,16 @@ class CommandsTest extends WebDriverTestBase {
   }
 
   /**
-   * Tests the original command contracts on a page with the legacy library.
-   */
-  #[IgnoreDeprecations]
-  public function testLegacyCommands(): void {
-    $this->expectUserDeprecationMessage('Javascript Deprecation: Using jQuery Ajax selector, method or effect inputs is deprecated in drupal:12.0.0 and is removed from drupal:13.0.0. Use a CSS selector and supported native command options. See https://www.drupal.org/node/CHANGE_RECORD.');
-    $this->expectUserDeprecationMessage("Javascript Deprecation: DataCommand's jQuery-data semantics is deprecated in drupal:12.0.0 and is removed from drupal:13.0.0. Use Drupal's element data API. See https://www.drupal.org/node/CHANGE_RECORD.");
-    $this->expectUserDeprecationMessage('Javascript Deprecation: The invoke Ajax command is deprecated in drupal:12.0.0 and is removed from drupal:13.0.0. Use a native command for the operation, or define an explicit command in your extension. See https://www.drupal.org/node/CHANGE_RECORD.');
-    $this->drupalLogin($this->drupalCreateUser(['access content']));
-    $this->drupalGet('ajax_forms_test_ajax_commands_form', ['query' => ['legacy_commands' => 1]]);
-    $session = $this->getSession();
-    $session->executeScript(<<<'JS'
-      const fixture = document.createElement('div');
-      fixture.id = 'legacy-commands';
-      fixture.innerHTML = '<div class="target" style="width: 30px"></div><div class="target"></div>';
-      document.body.append(fixture);
-
-      jQuery.cssHooks.fixtureColor = {
-        set(element, value) {
-          element.dataset.color = value;
-        }
-      };
-      jQuery.fn.fixtureInvoke = function (attribute, value) {
-        return this.attr(attribute, value);
-      };
-      jQuery.fn.fixtureInsert = function (nodes) {
-        return this.append(nodes).attr('data-plugin-insert', 'yes');
-      };
-
-      const ajax = Drupal.ajax({ url: location.href });
-      ajax.commandExecutionQueue([
-        { command: 'css', selector: '#legacy-commands .target:first', argument: { width: '+=12', fixtureColor: 'blue' } },
-        { command: 'data', selector: '#legacy-commands .target:first', name: 'fixture-key', value: { stored: true } },
-        { command: 'invoke', selector: '#legacy-commands .target:first', method: 'fixtureInvoke', args: ['data-invoked', 'yes'] },
-        { command: 'insert', selector: '#legacy-commands .target:first', method: 'fixtureInsert', data: '<span>plugin</span>' },
-        { command: 'remove', selector: '#legacy-commands .target:last' },
-      ], 'success').then(() => {
-        fixture.dataset.completed = 'yes';
-      });
-      JS);
-
-    $this->assertJsCondition("document.querySelector('#legacy-commands').dataset.completed === 'yes'");
-    $target = $this->assertSession()->elementExists('css', '#legacy-commands .target');
-    $this->assertSame('width: 42px;', $target->getAttribute('style'));
-    $this->assertSame('blue', $target->getAttribute('data-color'));
-    $this->assertSame('yes', $target->getAttribute('data-invoked'));
-    $this->assertSame('yes', $target->getAttribute('data-plugin-insert'));
-    $this->assertSame('plugin', $target->getText());
-    $this->assertSession()->elementsCount('css', '#legacy-commands .target', 1);
-    $this->assertTrue($session->evaluateScript("jQuery.data(document.querySelector('#legacy-commands .target'), 'fixtureKey').stored"));
-    $this->assertSame(['stored' => TRUE], $session->evaluateScript("Drupal.ajax.elementData.get(document.querySelector('#legacy-commands .target'), 'fixture-key')"));
-  }
-
-  /**
    * Tests the various Ajax Commands.
    */
-  #[IgnoreDeprecations]
   public function testAjaxCommands(): void {
-    $this->expectUserDeprecationMessage('Javascript Deprecation: Using jQuery Ajax selector, method or effect inputs is deprecated in drupal:12.0.0 and is removed from drupal:13.0.0. Use a CSS selector and supported native command options. See https://www.drupal.org/node/CHANGE_RECORD.');
-    $this->expectUserDeprecationMessage('Javascript Deprecation: The invoke Ajax command is deprecated in drupal:12.0.0 and is removed from drupal:13.0.0. Use a native command for the operation, or define an explicit command in your extension. See https://www.drupal.org/node/CHANGE_RECORD.');
     $session = $this->getSession();
     $page = $this->getSession()->getPage();
 
     $form_path = 'ajax_forms_test_ajax_commands_form';
     $web_user = $this->drupalCreateUser(['access content']);
     $this->drupalLogin($web_user);
-    $this->drupalGet($form_path, ['query' => ['legacy_requests' => 1]]);
+    $this->drupalGet($form_path);
 
     // Tests the 'add_css' command.
     $page->pressButton("AJAX 'add_css' command");
@@ -494,19 +253,19 @@ class CommandsTest extends WebDriverTestBase {
     $this->assertEquals('Alert', $alert_text);
     $this->getSession()->getDriver()->getWebDriverSession()->alert()->accept();
 
-    $this->drupalGet($form_path, ['query' => ['legacy_requests' => 1]]);
+    $this->drupalGet($form_path);
     $page->pressButton("AJAX 'Announce': Click to announce");
     $this->assertWaitPageContains('<div id="drupal-live-announce" class="visually-hidden" aria-live="polite" aria-busy="false">Default announcement.</div>');
 
-    $this->drupalGet($form_path, ['query' => ['legacy_requests' => 1]]);
+    $this->drupalGet($form_path);
     $page->pressButton("AJAX 'Announce': Click to announce with 'polite' priority");
     $this->assertWaitPageContains('<div id="drupal-live-announce" class="visually-hidden" aria-live="polite" aria-busy="false">Polite announcement.</div>');
 
-    $this->drupalGet($form_path, ['query' => ['legacy_requests' => 1]]);
+    $this->drupalGet($form_path);
     $page->pressButton("AJAX 'Announce': Click to announce with 'assertive' priority");
     $this->assertWaitPageContains('<div id="drupal-live-announce" class="visually-hidden" aria-live="assertive" aria-busy="false">Assertive announcement.</div>');
 
-    $this->drupalGet($form_path, ['query' => ['legacy_requests' => 1]]);
+    $this->drupalGet($form_path);
     $page->pressButton("AJAX 'Announce': Click to announce twice");
     $this->assertWaitPageContains('<div id="drupal-live-announce" class="visually-hidden" aria-live="assertive" aria-busy="false">Assertive announcement.' . "\nAnother announcement.</div>");
 
@@ -524,7 +283,7 @@ class CommandsTest extends WebDriverTestBase {
 
     // Tests the 'changed' command using the second argument.
     // Refresh page for testing 'changed' command to same element again.
-    $this->drupalGet($form_path, ['query' => ['legacy_requests' => 1]]);
+    $this->drupalGet($form_path);
     $page->pressButton("AJAX changed: Click to mark div changed with asterisk.");
     $this->assertWaitPageContains('<div id="changed_div" class="ajax-changed"> <div id="changed_div_mark_this">This div can be marked as changed or not. <abbr class="ajax-changed" title="Changed">*</abbr> </div></div>');
 
@@ -546,29 +305,9 @@ class CommandsTest extends WebDriverTestBase {
     $page->pressButton("AJAX insert: Let client insert based on #ajax['method'].");
     $this->assertWaitPageContains('<div id="insert_div">insert replacement textOriginal contents</div>');
 
-    // Loading the legacy handler through the response exposes data already
-    // written by a native command.
-    $this->assertTrue($session->evaluateScript('Drupal.ajax.commandCompatibility === undefined'));
-    $session->executeScript(<<<'JS'
-      const remove = jQuery.fn.remove;
-      jQuery.fn.remove = function (...args) {
-        if (this[0]?.id === 'remove_text') {
-          document.querySelector('#remove_div').dataset.overridden = 'yes';
-        }
-        return remove.apply(this, args);
-      };
-      JS);
-    $page->pressButton("AJAX invoke command: Invoke addClass() method.");
-    $this->assertWaitPageContains('<div id="invoke_div" class="error">Original contents</div>');
-    $this->assertSame('test_value', $session->evaluateScript('jQuery("#data_div").data("test_key")'));
-    $session->executeScript(<<<'JS'
-      const element = document.querySelector('#data_div');
-      element.setAttribute('data-test_key', 'attribute');
-      jQuery.data(element, 'test_key', 'replacement');
-      JS);
-    $this->assertSame('replacement', $session->evaluateScript('Drupal.ajax.elementData.get(document.querySelector("#data_div"), "test_key")'));
-    $session->executeScript('jQuery("#data_div").removeData("test_key");');
-    $this->assertSame('attribute', $session->evaluateScript('Drupal.ajax.elementData.get(document.querySelector("#data_div"), "test_key")'));
+    // Tests the toggleClass command.
+    $page->pressButton("AJAX toggleClass command: Add the error class.");
+    $this->assertWaitPageContains('<div id="toggle_class_div" class="error">Original contents</div>');
 
     // Tests the 'prepend' command.
     $page->pressButton("AJAX 'prepend': Click to prepend something");
@@ -576,7 +315,7 @@ class CommandsTest extends WebDriverTestBase {
 
     // Tests the 'remove' command.
     $page->pressButton("AJAX 'remove': Click to remove text");
-    $this->assertWaitPageContains('<div id="remove_div" data-overridden="yes"></div>');
+    $this->assertWaitPageContains('<div id="remove_div"></div>');
 
     // Tests the 'settings' command.
     $test_settings_command = <<<JS

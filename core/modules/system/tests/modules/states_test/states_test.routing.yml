@@ -14,21 +14,6 @@ states_test.native_form:
   requirements:
     _access: 'TRUE'
 
-states_test.core_hooks:
-  path: '/states-test/core-hooks'
-  defaults:
-    _controller: '\Drupal\states_test\Controller\StatesTestController::coreHooks'
-    _title: 'States with core jQuery hooks'
-  requirements:
-    _access: 'TRUE'
-
-states_test.legacy:
-  path: '/states-test/legacy'
-  defaults:
-    _controller: '\Drupal\states_test\Controller\StatesTestController::legacy'
-  requirements:
-    _access: 'TRUE'
-
 states_test.remove_dependent:
   path: '/states-test/remove-dependent'
   defaults:

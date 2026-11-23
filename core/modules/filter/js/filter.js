@@ -29,12 +29,7 @@
                     : 'none';
               });
           };
-          Drupal.formEvents.listen(
-            select,
-            'change',
-            'filterGuidelines',
-            update,
-          );
+          Drupal.formEvents.listen(select, 'change', update);
           update();
         });
       });

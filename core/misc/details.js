@@ -31,7 +31,6 @@
   Drupal.form.listen(
     document.body,
     'formFragmentLinkClickOrHashChange',
-    'details',
     (event) => openParentDetails(event.detail),
   );
 

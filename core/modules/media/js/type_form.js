@@ -14,26 +14,28 @@
    */
   Drupal.behaviors.mediaTypeFormSummaries = {
     attach(context) {
-      const $context = $(context);
       // Provide the vertical tab summaries.
-      $context.find('#edit-workflow').drupalSetSummary((context) => {
-        const values = [];
-        $(context)
-          .find('input[name^="options"]:checked')
-          .parent()
-          .each(function () {
-            values.push(
-              Drupal.checkPlain($(this).find('label')[0].textContent),
-            );
-          });
-        if ($(context).find('#edit-options-status:checked').length === 0) {
-          values.unshift(Drupal.t('Not published'));
-        }
-        return values.join(', ');
-      });
-      $(context)
-        .find('#edit-language')
-        .drupalSetSummary((context) => {
+      Drupal.form.setSummary(
+        context.querySelectorAll('#edit-workflow'),
+        (context) => {
+          const values = [];
+          $(context)
+            .find('input[name^="options"]:checked')
+            .parent()
+            .each(function () {
+              values.push(
+                Drupal.checkPlain($(this).find('label')[0].textContent),
+              );
+            });
+          if ($(context).find('#edit-options-status:checked').length === 0) {
+            values.unshift(Drupal.t('Not published'));
+          }
+          return values.join(', ');
+        },
+      );
+      Drupal.form.setSummary(
+        context.querySelectorAll('#edit-language'),
+        (context) => {
           const values = [];
 
           values.push(
@@ -50,7 +52,8 @@
             });
 
           return values.join(', ');
-        });
+        },
+      );
     },
   };
 })(jQuery, Drupal);

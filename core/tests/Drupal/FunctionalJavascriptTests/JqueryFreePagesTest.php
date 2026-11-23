@@ -21,8 +21,6 @@ use PHPUnit\Framework\Attributes\RunTestsInSeparateProcesses;
  *   nested modals, a generated Starterkit theme and a contrib subtheme.
  * @todo Test aggregated, cached and streaming responses with asset provenance.
  * @todo Add document-start instrumentation for Firefox and Safari.
- * @todo Add mixed modes when the bridge lands: third-party jQuery early and
- *   late without legacy calls, plus an attributed legacy-call fixture.
  */
 #[Group('javascript')]
 #[RunTestsInSeparateProcesses]
@@ -38,21 +36,16 @@ class JqueryFreePagesTest extends WebDriverTestBase {
    * Values name the owner and removal slice, in that order. Default Admin's
    * styling still loads jQuery. The shared dialog path loads jQuery UI, and
    * the node form also loads the autocomplete widget. Remove entries as
-   * their last paths disappear. The bootstrap and compatibility adapters
-   * are carried by the remaining core/jquery library edges.
+   * their last paths disappear. The remaining core/jquery library loads the
+   * vendor script and bootstrap.
    */
   private const EXPECTED = [
     'block-layout' => [
       'global:jQuery' => ['Z', 'Z'],
       'global:jQuery.ui' => ['D', 'D'],
       'library:jquery' => ['Z', 'Z'],
-      'library:jquery-ajax-bridge' => ['A', 'Z'],
       'library:jquery-bootstrap' => ['B', 'Z'],
-      'library:jquery-bridge' => ['B', 'Z'],
-      'library:jquery-form-bridge' => ['U', 'Z'],
       'library:jquery-position' => ['D', 'D'],
-      'library:jquery-states-bridge' => ['S', 'Z'],
-      'library:jquery-tabledrag-bridge' => ['T', 'Z'],
       'library:jquery-ui-css' => ['D', 'D'],
       'library:jquery-ui-dialog' => ['D', 'D'],
       'library:jquery-ui-js' => ['D', 'D'],
@@ -61,13 +54,8 @@ class JqueryFreePagesTest extends WebDriverTestBase {
       'global:jQuery' => ['Z', 'Z'],
       'global:jQuery.ui' => ['D', 'D'],
       'library:jquery' => ['Z', 'Z'],
-      'library:jquery-ajax-bridge' => ['A', 'Z'],
       'library:jquery-bootstrap' => ['B', 'Z'],
-      'library:jquery-bridge' => ['B', 'Z'],
-      'library:jquery-form-bridge' => ['U', 'Z'],
       'library:jquery-position' => ['D', 'D'],
-      'library:jquery-states-bridge' => ['S', 'Z'],
-      'library:jquery-tabledrag-bridge' => ['T', 'Z'],
       'library:jquery-ui-css' => ['D', 'D'],
       'library:jquery-ui-dialog' => ['D', 'D'],
       'library:jquery-ui-js' => ['D', 'D'],
@@ -76,13 +64,8 @@ class JqueryFreePagesTest extends WebDriverTestBase {
       'global:jQuery' => ['Z', 'Z'],
       'global:jQuery.ui' => ['D', 'D'],
       'library:jquery' => ['Z', 'Z'],
-      'library:jquery-ajax-bridge' => ['A', 'Z'],
       'library:jquery-bootstrap' => ['B', 'Z'],
-      'library:jquery-bridge' => ['B', 'Z'],
-      'library:jquery-form-bridge' => ['U', 'Z'],
       'library:jquery-position' => ['D', 'D'],
-      'library:jquery-states-bridge' => ['S', 'Z'],
-      'library:jquery-tabledrag-bridge' => ['T', 'Z'],
       'library:jquery-ui-css' => ['D', 'D'],
       'library:jquery-ui-dialog' => ['D', 'D'],
       'library:jquery-ui-js' => ['D', 'D'],
@@ -91,13 +74,8 @@ class JqueryFreePagesTest extends WebDriverTestBase {
       'global:jQuery' => ['Z', 'Z'],
       'global:jQuery.ui' => ['D', 'D'],
       'library:jquery' => ['Z', 'Z'],
-      'library:jquery-ajax-bridge' => ['A', 'Z'],
       'library:jquery-bootstrap' => ['B', 'Z'],
-      'library:jquery-bridge' => ['B', 'Z'],
-      'library:jquery-form-bridge' => ['U', 'Z'],
       'library:jquery-position' => ['D', 'D'],
-      'library:jquery-states-bridge' => ['S', 'Z'],
-      'library:jquery-tabledrag-bridge' => ['T', 'Z'],
       'library:jquery-ui-css' => ['D', 'D'],
       'library:jquery-ui-dialog' => ['D', 'D'],
       'library:jquery-ui-js' => ['D', 'D'],
@@ -106,13 +84,8 @@ class JqueryFreePagesTest extends WebDriverTestBase {
       'global:jQuery' => ['Z', 'Z'],
       'global:jQuery.ui' => ['D', 'C'],
       'library:jquery' => ['Z', 'Z'],
-      'library:jquery-ajax-bridge' => ['A', 'Z'],
       'library:jquery-bootstrap' => ['B', 'Z'],
-      'library:jquery-bridge' => ['B', 'Z'],
-      'library:jquery-form-bridge' => ['U', 'Z'],
       'library:jquery-position' => ['D', 'C'],
-      'library:jquery-states-bridge' => ['S', 'Z'],
-      'library:jquery-tabledrag-bridge' => ['T', 'Z'],
       'library:jquery-ui-autocomplete' => ['C', 'C'],
       'library:jquery-ui-css' => ['D', 'C'],
       'library:jquery-ui-dialog' => ['D', 'D'],
@@ -122,13 +95,8 @@ class JqueryFreePagesTest extends WebDriverTestBase {
       'global:jQuery' => ['Z', 'Z'],
       'global:jQuery.ui' => ['D', 'D'],
       'library:jquery' => ['Z', 'Z'],
-      'library:jquery-ajax-bridge' => ['A', 'Z'],
       'library:jquery-bootstrap' => ['B', 'Z'],
-      'library:jquery-bridge' => ['B', 'Z'],
-      'library:jquery-form-bridge' => ['U', 'Z'],
       'library:jquery-position' => ['D', 'D'],
-      'library:jquery-states-bridge' => ['S', 'Z'],
-      'library:jquery-tabledrag-bridge' => ['T', 'Z'],
       'library:jquery-ui-css' => ['D', 'D'],
       'library:jquery-ui-dialog' => ['D', 'D'],
       'library:jquery-ui-js' => ['D', 'D'],
@@ -137,13 +105,8 @@ class JqueryFreePagesTest extends WebDriverTestBase {
       'global:jQuery' => ['Z', 'Z'],
       'global:jQuery.ui' => ['D', 'D'],
       'library:jquery' => ['Z', 'Z'],
-      'library:jquery-ajax-bridge' => ['A', 'Z'],
       'library:jquery-bootstrap' => ['B', 'Z'],
-      'library:jquery-bridge' => ['B', 'Z'],
-      'library:jquery-form-bridge' => ['U', 'Z'],
       'library:jquery-position' => ['D', 'D'],
-      'library:jquery-states-bridge' => ['S', 'Z'],
-      'library:jquery-tabledrag-bridge' => ['T', 'Z'],
       'library:jquery-ui-css' => ['D', 'D'],
       'library:jquery-ui-dialog' => ['D', 'D'],
       'library:jquery-ui-js' => ['D', 'D'],
@@ -152,13 +115,8 @@ class JqueryFreePagesTest extends WebDriverTestBase {
       'global:jQuery' => ['Z', 'Z'],
       'global:jQuery.ui' => ['D', 'D'],
       'library:jquery' => ['Z', 'Z'],
-      'library:jquery-ajax-bridge' => ['A', 'Z'],
       'library:jquery-bootstrap' => ['B', 'Z'],
-      'library:jquery-bridge' => ['B', 'Z'],
-      'library:jquery-form-bridge' => ['U', 'Z'],
       'library:jquery-position' => ['D', 'D'],
-      'library:jquery-states-bridge' => ['S', 'Z'],
-      'library:jquery-tabledrag-bridge' => ['T', 'Z'],
       'library:jquery-ui-css' => ['D', 'D'],
       'library:jquery-ui-dialog' => ['D', 'D'],
       'library:jquery-ui-js' => ['D', 'D'],
@@ -345,13 +303,6 @@ class JqueryFreePagesTest extends WebDriverTestBase {
           ['library:jquery-form', /\/misc\/jquery\.form\.js$/],
           ['library:jquery-position', /\/misc\/position\.js$/],
           ['library:jquery-bootstrap', /\/misc\/jquery\.no-conflict\.js$/],
-          ['library:jquery-bridge', /\/misc\/jquery\.drupal-bc\.js$/],
-          ['library:jquery-ajax-bridge', /\/misc\/jquery\.drupal-ajax-bc\.js$/],
-          ['library:jquery-ajax-commands', /\/misc\/jquery\.drupal-ajax-commands\.js$/],
-          ['library:jquery-form-bridge', /\/misc\/jquery\.drupal-form-bc\.js$/],
-          ['library:jquery-tabledrag-bridge', /\/misc\/jquery\.tabledrag\.bc\.js$/],
-          ['library:jquery-states-bridge', /\/misc\/jquery\.states\.bc\.js$/],
-          ['library:jquery-states-selectors', /\/misc\/states\.jquery\.js$/],
         ];
         urls.forEach((url) => {
           const path = new URL(url).pathname;

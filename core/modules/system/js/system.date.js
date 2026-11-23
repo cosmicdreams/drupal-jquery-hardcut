@@ -55,7 +55,7 @@
 
       source.forEach((element) => {
         ['keyup', 'change', 'input'].forEach((type) => {
-          Drupal.form.listen(element, type, 'dateFormat', dateFormatHandler);
+          Drupal.form.listen(element, type, dateFormatHandler);
         });
       });
       source.forEach((element) => {

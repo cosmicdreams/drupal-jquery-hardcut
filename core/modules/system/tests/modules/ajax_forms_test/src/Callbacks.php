@@ -16,11 +16,11 @@ use Drupal\Core\Ajax\CssCommand;
 use Drupal\Core\Ajax\DataCommand;
 use Drupal\Core\Ajax\HtmlCommand;
 use Drupal\Core\Ajax\InsertCommand;
-use Drupal\Core\Ajax\InvokeCommand;
 use Drupal\Core\Ajax\PrependCommand;
 use Drupal\Core\Ajax\RemoveCommand;
 use Drupal\Core\Ajax\RestripeCommand;
 use Drupal\Core\Ajax\SettingsCommand;
+use Drupal\Core\Ajax\ToggleClassCommand;
 use Drupal\Core\Form\FormStateInterface;
 
 /**
@@ -34,7 +34,7 @@ class Callbacks {
   public static function selectCallback($form, FormStateInterface $form_state): AjaxResponse {
     $response = new AjaxResponse();
     $response->addCommand(new HtmlCommand('#ajax_selected_color', $form_state->getValue('select')));
-    $response->addCommand(new DataCommand('#ajax_selected_color', 'form_state_value_select', $form_state->getValue('select'), native: TRUE));
+    $response->addCommand(new DataCommand('#ajax_selected_color', 'form_state_value_select', $form_state->getValue('select')));
     return $response;
   }
 
@@ -45,7 +45,7 @@ class Callbacks {
     $response = new AjaxResponse();
     $date = $form_state->getValue('date');
     $response->addCommand(new HtmlCommand('#ajax_date_value', sprintf('<div>%s</div>', $date)));
-    $response->addCommand(new DataCommand('#ajax_date_value', 'form_state_value_date', $form_state->getValue('date'), native: TRUE));
+    $response->addCommand(new DataCommand('#ajax_date_value', 'form_state_value_date', $form_state->getValue('date')));
     return $response;
   }
 
@@ -57,7 +57,7 @@ class Callbacks {
 
     $response = new AjaxResponse();
     $response->addCommand(new HtmlCommand('#ajax_datetime_value', sprintf('<div>%s</div>', $datetime)));
-    $response->addCommand(new DataCommand('#ajax_datetime_value', 'form_state_value_datetime', $datetime, native: TRUE));
+    $response->addCommand(new DataCommand('#ajax_datetime_value', 'form_state_value_datetime', $datetime));
     return $response;
   }
 
@@ -67,7 +67,7 @@ class Callbacks {
   public static function checkboxCallback($form, FormStateInterface $form_state): AjaxResponse {
     $response = new AjaxResponse();
     $response->addCommand(new HtmlCommand('#ajax_checkbox_value', $form_state->getValue('checkbox') ? 'checked' : 'unchecked'));
-    $response->addCommand(new DataCommand('#ajax_checkbox_value', 'form_state_value_select', (int) $form_state->getValue('checkbox'), native: TRUE));
+    $response->addCommand(new DataCommand('#ajax_checkbox_value', 'form_state_value_select', (int) $form_state->getValue('checkbox')));
     return $response;
   }
 
@@ -182,7 +182,7 @@ class Callbacks {
     $color = 'blue';
 
     $response = new AjaxResponse();
-    $response->addCommand(new CssCommand($selector, ['background-color' => $color], native: TRUE));
+    $response->addCommand(new CssCommand($selector, ['background-color' => $color]));
     return $response;
   }
 
@@ -192,17 +192,16 @@ class Callbacks {
   public static function advancedCommandsDataCallback($form, FormStateInterface $form_state): AjaxResponse {
     $selector = '#data_div';
     $response = new AjaxResponse();
-    $response->addCommand(new DataCommand($selector, 'test_key', 'test_value', native: TRUE));
+    $response->addCommand(new DataCommand($selector, 'test_key', 'test_value'));
     return $response;
   }
 
   /**
-   * Ajax form callback: Selects 'invoke'.
+   * Ajax form callback: Toggles a class.
    */
-  public static function advancedCommandsInvokeCallback($form, FormStateInterface $form_state): AjaxResponse {
+  public static function advancedCommandsToggleClassCallback($form, FormStateInterface $form_state): AjaxResponse {
     $response = new AjaxResponse();
-    $response->addAttachments(['library' => ['core/drupal.ajax.jquery']]);
-    $response->addCommand(new InvokeCommand('#invoke_div', 'addClass', ['error']));
+    $response->addCommand(new ToggleClassCommand('#toggle_class_div', 'error', TRUE));
     return $response;
   }
 

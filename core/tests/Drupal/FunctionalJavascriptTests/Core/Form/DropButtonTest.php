@@ -4,7 +4,6 @@ declare(strict_types=1);
 
 namespace Drupal\FunctionalJavascriptTests\Core\Form;
 
-use Drupal\FunctionalJavascriptTests\JqueryCallCounterTrait;
 use Drupal\FunctionalJavascriptTests\WebDriverTestBase;
 use PHPUnit\Framework\Attributes\Group;
 use PHPUnit\Framework\Attributes\RunTestsInSeparateProcesses;
@@ -16,8 +15,6 @@ use PHPUnit\Framework\Attributes\TestWith;
 #[Group('form')]
 #[RunTestsInSeparateProcesses]
 class DropButtonTest extends WebDriverTestBase {
-
-  use JqueryCallCounterTrait;
 
   /**
    * {@inheritdoc}
@@ -56,130 +53,6 @@ class DropButtonTest extends WebDriverTestBase {
     $this->pressEnter();
     $this->assertFalse($wrapper->hasClass('open'));
     $this->assertFalse($secondary->isVisible());
-  }
-
-  /**
-   * Tests the legacy collection and event passed to a contributed override.
-   */
-  public function testLegacyDropButton(): void {
-    $this->drupalGet('form-test/dropbutton', ['query' => ['legacy' => 1]]);
-    $result = $this->getSession()->evaluateScript(<<<'JS'
-      (() => {
-        const warn = Drupal.deprecationError;
-        Drupal.deprecationError = () => {};
-        const prototype = Drupal.DropButton.prototype;
-        const originalFocusOut = prototype.focusOut;
-        const originalHoverIn = prototype.hoverIn;
-        const originalHoverOut = prototype.hoverOut;
-        const calls = [];
-        prototype.focusOut = function (event) {
-          calls.push(['focusOut', event instanceof jQuery.Event, this.$actions.length, this.$dropbutton[0] === event.target]);
-          originalFocusOut.call(this, event);
-        };
-        prototype.hoverIn = function (event) {
-          calls.push(['hoverIn', event instanceof jQuery.Event, this.$list.length]);
-          originalHoverIn.call(this, event);
-        };
-        prototype.hoverOut = function (event) {
-          calls.push(['hoverOut', event instanceof jQuery.Event]);
-          originalHoverOut.call(this, event);
-          return false;
-        };
-        try {
-          const context = document.body.appendChild(document.createElement('div'));
-          context.innerHTML = '<div class="dropbutton-wrapper"><ul class="dropbutton"><li>First</li><li>Second</li></ul></div>';
-          Drupal.behaviors.dropButton.attach(context, drupalSettings);
-          const element = context.querySelector('.dropbutton-wrapper');
-          jQuery(element).trigger('focusout.dropbutton');
-          jQuery(element).trigger('mouseenter.dropbutton');
-          const leaveEvent = jQuery.Event('mouseleave.dropbutton');
-          jQuery(element).trigger(leaveEvent);
-          jQuery(element).off('.dropbutton');
-          jQuery(element).trigger('focusout.dropbutton');
-
-          // Legacy constructor accepts a jQuery collection.
-          const legacyWrapper = document.createElement('div');
-          legacyWrapper.className = 'dropbutton-wrapper';
-          legacyWrapper.innerHTML = '<ul class="dropbutton"><li>One</li><li>Two</li></ul>';
-          const legacyInstance = new Drupal.DropButton(jQuery(legacyWrapper), {});
-          return [
-            calls,
-            [leaveEvent.result, leaveEvent.isDefaultPrevented(), leaveEvent.isPropagationStopped()],
-            legacyInstance.wrapperElement === legacyWrapper && legacyInstance.$dropbutton[0] === legacyWrapper,
-          ];
-        } finally {
-          prototype.focusOut = originalFocusOut;
-          prototype.hoverIn = originalHoverIn;
-          prototype.hoverOut = originalHoverOut;
-          Drupal.deprecationError = warn;
-        }
-      })()
-      JS);
-    $this->assertSame([
-      [
-        ['focusOut', TRUE, 2, TRUE],
-        ['hoverOut', TRUE],
-        ['hoverIn', TRUE, 1],
-        ['hoverOut', TRUE],
-      ],
-      [FALSE, TRUE, TRUE],
-      TRUE,
-    ], $result);
-  }
-
-  /**
-   * Tests pre-bridge prototype overrides and native mouseenter/mouseleave delivery.
-   */
-  public function testPreBridgeOverridesAndNativeMouseEvents(): void {
-    $this->drupalGet('form-test/dropbutton');
-    $session = $this->getSession();
-    $this->assertSame('undefined', $session->evaluateScript('typeof window.jQuery'));
-    $scripts = json_encode(array_column(
-      \Drupal::service('library.discovery')->getLibraryByName('core', 'jquery')['js'],
-      'data',
-    ));
-    $session->executeScript($this->jqueryCallCounter());
-    $session->executeScript(<<<JS
-      (async () => {
-        const calls = [];
-        Drupal.DropButton.prototype.hoverIn = function (event) {
-          calls.push(['hoverIn', typeof window.jQuery === 'function' && event instanceof jQuery.Event]);
-        };
-        Drupal.DropButton.prototype.hoverOut = function (event) {
-          calls.push(['hoverOut', typeof window.jQuery === 'function' && event instanceof jQuery.Event]);
-        };
-        for (const path of $scripts) {
-          await new Promise((resolve, reject) => {
-            const script = document.createElement('script');
-            script.src = drupalSettings.path.baseUrl + path;
-            script.onload = resolve;
-            script.onerror = reject;
-            document.head.append(script);
-          });
-        }
-        // Native hover and toggle clicks make no jQuery calls beyond the event
-        // each legacy override receives.
-        jqueryCalls.start();
-        try {
-          const wrapper = document.querySelector('.dropbutton-wrapper');
-          wrapper.dispatchEvent(new MouseEvent('mouseenter'));
-          wrapper.dispatchEvent(new MouseEvent('mouseleave'));
-          wrapper.querySelector('.dropbutton-toggle button').click();
-          const open = wrapper.classList.contains('open');
-          window.dropButtonPreBridgeResult = [calls, open, jqueryCalls.stop()];
-        } finally {
-          jqueryCalls.stop();
-        }
-      })();
-      JS);
-    $this->assertJsCondition('Array.isArray(window.dropButtonPreBridgeResult)');
-    [$calls, $open, $counts] = $session->evaluateScript('window.dropButtonPreBridgeResult');
-    $this->assertSame([['hoverIn', TRUE], ['hoverOut', TRUE]], $calls);
-    $this->assertTrue($open);
-    // The two legacy overrides each receive one jQuery event.
-    $this->assertSame(2, $counts['Event'] ?? NULL);
-    $counts['Event'] = 0;
-    $this->assertNoJqueryCalls($counts);
   }
 
   /**

@@ -71,19 +71,7 @@
     releaseDisconnected,
 
     /**
-     * Checks for events marked as synthetic by an event adapter.
-     *
-     * @param {Event|object} event
-     *   The event passed to a table handler.
-     * @return {boolean}
-     *   Whether the event is synthetic.
-     */
-    isSyntheticEvent(event) {
-      return Object.hasOwn(event ?? {}, 'isTrigger');
-    },
-
-    /**
-     * Binds a native listener and registers its synthetic entry point.
+     * Binds a listener owned by a table or form.
      *
      * @param {HTMLElement} owner
      *   The table or form that owns the listener.
@@ -97,38 +85,10 @@
      *   Releases the listener before its table or target unloads.
      */
     listen(owner, target, type, listener) {
-      const binding = {
-        target,
-        type,
-        listener,
-        nativeActive: true,
-        tableInteraction: true,
-      };
-      const nativeListener = (event) => {
-        if (
-          binding.nativeActive &&
-          this.allowNativeEvent(event) &&
-          !binding.handlesNativeEvent?.(event)
-        ) {
-          return listener.call(target, event);
-        }
-      };
-      target.addEventListener(type, nativeListener);
-      const unregister = Drupal.eventBindings.register(binding);
+      target.addEventListener(type, listener);
       return this.own(owner, target, () => {
-        unregister();
-        target.removeEventListener(type, nativeListener);
+        target.removeEventListener(type, listener);
       });
-    },
-
-    /**
-     * Determines whether a native event is handled here.
-     *
-     * @return {boolean}
-     *   Whether to invoke the native handler.
-     */
-    allowNativeEvent() {
-      return true;
     },
 
     /**
@@ -212,111 +172,5 @@
       listeners.add(binding);
       return binding.stop;
     },
-
-    /**
-     * Calls an event override through the current compatibility boundary.
-     *
-     * @param {Function} callback
-     *   The original callback.
-     * @param {object} context
-     *   The instance receiving the event.
-     * @param {Array} args
-     *   The callback arguments.
-     * @return {*}
-     *   The callback result.
-     */
-    invokeEventCallback(callback, context, args) {
-      return callback.apply(context, args);
-    },
-
-    /**
-     * Keeps saved event callbacks callable after a late adapter installation.
-     *
-     * @param {object} prototype
-     *   The prototype declaring the native methods.
-     * @param {object} methods
-     *   Method names mapped to the event argument index.
-     * @return {Function}
-     *   Adopts methods defined by a subclass.
-     */
-    installEventOverrides(prototype, methods) {
-      const adoptMethods = Object.entries(methods).map(
-        ([method, eventIndex]) => {
-          const wrapped = new WeakMap();
-
-          function wrap(callback, builtin) {
-            if (
-              typeof callback !== 'function' ||
-              wrapped.get(callback) === callback
-            ) {
-              return callback;
-            }
-            if (!wrapped.has(callback)) {
-              const wrapper = function (...args) {
-                return Drupal.tableInteraction.invokeEventCallback(
-                  callback,
-                  this,
-                  args,
-                  eventIndex,
-                  method,
-                  builtin,
-                );
-              };
-              Object.defineProperty(wrapper, 'nativeTableEvent', {
-                get: () => callback.nativeTableEvent,
-                set: (value) => {
-                  callback.nativeTableEvent = value;
-                },
-              });
-              wrapped.set(callback, wrapper);
-              wrapped.set(wrapper, wrapper);
-            }
-            return wrapped.get(callback);
-          }
-
-          function install(target, callback, builtin = false) {
-            let current = wrap(callback, builtin);
-            Object.defineProperty(target, method, {
-              configurable: true,
-              enumerable:
-                Object.getOwnPropertyDescriptor(target, method)?.enumerable ??
-                true,
-              get() {
-                return current;
-              },
-              set(value) {
-                if (this === target) {
-                  current = wrap(value);
-                } else {
-                  install(this, value);
-                }
-              },
-            });
-          }
-
-          install(prototype, prototype[method], true);
-          return (instance) => {
-            for (
-              let target = Object.getPrototypeOf(instance);
-              target && target !== prototype;
-              target = Object.getPrototypeOf(target)
-            ) {
-              const descriptor = Object.getOwnPropertyDescriptor(
-                target,
-                method,
-              );
-              if (
-                descriptor?.configurable &&
-                typeof descriptor.value === 'function'
-              ) {
-                install(target, descriptor.value);
-              }
-            }
-          };
-        },
-      );
-      return (instance) => adoptMethods.forEach((adopt) => adopt(instance));
-    },
   };
-  document.dispatchEvent(new Event('drupal:table-interaction-ready'));
 })(Drupal);

@@ -16,9 +16,6 @@
    * likely break layouts, but it provides the user with a means to access
    * data, which is a guiding principle of responsive design.
    *
-   * With core/jquery loaded, assigned overrides receive legacy events.
-   * Set nativeTableEvent to true on an override or its method getter result
-   * to keep native events on mixed pages.
    *
    * @constructor Drupal.TableResponsive
    *
@@ -26,7 +23,6 @@
    *   The table element to initialize the responsive table on.
    */
   function TableResponsive(table) {
-    adoptEventOverrides(this);
     this.table = table;
     this.showText = Drupal.t('Show all columns');
     this.hideText = Drupal.t('Hide lower priority columns');
@@ -62,30 +58,11 @@
     // Capture the current handler, as a later assignment should only affect
     // newly created tables.
     const evaluate = this.eventhandlerEvaluateColumnVisibility.bind(this);
-    const stop = () => {
-      TableResponsive.resizeHandlers.delete(this);
-      unregister();
-      window.removeEventListener('resize', nativeListener);
-    };
-    const binding = {
-      target: window,
-      type: 'resize',
-      namespace: 'tableresponsive',
-      link: this.link,
-      listener: evaluate,
-      nativeActive: true,
-      stop,
-    };
-    const nativeListener = (event) => {
-      if (binding.nativeActive) {
-        evaluate(event);
-      }
-    };
-    window.addEventListener('resize', nativeListener);
+    window.addEventListener('resize', evaluate);
     TableResponsive.resizeHandlers.set(this, evaluate);
-    const unregister = Drupal.eventBindings.register(binding);
     Drupal.tableInteraction.own(table, window, () => {
-      stop();
+      TableResponsive.resizeHandlers.delete(this);
+      window.removeEventListener('resize', evaluate);
       const index = TableResponsive.tables.indexOf(this);
       if (index !== -1) {
         TableResponsive.tables.splice(index, 1);
@@ -140,27 +117,10 @@
 
   /**
    * Refreshes the visibility of all responsive toggles.
-   *
-   * @param {Event} event
-   *   The resize event.
-   * @param {Function} isStopped
-   *   Checks whether the refresh should stop before invoking another handler.
    */
-  function refreshToggles(
-    event = new Event('resize'),
-    isStopped = () => false,
-  ) {
-    if (!event.target) {
-      Object.defineProperties(event, {
-        target: { value: window },
-        currentTarget: { value: window },
-      });
-    }
-    for (const evaluate of [...TableResponsive.resizeHandlers.values()]) {
-      evaluate(event);
-      if (isStopped()) {
-        break;
-      }
+  function refreshToggles() {
+    for (const evaluate of TableResponsive.resizeHandlers.values()) {
+      evaluate();
     }
   }
 
@@ -271,14 +231,5 @@
   }
 
   // Make the TableResponsive object available in the Drupal namespace.
-  const adoptEventOverrides = Drupal.tableInteraction.installEventOverrides(
-    TableResponsive.prototype,
-    {
-      eventhandlerEvaluateColumnVisibility: 0,
-      eventhandlerToggleColumns: 0,
-    },
-  );
-  Drupal.tableInteraction.responsiveConstructor = TableResponsive;
   Drupal.TableResponsive = TableResponsive;
-  document.dispatchEvent(new Event('drupal:tableresponsive-ready'));
 })(Drupal, once, window);

@@ -25,11 +25,8 @@
       }
 
       const add = (target, type, methodName) => {
-        const stop = Drupal.formEvents.listen(
-          target,
-          type,
-          undefined,
-          (event) => this[methodName].call(target, event),
+        const stop = Drupal.formEvents.listen(target, type, (event) =>
+          this[methodName].call(target, event),
         );
         listeners.set(target, stop);
       };
@@ -72,6 +69,4 @@
       }
     },
   };
-
-  document.dispatchEvent(new Event('drupal:copy-field-value-ready'));
 })(Drupal, drupalSettings);

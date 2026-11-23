@@ -6,19 +6,14 @@
 ((Drupal, { tabbable }, once) => {
   const { tableInteraction } = Drupal;
   const isSyntheticChange = (event) =>
-    tableInteraction.isSyntheticEvent(event) ||
     tableInteraction.tableSelect?.isSelectionChange(event);
 
   /**
    * Adds sticky bulk actions.
    *
-   * With core/jquery loaded, assigned overrides receive legacy events.
-   * Set nativeTableEvent to true on an override or its method getter result
-   * to keep native events on mixed pages.
    */
   Drupal.DefaultAdminBulkActions = class {
     constructor(bulkActions) {
-      adoptEventOverrides(this);
       this.bulkActions = bulkActions;
       this.form = this.bulkActions.closest('form');
       this.form.querySelectorAll('tr').forEach((element) => {
@@ -396,16 +391,4 @@
       );
     },
   };
-  const adoptEventOverrides = Drupal.tableInteraction.installEventOverrides(
-    Drupal.DefaultAdminBulkActions.prototype,
-    {
-      blurHandler: 0,
-      focusHandler: 0,
-      rowCheckboxHandler: 0,
-      selectAllHandler: 0,
-    },
-  );
-  Drupal.tableInteraction.bulkActionsConstructor =
-    Drupal.DefaultAdminBulkActions;
-  document.dispatchEvent(new Event('drupal:bulk-actions-ready'));
 })(Drupal, window.tabbable, once);

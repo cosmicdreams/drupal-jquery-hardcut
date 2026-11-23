@@ -4,8 +4,3 @@ tabledrag:
     js/tabledrag_test.js: {}
   dependencies:
     - core/drupal.tabledrag
-
-legacy:
-  version: VERSION
-  dependencies:
-    - core/jquery

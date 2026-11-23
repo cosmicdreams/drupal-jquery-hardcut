@@ -75,37 +75,18 @@
       ).indexOf(item);
     });
 
-    const binding = {
-      target: tab,
-      type: 'click',
-      namespace: 'tabs',
-      selector: '[data-drupal-nav-tabs-trigger]',
-      navTabs: true,
-      reservesLegacySlot: true,
-      listener() {
+    tab.addEventListener('click', (event) => {
+      if (event.button >= 1) {
+        return;
+      }
+      const trigger = event.target.closest?.('[data-drupal-nav-tabs-trigger]');
+      if (trigger && trigger !== tab && tab.contains(trigger)) {
         const expanded = target.classList.toggle('is-open');
         target.querySelectorAll('button').forEach((button) => {
           button.setAttribute('aria-expanded', String(expanded));
         });
-      },
-      stop() {
-        tab.removeEventListener('click', onClick);
-        unregister();
-      },
-    };
-
-    function onClick(event) {
-      if (binding.handlesNativeEvent?.(event) || event.button >= 1) {
-        return;
       }
-      const trigger = event.target.closest?.(binding.selector);
-      if (trigger && trigger !== tab && tab.contains(trigger)) {
-        binding.listener();
-      }
-    }
-
-    tab.addEventListener('click', onClick);
-    const unregister = Drupal.eventBindings.register(binding);
+    });
     const mql = window.matchMedia('(min-width: 48em)');
     mql.addEventListener('change', toggleCollapsed);
     toggleCollapsed(mql);

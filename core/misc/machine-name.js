@@ -164,7 +164,7 @@
           suffix.append(link);
 
           const stopUpdates = [];
-          Drupal.form.listen(link, 'click', undefined, () => {
+          Drupal.form.listen(link, 'click', () => {
             wrapper.classList.remove('hidden');
             if (target.dataset.machineNameRequireWhenVisible) {
               target.required = true;
@@ -174,14 +174,14 @@
             suffix.style.display = 'none';
             stopUpdates.forEach((stop) => stop());
           });
-          Drupal.form.listen(link, 'keyup', undefined, (event) => {
+          Drupal.form.listen(link, 'keyup', (event) => {
             if (event.key === 'Enter') {
               event.preventDefault();
               event.stopImmediatePropagation();
               event.target.click();
             }
           });
-          Drupal.form.listen(link, 'keydown', undefined, (event) => {
+          Drupal.form.listen(link, 'keydown', (event) => {
             if (event.key === 'Enter') {
               event.preventDefault();
             }
@@ -190,9 +190,7 @@
           // An existing machine name is preserved until the input is edited.
           if (target.value === '') {
             ['change', 'input'].forEach((type) => {
-              stopUpdates.push(
-                Drupal.form.listen(source, type, 'machineName', update),
-              );
+              stopUpdates.push(Drupal.form.listen(source, type, update));
             });
             update({ target: source });
           }
@@ -267,5 +265,4 @@
       return prepareMachineName(transliteratedSource, settings);
     },
   };
-  document.dispatchEvent(new Event('drupal:machine-name-ready'));
 })(Drupal, drupalSettings, transliteration.transliterate);

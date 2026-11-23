@@ -24,254 +24,23 @@
 
   Drupal.states = states;
 
-  const nonTextInputTypes = [
-    'button',
-    'checkbox',
-    'color',
-    'date',
-    'datetime-local',
-    'email',
-    'file',
-    'hidden',
-    'image',
-    'month',
-    'number',
-    'password',
-    'radio',
-    'range',
-    'reset',
-    'search',
-    'submit',
-    'tel',
-    'time',
-    'url',
-    'week',
-  ];
-  const formPseudos = {
-    input: 'input, select, textarea, button',
-    radio: 'input[type="radio" i]',
-    checkbox: 'input[type="checkbox" i]',
-    text: `input:not(${nonTextInputTypes.map((type) => `[type="${type}" i]`).join(', ')})`,
-    password: 'input[type="password" i]',
-    file: 'input[type="file" i]',
-    submit:
-      'input[type="submit" i], button[type="submit" i], button:not([type="button" i], [type="reset" i], [command], [commandfor])',
-    button: 'button, input[type="button" i]',
-    image: 'input[type="image" i]',
-    reset: 'input[type="reset" i], button[type="reset" i]',
-  };
-  const nativePseudos = new Set([
-    'active',
-    'any-link',
-    'autofill',
-    'blank',
-    'checked',
-    'default',
-    'defined',
-    'dir',
-    'disabled',
-    'empty',
-    'enabled',
-    'first-child',
-    'first-of-type',
-    'focus',
-    'focus-visible',
-    'focus-within',
-    'fullscreen',
-    'hover',
-    'in-range',
-    'indeterminate',
-    'invalid',
-    'is',
-    'lang',
-    'last-child',
-    'last-of-type',
-    'link',
-    'local-link',
-    'modal',
-    'not',
-    'nth-child',
-    'nth-last-child',
-    'nth-last-of-type',
-    'nth-of-type',
-    'only-child',
-    'only-of-type',
-    'open',
-    'optional',
-    'out-of-range',
-    'placeholder-shown',
-    'popover-open',
-    'read-only',
-    'read-write',
-    'required',
-    'root',
-    'scope',
-    'target',
-    'target-within',
-    'user-invalid',
-    'user-valid',
-    'valid',
-    'visited',
-    'where',
-  ]);
-  const deprecatedSelectors = new Set();
-
   /**
-   * Emits a selector deprecation once per selector string.
+   * Resolves a CSS selector against the document.
    * @param {string} selector
-   *   The original selector string.
-   */
-  function deprecateSelector(selector) {
-    if (!deprecatedSelectors.has(selector)) {
-      deprecatedSelectors.add(selector);
-      Drupal.deprecationError({
-        message: `The jQuery selector "${selector}" in States is deprecated in drupal:12.0.0 and is removed from drupal:13.0.0. Use a CSS selector and the native States callback arguments. See https://www.drupal.org/node/CHANGE_RECORD.`,
-      });
-    }
-  }
-
-  /**
-   * Normalizes the audited form pseudos in a States selector.
-   *
-   * Skip escapes, quoted strings and attributes as tokens. Inspect every
-   * selector in functional pseudos, including forgiving selector lists.
-   * @param {string} selector
-   *   A selector from the final States markup.
-   * @return {{selector: string, translated: boolean}|null}
-   *   A native selector result, or null for selectors that need the legacy
-   *   engine.
-   */
-  function nativeSelector(selector) {
-    const tokens =
-      /\\(?:[\da-f]{1,6}[\t\n\r\f ]?|[^\n\r\f])|\[(?:\\.|"(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*'|[^\]"'\\])*\]|"(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*'|:[\w-]*|\/\*/gis;
-    let eligible = true;
-    let translated = false;
-    const normalized = selector.replace(tokens, (token, offset) => {
-      if (token === '/*') {
-        eligible = false;
-        return token;
-      }
-      if (token[0] !== ':') {
-        return token;
-      }
-      const name = token.slice(1).toLowerCase();
-      const next = selector[offset + token.length];
-      if (!name || next === '\\' || (next && next.charCodeAt(0) > 127)) {
-        eligible = false;
-        return token;
-      }
-      if (Object.hasOwn(formPseudos, name)) {
-        translated = true;
-        // Wrap the substitution so it can follow any simple selector.
-        return `:is(${formPseudos[name]})`;
-      }
-      eligible = eligible && nativePseudos.has(name);
-      return token;
-    });
-    return eligible ? { selector: normalized, translated } : null;
-  }
-
-  /**
-   * Resolves an audited selector against the document.
-   * @param {string} selector
-   *   The original selector from the States markup.
-   * @return {Element[]|null}
-   *   The matches, or null when a legacy selector has no attached adapter.
+   *   The selector from the States markup.
+   * @return {Element[]}
+   *   The matching elements.
    */
   function select(selector) {
-    const normalized = nativeSelector(selector);
-    if (normalized !== null) {
-      try {
-        const simpleId = /^#([\w-]+)$/.exec(normalized.selector);
-        const matches = simpleId
-          ? [document.getElementById(simpleId[1])].filter(Boolean)
-          : Array.from(document.querySelectorAll(normalized.selector));
-        if (normalized.translated) {
-          deprecateSelector(selector);
-        }
-        return matches;
-      } catch (error) {
-        if (error.name !== 'SyntaxError') {
-          throw error;
-        }
-      }
-    }
-    return states.compatibility.select?.(selector) ?? null;
+    const id = /^#([\w-]+)$/.exec(selector);
+    return id
+      ? [document.getElementById(id[1])].filter(Boolean)
+      : Array.from(document.querySelectorAll(selector));
   }
 
-  /**
-   * Adapter hooks owned by the deprecated States bridge.
-   * @internal
-   */
-  states.compatibility = {};
-
-  /**
-   * Binds native States events and exposes the slot to the event bridge.
-   * @param {EventTarget} target
-   *   The event target.
-   * @param {string} type
-   *   One or more whitespace-separated event names, optionally with namespaces.
-   * @param {function(Event): void} listener
-   *   The native listener.
-   * @param {object} [data]
-   *   Binding data used by the legacy adapter.
-   * @return {function(): void}
-   *   Removes the binding.
-   */
-  function listen(target, type, listener, data) {
-    const names = String(type).trim().split(/\s+/).filter(Boolean);
-    const removers = [];
-    for (const entry of names) {
-      const [baseType, ...namespaces] = entry.split('.');
-      if (baseType) {
-        const namespace = namespaces.filter(Boolean).sort().join('.');
-        const binding = {
-          target,
-          type: baseType,
-          ...(namespace ? { namespace } : {}),
-          listener,
-          data,
-          states: true,
-        };
-        const nativeListener = (event) => {
-          const syntheticDefault =
-            Drupal.ajax?.compatibility?.isSyntheticDefaultAction?.(event) ??
-            Drupal.eventBindings.isForeignDefaultAction?.(event);
-          if (!syntheticDefault && !binding.handlesNativeEvent?.(event)) {
-            return listener(event);
-          }
-        };
-        target.addEventListener(baseType, nativeListener);
-        const unregister = Drupal.eventBindings.register(binding);
-        removers.push(() => {
-          unregister();
-          target.removeEventListener(baseType, nativeListener);
-        });
-      }
-    }
-    return () => {
-      removers.forEach((remove) => remove());
-    };
-  }
-
-  const stateEvents = new WeakSet();
-  states.compatibility.isStateEvent = (event) => stateEvents.has(event);
-
-  // The original target of each event States publishes.
-  const publicationTargets = new WeakMap();
-  states.compatibility.publicationTarget = (event) =>
-    publicationTargets.get(event);
-
-  /**
-   * Publishes one owned event and records its original target.
-   * @param {EventTarget} target
-   *   The dispatch target.
-   * @param {Event} event
-   *   The event to publish.
-   */
-  function publish(target, event) {
-    publicationTargets.set(event, target);
-    Drupal.eventBindings.publish(target, event);
+  function listen(target, type, listener) {
+    target.addEventListener(type, listener);
+    return () => target.removeEventListener(type, listener);
   }
 
   /**
@@ -290,8 +59,7 @@
         cancelable: true,
         detail: { ...detail },
       });
-      stateEvents.add(event);
-      publish(element, event);
+      element.dispatchEvent(event);
     }
   }
 
@@ -349,7 +117,6 @@
   }
 
   const attached = new WeakMap();
-  const pending = new Set();
   const elementCleanups = new WeakMap();
   const trackedTargets = new Set();
 
@@ -498,15 +265,6 @@
         attached.set(element, dependents);
         dependents.forEach((dependent) => dependent.connect());
       });
-      // Retry only previously unresolved legacy-selector dependents that are
-      // still connected to the document.
-      Array.from(pending).forEach((dependent) => {
-        if (!dependent.elements?.some((element) => element.isConnected)) {
-          pending.delete(dependent);
-          return;
-        }
-        dependent.connect();
-      });
       while (states.postponed.length) {
         states.postponed.shift()();
       }
@@ -525,7 +283,6 @@
       }
       elements.forEach((element) => {
         attached.get(element)?.forEach((dependent) => {
-          pending.delete(dependent);
           dependent.disconnect();
         });
         attached.delete(element);
@@ -596,27 +353,15 @@
 
   states.Dependent.prototype = {
     /**
-     * Connects resolved dependees and retries unresolved legacy selectors.
+     * Connects dependees to their state change listeners.
      */
     connect() {
       if (this.connected) {
         return;
       }
-      const matches = new Map();
-      for (const selector of Object.keys(this.dependees)) {
-        const elements = select(selector);
-        if (elements === null) {
-          if (this.elements?.some((element) => element.isConnected)) {
-            pending.add(this);
-          }
-          return;
-        }
-        matches.set(selector, elements);
-      }
-      pending.delete(this);
       this.connected = true;
-      matches.forEach((elements, selector) => {
-        this.initializeDependee(selector, this.dependees[selector], elements);
+      Object.entries(this.dependees).forEach(([selector, states]) => {
+        this.initializeDependee(selector, states, select(selector));
       });
     },
 
@@ -624,7 +369,6 @@
      * Releases the listeners and shared trigger subscriptions.
      */
     disconnect() {
-      pending.delete(this);
       const disposers = Array.from(this.disposers);
       this.disposers.clear();
       disposers.forEach((dispose) => dispose());
@@ -641,7 +385,7 @@
      *   The resolved dependee elements.
      */
     initializeDependee(selector, dependeeStates, elements) {
-      const resolved = elements ?? select(selector) ?? [];
+      const resolved = elements ?? select(selector);
       this.values[selector] = {};
       for (const stateName of new Set(dependeeStates)) {
         const state = states.State.sanitize(stateName);
@@ -649,11 +393,8 @@
 
         for (const element of resolved) {
           let untrack;
-          const removeListener = listen(
-            element,
-            `state:${state}`,
-            (event) => this.update(selector, state, event.detail?.value),
-            { selector, state },
+          const removeListener = listen(element, `state:${state}`, (event) =>
+            this.update(selector, state, event.detail?.value),
           );
           const dispose = () => {
             this.disposers.delete(dispose);
@@ -986,8 +727,7 @@
    *
    * An initializer receives the array of matching DOM elements. A map of
    * value callbacks uses that array as its receiver, with a native event
-   * when reevaluating after a change. The native registration takes precedence
-   * over assignments to the deprecated collection callback surface.
+   * when reevaluating after a change.
    * @param {string} name
    *   The normalized state name.
    * @param {function(Element[]): (function()|undefined)|object} trigger
@@ -1009,7 +749,7 @@
       registeredTriggers.has(name) ||
       Object.hasOwn(states.Trigger.states, name)
     ) {
-      this.elements = this.elements ?? select(this.selector) ?? [];
+      this.elements = this.elements ?? select(this.selector);
       this.disposers = new Set();
       this.active = true;
       const existing =
@@ -1029,10 +769,7 @@
     initialize() {
       const name = this.state?.name ?? String(this.state);
       const trigger =
-        registeredTriggers.get(name) ??
-        (states.compatibility.trigger ?? ((key) => states.Trigger.states[key]))(
-          name,
-        );
+        registeredTriggers.get(name) ?? states.Trigger.states[name];
 
       if (typeof trigger === 'function') {
         const dispose = trigger.call(window, this.elements);
@@ -1252,12 +989,6 @@
     },
   };
 
-  // The bridge uses these identities to distinguish defaults from legacy
-  // assignments, including assignments made before the bridge attaches.
-  states.compatibility.defaults = Object.values(states.Trigger.states).flatMap(
-    (trigger) => Object.values(trigger),
-  );
-
   /**
    * A state object is used for describing the state and performing aliasing.
    * @class Drupal.states.State
@@ -1385,12 +1116,6 @@
     }
   }
 
-  // Events that stand in for a pinned jQuery .trigger() call. The bridge
-  // delivers them to jQuery handlers as one synthetic event.
-  const syntheticTriggers = new WeakSet();
-  states.compatibility.isSyntheticTrigger = (event) =>
-    syntheticTriggers.has(event);
-
   const handlers = {
     disabled(target, value) {
       const container = target.closest(wrapper);
@@ -1467,28 +1192,14 @@
       }
       inputs?.forEach((input) => {
         const event = new Event('change', { bubbles: true, cancelable: true });
-        syntheticTriggers.add(event);
-        publish(input, event);
+        input.dispatchEvent(event);
       });
     },
 
     collapsed(target, value) {
       const summary = target.querySelector(':scope > summary');
       if (summary && target.hasAttribute('open') === value) {
-        // The bridge runs the pinned jQuery click, whose handlers can cancel
-        // the native click before any native listener receives it.
-        if (states.compatibility.click?.(summary)) {
-          return;
-        }
-        // A dispatched click toggles the details element like click() does.
-        // Publishing it lets the bridge give jQuery a synthetic click.
-        const event = new MouseEvent('click', {
-          bubbles: true,
-          cancelable: true,
-          view: window,
-        });
-        syntheticTriggers.add(event);
-        publish(summary, event);
+        summary.click();
       }
     },
   };
@@ -1500,5 +1211,4 @@
       }
     });
   });
-  document.dispatchEvent(new Event('drupal:states-ready'));
 })(Drupal, once);

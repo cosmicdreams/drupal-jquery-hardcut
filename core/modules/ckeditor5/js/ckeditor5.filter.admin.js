@@ -71,7 +71,4 @@
 
     return originalAjaxEventResponse.apply(this, args);
   };
-  if (Drupal.ajax.isNativeCallback(originalAjaxEventResponse)) {
-    Drupal.ajax.useNativeCallback(Drupal.Ajax.prototype.eventResponse);
-  }
 })(Drupal, once);

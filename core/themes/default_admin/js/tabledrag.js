@@ -288,5 +288,4 @@
       },
     },
   );
-  document.dispatchEvent(new Event('drupal:admin-tabledrag-ready'));
 })(Drupal, once);

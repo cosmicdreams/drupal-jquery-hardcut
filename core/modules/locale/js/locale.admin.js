@@ -13,11 +13,9 @@
     attach() {
       once('localetranslatedirty', '#locale-translate-edit-form').forEach(
         (form) => {
-          const namespace = 'localeTranslateDirty';
           const stopWarning = Drupal.form.listen(
             form,
             'formUpdated',
-            namespace,
             (event, table) => {
               stopWarning();
               const template = document.createElement('template');
@@ -52,7 +50,6 @@
           const stopRows = Drupal.form.listen(
             form,
             'formUpdated',
-            namespace,
             (event, row) => {
               row.classList.add('changed');
               if (once('localemark', row).length) {
@@ -109,7 +106,7 @@
           };
           form.querySelectorAll('tbody').forEach((body) => {
             ['click', 'keydown'].forEach((type) => {
-              Drupal.form.listen(body, type, undefined, toggle, '.description');
+              Drupal.form.listen(body, type, toggle, '.description');
             });
           });
           form.querySelectorAll('.requirements, .links').forEach((element) => {

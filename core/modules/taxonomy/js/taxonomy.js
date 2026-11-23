@@ -40,7 +40,6 @@
           );
         }
       };
-      markPreviewRows.nativeTableEvent = true;
       tableDrag.row.prototype.onSwap = markPreviewRows;
     },
   };

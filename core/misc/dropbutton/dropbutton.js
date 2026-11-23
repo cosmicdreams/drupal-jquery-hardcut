@@ -46,14 +46,8 @@
         focusout: 'focusOutNative',
         focusin: 'focusInNative',
       };
-      // Known ordering gap: jQuery runs a contrib mouseenter or mouseleave
-      // handler on mouseover or mouseout, which fire before the native events
-      // here. That handler now runs before core's hover handler, whatever
-      // the binding order, and its stopImmediatePropagation() cannot stop
-      // core. The pinned binding ran in that same jQuery dispatch, in binding
-      // order.
       Object.entries(handlers).forEach(([type, method]) => {
-        listen(dropbutton, type, 'dropbutton', (event) => this[method](event));
+        listen(dropbutton, type, (event) => this[method](event));
       });
     } else {
       dropbutton.classList.add('dropbutton-single');
@@ -75,13 +69,7 @@
         return;
       }
       once('dropbutton-click', 'body').forEach((body) => {
-        listen(
-          body,
-          'click',
-          undefined,
-          toggleSecondaryActions,
-          '.dropbutton-toggle',
-        );
+        listen(body, 'click', toggleSecondaryActions, '.dropbutton-toggle');
       });
       dropbuttons.forEach((dropbutton) => {
         Drupal.DropButton.dropbuttons.push(
@@ -157,5 +145,4 @@
     `<li class="dropbutton-toggle"><button type="button"><span class="dropbutton-arrow"><span class="visually-hidden">${options.title}</span></span></button></li>`;
 
   Drupal.DropButton = DropButton;
-  document.dispatchEvent(new Event('drupal:dropbutton-ready'));
 })(Drupal);

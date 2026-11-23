@@ -214,7 +214,6 @@ internal.admin.style:
     theme:
       css/style.admin.css: { }
   dependencies:
-    - core/jquery
     - core/drupal
     - core/drupal.vertical-tabs
 
@@ -235,8 +234,8 @@ internal.admin.image:
   js:
     js/ckeditor5.image.admin.js: { }
   dependencies:
-    - core/jquery
     - core/drupal
+    - core/drupal.form
 
 internal.admin.fullscreen:
   css:

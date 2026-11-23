@@ -235,15 +235,6 @@ drupal.ajax:
     - core/drupal.message
     - core/drupal.xhr
 
-drupal.ajax.jquery:
-  version: VERSION
-  deprecated: "%library_id% is deprecated in drupal:12.0.0 and is removed from drupal:13.0.0. Use a native command or define an explicit command in your extension. See https://www.drupal.org/node/CHANGE_RECORD."
-  js:
-    misc/jquery.drupal-ajax-commands.js: {}
-  dependencies:
-    - core/jquery
-    - core/drupal.ajax
-
 drupal.announce:
   version: VERSION
   js:
@@ -533,15 +524,6 @@ drupal.states:
     - core/drupal
     - core/once
 
-drupal.states.jquery:
-  version: VERSION
-  deprecated: "%library_id% is deprecated in drupal:12.0.0 and is removed from drupal:13.0.0. Use a CSS selector and the native States callback arguments. See https://www.drupal.org/node/CHANGE_RECORD."
-  js:
-    misc/states.jquery.js: {}
-  dependencies:
-    - core/drupal.states
-    - core/jquery
-
 drupal.tabbingmanager:
   version: VERSION
   js:
@@ -710,16 +692,10 @@ jquery:
     # browser instead of potentially multiple times from different pages.
     assets/vendor/jquery/jquery.min.js: { preprocess: false, minified: true, preserve_override_order: true }
     misc/jquery.no-conflict.js: { preprocess: false, minified: false }
-    misc/jquery.drupal-bc.js: { preprocess: false, minified: false }
-    misc/jquery.drupal-ajax-bc.js: { preprocess: false, minified: false }
-    misc/jquery.tabledrag.bc.js: { preprocess: false, minified: false }
-    misc/jquery.drupal-form-bc.js: { preprocess: false, minified: false }
-    misc/jquery.states.bc.js: { preprocess: false, minified: false }
 
 internal.jquery.form:
   # Drupal maintains this modified copy of jQuery Form.
   version: "4.3.0"
-  deprecated: "%library_id% is deprecated in drupal:12.0.0 and is removed from drupal:13.0.0. Use Drupal AJAX with native form options, or supply your own form plugin. See https://www.drupal.org/node/CHANGE_RECORD."
   license:
     name: GPL-2.0-or-later
     url: https://raw.githubusercontent.com/jquery-form/form/master/LICENSE

@@ -3,7 +3,7 @@
  * CKEditor 5 Image admin behavior.
  */
 
-(function ($, Drupal) {
+(function (Drupal) {
   /**
    * Provides the summary for the "image" plugin settings vertical tab.
    *
@@ -14,8 +14,11 @@
    */
   Drupal.behaviors.ckeditor5ImageSettingsSummary = {
     attach() {
-      $('[data-ckeditor5-plugin-id="ckeditor5_image"]').drupalSetSummary(
-        (context) => {
+      Drupal.form.setSummary(
+        document.querySelectorAll(
+          '[data-ckeditor5-plugin-id="ckeditor5_image"]',
+        ),
+        () => {
           const uploadsEnabled = document.querySelector(
             '[data-drupal-selector="edit-editor-settings-plugins-ckeditor5-image-status"]',
           ).checked;
@@ -27,4 +30,4 @@
       );
     },
   };
-})(jQuery, Drupal);
+})(Drupal);

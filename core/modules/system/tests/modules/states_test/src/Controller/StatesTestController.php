@@ -5,13 +5,12 @@ declare(strict_types=1);
 namespace Drupal\states_test\Controller;
 
 use Drupal\Core\Ajax\AjaxResponse;
-use Drupal\Core\Ajax\AppendCommand;
 use Drupal\Core\Ajax\RemoveCommand;
 use Drupal\Core\Ajax\ReplaceCommand;
 use Drupal\Core\Url;
 
 /**
- * Provides States markup with separately attached legacy selectors.
+ * Provides States markup for browser tests.
  *
  * @internal
  */
@@ -58,12 +57,6 @@ final class StatesTestController {
         ],
         'text' => ['#plain_text' => 'Native dependent'],
       ],
-      'load' => [
-        '#type' => 'link',
-        '#title' => 'Load legacy States',
-        '#url' => Url::fromRoute('states_test.legacy'),
-        '#attributes' => ['class' => ['use-ajax']],
-      ],
       'remove_dependent' => [
         '#type' => 'link',
         '#title' => 'Remove native dependent',
@@ -77,18 +70,6 @@ final class StatesTestController {
         '#attributes' => ['class' => ['use-ajax']],
       ],
     ];
-  }
-
-  /**
-   * Builds the States fixture with the jQuery bridges and table select.
-   *
-   * Table select makes the table bridge install its change special hook.
-   */
-  public function coreHooks(): array {
-    $build = $this->form();
-    $build['#attached']['library'][] = 'core/jquery';
-    $build['#attached']['library'][] = 'core/drupal.tableselect';
-    return $build;
   }
 
   /**
@@ -116,36 +97,6 @@ final class StatesTestController {
     ];
     $response = new AjaxResponse();
     $response->addCommand(new ReplaceCommand('input[name="choice[1]"]', $replacement));
-    return $response;
-  }
-
-  /**
-   * Adds legacy conditions to the existing form.
-   */
-  public function legacy(): AjaxResponse {
-    $fragment = [
-      '#type' => 'container',
-      '#attributes' => ['id' => 'states-test-legacy'],
-      '#attached' => ['library' => ['states_test/legacy_pseudo']],
-      'positional' => [
-        '#type' => 'container',
-        '#attributes' => ['id' => 'states-test-positional', 'class' => ['js-form-wrapper']],
-        '#states' => [
-          'visible' => ['.states-test-choice:eq(1)' => ['checked' => TRUE]],
-        ],
-        'text' => ['#plain_text' => 'Positional dependent'],
-      ],
-      'custom' => [
-        '#type' => 'container',
-        '#attributes' => ['id' => 'states-test-custom', 'class' => ['js-form-wrapper']],
-        '#states' => [
-          'visible' => ['.states-test-choice:statesTest' => ['checked' => TRUE]],
-        ],
-        'text' => ['#plain_text' => 'Custom dependent'],
-      ],
-    ];
-    $response = new AjaxResponse();
-    $response->addCommand(new AppendCommand('#states-test-content', $fragment));
     return $response;
   }
 

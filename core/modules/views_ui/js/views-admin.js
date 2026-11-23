@@ -803,7 +803,9 @@
        *   The event triggered.
        */
       clickAddGroupButton(event) {
-        this.addGroupButton.trigger('mousedown');
+        this.addGroupButton[0]?.dispatchEvent(
+          new MouseEvent('mousedown', { bubbles: true, cancelable: true }),
+        );
         event.preventDefault();
       },
 
@@ -815,7 +817,11 @@
        *   form button that should be clicked.
        */
       clickRemoveGroupButton(event) {
-        this.table.find(`#${event.data.buttonId}`).trigger('mousedown');
+        this.table
+          .find(`#${event.data.buttonId}`)[0]
+          ?.dispatchEvent(
+            new MouseEvent('mousedown', { bubbles: true, cancelable: true }),
+          );
         event.preventDefault();
       },
 
@@ -1197,7 +1203,9 @@
         .find('input[name="options[group_info][multiple]"]')
         .on('change', changeDefaultWidget)
         // Update the first time the form is rendered.
-        .trigger('change');
+        .each((index, input) =>
+          input.dispatchEvent(new Event('change', { bubbles: true })),
+        );
     },
   };
 
@@ -1275,7 +1283,9 @@
               dialog?.dispatchEvent(new CustomEvent('dialogButtonsChange'));
             }
           })
-          .trigger('change');
+          .each((index, input) =>
+            input.dispatchEvent(new Event('change', { bubbles: true })),
+          );
       });
     },
   };

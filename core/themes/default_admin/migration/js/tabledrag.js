@@ -105,9 +105,6 @@
    * See blocks.js for an example of adding additional functionality to
    * tableDrag.
    *
-   * With core/jquery loaded, assigned overrides receive legacy events.
-   * To keep native events on mixed pages, set nativeTableEvent to true on
-   * the override or on the saved wrapper returned by the method getter.
    *
    * @type {Drupal~behavior}
    */
@@ -137,7 +134,6 @@
    */
   Drupal.tableDrag = function (table, tableSettings) {
     const self = this;
-    adoptEventOverrides(this);
     /**
      *
      * @type {HTMLElement}
@@ -520,8 +516,7 @@
 
     // Publish an event to allow other scripts to react to this display change.
     once.filter('tabledrag', 'table').forEach((table) => {
-      Drupal.eventBindings.publish(
-        table,
+      table.dispatchEvent(
         new CustomEvent('columnschange', {
           bubbles: true,
           cancelable: true,
@@ -1962,15 +1957,4 @@
   };
   const tableDrag = Drupal.tableDrag;
   tableInteraction.tableDragConstructor = tableDrag;
-  const adoptEventOverrides = tableInteraction.installEventOverrides(
-    Drupal.tableDrag.prototype,
-    {
-      dragStart: 0,
-      dragRow: 0,
-      dropRow: 0,
-      pointerCoords: 0,
-      getPointerOffset: 1,
-    },
-  );
-  document.dispatchEvent(new Event('drupal:tabledrag-ready'));
 })(Drupal, drupalSettings, once);

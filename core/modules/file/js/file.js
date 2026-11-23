@@ -198,7 +198,11 @@
       $(event.target)
         .closest('.js-form-managed-file')
         .find('.js-form-submit[data-drupal-selector$="upload-button"]')
-        .trigger('mousedown');
+        .each((index, button) => {
+          button.dispatchEvent(
+            new MouseEvent('mousedown', { bubbles: true, cancelable: true }),
+          );
+        });
     },
 
     /**
@@ -211,7 +215,7 @@
      */
     disableFields(event) {
       const $clickedButton = $(this);
-      $clickedButton.trigger('formUpdated');
+      this.dispatchEvent(new Event('formUpdated', { bubbles: true }));
 
       // Check if we're working with an "Upload" button.
       let $enabledFields = [];

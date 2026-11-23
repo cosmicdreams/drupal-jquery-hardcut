@@ -12,35 +12,18 @@
   Drupal.behaviors.detailsAria = {
     attach() {
       once('detailsAria', 'body').forEach((target) => {
-        const binding = {
-          target,
-          type: 'click',
-          namespace: 'detailsAria',
-          selector: 'summary',
-          detailsAria: true,
-          reservesLegacySlot: true,
-          listener(summary) {
-            summary.setAttribute(
-              'aria-expanded',
-              String(summary.parentNode.getAttribute('open') !== 'open'),
-            );
-          },
-          stop() {
-            target.removeEventListener('click', onClick);
-            unregister();
-          },
-        };
-        function onClick(event) {
-          if (binding.handlesNativeEvent?.(event) || event.button >= 1) {
+        target.addEventListener('click', (event) => {
+          if (event.defaultPrevented || event.button >= 1) {
             return;
           }
-          const summary = event.target.closest?.(binding.selector);
+          const summary = event.target.closest?.('summary');
           if (summary) {
-            binding.listener(summary);
+            summary.setAttribute(
+              'aria-expanded',
+              String(!summary.parentElement.open),
+            );
           }
-        }
-        target.addEventListener('click', onClick);
-        const unregister = Drupal.eventBindings.register(binding);
+        });
       });
     },
   };

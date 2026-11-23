@@ -28,7 +28,7 @@
           );
         const langcode = descendants('.langcode-input');
         descendants('.file-import-input').forEach((input) => {
-          Drupal.formEvents.listen(input, 'change', undefined, () => {
+          Drupal.formEvents.listen(input, 'change', () => {
             // If the filename is fully the language code or the filename
             // ends with a language code, pre-select that one.
             const matches = input.value.match(/([^.][.]*)([\w-]+)\.po$/);

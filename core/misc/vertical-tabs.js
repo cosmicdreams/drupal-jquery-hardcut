@@ -87,7 +87,6 @@
         Drupal.form.listen(
           body,
           'formFragmentLinkClickOrHashChange',
-          'verticalTabs',
           ({ detail }) => {
             for (
               let pane = detail?.parentElement;
@@ -174,11 +173,11 @@
     Object.assign(this, members, Drupal.verticalTabs.createMarkup(settings));
     const { detailsElement, linkElement } = this;
     linkElement.setAttribute('href', `#${detailsElement.id}`);
-    Drupal.form.listen(linkElement, 'click', undefined, (event) => {
+    Drupal.form.listen(linkElement, 'click', (event) => {
       event.preventDefault();
       this.focus();
     });
-    Drupal.form.listen(linkElement, 'keydown', undefined, (event) => {
+    Drupal.form.listen(linkElement, 'keydown', (event) => {
       if (event.key === 'Enter' || event.keyCode === 13) {
         event.preventDefault();
         this.focus();
@@ -190,7 +189,7 @@
           ?.focus();
       }
     });
-    Drupal.form.listen(detailsElement, 'summaryUpdated', undefined, () =>
+    Drupal.form.listen(detailsElement, 'summaryUpdated', () =>
       this.updateSummary(),
     );
     Drupal.form.publish(detailsElement, 'summaryUpdated');
@@ -275,12 +274,7 @@
       return this;
     },
   };
-  /**
-   * The native constructor, kept for the legacy adapter.
-   *
-   * @internal
-   */
-  Drupal.verticalTabs.nativeConstructor = VerticalTab;
+
   Drupal.verticalTab = VerticalTab;
 
   /**
@@ -297,6 +291,4 @@
     titleElement.textContent = title;
     return { itemElement, linkElement, titleElement, summaryElement };
   };
-
-  document.dispatchEvent(new Event('drupal:vertical-tabs-ready'));
 })(Drupal, drupalSettings);

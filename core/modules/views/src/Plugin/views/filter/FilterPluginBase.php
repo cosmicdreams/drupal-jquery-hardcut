@@ -1257,7 +1257,7 @@ abstract class FilterPluginBase extends HandlerBase implements CacheableDependen
         foreach ($children as $child) {
           if (!empty($row['value'][$child]['#states']['visible'])) {
             foreach ($row['value'][$child]['#states']['visible'] as $state) {
-              if (isset($state[$operator_selector]) || isset($state[':input' . $operator_selector])) {
+              if (isset($state[$operator_selector])) {
                 $row['value'][$child]['#title'] = '';
 
                 // Exit this loop and process the next child element.

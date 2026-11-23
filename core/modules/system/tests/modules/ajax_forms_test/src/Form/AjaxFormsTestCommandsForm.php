@@ -27,12 +27,6 @@ class AjaxFormsTestCommandsForm extends FormBase {
    */
   public function buildForm(array $form, FormStateInterface $form_state) {
     $form = [];
-    if (\Drupal::request()->query->getBoolean('legacy_commands')) {
-      $form['#attached']['library'][] = 'core/drupal.ajax.jquery';
-    }
-    elseif (\Drupal::request()->query->getBoolean('legacy_requests')) {
-      $form['#attached']['library'][] = 'core/jquery';
-    }
 
     // Shows the 'after' command with a callback generating commands.
     $form['after_command_example'] = [
@@ -148,14 +142,14 @@ class AjaxFormsTestCommandsForm extends FormBase {
       '#suffix' => '<div id="data_div">Data attached to this div.</div>',
     ];
 
-    // Shows the Ajax 'invoke' command.
-    $form['invoke_command_example'] = [
-      '#value' => $this->t("AJAX invoke command: Invoke addClass() method."),
+    // Shows the Ajax 'toggleClass' command.
+    $form['toggle_class_command_example'] = [
+      '#value' => $this->t("AJAX toggleClass command: Add the error class."),
       '#type' => 'submit',
       '#ajax' => [
-        'callback' => [Callbacks::class, 'advancedCommandsInvokeCallback'],
+        'callback' => [Callbacks::class, 'advancedCommandsToggleClassCallback'],
       ],
-      '#suffix' => '<div id="invoke_div">Original contents</div>',
+      '#suffix' => '<div id="toggle_class_div">Original contents</div>',
     ];
 
     // Shows the Ajax 'html' command.

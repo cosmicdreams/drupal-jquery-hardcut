@@ -38,7 +38,7 @@
             context.querySelectorAll(`input[name^="${CSS.escape(name)}"]`),
           );
           fields.forEach((field) => {
-            Drupal.formEvents.listen(field, 'change', undefined, ({ target }) =>
+            Drupal.formEvents.listen(field, 'change', ({ target }) =>
               this.checkNative(fields, columns, target),
             );
           });
@@ -99,7 +99,6 @@
         Drupal.formEvents.listen(
           body,
           'click',
-          undefined,
           (event, checkbox) => {
             const bundle = checkbox.closest('.bundle-settings');
             const settings = following(bundle, '.bundle-settings');
@@ -130,7 +129,6 @@
         Drupal.formEvents.listen(
           body,
           'click',
-          undefined,
           (event, checkbox) => {
             const field = checkbox.closest('.field-settings');
             following(field, '.field-settings, .bundle-settings').forEach(
@@ -144,5 +142,4 @@
       });
     },
   };
-  document.dispatchEvent(new Event('drupal:translation-options-ready'));
 })(Drupal, drupalSettings);

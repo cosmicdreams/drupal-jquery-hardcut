@@ -53,12 +53,7 @@
         }
       };
       inputs.forEach((input) =>
-        Drupal.formEvents.listen(
-          input,
-          'keyup',
-          undefined,
-          debounce(filter, 200),
-        ),
+        Drupal.formEvents.listen(input, 'keyup', debounce(filter, 200)),
       );
     },
   };

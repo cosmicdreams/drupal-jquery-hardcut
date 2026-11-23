@@ -72,7 +72,7 @@
 
       group.forEach((element) => {
         summaries.get(element)?.stop();
-        const stop = listen(element, 'formUpdated', 'summary', update);
+        const stop = listen(element, 'formUpdated', update);
         summaries.set(element, { callback, stop });
       });
       update();
@@ -97,7 +97,6 @@
         listen(
           body,
           'submit',
-          'singleSubmit',
           (event, form) => {
             const values = new URLSearchParams(new FormData(form)).toString();
             if (form.dataset.drupalFormSubmitLast === values) {
@@ -155,9 +154,7 @@
         form.dataset.drupalFormFields = fieldsList(form);
         formListeners.set(
           form,
-          ['change', 'input'].map((type) =>
-            listen(form, type, 'formUpdated', update),
-          ),
+          ['change', 'input'].map((type) => listen(form, type, update)),
         );
       });
       // Ajax can reattach behaviors to a form whose fields have changed.
@@ -213,7 +210,7 @@
         }
       });
       forms.forEach((form) =>
-        listen(form, 'submit', undefined, () => {
+        listen(form, 'submit', () => {
           userInfo.forEach((name) => {
             const field = findFields(name)[0];
             if (field) {
@@ -240,8 +237,6 @@
     300,
     true,
   );
-  listen(window, 'hashchange', 'form-fragment', fragmentChanged);
-  listen(document, 'click', 'form-fragment', fragmentChanged, 'a[href*="#"]');
-
-  document.dispatchEvent(new Event('drupal:form-ready'));
+  listen(window, 'hashchange', fragmentChanged);
+  listen(document, 'click', fragmentChanged, 'a[href*="#"]');
 })(Drupal, Drupal.debounce);

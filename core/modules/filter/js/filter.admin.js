@@ -40,7 +40,7 @@
           Drupal.tableDrag['filter-order'].restripeTable();
         };
 
-        Drupal.form.listen(checkbox, 'click', 'filterUpdate', update);
+        Drupal.form.listen(checkbox, 'click', update);
         if (tab) {
           Drupal.form.setSummary(pane, () =>
             checkbox.checked ? Drupal.t('Enabled') : Drupal.t('Disabled'),

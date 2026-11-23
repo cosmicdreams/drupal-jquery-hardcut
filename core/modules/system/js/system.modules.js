@@ -88,13 +88,8 @@
         }
       };
 
-      Drupal.formEvents.listen(
-        input,
-        'input',
-        undefined,
-        debounce(filterModuleList, 200),
-      );
-      Drupal.formEvents.listen(input, 'keydown', undefined, (event) => {
+      Drupal.formEvents.listen(input, 'input', debounce(filterModuleList, 200));
+      Drupal.formEvents.listen(input, 'keydown', (event) => {
         if (
           event.key === 'Enter' ||
           event.which === 13 ||

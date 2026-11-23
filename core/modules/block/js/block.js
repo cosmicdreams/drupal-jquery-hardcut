@@ -134,7 +134,6 @@
         checkEmptyRegions(this);
         updateLastPlaced(this);
       }
-      onSwap.nativeTableEvent = true;
       tableDrag.row.prototype.onSwap = onSwap;
 
       function onDrop() {
@@ -170,7 +169,6 @@
         }
         updateBlockWeights(region);
       }
-      onDrop.nativeTableEvent = true;
       tableDrag.onDrop = onDrop;
 
       once(
@@ -178,7 +176,7 @@
         'select.block-region-select',
         context,
       ).forEach((select) => {
-        Drupal.formEvents.listen(select, 'change', undefined, () => {
+        Drupal.formEvents.listen(select, 'change', () => {
           const row = select.closest('tr');
           tableDrag.rowObject = new tableDrag.row(row);
           const message = table.querySelector(

@@ -9,7 +9,6 @@ use Drupal\Core\Ajax\AjaxResponse;
 use Drupal\Core\Ajax\AlertCommand;
 use Drupal\Core\Ajax\CloseDialogCommand;
 use Drupal\Core\Ajax\HtmlCommand;
-use Drupal\Core\Render\Markup;
 use Drupal\Core\Url;
 use Symfony\Component\HttpFoundation\File\UploadedFile;
 use Symfony\Component\HttpFoundation\JsonResponse;
@@ -398,25 +397,11 @@ class AjaxTestController {
    * @return array
    *   The render array.
    */
-  public function globalEvents(Request $request) {
-    if ($request->query->getBoolean('legacy_overrides')) {
-      $libraries = ['ajax_test/legacy_overrides'];
-      if ($request->query->getBoolean('legacy_plugin')) {
-        $libraries[] = 'core/internal.jquery.form';
-      }
-      return [
-        '#attached' => ['library' => $libraries],
-        '#markup' => Markup::create(implode('', [
-          '<form id="legacy-ajax-overrides" action="' . Url::fromRoute('ajax_test.echo_request')->toString() . '">',
-          '<select name="override"><option>disabled</option><option>enabled</option></select>',
-          '<button type="button">Send request</button></form><div id="request-lane-echo"></div>',
-        ])),
-      ];
-    }
+  public function globalEvents() {
     return [
       '#attached' => [
         'library' => [
-          'ajax_test/global_events',
+          'core/drupal.ajax',
           'core/drupal.xhr',
         ],
       ],

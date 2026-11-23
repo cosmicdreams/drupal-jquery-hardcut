@@ -341,7 +341,9 @@
         if (mediaLibraryModalSelection) {
           // Set the selection in the hidden form element.
           mediaLibraryModalSelection.value = currentSelection.join();
-          $(mediaLibraryModalSelection).trigger('change');
+          $(mediaLibraryModalSelection).each((index, input) =>
+            input.dispatchEvent(new Event('change', { bubbles: true })),
+          );
         }
 
         // Set the selection in the media library add form. Since the form is
@@ -371,7 +373,9 @@
         $form
           .find(`input[type="checkbox"][value="${value}"]`)
           .prop('checked', true)
-          .trigger('change');
+          .each((index, input) =>
+            input.dispatchEvent(new Event('change', { bubbles: true })),
+          );
       });
 
       // Add the selection count to the button pane when a media library dialog

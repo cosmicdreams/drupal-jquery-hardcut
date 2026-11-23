@@ -71,15 +71,9 @@
    *
    * @internal
    */
-  function listen(target, type, namespace, listener, selector) {
+  function listen(target, type, listener, selector) {
     const binding = {
       target,
-      type,
-      namespace,
-      selector,
-      listener,
-      formInteraction: true,
-      reservesLegacySlot: true,
       stop() {
         target.removeEventListener(type, handle);
         bindings.delete(binding);
@@ -90,13 +84,9 @@
           }
         });
         disconnectIfIdle();
-        unregister();
       },
     };
     const handle = (event) => {
-      if (binding.handlesNativeEvent?.(event)) {
-        return;
-      }
       if (!selector) {
         listener(event, target);
         return;
@@ -110,7 +100,6 @@
       }
     };
     target.addEventListener(type, handle);
-    const unregister = Drupal.eventBindings.register(binding);
     bindings.add(binding);
     return binding.stop;
   }
@@ -165,14 +154,13 @@
    * @internal
    */
   function publish(target, type, detail) {
-    Drupal.eventBindings.publish(
-      target,
+    target.dispatchEvent(
       new CustomEvent(type, { detail, bubbles: true, cancelable: true }),
     );
   }
 
   /**
-   * Connects native form events to Drupal's event registry.
+   * Binds and dispatches native form events.
    *
    * @internal
    */

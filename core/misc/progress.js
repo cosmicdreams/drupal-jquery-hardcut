@@ -63,18 +63,6 @@
     this.elementNode = template.content.firstElementChild;
   };
 
-  // With the legacy adapter, element is a deprecated jQuery accessor.
-  // Access elementNode in callbacks that use the native element.
-  Object.defineProperty(Drupal.ProgressBar.prototype, 'element', {
-    configurable: true,
-    get() {
-      return this.elementNode;
-    },
-    set(element) {
-      this.elementNode = element;
-    },
-  });
-
   Object.assign(Drupal.ProgressBar.prototype, {
     /**
      * Set the percentage and status message for the progressbar.
@@ -172,16 +160,6 @@
           `<pre>${new Drupal.AjaxError(xhr, this.uri).message}</pre>`,
         );
       };
-      if (Drupal.ProgressBar.request) {
-        Drupal.ProgressBar.request({
-          url: uri.href,
-          method,
-          dataType: 'json',
-          success,
-          error,
-        });
-        return;
-      }
       Drupal.ajaxRequest(
         {
           url: uri.href,
@@ -216,5 +194,4 @@
       }
     },
   });
-  document.dispatchEvent(new CustomEvent('drupal:progress-ready'));
 })(Drupal);

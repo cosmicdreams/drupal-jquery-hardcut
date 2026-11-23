@@ -185,7 +185,7 @@
             applyWidgetClasses();
           }
           [mainInput, confirm].forEach((field) => {
-            Drupal.formEvents.listen(field, 'input', undefined, passwordCheck);
+            Drupal.formEvents.listen(field, 'input', passwordCheck);
           });
         },
       );

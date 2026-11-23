@@ -64,7 +64,6 @@
         stopPreview = Drupal.formEvents.listen(
           document,
           'click',
-          'preview',
           clickPreviewModal,
           'a:not([href^="#"], .node-preview-container a)',
         );
@@ -99,7 +98,7 @@
         context,
       );
       autosubmit.forEach((input) => {
-        Drupal.formEvents.listen(input, 'formUpdated', 'preview', () => {
+        Drupal.formEvents.listen(input, 'formUpdated', () => {
           const { form } = input;
           if (
             form?.dispatchEvent(

@@ -11,7 +11,6 @@
         Drupal.formEvents.listen(
           menu,
           'change',
-          undefined,
           Drupal.menuUiUpdateParentList,
           'input',
         );

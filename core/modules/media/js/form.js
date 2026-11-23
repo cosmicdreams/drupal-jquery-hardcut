@@ -3,7 +3,7 @@
  * Defines JavaScript behaviors for the media form.
  */
 
-(function ($, Drupal) {
+(function (Drupal) {
   /**
    * Behaviors for summaries for tabs in the media edit form.
    *
@@ -14,9 +14,9 @@
    */
   Drupal.behaviors.mediaFormSummaries = {
     attach(context) {
-      $(context)
-        .find('.media-form-author')
-        .drupalSetSummary((context) => {
+      Drupal.form.setSummary(
+        context.querySelectorAll('.media-form-author'),
+        (context) => {
           const nameInput = context.querySelector('.field--name-uid input');
           const name = nameInput?.value;
           const dateInput = context.querySelector('.field--name-created input');
@@ -34,7 +34,8 @@
           if (date) {
             return Drupal.t('Authored on @date', { '@date': date });
           }
-        });
+        },
+      );
     },
   };
-})(jQuery, Drupal);
+})(Drupal);

@@ -40,18 +40,6 @@ class NegotiationMiddlewareTest extends UnitTestCase {
   }
 
   /**
-   * Tests the getContentType() method with AJAX iframe upload.
-   *
-   * @see ::getContentType
-   */
-  public function testAjaxIframeUpload(): void {
-    $request = new Request();
-    $request->request->set('ajax_iframe_upload', '1');
-
-    $this->assertSame('iframeupload', $this->contentNegotiation->getContentType($request));
-  }
-
-  /**
    * Tests the specifying a format via query parameters gets used.
    *
    * @see ::getContentType

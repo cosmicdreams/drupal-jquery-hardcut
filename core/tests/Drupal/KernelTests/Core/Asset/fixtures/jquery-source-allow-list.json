@@ -32,36 +32,12 @@
       "owner": "D",
       "references": 1
     },
-    "misc/jquery.drupal-ajax-bc.js": {
-      "owner": "A",
-      "references": 1
-    },
-    "misc/jquery.drupal-ajax-commands.js": {
-      "owner": "A",
-      "references": 1
-    },
-    "misc/jquery.drupal-bc.js": {
-      "owner": "B",
-      "references": 1
-    },
-    "misc/jquery.drupal-form-bc.js": {
-      "owner": "U",
-      "references": 1
-    },
     "misc/jquery.form.js": {
       "owner": "A",
       "references": 4
     },
     "misc/jquery.no-conflict.js": {
       "owner": "B",
-      "references": 1
-    },
-    "misc/jquery.states.bc.js": {
-      "owner": "S",
-      "references": 1
-    },
-    "misc/jquery.tabledrag.bc.js": {
-      "owner": "T",
       "references": 1
     },
     "misc/position.js": {
@@ -80,15 +56,7 @@
       "owner": "D",
       "references": 1
     },
-    "modules/ckeditor5/js/ckeditor5.image.admin.js": {
-      "owner": "M",
-      "references": 1
-    },
     "modules/ckeditor5/js/ckeditor5.js": {
-      "owner": "M",
-      "references": 1
-    },
-    "modules/ckeditor5/js/ckeditor5.style.admin.js": {
       "owner": "M",
       "references": 1
     },
@@ -120,10 +88,6 @@
       "owner": "M",
       "references": 1
     },
-    "modules/media/js/form.js": {
-      "owner": "M",
-      "references": 1
-    },
     "modules/media/js/type_form.js": {
       "owner": "M",
       "references": 1
@@ -144,28 +108,8 @@
       "owner": "M",
       "references": 1
     },
-    "modules/system/tests/modules/ajax_test/js/global_events.js": {
-      "owner": "A",
-      "references": 1
-    },
-    "modules/system/tests/modules/ajax_test/js/insert-ajax.js": {
-      "owner": "A",
-      "references": 1
-    },
-    "modules/system/tests/modules/ajax_test/js/legacy-overrides.js": {
-      "owner": "A",
-      "references": 1
-    },
     "modules/system/tests/modules/css_disable_transitions_test/js/disable_transitions.theme.js": {
       "owner": "U",
-      "references": 1
-    },
-    "modules/system/tests/modules/jquery_bc_test/js/event-bridge-dependent.js": {
-      "owner": "B",
-      "references": 1
-    },
-    "modules/system/tests/modules/states_test/js/legacy-pseudo.js": {
-      "owner": "S",
       "references": 1
     },
     "modules/views/js/base.js": {

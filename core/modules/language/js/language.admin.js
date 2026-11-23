@@ -28,7 +28,6 @@
         Drupal.formEvents.listen(
           element,
           'change',
-          undefined,
           (event, checkbox) => toggleTable(checkbox),
           inputSelector,
         );

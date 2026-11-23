@@ -165,7 +165,7 @@ class FormTestController extends ControllerBase {
         ],
       ],
       '#cache' => [
-        'contexts' => ['url.query_args:legacy', 'url.query_args:preview'],
+        'contexts' => ['url.query_args:preview'],
       ],
     ];
     if ($request->query->getBoolean('preview')) {
@@ -179,9 +179,6 @@ class FormTestController extends ControllerBase {
    * Attaches the explicit jQuery library when requested by query parameter.
    */
   private function attachLegacyJquery(array &$build, Request $request): void {
-    if ($request->query->getBoolean('legacy')) {
-      $build['#attached']['library'][] = 'core/jquery';
-    }
   }
 
 }

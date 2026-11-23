@@ -46,7 +46,6 @@
         Drupal.form.listen(
           this.node,
           'summaryUpdated',
-          undefined,
           this.onSummaryUpdatedNative.bind(this),
         );
         Drupal.form.publish(this.node, 'summaryUpdated');
@@ -115,6 +114,4 @@
    */
   Drupal.theme.detailsSummarizedContentText = (text) =>
     text ? ` (${text})` : '';
-
-  document.dispatchEvent(new Event('drupal:details-summary-ready'));
 })(Drupal);

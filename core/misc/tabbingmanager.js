@@ -418,8 +418,7 @@
    *   The affected context, supplied as event.detail.
    */
   function publish(type, context) {
-    Drupal.eventBindings.publish(
-      document,
+    document.dispatchEvent(
       new CustomEvent(type, {
         bubbles: true,
         cancelable: true,
@@ -441,31 +440,14 @@
    *   Removes the focus trap.
    */
   function focusTrap(target, reverse, next) {
-    const binding = {
-      target,
-      type: 'keydown',
-      namespace: 'focus-trap',
-      tabbingFocusTrap: true,
-      reservesLegacySlot: true,
-      listener(event) {
-        if (event.key === 'Tab' && event.shiftKey === reverse) {
-          event.preventDefault();
-          next.focus();
-        }
-      },
-      stop() {
-        target.removeEventListener('keydown', onKeydown);
-        unregister();
-      },
-    };
     function onKeydown(event) {
-      if (!binding.handlesNativeEvent?.(event)) {
-        binding.listener(event);
+      if (event.key === 'Tab' && event.shiftKey === reverse) {
+        event.preventDefault();
+        next.focus();
       }
     }
     target.addEventListener('keydown', onKeydown);
-    const unregister = Drupal.eventBindings.register(binding);
-    return binding.stop;
+    return () => target.removeEventListener('keydown', onKeydown);
   }
 
   // Mark this behavior as processed on the first pass and return if it is
@@ -478,8 +460,4 @@
    * @type {Drupal~TabbingManager}
    */
   Drupal.tabbingManager = new TabbingManager();
-  Object.defineProperty(Drupal.tabbingManager, 'contextPrototype', {
-    value: TabbingContext.prototype,
-  });
-  document.dispatchEvent(new Event('drupal:tabbing-manager-ready'));
 })(Drupal, window.tabbable);

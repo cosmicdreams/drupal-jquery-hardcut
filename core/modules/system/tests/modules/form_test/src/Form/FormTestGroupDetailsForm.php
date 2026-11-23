@@ -28,9 +28,6 @@ class FormTestGroupDetailsForm extends FormBase {
     if ($this->getRequest()->query->getBoolean('timezone')) {
       $form['#attached']['library'][] = 'core/drupal.timezone';
     }
-    if ($this->getRequest()->query->getBoolean('legacy-details')) {
-      $form['#attached']['library'][] = 'core/jquery';
-    }
     if ($this->getRequest()->query->getBoolean('states')) {
       $form['#attached']['library'][] = 'core/drupal.states';
     }
