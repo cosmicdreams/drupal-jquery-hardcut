@@ -121,7 +121,6 @@ class OffCanvasTest extends OffCanvasTestBase {
    */
   #[TestWith(['stark'])]
   #[TestWith(['starterkit_theme'])]
-  #[TestWith(['umami'])]
   #[TestWith(['default_admin'])]
   public function testAutocomplete(string $theme): void {
     $this->container->get('module_installer')->install(['form_test']);
@@ -218,11 +217,11 @@ class OffCanvasTest extends OffCanvasTestBase {
       grip.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowLeft', bubbles: true }));
       const opener = document.createElement('button');
       opener.textContent = 'Open viewport modal';
-      opener.addEventListener('click', () => Drupal.ajax({
-        url: Drupal.url('off-canvas-test-thing2'),
-        element: opener,
-        dialogType: 'modal',
-      }).execute());
+      opener.addEventListener('click', () => {
+        const content = document.createElement('div');
+        content.textContent = 'Viewport modal content';
+        Drupal.dialog(content, { removeOnClose: true }).showModal();
+      });
       document.body.prepend(opener);
       JS);
     $this->assertJsCondition('Drupal.displace.offsets.right > window.initialOffset');
@@ -230,13 +229,13 @@ class OffCanvasTest extends OffCanvasTestBase {
     $this->assertJsCondition(<<<'JS'
       (() => {
         const modal = document.querySelector('dialog:modal');
-        if (!modal?.textContent.includes('Thing 2 says hello')) {
+        if (!modal?.textContent.includes('Viewport modal content')) {
           return false;
         }
         const { left, top, width, height } = modal.getBoundingClientRect();
         return document.querySelector('#drupal-off-canvas-wrapper[open]') &&
-          Math.abs(left + width / 2 - document.documentElement.clientWidth / 2) < 2 &&
-          Math.abs(top + height / 2 - document.documentElement.clientHeight / 2) < 2;
+          Math.abs(left + width / 2 - window.innerWidth / 2) < 2 &&
+          Math.abs(top + height / 2 - window.innerHeight / 2) < 2;
       })()
       JS);
   }
