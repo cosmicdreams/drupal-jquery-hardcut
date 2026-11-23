@@ -223,6 +223,7 @@ class ExposedFilterAJAXTest extends WebDriverTestBase {
     $this->assertJsCondition('window.newRefreshHasWidget === false');
     $session->executeScript('window.finishLoadingRefreshAssets()');
     $this->assertSession()->assertWaitOnAjaxRequest();
+    $this->assertJsCondition('typeof Drupal.behaviors.viewsRefreshWidget === "object"');
     $this->assertSession()->elementTextContains('css', 'tbody[data-refresh-widget]', 'Page Two');
     $this->assertSession()->pageTextNotContains('Page One');
     $this->assertSession()->pageTextContains('Page Two');

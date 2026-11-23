@@ -5,8 +5,10 @@
 
 Drupal.behaviors.viewsRefreshWidget = {
   attach(context) {
-    context.querySelectorAll('.views-table tbody').forEach((results) => {
-      results.dataset.refreshWidget = '';
-    });
+    context
+      .querySelectorAll('[class*="js-view-dom-id-"] tbody')
+      .forEach((results) => {
+        results.dataset.refreshWidget = '';
+      });
   },
 };
