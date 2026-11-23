@@ -4,62 +4,25 @@
  */
 
 ((Drupal, drupalSettings, once) => {
-  /**
-   * Attaches the AJAX behavior to exposed filters forms and key View links.
-   *
-   * @type {Drupal~behavior}
-   *
-   * @prop {Drupal~behaviorAttach} attach
-   *   Attaches ajaxView functionality to relevant elements.
-   */
-  Drupal.behaviors.ViewsAjaxView = {};
-  Drupal.behaviors.ViewsAjaxView.attach = function (context, settings) {
-    Object.entries(settings?.views?.ajaxViews ?? {}).forEach(
-      ([key, config]) => {
-        const instance = new Drupal.views.ajaxView(config);
-        if (instance.view) {
-          Drupal.views.instances[key] = instance;
-        }
-      },
-    );
-  };
-  Drupal.behaviors.ViewsAjaxView.detach = (context, settings, trigger) => {
-    if (trigger === 'unload') {
-      Object.entries(Drupal.views.instances).forEach(([key, { view }]) => {
-        if (context.contains(view)) {
-          delete Drupal.views.instances[key];
-        }
-      });
-    }
+  Drupal.behaviors.ViewsAjaxView = {
+    attach(context, settings) {
+      Object.values(settings?.views?.ajaxViews ?? {}).forEach(bindView);
+    },
   };
 
   /**
-   * @namespace
-   */
-  Drupal.views = {};
-
-  /**
-   * @type {object.<string, Drupal.views.ajaxView>}
-   */
-  Drupal.views.instances = {};
-
-  /**
-   * JavaScript object for a certain view.
+   * Binds the exposed forms, pager links and refresh event for a view.
    *
-   * @constructor
-   *
-   * @param {object} settings
-   *   Settings object for the ajax view.
-   * @param {string} settings.view_dom_id
-   *   The DOM id of the view.
+   * @param {Object} settings
+   *   The view's Ajax settings.
    */
-  Drupal.views.ajaxView = function (settings) {
+  function bindView(settings) {
     const selector = `.js-view-dom-id-${settings.view_dom_id}`;
-    this.view = document.querySelector(selector);
-    if (!this.view) {
+    const view = document.querySelector(selector);
+    if (!view) {
       return;
     }
-    this.exposedForms = [
+    const exposedForms = [
       ...document.querySelectorAll(
         `form#views-exposed-form-${settings.view_name.replace(
           /_/g,
@@ -87,7 +50,7 @@
       'order',
       'q',
       'render',
-      ...this.exposedForms.flatMap((form) =>
+      ...exposedForms.flatMap((form) =>
         Array.from(form.elements, ({ name }) => stripArraySuffix(name)),
       ),
     ]);
@@ -98,65 +61,67 @@
       }
     });
 
-    this.element_settings = {
+    const defaults = {
       url: url.href,
       submit: settings,
       httpMethod: 'GET',
       setClick: true,
       event: 'click',
       selector,
-      progress: { type: 'fullscreen' },
     };
-
-    this.settings = settings;
 
     // Separate exposed blocks can outlive the view markup.
     const submit =
       ':is(input[type=submit], button[type=submit], input[type=image]):not([data-drupal-selector=edit-reset])';
     once(
       `views-exposed-${settings.view_dom_id}`,
-      this.exposedForms.flatMap((form) => [...form.querySelectorAll(submit)]),
+      exposedForms.flatMap((form) => [...form.querySelectorAll(submit)]),
     ).forEach((element) => {
       Drupal.ajax.elementData.set(element, 'refocus-blur', true);
-      this.bind({ base: element.id, element });
+      bindRequest({ ...defaults, base: element.id, element });
     });
 
-    if (!this.view.parentElement?.closest('.view')) {
+    if (!view.parentElement?.closest('.view')) {
       once(
         'views-pager',
         '.js-pager__items a[href], th.views-field a[href], .attachment .views-summary a[href]',
-        this.view,
+        view,
       ).forEach((element) => {
         const href = new URL(element.href);
-        this.bind({
+        bindRequest({
+          ...defaults,
           base: false,
           element,
           submit: {
-            ...this.settings,
+            ...settings,
             ...Drupal.Views.parseQueryString(href.search),
-            ...Drupal.Views.parseViewArgs(
-              href.href,
-              this.settings.view_base_path,
-            ),
+            ...Drupal.Views.parseViewArgs(href.href, settings.view_base_path),
           },
         });
       });
     }
 
     // Dispatch RefreshView on the view element to update it in place.
-    once('views-refresh', this.view).forEach((element) => {
-      this.refreshViewAjax = this.bind({ element, event: 'RefreshView' });
+    once('views-refresh', view).forEach((element) => {
+      bindRequest({ ...defaults, element, event: 'RefreshView' });
     });
-  };
+  }
 
   const latestRequests = new WeakMap();
 
   /**
    * Binds an Ajax request and discards responses superseded for the same view.
+   *
+   * @param {Object} settings
+   *   The settings for this request.
    */
-  Drupal.views.ajaxView.prototype.bind = function (settings) {
-    const ajax = Drupal.ajax({ ...this.element_settings, ...settings });
+  function bindRequest(settings) {
+    const ajax = Drupal.ajax({
+      ...settings,
+      progress: { type: 'fullscreen' },
+    });
     let target;
+    let request;
     const { beforeSend } = ajax.options;
     ajax.options.beforeSend = function (xhr, options) {
       target = document.querySelector(ajax.selector);
@@ -164,14 +129,14 @@
       if (target && result !== false) {
         latestRequests.set(target, xhr);
       }
-      ajax.request = xhr;
+      request = xhr;
       return result;
     };
     const { success } = ajax;
     ajax.success = function (response, status) {
       if (
         !target?.isConnected ||
-        latestRequests.get(target) !== this.request ||
+        latestRequests.get(target) !== request ||
         !this.element.isConnected
       ) {
         // Use the common cleanup without changing the current focus.
@@ -179,21 +144,15 @@
           this.element,
           'disable-refocus',
         );
-        const refocus = Drupal.ajax.elementData.get(
-          this.element,
-          'refocus-blur',
-        );
+        this.preCommandsFocusedElementSelector = null;
         Drupal.ajax.elementData.set(this.element, 'disable-refocus', true);
-        Drupal.ajax.elementData.set(this.element, 'refocus-blur', false);
         return success.call(this, [], status).finally(() => {
           Drupal.ajax.elementData.set(this.element, 'disable-refocus', focus);
-          Drupal.ajax.elementData.set(this.element, 'refocus-blur', refocus);
         });
       }
       return success.call(this, response, status);
     };
-    return ajax;
-  };
+  }
 
   /**
    * Sets the browser URL ajax command.
