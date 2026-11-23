@@ -554,10 +554,11 @@
             return;
           }
         } else if (key === 'Escape') {
-          close();
           if (!expanded) {
+            cancelSearch();
             return;
           }
+          close();
         } else if (key !== 'Enter' || !expanded || !select(active)) {
           return;
         }

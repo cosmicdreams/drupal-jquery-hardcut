@@ -686,6 +686,13 @@ class DialogTest extends WebDriverTestBase {
       JS);
     $this->assertJsCondition("pending.get('replaced').signal.aborted && !oldList.isConnected && list.hidden");
 
+    // The replacement field does not reuse the old field's cached results.
+    $session->executeScript("window.oldSearch = pending.get('se'); type('se')");
+    $this->assertJsCondition("pending.get('se') !== oldSearch");
+    $session->executeScript("pending.get('se').respond('Fresh')");
+    $this->assertNotNull($assert->waitOnAutocomplete());
+    $assert->elementTextContains('css', '#drupal-modal .autocomplete-list', 'Fresh');
+
     // The late response must not reopen a closed dialog or leave an orphan menu.
     $session->executeScript("type('slow')");
     $this->assertJsCondition("pending.has('slow')");
