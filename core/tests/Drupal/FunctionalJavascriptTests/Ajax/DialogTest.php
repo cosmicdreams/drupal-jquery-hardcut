@@ -516,6 +516,35 @@ class DialogTest extends WebDriverTestBase {
     $press("\u{E004}");
     $this->assertJsCondition("document.activeElement !== field && field.value === 'se' && list.hidden");
 
+    // A popup near the viewport edge must flip and stay on screen.
+    $session->executeScript(<<<'JS'
+      Object.assign(field.style, { position: 'fixed', bottom: '0', right: '0' });
+      type('se');
+      JS);
+    $this->assertNotNull($assert->waitOnAutocomplete());
+    $this->assertJsCondition(<<<'JS'
+      (() => {
+        const anchor = field.getBoundingClientRect();
+        const popup = list.getBoundingClientRect();
+        return popup.bottom <= anchor.top + 1 && popup.right <= window.innerWidth;
+      })()
+      JS);
+
+    // Replacing a field during its request must also discard the old results.
+    $session->executeScript("type('replaced')");
+    $this->assertJsCondition("pending.has('replaced')");
+    $session->executeScript(<<<'JS'
+      window.oldList = list;
+      Drupal.detachBehaviors(field, null, 'unload');
+      const replacement = field.cloneNode();
+      field.replaceWith(replacement);
+      Drupal.attachBehaviors(replacement);
+      window.field = replacement;
+      window.list = document.getElementById(field.getAttribute('aria-controls'));
+      pending.get('replaced').respond('Obsolete');
+      JS);
+    $this->assertJsCondition("pending.get('replaced').signal.aborted && !oldList.isConnected && list.hidden");
+
     // The late response must not reopen a closed dialog or leave an orphan menu.
     $session->executeScript("type('slow')");
     $this->assertJsCondition("pending.has('slow')");
