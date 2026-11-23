@@ -29,6 +29,7 @@ admin.styling:
   css:
     component:
       css/views_ui.admin.css: {}
+      css/views_ui.behaviors.css: {}
     theme:
       css/views_ui.admin.theme.css: {}
       css/views_ui.contextual.css: {}

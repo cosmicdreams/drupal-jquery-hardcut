@@ -437,8 +437,7 @@
           .querySelectorAll(
             '.js-form-type-checkbox:not(.js-form-item-options-value-all) input[type="checkbox"]',
           );
-        item.classList.remove('js-hide');
-        item.hidden = false;
+        item.classList.add('views-select-all-ready');
         selectAll.addEventListener('change', () => {
           checkboxes.forEach((checkbox) => {
             checkbox.checked = selectAll.checked;

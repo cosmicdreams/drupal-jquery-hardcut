@@ -8,6 +8,8 @@ use Drupal\ckeditor5\Plugin\CKEditor5Plugin\Heading;
 use Drupal\editor\Entity\Editor;
 use Drupal\filter\Entity\FilterFormat;
 use Drupal\FunctionalJavascriptTests\WebDriverTestBase;
+use Drupal\node\Entity\NodeType;
+use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\Attributes\Group;
 use PHPUnit\Framework\Attributes\RunTestsInSeparateProcesses;
 
@@ -69,13 +71,17 @@ class AdminAjaxTest extends WebDriverTestBase {
   /**
    * Tests finding and selecting a handler in the add-fields dialog.
    */
-  public function testFindHandler(): void {
+  #[DataProvider('viewsThemes')]
+  public function testFindHandler(string $theme): void {
+    $this->useViewsTheme($theme);
     $this->drupalGet('admin/structure/views/view/user_admin_people');
     $assert = $this->assertSession();
     $assert->elementExists('css', '#views-add-field')->click();
     $assert->assertWaitOnAjaxRequest();
 
     $dialog = $assert->elementExists('css', 'dialog.views-ui-dialog[open]');
+    $selected = $assert->elementExists('css', '.views-add-form-selected', $dialog);
+    $this->assertFalse($selected->isVisible());
     $search = $dialog->findField('Search');
     $category = $dialog->findField('Category');
     $checkbox = $assert->fieldExists('name[views.dropbutton]', $dialog);
@@ -90,6 +96,7 @@ class AdminAjaxTest extends WebDriverTestBase {
     $category->selectOption('- All -');
     $this->assertTrue($title->isVisible());
     $title->click();
+    $this->assertTrue($selected->isVisible());
     $assert->elementTextContains('css', '.views-selected-options', 'Dropbutton');
 
     // A selection remains checked when it is filtered out.
@@ -98,7 +105,62 @@ class AdminAjaxTest extends WebDriverTestBase {
     $assert->elementTextContains('css', '.views-selected-options', 'Dropbutton');
     $search->setValue('dropbutton');
     $title->click();
-    $this->assertFalse($assert->elementExists('css', '.views-selected-options')->isVisible());
+    $this->assertFalse($selected->isVisible());
+  }
+
+  /**
+   * Tests Select all before and after the filter behavior is attached.
+   */
+  #[DataProvider('viewsThemes')]
+  public function testSelectAll(string $theme): void {
+    $this->useViewsTheme($theme);
+    \Drupal::service('module_installer')->install(['node']);
+    $this->resetAll();
+    NodeType::create(['type' => 'page', 'name' => 'Page'])->save();
+    NodeType::create(['type' => 'article', 'name' => 'Article'])->save();
+    $this->config('views.view.content')
+      ->set('display.default.display_options.filters.type.exposed', FALSE)
+      ->save();
+    $this->drupalGet('admin/structure/views/view/content');
+
+    $assert = $this->assertSession();
+    $filter = $assert->elementExists('css', 'a[href$="/filter/type"]');
+    $filter->click();
+    $assert->assertWaitOnAjaxRequest();
+    $dialog = $assert->elementExists('css', 'dialog.views-ui-dialog[open]');
+    $select_all = $assert->fieldExists('Select all', $dialog);
+    $this->assertTrue($select_all->isVisible());
+    $select_all->check();
+    $page = $assert->fieldExists('options[value][page]', $dialog);
+    $this->assertTrue($page->isChecked());
+    $this->assertTrue($assert->fieldExists('options[value][article]', $dialog)->isChecked());
+    $page->uncheck();
+    $this->assertFalse($select_all->isChecked());
+
+    $assert->buttonExists('Close', $dialog)->press();
+    $this->getSession()->executeScript('delete Drupal.behaviors.viewsFilterConfigSelectAll');
+    $filter->click();
+    $assert->assertWaitOnAjaxRequest();
+    $this->assertFalse($assert->fieldExists('Select all')->isVisible());
+  }
+
+  /**
+   * Provides core themes for Views UI visibility tests.
+   */
+  public static function viewsThemes(): array {
+    return [
+      'Stark' => ['stark'],
+      'Default Admin' => ['default_admin'],
+      'Starterkit' => ['starterkit_theme'],
+    ];
+  }
+
+  /**
+   * Sets the current theme for the Views editor and its dialog requests.
+   */
+  private function useViewsTheme(string $theme): void {
+    $this->container->get('theme_installer')->install([$theme]);
+    $this->config('system.theme')->set('default', $theme)->save();
   }
 
   /**

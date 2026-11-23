@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Drupal\Tests\views_ui\FunctionalJavascript;
 
 use Drupal\FunctionalJavascriptTests\WebDriverTestBase;
+use PHPUnit\Framework\Attributes\DataProviderExternal;
 use PHPUnit\Framework\Attributes\Group;
 use PHPUnit\Framework\Attributes\RunTestsInSeparateProcesses;
 
@@ -145,7 +146,10 @@ class FilterCriteriaTest extends WebDriverTestBase {
   /**
    * Tests operator labels.
    */
-  public function testOperatorLabels(): void {
+  #[DataProviderExternal(AdminAjaxTest::class, 'viewsThemes')]
+  public function testOperatorLabels(string $theme): void {
+    $this->container->get('theme_installer')->install([$theme]);
+    $this->config('system.theme')->set('default', $theme)->save();
     // Open the "Promoted Content" view.
     $this->drupalGet('admin/structure/views/view/promoted_content');
     $session = $this->getSession();
@@ -163,6 +167,9 @@ class FilterCriteriaTest extends WebDriverTestBase {
     // Drag the last row before the penultimate row.
     $drag_handle = $last_row->find('css', '.tabledrag-handle');
     $drag_handle->dragTo($penultimate_row);
+
+    $warning = $this->assertSession()->elementExists('css', '.views-ui-dialog .tabledrag-changed-warning');
+    $this->assertFalse($warning->isVisible());
 
     // Assert there are valid number of visible operator labels.
     $operator_label = $page->findAll('css', '.views-operator-label');

@@ -1,0 +1,17 @@
+/**
+ * @file
+ * Visibility rules for Views UI behaviors across themes.
+ */
+
+:where(.views-admin, .views-ui-dialog, .views-listing-table) [hidden] {
+  display: none !important;
+}
+
+.form-item-options-value-all:not(.views-select-all-ready) {
+  display: none;
+}
+
+/* Applying a Views dialog does not save the view. */
+.views-ui-dialog .tabledrag-changed-warning {
+  display: none;
+}
