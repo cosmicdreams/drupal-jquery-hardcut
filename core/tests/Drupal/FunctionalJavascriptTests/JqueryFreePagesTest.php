@@ -16,7 +16,7 @@ use PHPUnit\Framework\Attributes\RunTestsInSeparateProcesses;
  * @todo Extend the core-only matrix to installer, update and batch, Umami,
  *   node display and edit, states, machine name, uploads, Media Library,
  *   text formats and CKEditor 5 link balloons, menu editing, table weights,
- *   other Field UI pages, Views pager, contextual links, Layout
+ *   other Field UI pages, contextual links, Layout
  *   Builder, tabbing, People, language, locale, modules, theme settings,
  *   nested modals, a generated Starterkit theme and a contrib subtheme.
  * @todo Test aggregated, cached and streaming responses with asset provenance.
@@ -184,10 +184,12 @@ class JqueryFreePagesTest extends WebDriverTestBase {
    */
   public function testViewsPagesWithoutJquery(): void {
     \Drupal::service('theme_installer')->install(['stark']);
-    $this->config('system.theme')->set('admin', 'stark')->save();
+    $this->config('system.theme')->set('default', 'stark')->set('admin', 'stark')->save();
+    $this->config('views.settings')->set('ui.always_live_preview', FALSE)->save();
+    $this->config('views.view.content')->set('display.default.display_options.use_ajax', TRUE)->save();
     $this->config('system.performance')->set('js.preprocess', FALSE)->save();
     $this->installAssetObserver();
-    $this->drupalLogin($this->createUser(['administer views', 'view the administration theme']));
+    $this->drupalLogin($this->createUser(['administer views', 'access content overview', 'view the administration theme']));
 
     $this->drupalGet('admin/structure/views');
     $this->assertSession()->elementExists('css', 'input.views-filter-text');
@@ -198,6 +200,11 @@ class JqueryFreePagesTest extends WebDriverTestBase {
     $this->assertSession()->assertWaitOnAjaxRequest();
     $this->assertSession()->elementExists('css', 'dialog[open] .filterable-option');
     $this->assertSame([], $this->observedEdges(), 'Views editor');
+
+    $this->drupalGet('admin/content');
+    $this->getSession()->getPage()->pressButton('Filter');
+    $this->assertSession()->assertWaitOnAjaxRequest();
+    $this->assertSame([], $this->observedEdges(), 'Ajax content view');
   }
 
   /**

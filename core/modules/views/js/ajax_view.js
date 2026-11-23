@@ -3,6 +3,15 @@
  * Handles AJAX fetching of views, including filter submission and response.
  */
 
+/**
+ * Binds Views Ajax behaviors and response commands.
+ * @param {Drupal} Drupal
+ *   The Drupal object.
+ * @param {object} drupalSettings
+ *   Settings for the current Drupal page.
+ * @param {typeof window.once} once
+ *   Marks elements already processed by a behavior.
+ */
 ((Drupal, drupalSettings, once) => {
   Drupal.behaviors.ViewsAjaxView = {
     attach(context, settings) {
@@ -12,8 +21,7 @@
 
   /**
    * Binds the exposed forms, pager links and refresh event for a view.
-   *
-   * @param {Object} settings
+   * @param {object} settings
    *   The view's Ajax settings.
    */
   function bindView(settings) {
@@ -77,7 +85,7 @@
       `views-exposed-${settings.view_dom_id}`,
       exposedForms.flatMap((form) => [...form.querySelectorAll(submit)]),
     ).forEach((element) => {
-      Drupal.ajax.elementData.set(element, 'refocus-blur', true);
+      element.dataset.refocusBlur = 'true';
       bindRequest({ ...defaults, base: element.id, element });
     });
 
@@ -111,8 +119,7 @@
 
   /**
    * Binds an Ajax request and discards responses superseded for the same view.
-   *
-   * @param {Object} settings
+   * @param {object} settings
    *   The settings for this request.
    */
   function bindRequest(settings) {
@@ -156,7 +163,6 @@
 
   /**
    * Sets the browser URL ajax command.
-   *
    * @param {Drupal.Ajax} [ajax]
    *   A {@link Drupal.ajax} object.
    * @param {object} response

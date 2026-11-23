@@ -202,6 +202,7 @@ class ExposedFilterAJAXTest extends WebDriverTestBase {
     $this->assertSession()->pageTextNotContains('Page One');
     $this->assertSession()->pageTextContains('Page Two');
     $this->assertSession()->addressEquals('admin/content?title=Page%20Two&type=All&status=All');
+    $this->assertSession()->elementNotExists('css', '.ajax-progress');
   }
 
   /**

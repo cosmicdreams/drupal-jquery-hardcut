@@ -139,19 +139,27 @@ class PreviewTest extends WebDriverTestBase {
     $this->assertPreviewAJAX(1);
     $assert->elementTextContains('css', '#views-live-preview .views-row', 'George');
 
-    $assert->elementExists('css', '#views-add-field')->click();
-    $assert->assertWaitOnAjaxRequest();
-
-    // Refresh the preview while a configuration dialog has an active editor.
+    // Start the next preview before opening the dialog and release it when
+    // the search field has focus.
     $session = $this->getSession();
     $session->executeScript(<<<'JS'
-      document.querySelector('#preview-args').value = '3';
-      document.querySelector('#preview-submit').click();
-      document.querySelector('dialog[open] input[data-drupal-selector="edit-override-controls-options-search"]').focus();
+      const send = XMLHttpRequest.prototype.send;
+      XMLHttpRequest.prototype.send = function (...args) {
+        XMLHttpRequest.prototype.send = send;
+        window.sendPreview = () => send.apply(this, args);
+      };
       JS);
+    $assert->fieldExists('preview-args')->setValue('3');
+    $page->pressButton('Update preview');
+    $this->assertJsCondition('typeof window.sendPreview === "function"');
+    $assert->elementExists('css', '#views-add-field')->click();
+    $search = $assert->waitForElementVisible('css', 'dialog[open] [data-drupal-selector="edit-override-controls-options-search"]');
+    $this->assertNotNull($search);
+    $search->focus();
+    $session->executeScript('window.sendPreview()');
     $assert->assertWaitOnAjaxRequest();
     $this->assertPreviewAJAX(1);
-    $assert->elementTextContains('css', '#views-live-preview .views-row', 'Ringo');
+    $this->assertJsCondition('document.querySelector("#views-live-preview .views-row").textContent.includes("Ringo")');
     $assert->elementExists('css', 'dialog.views-ui-dialog[open]');
     $this->assertJsCondition('document.activeElement.dataset.drupalSelector === "edit-override-controls-options-search"');
   }

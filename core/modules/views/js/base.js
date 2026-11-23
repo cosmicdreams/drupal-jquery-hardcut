@@ -3,6 +3,13 @@
  * Some basic behaviors and utility functions for Views.
  */
 
+/**
+ * Registers helpers for interpreting Views links.
+ * @param {Drupal} Drupal
+ *   The Drupal object.
+ * @param {object} drupalSettings
+ *   Settings for the current Drupal page.
+ */
 (function (Drupal, drupalSettings) {
   /**
    * @namespace
@@ -11,10 +18,8 @@
 
   /**
    * Helper function to parse a querystring.
-   *
    * @param {string} query
    *   The querystring to parse.
-   *
    * @return {object}
    *   A map of query parameters.
    */
@@ -27,12 +32,10 @@
 
   /**
    * Helper function to return a view's arguments based on a path.
-   *
    * @param {string} href
    *   The href to check.
    * @param {string} viewPath
    *   The views path to check.
-   *
    * @return {object}
    *   An object containing `view_args` and `view_path`.
    */
@@ -55,10 +58,8 @@
 
   /**
    * Return the Drupal path portion of an href.
-   *
    * @param {string} href
    *   The href to check.
-   *
    * @return {string}
    *   An internal path.
    */

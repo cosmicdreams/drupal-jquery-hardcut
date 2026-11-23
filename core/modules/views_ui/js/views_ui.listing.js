@@ -3,6 +3,13 @@
  * Filters the enabled and disabled Views listings by name and description.
  */
 
+/**
+ * Registers the filter for both listing tables.
+ * @param {Drupal} Drupal
+ *   The Drupal object.
+ * @param {typeof window.once} once
+ *   Marks elements already processed by a behavior.
+ */
 ((Drupal, once) => {
   Drupal.behaviors.viewTableFilterByText = {
     attach(context) {
@@ -10,18 +17,19 @@
         (input) => {
           const filter = () => {
             const query = input.value.toLowerCase();
-            document.querySelectorAll(input.dataset.table).forEach((table) => {
-              table.querySelectorAll('tbody tr').forEach((row) => {
-                const text = Array.from(
-                  row.querySelectorAll(
-                    '[data-drupal-selector="views-table-filter-text-source"]',
-                  ),
-                  (source) => source.textContent,
-                )
-                  .join('')
-                  .toLowerCase();
-                row.hidden = query.length >= 2 && !text.includes(query);
-              });
+            const rows = document.querySelectorAll(
+              `:is(${input.dataset.table}) tbody tr`,
+            );
+            rows.forEach((row) => {
+              const sources = row.querySelectorAll(
+                '[data-drupal-selector="views-table-filter-text-source"]',
+              );
+              let text = '';
+              for (const source of sources) {
+                text += source.textContent;
+              }
+              row.hidden =
+                query.length >= 2 && !text.toLowerCase().includes(query);
             });
           };
           input.addEventListener('input', filter);

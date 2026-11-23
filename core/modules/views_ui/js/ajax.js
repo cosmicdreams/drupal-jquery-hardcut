@@ -3,9 +3,27 @@
  * Handles Ajax submission and responses in Views UI.
  */
 
+/**
+ * Registers editor Ajax behaviors and commands.
+ * @param {Drupal} Drupal
+ *   The Drupal object.
+ * @param {typeof window.once} once
+ *   Marks elements already processed by a behavior.
+ */
 ((Drupal, once) => {
   const commands = Drupal.AjaxCommands.prototype;
 
+  /**
+   *
+   * @param ajax
+   */
+  /**
+   * Checks that the response still owns the modal.
+   * @param {Drupal.Ajax} ajax
+   *   The request that opened the dialog.
+   * @return {boolean}
+   *   Whether the response still owns the modal.
+   */
   function isCurrentDialogResponse(ajax) {
     return (
       Drupal.dialog.hasOpenOrigin(ajax.dialogOrigin) &&
@@ -53,6 +71,12 @@
   };
 
   let previewQueued = false;
+  /**
+   *
+   */
+  /**
+   * Requests a live preview, waiting for any previous preview to settle.
+   */
   function updatePreview() {
     if (!document.getElementById('edit-displays-live-preview')?.checked) {
       return;
@@ -95,19 +119,13 @@
     });
   };
 
-  // The Views editor shows its own save notice.
-  Drupal.theme.tableDragChangedWarning = () => [];
-
   Drupal.behaviors.viewsAjax = {
     attach(context) {
-      const baseSettings = {
-        event: 'click',
-        progress: { type: 'fullscreen' },
-      };
       once('views-ajax', 'a.views-ajax-link[href]', context).forEach(
         (element) => {
           Drupal.ajax({
-            ...baseSettings,
+            event: 'click',
+            progress: { type: 'fullscreen' },
             element,
             base: element.id,
             url: element.getAttribute('href'),
@@ -127,7 +145,8 @@
           Drupal.Views.getPath(url).startsWith('admin/structure/views/')
         ) {
           Drupal.ajax({
-            ...baseSettings,
+            event: 'click',
+            progress: { type: 'fullscreen' },
             element,
             base: element.id,
             url,

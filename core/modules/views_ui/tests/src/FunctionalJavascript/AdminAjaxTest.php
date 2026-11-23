@@ -142,6 +142,7 @@ class AdminAjaxTest extends WebDriverTestBase {
     Editor::create([
       'format' => 'area_format',
       'editor' => 'ckeditor5',
+      'image_upload' => ['status' => FALSE],
       'settings' => [
         'toolbar' => ['items' => ['heading', 'link']],
         'plugins' => ['ckeditor5_heading' => Heading::DEFAULT_CONFIGURATION],

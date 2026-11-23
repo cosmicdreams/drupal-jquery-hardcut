@@ -3,6 +3,13 @@
  * Behaviors for the Views editor and add-view wizard.
  */
 
+/**
+ * Registers the Views editor behaviors.
+ * @param {Drupal} Drupal
+ *   The Drupal object.
+ * @param {typeof window.once} once
+ *   Marks elements already processed by a behavior.
+ */
 ((Drupal, once) => {
   Drupal.behaviors.viewsUiEditView = {
     attach(context) {
@@ -119,17 +126,29 @@
           },
         );
 
+        /**
+         *
+         */
+        /** Asks the dialog to size itself to the filtered results. */
         function notifyResize() {
           form.dispatchEvent(
             new Event('dialogContentResize', { bubbles: true }),
           );
         }
 
+        /**
+         *
+         */
+        /** Shows the selection, including filtered-out handlers. */
         function updateSelected() {
           selected.textContent = [...checked.values()].join(', ');
           selected.parentElement.hidden = !checked.size;
         }
 
+        /**
+         *
+         */
+        /** Matches the category and every word of the search. */
         function filter() {
           const words = search?.value.toLowerCase().trim().split(/\s+/) ?? [];
           const group = category?.value;
@@ -188,6 +207,15 @@
           entry.append(button);
           list.append(entry);
         });
+        /**
+         *
+         * @param open
+         */
+        /**
+         * Changes visibility and the keyboard trigger's expanded state.
+         * @param {boolean} open
+         *   Whether the choices are visible.
+         */
         function show(open) {
           item.classList.toggle('open', open);
           trigger.setAttribute('aria-expanded', String(open));
@@ -241,6 +269,10 @@
 
   /**
    * Sets up filter group controls and updates them after tabledrag moves rows.
+   * @param {HTMLTableElement} table
+   *   The groupable filters table.
+   * @param {Drupal.tableDrag} tableDrag
+   *   The table's drag controller.
    */
   function rearrangeFilters(table, tableDrag) {
     const form = table.closest('form');
@@ -253,6 +285,10 @@
       }),
     );
 
+    /**
+     *
+     */
+    /** Refreshes group row spans, empty states and operator labels. */
     function redraw() {
       groups.forEach(({ operator, cell, message }) => {
         const rows = [];
@@ -279,6 +315,17 @@
     }
 
     // A visible action forwards to the form button's configured Ajax event.
+    /**
+     *
+     * @param {HTMLInputElement} button
+     *   The form button whose Ajax event the link forwards.
+     * @param {string} text
+     *   The link label.
+     * @param {string} [className]
+     *   The link's class, if any.
+     * @return {HTMLAnchorElement}
+     *   The link to insert.
+     */
     function addAction(button, text, className = '') {
       const link = document.createElement('a');
       link.href = '#';
@@ -498,6 +545,10 @@
         submit.addEventListener('mouseup', () => {
           submit.value = oldValue;
         });
+        /**
+         *
+         */
+        /** Updates the Apply label and the dialog action using it. */
         function update() {
           if (dropdown.value === 'default') {
             submit.value = Drupal.t('Apply (all displays)');

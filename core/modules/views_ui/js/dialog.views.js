@@ -3,6 +3,11 @@
  * Keeps the Views dialog header and actions in view while its options scroll.
  */
 
+/**
+ * Registers resize handling for Views dialogs.
+ * @param {Drupal} Drupal
+ *   The Drupal object.
+ */
 ((Drupal) => {
   window.addEventListener(
     'dialog:beforecreate',

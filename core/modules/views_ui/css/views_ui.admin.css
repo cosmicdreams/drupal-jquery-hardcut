@@ -168,6 +168,11 @@
   }
 }
 
+/* Views dialogs have their own Apply button and unsaved changes notice. */
+.views-ui-dialog .tabledrag-changed-warning {
+  display: none;
+}
+
 .views-ui-dialog .scroll {
   overflow: auto;
   padding: 1em;
