@@ -101,4 +101,35 @@ class ViewsWizardTest extends WebDriverTestBase {
     $this->assertSame('page', $page->findField('show[type]')->getValue());
   }
 
+  /**
+   * Tests Views wizard title and machine-name synchronization in a modal.
+   */
+  public function testWizardInDialog(): void {
+    $this->drupalGet('admin/structure/views');
+    $session = $this->getSession();
+    $session->executeScript(<<<'JS'
+      const link = document.createElement('a');
+      link.href = Drupal.url('admin/structure/views/add');
+      link.dataset.dialogType = 'modal';
+      link.className = 'use-ajax';
+      document.body.append(link);
+      Drupal.attachBehaviors();
+      link.click();
+      JS);
+    $assert = $this->assertSession();
+    $assert->assertWaitOnAjaxRequest();
+    $dialog = $assert->elementExists('css', 'dialog[open]');
+    $label = $assert->fieldExists('label', $dialog);
+    $label->setValue('Editorial review');
+    $this->assertJsCondition('document.querySelector("dialog[open] input[name=id]").value === "editorial_review"');
+
+    $assert->fieldExists('page[create]', $dialog)->check();
+    $title = $assert->fieldExists('page[title]', $dialog);
+    $this->assertSame('Editorial review', $title->getValue());
+    $title->setValue('Custom page title');
+    $label->setValue('Weekly review');
+    $this->assertJsCondition('document.querySelector("dialog[open] input[name=id]").value === "weekly_review"');
+    $this->assertSame('Custom page title', $title->getValue());
+  }
+
 }
