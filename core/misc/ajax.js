@@ -2009,6 +2009,16 @@
   // Follow focus candidates only through replacements of their own markup.
   const focusTargets = new WeakMap();
 
+  /**
+   * Finds the replacement for a detached focus target within its owning form.
+   *
+   * @param {Element} element
+   *   The original focus target.
+   * @param {HTMLFormElement|null} form
+   *   The original owning form, if any.
+   * @param {Node[]} children
+   *   The nodes inserted by the command.
+   */
   function findReplacementFocusTarget(element, form, children) {
     const selector = element.getAttribute('data-drupal-selector');
     if (selector === null) {
@@ -2870,6 +2880,7 @@
       return new Promise((resolve, reject) => {
         loadjs.ready(allUniqueBundleIds, {
           success() {
+            // A newer response can already be using the assets from this one.
             Drupal.attachBehaviors(parentEl, settings);
             // All JS files were loaded and new and old behaviors have
             // been attached. Resolve the promise and let the remaining

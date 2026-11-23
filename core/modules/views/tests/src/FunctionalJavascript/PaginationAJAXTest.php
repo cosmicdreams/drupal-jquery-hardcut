@@ -184,7 +184,7 @@ class PaginationAJAXTest extends WebDriverTestBase {
 
       $attachment = $assert->elementExists('css', $attachment_selector);
       $assert->elementExists('css', '.js-pager__items a[href*="page=1"]', $attachment)->click();
-      $assert->assertExpectedAjaxRequest(1);
+      $assert->assertExpectedAjaxRequest(2);
       $assert->elementTextContains('css', "$outer_rows:first-child", 'Node 6 content');
     }
   }

@@ -5,7 +5,7 @@
 
 Drupal.behaviors.viewsRefreshWidget = {
   attach(context) {
-    context.querySelectorAll('.view-content tbody').forEach((results) => {
+    context.querySelectorAll('.views-table tbody').forEach((results) => {
       results.dataset.refreshWidget = '';
     });
   },
