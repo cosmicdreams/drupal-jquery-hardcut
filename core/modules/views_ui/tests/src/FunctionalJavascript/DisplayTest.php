@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Drupal\Tests\views_ui\FunctionalJavascript;
 
+use Drupal\FunctionalJavascriptTests\DrupalSelenium2Driver;
 use Drupal\FunctionalJavascriptTests\WebDriverTestBase;
 use Drupal\language\Entity\ConfigurableLanguage;
 use Drupal\locale\SourceString;
@@ -76,14 +77,43 @@ class DisplayTest extends WebDriverTestBase {
    */
   public function testAddDisplay(): void {
     $this->drupalGet('admin/structure/views/view/test_content_ajax');
-    $page = $this->getSession()->getPage();
+    $session = $this->getSession();
+    $assert = $this->assertSession();
+    $trigger_selector = '#views-display-menu-tabs .add > a';
+    $trigger = $assert->elementExists('css', $trigger_selector);
+    $trigger->focus();
 
-    $page->find('css', '#views-display-menu-tabs .add')->click();
+    $driver = $session->getDriver();
+    $this->assertInstanceOf(DrupalSelenium2Driver::class, $driver);
+    $keyboard = $driver->getWebDriverSession();
+    $press_key = static function (string $key) use ($keyboard): void {
+      $keyboard->postActions([
+        'actions' => [
+          [
+            'type' => 'key',
+            'id' => 'keyboard',
+            'actions' => [
+              ['type' => 'keyDown', 'value' => $key],
+              ['type' => 'keyUp', 'value' => $key],
+            ],
+          ],
+        ],
+      ]);
+    };
+    // WebDriver key codes for Space, Tab and Escape.
+    $press_key("\u{E00D}");
+    $this->assertSame('true', $trigger->getAttribute('aria-expanded'));
+    $press_key("\u{E004}");
+    $this->assertJsCondition('document.activeElement.matches("#views-add-display-options input")');
+    $press_key("\u{E00C}");
+    $this->assertSame('false', $trigger->getAttribute('aria-expanded'));
+    $this->assertJsCondition("document.activeElement.matches('$trigger_selector')");
 
     // Add the display once the menu opens.
-    $this->assertSession()->waitForElementVisible('css', '#edit-displays-top-add-display-block')->click();
+    $trigger->click();
+    $assert->waitForElementVisible('css', '#edit-displays-top-add-display-block')->click();
 
-    $element = $page->findById('views-display-menu-tabs')->findLink('Block');
+    $element = $session->getPage()->findById('views-display-menu-tabs')->findLink('Block');
     $this->assertNotEmpty($element);
   }
 
