@@ -23,6 +23,8 @@
   inset: var(--drupal-displace-offset-top, 0) var(--drupal-displace-offset-right, 0) var(--drupal-displace-offset-bottom, 0) var(--drupal-displace-offset-left, 0);
 }
 
+/* A tray can displace the entire viewport. Modals are layered above it. */
+.js-off-canvas-dialog-open .drupal-dialog:modal,
 .drupal-dialog--viewport-centered {
   --drupal-dialog-displaced-height: 0px;
 }
