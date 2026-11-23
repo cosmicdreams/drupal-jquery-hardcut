@@ -4,6 +4,8 @@
  * links, and controls.
  */
 
+@import "../base/media-queries.pcss.css";
+
 .drupal-dialog {
   border-radius: var(--admin-radius-m);
   outline: none;
