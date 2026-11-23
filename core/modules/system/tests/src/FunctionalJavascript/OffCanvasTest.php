@@ -221,7 +221,7 @@ class OffCanvasTest extends OffCanvasTestBase {
         return { x: Math.round(x + width / 2), y: Math.round(y + height / 2) };
       })()
       JS);
-    $driver->getWebDriverSession()->postActions(['actions' => [[
+    $resize = [
       'type' => 'pointer',
       'id' => 'tray-resize',
       'parameters' => ['pointerType' => 'mouse'],
@@ -231,7 +231,8 @@ class OffCanvasTest extends OffCanvasTestBase {
         ['type' => 'pointerMove', 'x' => 0, 'y' => $grip['y']],
         ['type' => 'pointerUp', 'button' => 0],
       ],
-    ]]]);
+    ];
+    $driver->getWebDriverSession()->postActions(['actions' => [$resize]]);
     $this->assertJsCondition(<<<'JS'
       (() => {
         const width = document.getElementById('drupal-off-canvas-wrapper').getBoundingClientRect().width;

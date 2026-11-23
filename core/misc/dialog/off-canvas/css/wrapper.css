@@ -41,16 +41,16 @@
     max-height: 100dvh;
 
     [data-admin-toolbar] & {
-      left: var(--drupal-displace-offset-left, 0px);
-      right: var(--drupal-displace-offset-right, 0px);
+      right: var(--drupal-displace-offset-right, 0);
+      left: var(--drupal-displace-offset-left, 0);
       width: auto !important;
     }
   }
 
   & > .drupal-dialog-content {
+    overflow: auto;
     flex: 1 1 auto;
     min-height: 0;
-    overflow: auto;
     overscroll-behavior: contain;
   }
 

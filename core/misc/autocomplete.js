@@ -3,6 +3,8 @@
  * Autocomplete based on jQuery UI.
  */
 
+// cspell:ignore autocompletecreate autocompleteresponse
+
 (function ($, Drupal) {
   let autocomplete;
 
