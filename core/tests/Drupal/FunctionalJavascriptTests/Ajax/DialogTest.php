@@ -61,10 +61,9 @@ class DialogTest extends WebDriverTestBase {
     $this->assertNotNull($link1_modal, 'Link was used to open a dialog ( non-modal )');
     $this->assertSession()->responseContains($dialog_contents);
 
-    $dialog_title = $link1_dialog_div->find('css', "h1.drupal-dialog-title:contains('AJAX Dialog & contents')");
-    $this->assertNotNull($dialog_title);
-    $dialog_title_amp = $link1_dialog_div->find('css', "h1.drupal-dialog-title:contains('AJAX Dialog &amp; contents')");
-    $this->assertNull($dialog_title_amp);
+    $dialog_title = $this->assertSession()->elementExists('css', 'h1.drupal-dialog-title', $link1_dialog_div);
+    $this->assertSame('AJAX Dialog & contents: Release <draft>', $dialog_title->getText());
+    $this->assertSame($dialog_title->getAttribute('id'), $link1_dialog_div->getAttribute('aria-labelledby'));
 
     // Close open dialog, return to the dialog links page.
     $close_button = $link1_dialog_div->findButton('Close');
@@ -287,30 +286,32 @@ class DialogTest extends WebDriverTestBase {
     $driver = $this->getSession()->getDriver();
     $this->assertInstanceOf(DrupalSelenium2Driver::class, $driver);
     $webdriver = $driver->getWebDriverSession();
-    $keys = [];
-    for ($i = 0; $i < 8; $i++) {
-      $keys[] = ['type' => 'keyDown', 'value' => "\u{E004}"];
-      $keys[] = ['type' => 'keyUp', 'value' => "\u{E004}"];
-    }
-    $this->getSession()->executeScript(<<<'JS'
-      window.focusedOutsideModal = false;
-      document.addEventListener('focusin', ({ target }) => {
-        if (document.querySelector('dialog:modal') && !target.closest('dialog:modal')) {
-          window.focusedOutsideModal = true;
-        }
-      });
-      JS);
-    $webdriver->postActions(['actions' => [
-      ['type' => 'key', 'id' => 'keyboard', 'actions' => $keys],
-    ]]);
-    $this->assertJsCondition('!window.focusedOutsideModal');
+    $keyboard = ['type' => 'key', 'id' => 'keyboard'];
 
-    $webdriver->postActions(['actions' => [
-      ['type' => 'key', 'id' => 'keyboard', 'actions' => [
-        ['type' => 'keyDown', 'value' => "\u{E00C}"],
-        ['type' => 'keyUp', 'value' => "\u{E00C}"],
-      ]],
-    ]]);
+    // Tab from the last form action wraps to the close button.
+    $this->getSession()->executeScript('document.querySelector("dialog:modal .drupal-dialog-buttonset button:last-child").focus()');
+    $keyboard['actions'] = [
+      ['type' => 'keyDown', 'value' => "\u{E004}"],
+      ['type' => 'keyUp', 'value' => "\u{E004}"],
+    ];
+    $webdriver->postActions(['actions' => [$keyboard]]);
+    $this->assertJsCondition('document.activeElement.matches(".drupal-dialog-titlebar-close")');
+
+    // Shift+Tab at the close button wraps back to the last form action.
+    $keyboard['actions'] = [
+      ['type' => 'keyDown', 'value' => "\u{E008}"],
+      ['type' => 'keyDown', 'value' => "\u{E004}"],
+      ['type' => 'keyUp', 'value' => "\u{E004}"],
+      ['type' => 'keyUp', 'value' => "\u{E008}"],
+    ];
+    $webdriver->postActions(['actions' => [$keyboard]]);
+    $this->assertJsCondition('document.activeElement.matches(".drupal-dialog-buttonset button:last-child")');
+
+    $keyboard['actions'] = [
+      ['type' => 'keyDown', 'value' => "\u{E00C}"],
+      ['type' => 'keyUp', 'value' => "\u{E00C}"],
+    ];
+    $webdriver->postActions(['actions' => [$keyboard]]);
     $this->assertSession()->assertNoElementAfterWait('css', 'dialog[open]');
     $this->assertJsCondition('document.activeElement.textContent === "Link 5 (form)"');
   }

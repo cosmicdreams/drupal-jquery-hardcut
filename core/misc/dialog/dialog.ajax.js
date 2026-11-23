@@ -74,7 +74,7 @@
       options.drupalAutoButtons !== false &&
       options.drupalAutoButtons !== 'false';
     const dialog = Drupal.dialog(content, options);
-    ajax.wrapper ||= content.id;
+    ajax.wrapper = ajax.wrapper || content.id;
     ajax.commands.insert(
       ajax,
       { ...response, command: 'insert', method: 'html' },

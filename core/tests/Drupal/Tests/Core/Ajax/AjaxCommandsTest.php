@@ -462,7 +462,7 @@ class AjaxCommandsTest extends UnitTestCase {
    * @see \Drupal\Core\Ajax\OpenDialogCommand
    */
   public function testOpenDialogCommand(): void {
-    $command = new OpenDialogCommand('#some-dialog', 'Title', '<p>Text!</p>', [
+    $command = new OpenDialogCommand('#some-dialog', 'Release <draft>', '<p>Text!</p>', [
       'url' => FALSE,
       'width' => 500,
     ]);
@@ -475,7 +475,7 @@ class AjaxCommandsTest extends UnitTestCase {
       'dialogOptions' => [
         'url' => FALSE,
         'width' => 500,
-        'title' => 'Title',
+        'title' => 'Release <draft>',
         'modal' => FALSE,
       ],
     ];

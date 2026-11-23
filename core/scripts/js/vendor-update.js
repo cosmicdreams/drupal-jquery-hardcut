@@ -137,6 +137,7 @@ const assetsFolder = `${coreFolder}/assets/vendor`;
       process: {
         // This will automatically minify the files and update the destination
         // filename before saving.
+        '.js': jQueryUIProcess,
       },
       files: [
         'themes/base/autocomplete.css',

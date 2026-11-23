@@ -9,6 +9,7 @@ use Drupal\Core\Ajax\AjaxResponse;
 use Drupal\Core\Ajax\AlertCommand;
 use Drupal\Core\Ajax\CloseDialogCommand;
 use Drupal\Core\Ajax\HtmlCommand;
+use Drupal\Core\Render\Markup;
 use Drupal\Core\Url;
 use Symfony\Component\HttpFoundation\File\UploadedFile;
 use Symfony\Component\HttpFoundation\JsonResponse;
@@ -29,7 +30,7 @@ class AjaxTestController {
   public static function dialogContents() {
     // This is a regular render array; the keys do not have special meaning.
     $content = [
-      '#title' => '<em>AJAX Dialog & contents</em>',
+      '#title' => Markup::create('<em>AJAX Dialog &amp; contents:</em> Release &lt;draft&gt;'),
       'content' => [
         '#markup' => 'Example message',
       ],
@@ -59,7 +60,7 @@ class AjaxTestController {
    */
   public function renderTypes($type) {
     return [
-      '#title' => '<em>AJAX Dialog & contents</em>',
+      '#title' => Markup::create('<em>AJAX Dialog &amp; contents</em>'),
       'content' => [
         '#type' => 'inline_template',
         '#template' => $this->getRenderTypes()[$type]['render'],

@@ -2,6 +2,7 @@
 
 namespace Drupal\Core\Ajax;
 
+use Drupal\Component\Render\MarkupInterface;
 use Drupal\Component\Render\PlainTextOutput;
 use Drupal\Component\Utility\Xss;
 
@@ -34,7 +35,7 @@ class OpenDialogCommand implements CommandInterface, CommandWithAttachedAssetsIn
    * @param string $selector
    *   The selector of the dialog.
    * @param string|\Stringable|null $title
-   *   The title of the dialog.
+   *   The title of the dialog. Markup objects are converted to plain text.
    * @param string|array $content
    *   The content that will be placed in the dialog, either a render array
    *   or an HTML string.
@@ -52,7 +53,6 @@ class OpenDialogCommand implements CommandInterface, CommandWithAttachedAssetsIn
     array $dialog_options = [],
     protected $settings = NULL,
   ) {
-    $title = PlainTextOutput::renderFromHtml($title);
     $dialog_options += ['title' => $title];
 
     $this->dialogOptions = $dialog_options;
@@ -120,12 +120,23 @@ class OpenDialogCommand implements CommandInterface, CommandWithAttachedAssetsIn
       }
     }
 
+    // The client renders dialog titles as text. Convert markup titles once.
+    $options = $this->dialogOptions;
+    if (array_key_exists('title', $options)) {
+      $title = $options['title'];
+      $options['title'] = match (TRUE) {
+        $title instanceof MarkupInterface => PlainTextOutput::renderFromHtml($title),
+        is_scalar($title), $title instanceof \Stringable => (string) $title,
+        default => '',
+      };
+    }
+
     return [
       'command' => 'openDialog',
       'selector' => $this->selector,
       'settings' => $this->settings,
       'data' => $this->getRenderedContent(),
-      'dialogOptions' => $this->dialogOptions,
+      'dialogOptions' => $options,
     ];
   }
 

@@ -115,10 +115,7 @@
         title.id = `drupal-dialog-title-${++titleId}`;
         titlebar.prepend(title);
       }
-      // Titles contain escaped markup. Decode entities and display only text.
-      const template = document.createElement('template');
-      template.innerHTML = settings.title || '';
-      title.textContent = template.content.textContent;
+      title.textContent = settings.title ?? '';
       if (title.textContent) {
         element.setAttribute('aria-labelledby', title.id);
         element.removeAttribute('aria-label');
@@ -257,21 +254,29 @@
       }
     });
     element.addEventListener('keydown', (event) => {
-      if (!settings.modal && !event.defaultPrevented) {
-        if (event.key === 'Escape' && settings.closeOnEscape !== false) {
+      if (event.defaultPrevented) {
+        return;
+      }
+      if (
+        !settings.modal &&
+        event.key === 'Escape' &&
+        settings.closeOnEscape !== false
+      ) {
+        event.preventDefault();
+        close();
+      } else if (event.key === 'Tab') {
+        // Keep keyboard focus from leaving the dialog for the browser chrome.
+        const targets = tabbable(element);
+        const first = targets[0];
+        const last = targets.at(-1);
+        const boundary = event.shiftKey ? first : last;
+        if (
+          !boundary ||
+          event.target === boundary ||
+          event.target === element
+        ) {
           event.preventDefault();
-          close();
-        } else if (event.key === 'Tab') {
-          const targets = tabbable(element);
-          const boundary = event.shiftKey ? targets[0] : targets.at(-1);
-          if (
-            !boundary ||
-            event.target === boundary ||
-            event.target === element
-          ) {
-            event.preventDefault();
-            (event.shiftKey ? targets.at(-1) : targets[0])?.focus();
-          }
+          (event.shiftKey ? last : first)?.focus();
         }
       }
     });

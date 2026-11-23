@@ -51,7 +51,7 @@ class OffCanvasDialogTest extends BrowserTestBase {
             'drupal-dialog' => 'drupal-dialog-off-canvas drupal-dialog-position-' . ($position ?: 'side'),
             'drupal-dialog-content' => 'drupal-off-canvas-reset',
           ],
-          'title' => 'AJAX Dialog & contents',
+          'title' => 'AJAX Dialog & contents: Release <draft>',
           'modal' => FALSE,
           'drupalAutoButtons' => FALSE,
           'drupalOffCanvasPosition' => $position ?: 'side',

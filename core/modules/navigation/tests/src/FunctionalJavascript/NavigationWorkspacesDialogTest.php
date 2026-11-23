@@ -37,9 +37,18 @@ class NavigationWorkspacesDialogTest extends WebDriverTestBase {
 
     $session = $this->getSession();
     $original_title = $session->evaluateScript('document.title');
+    $session->executeScript(<<<'JS'
+      document.querySelector('a.toolbar-button--icon--workspaces')
+        .addEventListener('htmx:before:request', ({ currentTarget }) => {
+          const icon = currentTarget.querySelector('.toolbar-button__icon');
+          window.workspacesThrobberVisible = getComputedStyle(icon).backgroundImage !== 'none';
+        }, { once: true });
+      JS);
     $this->assertSession()->elementExists('css', 'a.toolbar-button--icon--workspaces[data-hx-get]')->click();
     $tray = $this->assertSession()->waitForElementVisible('css', 'dialog#drupal-off-canvas-wrapper[open]');
     $this->assertNotNull($tray);
+    $this->assertJsCondition('window.workspacesThrobberVisible === true');
+    $this->assertJsCondition('!document.querySelector("a.toolbar-button--icon--workspaces").classList.contains("htmx-request")');
     $this->assertStringContainsString('Current workspace:', $tray->getText());
     $this->assertTrue($tray->hasClass('drupal-dialog-position-top'));
     $this->assertSame($original_title, $session->evaluateScript('document.title'));

@@ -69,8 +69,8 @@
       position: absolute;
       top: calc(50% - 1px);
       right: auto;
-    bottom: auto;
-    left: 50%;
+      bottom: auto;
+      left: 50%;
       width: 50%;
       height: 0;
       content: "";

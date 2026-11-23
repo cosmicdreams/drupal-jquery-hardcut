@@ -99,7 +99,7 @@
             .join(' '),
           'drupal-dialog-content': 'drupal-off-canvas-reset',
         },
-        title: Drupal.checkPlain(request.title || ''),
+        title: request.title,
         opener: request.source,
         drupalAutoButtons: false,
         drupalOffCanvasPosition: position,
