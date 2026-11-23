@@ -1827,7 +1827,12 @@
       (executionQueue, key) =>
         executionQueue.then(() => {
           const { command } = response[key];
-          if (command && ajaxCommands[command]) {
+          // Recheck ownership after any asynchronous command, such as an asset load.
+          if (
+            command &&
+            ajaxCommands[command] &&
+            (this.isResponseCurrent?.() ?? true)
+          ) {
             // When a command returns a promise, the remaining commands will not
             // execute until that promise has been fulfilled. This is typically
             // used to ensure JavaScript files added via the 'add_js' command
@@ -1905,7 +1910,7 @@
         // the triggering element or one of its parents if that element does not
         // exist anymore.
         .then(() => {
-          if (!focusChanged) {
+          if (!focusChanged && (this.isResponseCurrent?.() ?? true)) {
             let target = false;
             if (this.element) {
               if (
@@ -2223,8 +2228,10 @@
      *   The XMLHttpRequest status.
      * @param {function} [isCurrent]
      *   Whether this insert is still current after detaching behaviors.
+     * @return {Element[]|undefined}
+     *   Inserted elements, if this command performed the insertion.
      */
-    insert(ajax, response, status, isCurrent) {
+    insert(ajax, response, status, isCurrent = ajax.isResponseCurrent) {
       const selector = response.selector || ajax.wrapper;
       const method = response.method || ajax.method;
       const effect = response.effect || ajax.effect;
@@ -2247,7 +2254,7 @@
         // fallback to document.
         Drupal.detachBehaviors(targets[0], settings);
       }
-      // Detach behaviors may have opened a newer dialog on this target.
+      // Detach behaviors may have started a newer request for this target.
       if (isCurrent && !isCurrent()) {
         return;
       }
@@ -2303,6 +2310,7 @@
           Drupal.attachBehaviors(element, settings);
         }
       });
+      return elements;
     },
 
     /**
@@ -2806,7 +2814,9 @@
       return new Promise((resolve, reject) => {
         loadjs.ready(allUniqueBundleIds, {
           success() {
-            Drupal.attachBehaviors(parentEl, settings);
+            if (ajax.isResponseCurrent?.() ?? true) {
+              Drupal.attachBehaviors(parentEl, settings);
+            }
             // All JS files were loaded and new and old behaviors have
             // been attached. Resolve the promise and let the remaining
             // commands execute.

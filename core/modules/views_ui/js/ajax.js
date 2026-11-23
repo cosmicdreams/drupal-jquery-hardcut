@@ -66,6 +66,16 @@
     }
   };
 
+  const previewWrapper = '#views-preview-wrapper';
+  document.addEventListener(
+    'drupal:ajax-before-send',
+    ({ detail: { ajax } }) => {
+      if (ajax.wrapper === previewWrapper) {
+        Drupal.Views.trackRefreshResponse(ajax, previewWrapper);
+      }
+    },
+  );
+
   let previewQueued = false;
   /**
    * Requests a live preview, waiting for any previous preview to settle.
@@ -76,7 +86,7 @@
     }
     if (
       [...Drupal.ajax.pendingRequests()].some(
-        ({ wrapper }) => wrapper === '#views-preview-wrapper',
+        ({ wrapper }) => wrapper === previewWrapper,
       )
     ) {
       previewQueued = true;
@@ -89,8 +99,7 @@
   commands.viewsTriggerPreview = updatePreview;
 
   document.addEventListener('drupal:ajax-complete', ({ detail: { ajax } }) => {
-    if (previewQueued && ajax.wrapper === '#views-preview-wrapper') {
-      previewQueued = false;
+    if (previewQueued && ajax.wrapper === previewWrapper) {
       updatePreview();
     }
   });

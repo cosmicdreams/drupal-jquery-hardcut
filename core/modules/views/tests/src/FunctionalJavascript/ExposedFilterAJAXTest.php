@@ -186,18 +186,25 @@ class ExposedFilterAJAXTest extends WebDriverTestBase {
     $this->drupalGet('admin/content');
     $session = $this->getSession();
     $session->executeScript(<<<'JS'
-      const send = XMLHttpRequest.prototype.send;
-      XMLHttpRequest.prototype.send = function (...args) {
-        XMLHttpRequest.prototype.send = send;
-        window.sendViewRefresh = () => send.apply(this, args);
+      const prototype = Drupal.Ajax.prototype;
+      const queue = prototype.commandExecutionQueue;
+      const addCss = Drupal.AjaxCommands.prototype.add_css;
+      prototype.commandExecutionQueue = function (response, status) {
+        prototype.commandExecutionQueue = queue;
+        this.commands.add_css = (...args) => addCss(...args).then(
+          () => new Promise((resolve) => { window.finishLoadingRefreshAssets = resolve; }),
+        );
+        const asset = { command: 'add_css', data: [{ href: 'data:text/css,.views-refresh-test%7Bcolor:inherit%7D' }] };
+        return queue.call(this, [asset, ...Object.values(response)], status);
       };
       document.querySelector('.js-view-dom-id-' + Object.values(drupalSettings.views.ajaxViews)[0].view_dom_id)
         .dispatchEvent(new Event('RefreshView'));
       JS);
-    $this->assertJsCondition('typeof window.sendViewRefresh === "function"');
+    $this->assertJsCondition('typeof window.finishLoadingRefreshAssets === "function"');
     $this->submitForm(['title' => 'Page Two'], 'Filter');
     $this->assertJsCondition('new URL(location.href).searchParams.get("title") === "Page Two"');
-    $session->executeScript('window.sendViewRefresh()');
+    $this->assertJsCondition('document.querySelector(".view-content").textContent.includes("Page Two") && !document.querySelector(".view-content").textContent.includes("Page One")');
+    $session->executeScript('window.finishLoadingRefreshAssets()');
     $this->assertSession()->assertWaitOnAjaxRequest();
     $this->assertSession()->pageTextNotContains('Page One');
     $this->assertSession()->pageTextContains('Page Two');
@@ -213,8 +220,10 @@ class ExposedFilterAJAXTest extends WebDriverTestBase {
 
     $assert = $this->assertSession();
 
+    $this->assertJsCondition('Object.keys(drupalSettings.views?.ajaxViews ?? {}).length === 0');
     $assert->elementExists('named', ['link', 'Administer content'])->click();
     $dialog = $assert->waitForElementVisible('css', '.views-test-modal');
+    $this->assertJsCondition('Object.keys(drupalSettings.views.ajaxViews).length === 1');
 
     $session = $this->getSession();
     // Ensure that the Content we're testing for is present.
@@ -234,8 +243,10 @@ class ExposedFilterAJAXTest extends WebDriverTestBase {
 
     // Close and re-open the modal.
     $assert->buttonExists('Close', $dialog)->press();
+    $this->assertJsCondition('Object.keys(drupalSettings.views.ajaxViews).length === 0');
     $assert->elementExists('named', ['link', 'Administer content'])->click();
-    $assert->waitForElementVisible('css', '.views-test-modal');
+    $dialog = $assert->waitForElementVisible('css', '.views-test-modal');
+    $this->assertJsCondition('Object.keys(drupalSettings.views.ajaxViews).length === 1');
 
     // Ensure that the Content we're testing for is present.
     $html = $session->getPage()->getHtml();
@@ -251,6 +262,9 @@ class ExposedFilterAJAXTest extends WebDriverTestBase {
     $html = $session->getPage()->getHtml();
     $this->assertStringContainsString('Page One', $html);
     $this->assertStringNotContainsString('Page Two', $html);
+
+    $assert->buttonExists('Close', $dialog)->press();
+    $this->assertJsCondition('Object.keys(drupalSettings.views.ajaxViews).length === 0');
   }
 
   /**

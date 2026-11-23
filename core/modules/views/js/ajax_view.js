@@ -17,6 +17,23 @@
     attach(context, settings) {
       Object.values(settings?.views?.ajaxViews ?? {}).forEach(bindView);
     },
+    detach(context, settings, trigger) {
+      const ajaxViews = settings?.views?.ajaxViews;
+      if (trigger !== 'unload' || !ajaxViews) {
+        return;
+      }
+      Object.entries(ajaxViews).forEach(([key, view]) => {
+        const selector = `.js-view-dom-id-${view.view_dom_id}`;
+        if (context.matches?.(selector) || context.querySelector(selector)) {
+          // A refresh synchronously replaces the view with the same DOM ID.
+          queueMicrotask(() => {
+            if (ajaxViews[key] === view && !document.querySelector(selector)) {
+              delete ajaxViews[key];
+            }
+          });
+        }
+      });
+    },
   };
 
   /**
@@ -117,6 +134,47 @@
   const latestRequests = new WeakMap();
 
   /**
+   * Guards a view or preview refresh until its response commands finish.
+   * @param {Drupal.Ajax} ajax
+   *   The request whose commands update the view.
+   * @param {string} selector
+   *   The view or preview wrapper.
+   */
+  Drupal.Views.trackRefreshResponse = (ajax, selector) => {
+    const original = document.querySelector(selector);
+    const request = Symbol();
+    let target = original;
+    if (target) {
+      latestRequests.set(target, request);
+    }
+
+    ajax.isResponseCurrent = () =>
+      !!target?.isConnected &&
+      latestRequests.get(target) === request &&
+      (target !== original || !!ajax.element?.isConnected) &&
+      (Drupal.dialog?.hasOpenOrigin(ajax.dialogOrigin) ?? true);
+
+    ajax.commands.insert = (instance, response, status) => {
+      const inserted = Drupal.AjaxCommands.prototype.insert(
+        instance,
+        response,
+        status,
+      );
+      if (target?.isConnected) {
+        return;
+      }
+      // Continue with trailing commands on the replacement this request wrote.
+      // Its newly attached behaviors may already have started another request.
+      target = inserted
+        ?.flatMap((element) => [element, ...element.querySelectorAll(selector)])
+        .find((element) => element.isConnected && element.matches(selector));
+      if (target && !latestRequests.has(target)) {
+        latestRequests.set(target, request);
+      }
+    };
+  };
+
+  /**
    * Binds an Ajax request and discards responses superseded for the same view.
    * @param {object} settings
    *   The settings for this request.
@@ -126,38 +184,13 @@
       ...settings,
       progress: { type: 'fullscreen' },
     });
-    let target;
-    let request;
-    const { beforeSend } = ajax.options;
-    ajax.options.beforeSend = function (xhr, options) {
-      target = document.querySelector(ajax.selector);
+    const { beforeSend } = ajax;
+    ajax.beforeSend = function (xhr, options) {
       const result = beforeSend.call(this, xhr, options);
-      if (target && result !== false) {
-        request = Symbol();
-        latestRequests.set(target, request);
+      if (result !== false) {
+        Drupal.Views.trackRefreshResponse(this, this.selector);
       }
       return result;
-    };
-    const { success } = ajax;
-    ajax.success = function (response, status) {
-      if (
-        !target?.isConnected ||
-        latestRequests.get(target) !== request ||
-        !this.element.isConnected ||
-        (this.dialogOrigin && !Drupal.dialog.hasOpenOrigin(this.dialogOrigin))
-      ) {
-        // Use the common cleanup without changing the current focus.
-        const focus = Drupal.ajax.elementData.get(
-          this.element,
-          'disable-refocus',
-        );
-        this.preCommandsFocusedElementSelector = null;
-        Drupal.ajax.elementData.set(this.element, 'disable-refocus', true);
-        return success.call(this, [], status).finally(() => {
-          Drupal.ajax.elementData.set(this.element, 'disable-refocus', focus);
-        });
-      }
-      return success.call(this, response, status);
     };
   }
 
