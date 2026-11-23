@@ -126,9 +126,6 @@
           },
         );
 
-        /**
-         *
-         */
         /** Asks the dialog to size itself to the filtered results. */
         function notifyResize() {
           form.dispatchEvent(
@@ -136,18 +133,12 @@
           );
         }
 
-        /**
-         *
-         */
         /** Shows the selection, including filtered-out handlers. */
         function updateSelected() {
           selected.textContent = [...checked.values()].join(', ');
           selected.parentElement.hidden = !checked.size;
         }
 
-        /**
-         *
-         */
         /** Matches the category and every word of the search. */
         function filter() {
           const words = search?.value.toLowerCase().trim().split(/\s+/) ?? [];
@@ -207,10 +198,6 @@
           entry.append(button);
           list.append(entry);
         });
-        /**
-         *
-         * @param open
-         */
         /**
          * Changes visibility and the keyboard trigger's expanded state.
          * @param {boolean} open
@@ -285,9 +272,6 @@
       }),
     );
 
-    /**
-     *
-     */
     /** Refreshes group row spans, empty states and operator labels. */
     function redraw() {
       groups.forEach(({ operator, cell, message }) => {
@@ -314,9 +298,8 @@
       });
     }
 
-    // A visible action forwards to the form button's configured Ajax event.
     /**
-     *
+     * Creates a visible action for a hidden Ajax form button.
      * @param {HTMLInputElement} button
      *   The form button whose Ajax event the link forwards.
      * @param {string} text
@@ -546,9 +529,6 @@
         submit.addEventListener('mouseup', () => {
           submit.value = oldValue;
         });
-        /**
-         *
-         */
         /** Updates the Apply label and the dialog action using it. */
         function update() {
           if (dropdown.value === 'default') {

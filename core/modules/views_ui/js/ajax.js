@@ -14,10 +14,6 @@
   const commands = Drupal.AjaxCommands.prototype;
 
   /**
-   *
-   * @param ajax
-   */
-  /**
    * Checks that the response still owns the modal.
    * @param {Drupal.Ajax} ajax
    *   The request that opened the dialog.
@@ -71,9 +67,6 @@
   };
 
   let previewQueued = false;
-  /**
-   *
-   */
   /**
    * Requests a live preview, waiting for any previous preview to settle.
    */
