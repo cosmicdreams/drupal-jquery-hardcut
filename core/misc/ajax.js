@@ -2569,7 +2569,7 @@
       if (ajax.isResponseCurrent?.() === false) {
         // Keep the library list available to subsequent requests without
         // restoring settings for page content this response no longer owns.
-        const { ajaxPageState } = response.settings;
+        const ajaxPageState = response.settings?.ajaxPageState;
         if (response.merge && ajaxPageState) {
           extendDeep(drupalSettings, { ajaxPageState });
         }

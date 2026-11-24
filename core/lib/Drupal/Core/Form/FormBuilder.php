@@ -1054,7 +1054,7 @@ class FormBuilder implements FormBuilderInterface, FormValidatorInterface, FormS
       // possible to rely on it in JavaScript.
       $selector = Html::getId($element['#id']);
       // Keep the root form's stable selector from prepareForm().
-      if ($element['#array_parents'] !== [] || !isset($element['#attributes']['data-drupal-selector'])) {
+      if (($element['#array_parents'] ?? NULL) !== [] || !isset($element['#attributes']['data-drupal-selector'])) {
         $element['#attributes']['data-drupal-selector'] = $selector;
       }
       $element['#wrapper_attributes']['data-drupal-wrapper-selector'] = $selector;

@@ -112,6 +112,26 @@ class CommandsTest extends WebDriverTestBase {
   }
 
   /**
+   * Tests that superseded responses can contain a settings command with no data.
+   */
+  public function testSupersededEmptySettingsCommand(): void {
+    $this->drupalGet('ajax-test/native-request', ['query' => ['commands' => 1]]);
+    $this->assertTrue($this->getSession()->evaluateScript(<<<'JS'
+      (async () => {
+        const ajax = Drupal.ajax({ url: location.href });
+        ajax.isResponseCurrent = () => false;
+        await ajax.commandExecutionQueue([
+          { command: 'settings', merge: true },
+          { command: 'settings', merge: true, settings: {
+            ajaxPageState: { testAssetState: 'retained' },
+          } },
+        ], 'success');
+        return drupalSettings.ajaxPageState.testAssetState === 'retained';
+      })()
+      JS));
+  }
+
+  /**
    * Tests common Ajax commands on a page without jQuery.
    */
   public function testCouncilNativeCommands(): void {
