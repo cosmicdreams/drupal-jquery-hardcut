@@ -193,6 +193,9 @@
         if (definition['data-once']) {
           button.dataset.once = definition['data-once'];
         }
+        if (definition['data-dialog-button-for']) {
+          button.dataset.dialogButtonFor = definition['data-dialog-button-for'];
+        }
         if (definition.disabled) {
           button.disabled = true;
         }

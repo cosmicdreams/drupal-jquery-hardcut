@@ -114,6 +114,16 @@ class BlockFilterTest extends WebDriverTestBase {
     $this->assertAnnounceContains('All available blocks are listed.');
     // Confirm the Content Fields category remains collapsed after filtering.
     $this->assertFalse($promotedLink->isVisible());
+
+    // A new chooser starts unfiltered even if the previous one was filtered.
+    $filter->setValue('Powered by');
+    $this->assertAnnounceContains('1 block is available in the modified list.');
+    $session->executeScript('Drupal.dialog.get(document.getElementById("drupal-off-canvas")).close();');
+    $this->clickLink('Add block');
+    $assert_session->assertWaitOnAjaxRequest();
+    $assert_session->elementExists('css', '.js-layout-builder-filter')->setValue('a');
+    $session->executeScript('setTimeout(() => { window.shortBlockQuerySettled = true; }, 500);');
+    $this->assertJsCondition('window.shortBlockQuerySettled && !document.getElementById("drupal-live-announce")?.textContent.includes("All available blocks are listed.")');
   }
 
   /**

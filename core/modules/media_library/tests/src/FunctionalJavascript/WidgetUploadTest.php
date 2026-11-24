@@ -102,6 +102,18 @@ class WidgetUploadTest extends MediaLibraryTestBase {
     $assert_session->elementExists('css', '.js-media-library-add-form');
     $assert_session->fieldExists('Add files');
 
+    // An attach rooted at an upload form should preserve the live count.
+    $this->getSession()->executeScript(<<<'JS'
+      const form = document.querySelector('.js-media-library-add-form');
+      const count = document.querySelector('.js-media-library-selected-count');
+      const observer = new MutationObserver(() => {});
+      observer.observe(count, { childList: true });
+      Drupal.behaviors.MediaLibraryItemSelection.attach(form, drupalSettings);
+      window.mediaCountChanges = observer.takeRecords().length;
+      observer.disconnect();
+      JS);
+    $this->assertJsCondition('window.mediaCountChanges === 0');
+
     // Assert we can upload a file to the default tab type_three.
     $assert_session->elementNotExists('css', '.js-media-library-add-form[data-input]');
     $this->addMediaFileToField('Add files', $this->container->get('file_system')->realpath($png_image->uri));

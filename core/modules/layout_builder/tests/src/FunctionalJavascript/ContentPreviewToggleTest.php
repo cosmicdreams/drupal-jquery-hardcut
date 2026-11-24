@@ -110,8 +110,17 @@ class ContentPreviewToggleTest extends WebDriverTestBase {
     $assert_session->elementExists('css', $links_block . " div");
     $assert_session->elementExists('css', $body_block . " div");
 
+    $this->getSession()->executeScript(<<<'JS'
+      window.previousLayoutRegion = document.querySelector('.layout__region--content');
+      const sortable = Sortable.get(window.previousLayoutRegion);
+      Drupal.behaviors.layoutBuilderBlockDrag.attach(document.getElementById('layout-builder'));
+      window.layoutSortableRetained = !!sortable && Sortable.get(window.previousLayoutRegion) === sortable;
+      JS);
+    $this->assertJsCondition('window.layoutSortableRetained');
     $this->sortableAfter($links_block, $body_block, $region_content);
     $assert_session->assertWaitOnAjaxRequest();
+
+    $this->assertJsCondition('!window.previousLayoutRegion.isConnected && !Sortable.get(window.previousLayoutRegion)');
 
     // Check that the drag-triggered rebuild did not trigger content preview.
     $assert_session->pageTextNotContains($content_preview_body_text);
@@ -119,9 +128,27 @@ class ContentPreviewToggleTest extends WebDriverTestBase {
     // Check that drag successfully repositioned blocks.
     $this->assertOrderInPage([$body_field_placeholder_label, $links_field_placeholder_label]);
 
+    // The block itself can be the root of an Ajax behavior attachment.
+    $this->getSession()->executeScript(<<<'JS'
+      const block = document.querySelector('[data-layout-content-preview-placeholder-label]');
+      block.querySelector('.js-layout-builder-content-preview-placeholder-label').remove();
+      Drupal.attachBehaviors(block);
+      window.reattachedBlock = block;
+      const child = document.createElement('div');
+      child.id = 'preview-child';
+      child.textContent = 'Preview child';
+      const style = document.createElement('style');
+      style.textContent = '#preview-child { display: none; }';
+      document.head.append(style);
+      block.append(child);
+      JS);
+    $this->assertJsCondition('!!window.reattachedBlock.querySelector(":scope > .js-layout-builder-content-preview-placeholder-label")');
+    $this->assertFalse($assert_session->elementExists('css', '#preview-child')->isVisible());
+
     // Check if block position maintained after enabling content preview.
     $this->assertTrue($page->hasUncheckedField('layout-builder-content-preview'));
     $page->checkField('layout-builder-content-preview');
+    $this->assertTrue($assert_session->elementExists('css', '#preview-child')->isVisible());
     $this->assertNotEmpty($assert_session->waitForText($content_preview_body_text));
     $assert_session->pageTextContains($content_preview_body_text);
     $this->assertNotEmpty($assert_session->waitForText('Placeholder for the "Links" field'));

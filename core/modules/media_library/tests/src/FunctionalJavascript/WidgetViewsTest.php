@@ -82,6 +82,12 @@ class WidgetViewsTest extends MediaLibraryTestBase {
     $this->drupalGet('node/add/basic_page');
 
     $this->openMediaLibraryForField('field_unlimited_media');
+    $this->getSession()->executeScript(<<<'JS'
+      const container = document.getElementById('media-library-view');
+      container.removeAttribute('id');
+      Drupal.behaviors.MediaLibraryViewsDisplay.attach(container.querySelector('.js-media-library-view'));
+      JS);
+    $assert_session->elementExists('css', '#media-library-view');
 
     // Assert the 'Apply filter' button is not moved to the button pane.
     $button_pane = $assert_session->elementExists('css', '.drupal-dialog-buttonpane');
@@ -147,6 +153,7 @@ class WidgetViewsTest extends MediaLibraryTestBase {
     $page->checkField('Select Dog');
     $assert_session->linkExists('Table');
     $this->switchToMediaLibraryGrid();
+    $this->assertJsCondition('document.activeElement.matches("#media-library-view .views-display-link-widget")');
 
     $this->assertSame('Dog', $page->findField('Name')->getValue());
     $assert_session->pageTextContains('Dog');
@@ -154,6 +161,7 @@ class WidgetViewsTest extends MediaLibraryTestBase {
     $assert_session->pageTextNotContains('Turtle');
     $assert_session->linkExists('Grid');
     $this->switchToMediaLibraryTable();
+    $this->assertJsCondition('document.activeElement.matches("#media-library-view .views-display-link-widget_table")');
 
     // Select the item.
     $this->pressInsertSelected('Added one media item.');

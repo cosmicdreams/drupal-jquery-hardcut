@@ -21,42 +21,43 @@
    *   Attaches the behavior for the block filtering.
    */
   Drupal.behaviors.blockFilterByText = {
-    attach(context) {
-      once('block-filter-text', 'input.block-filter-text', context).forEach(
-        (input) => {
-          const table = (
-            input.closest('dialog, main') || context
-          ).querySelector(input.dataset.element);
-          if (!table) {
-            return;
+    attach() {
+      const [input] = once('block-filter-text', 'input.block-filter-text');
+      if (!input) {
+        return;
+      }
+      const tables = Array.from(
+        document.querySelectorAll(input.dataset.element),
+      );
+      const labels = tables.flatMap((table) =>
+        Array.from(table.querySelectorAll('div.block-filter-text-source')),
+      );
+      if (!tables.length) {
+        return;
+      }
+
+      input.addEventListener(
+        'keyup',
+        debounce(() => {
+          const query = input.value.toLowerCase();
+          labels.forEach((label) => {
+            const textMatch = label.textContent.toLowerCase().includes(query);
+            label.closest('tr').style.display =
+              query.length < 2 || textMatch ? '' : 'none';
+          });
+          if (query.length >= 2) {
+            const visible = tables
+              .flatMap((table) => Array.from(table.rows))
+              .filter((row) => row.getClientRects().length).length;
+            Drupal.announce(
+              Drupal.formatPlural(
+                visible - 1,
+                '1 block is available in the modified list.',
+                '@count blocks are available in the modified list.',
+              ),
+            );
           }
-          const labels = table.querySelectorAll('div.block-filter-text-source');
-          input.addEventListener(
-            'keyup',
-            debounce(() => {
-              const query = input.value.toLowerCase();
-              labels.forEach((label) => {
-                const textMatch = label.textContent
-                  .toLowerCase()
-                  .includes(query);
-                label.closest('tr').style.display =
-                  query.length < 2 || textMatch ? '' : 'none';
-              });
-              if (query.length >= 2) {
-                const visible = [...table.rows].filter(
-                  (row) => row.getClientRects().length,
-                ).length;
-                Drupal.announce(
-                  Drupal.formatPlural(
-                    visible - 1,
-                    '1 block is available in the modified list.',
-                    '@count blocks are available in the modified list.',
-                  ),
-                );
-              }
-            }, 200),
-          );
-        },
+        }, 200),
       );
     },
   };

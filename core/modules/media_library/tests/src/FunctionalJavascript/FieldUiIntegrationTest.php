@@ -79,7 +79,28 @@ class FieldUiIntegrationTest extends MediaLibraryTestBase {
     $this->assertSession()->elementExists('xpath', '//button[text()="Continue"]')->press();
     $this->assertSession()->assertWaitOnAjaxRequest();
     $assert_session->pageTextNotContains('Undefined index: target_bundles');
+    $this->getSession()->executeScript(<<<'JS'
+      const extraForm = document.createElement('form');
+      extraForm.className = 'field-config-edit-form';
+      extraForm.innerHTML = '<input type="submit" data-drupal-selector="edit-submit">';
+      document.body.append(extraForm);
+
+      document.addEventListener('drupal:ajax-before-send', () => {
+        const original = document.querySelector('dialog .field-config-edit-form [data-drupal-selector="edit-submit"]');
+        const visible = document.querySelector(`[data-dialog-button-for="${CSS.escape(original.id)}"]`);
+        window.fieldSaveWasLocked = original.disabled && visible?.disabled && extraForm.firstElementChild.disabled;
+      }, { once: true });
+      JS);
     $this->waitForFieldExists('Type One')->check();
+    $this->assertJsCondition('window.fieldSaveWasLocked === true');
+    $assert_session->assertWaitOnAjaxRequest();
+    $this->assertJsCondition(<<<'JS'
+      (() => {
+        const originals = [...document.querySelectorAll('.field-config-edit-form [data-drupal-selector="edit-submit"]')];
+        const visible = document.querySelector('dialog .drupal-dialog-buttonset [data-dialog-button-for]');
+        return originals.length === 2 && originals.every((button) => !button.disabled) && visible && !visible.disabled;
+      })()
+      JS);
     $this->assertElementExistsAfterWait('css', '[name="settings[handler_settings][target_bundles][type_one]"][checked="checked"]');
     $page->checkField('settings[handler_settings][target_bundles][type_two]');
     $this->assertElementExistsAfterWait('css', '[name="settings[handler_settings][target_bundles][type_two]"][checked="checked"]');

@@ -393,7 +393,7 @@
         const { modelId } = this;
         Drupal.contextual.instances.forEach((model) => {
           if (model.modelId !== modelId) {
-            model.close().blur().render();
+            model.close().blur();
           }
         });
         window.clearTimeout(this.timer);

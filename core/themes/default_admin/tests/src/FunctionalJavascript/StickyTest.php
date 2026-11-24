@@ -51,6 +51,78 @@ class StickyTest extends WebDriverTestBase {
       JS);
     $session->executeScript('window.scrollTo(0, 0);');
     $this->assertJsCondition('!document.querySelector(".region-sticky[data-offset-top]")');
+
+    $session->executeScript(<<<'JS'
+      const pair = document.createElement('div');
+      pair.innerHTML = '<div class="region-sticky-watcher"></div><div class="region-sticky"></div>';
+      document.body.append(pair);
+      const OriginalObserver = window.IntersectionObserver;
+      let callback;
+      try {
+        window.IntersectionObserver = class {
+          constructor(onIntersection) {
+            callback = onIntersection;
+          }
+          observe(element) {
+            window.stickyMarkerIsObserved = element === pair.firstElementChild;
+          }
+          disconnect() {
+            window.stickyMarkerIsDisconnected = true;
+          }
+        };
+        Drupal.behaviors.adminSticky.attach(pair);
+      } finally {
+        window.IntersectionObserver = OriginalObserver;
+      }
+      callback([{ intersectionRatio: 0 }]);
+      window.stickyPairMatches = pair.lastElementChild.hasAttribute('data-offset-top') &&
+        document.querySelectorAll('.region-sticky[data-offset-top]').length === 1;
+      Drupal.behaviors.adminSticky.detach(pair, drupalSettings, 'unload');
+      pair.remove();
+      JS);
+    $this->assertJsCondition('window.stickyMarkerIsObserved && window.stickyPairMatches && window.stickyMarkerIsDisconnected');
+  }
+
+  /**
+   * Tests closing the picker before the theme receives its selection count.
+   */
+  public function testMediaLibraryCounterObserverDisconnects(): void {
+    $this->drupalGet('<front>');
+    $session = $this->getSession();
+    $session->executeScript(<<<'JS'
+      const script = document.createElement('script');
+      script.src = Drupal.url('core/themes/default_admin/js/media-library.ui.js');
+      document.head.append(script);
+      JS);
+    $this->assertJsCondition('!!Drupal.behaviors.mediaLibraryItemSelectionDefaultAdmin');
+    $session->executeScript(<<<'JS'
+      Drupal.behaviors.mediaLibraryItemSelectionDefaultAdmin.attach();
+      const dialog = document.createElement('div');
+      dialog.className = 'media-library-widget-modal';
+      dialog.innerHTML = '<div class="drupal-dialog-content"></div><div class="drupal-dialog-buttonpane"></div>';
+      const [content, pane] = dialog.children;
+      document.body.append(dialog);
+      const OriginalObserver = window.MutationObserver;
+      let observed;
+      let disconnected;
+      try {
+        window.MutationObserver = class {
+          observe(element) {
+            observed = element === pane;
+          }
+          disconnect() {
+            disconnected = true;
+          }
+        };
+        content.dispatchEvent(new Event('dialog:aftercreate', { bubbles: true }));
+        content.dispatchEvent(new Event('dialog:beforeclose', { bubbles: true }));
+      } finally {
+        window.MutationObserver = OriginalObserver;
+      }
+      dialog.remove();
+      window.mediaCountObserverReleased = observed && disconnected;
+      JS);
+    $this->assertJsCondition('window.mediaCountObserverReleased');
   }
 
 }

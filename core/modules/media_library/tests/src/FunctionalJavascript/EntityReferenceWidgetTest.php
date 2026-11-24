@@ -360,6 +360,18 @@ class EntityReferenceWidgetTest extends MediaLibraryTestBase {
     $assert_session->fieldExists('Weight', $wrapper)->click();
     $wrapper->pressButton('Hide media item weights');
 
+    // Each weight follows its own visibility when the toggle is pressed.
+    $session->executeScript(<<<'JS'
+      const widget = document.getElementById('field_twin_media-media-library-wrapper');
+      const [first, second] = [...widget.querySelectorAll('.js-media-library-item-weight')].map((weight) => weight.parentElement);
+      first.style.display = '';
+      const toggle = widget.querySelector('.js-media-library-widget-toggle-weight');
+      toggle.click();
+      window.weightsToggledIndependently = !first.getClientRects().length && !!second.getClientRects().length;
+      toggle.click();
+      JS);
+    $this->assertJsCondition('window.weightsToggledIndependently');
+
     // Assert the same has been added twice and remove the items again.
     $this->waitForElementsCount('css', '.field--name-field-twin-media [data-media-library-item-delta]', 2);
     $assert_session->hiddenFieldValueEquals('field_twin_media[selection][0][target_id]', '4');
@@ -487,7 +499,16 @@ class EntityReferenceWidgetTest extends MediaLibraryTestBase {
     $this->assertTrue($checkboxes[1]->isChecked());
     $this->assertFalse($checkboxes[2]->isChecked());
     $this->assertFalse($checkboxes[3]->isChecked());
-    // Close the dialog, reopen it and assert not is selected again.
+    // Closing a second dialog preserves the selection in the open picker.
+    $session->executeScript(<<<'JS'
+      const dialog = Drupal.dialog(document.createElement('div'), { removeOnClose: true });
+      dialog.showModal();
+      dialog.close();
+      JS);
+    $this->assertSelectedMediaCount('2 items selected');
+    $this->assertJsCondition('Drupal.MediaLibrary.currentSelection.length === 2');
+
+    // Close the dialog, reopen it and assert nothing is selected again.
     $assert_session->elementExists('css', '.drupal-dialog-titlebar-close')->click();
     $this->openMediaLibraryForField('field_unlimited_media');
     $checkboxes = $this->getCheckboxes();
@@ -592,6 +613,15 @@ class EntityReferenceWidgetTest extends MediaLibraryTestBase {
     // Order: Dog - Cat - Bear.
     $this->pressInsertSelected('Added 3 media items.');
 
+    $this->getSession()->executeScript(<<<'JS'
+      const widget = document.getElementById('field_unlimited_media-media-library-wrapper');
+      window.previousMediaSelection = widget.querySelector('.js-media-library-selection');
+      const sortable = Sortable.get(window.previousMediaSelection);
+      Drupal.behaviors.MediaLibraryWidgetSortable.attach(widget);
+      window.mediaSortableRetained = !!sortable && Sortable.get(window.previousMediaSelection) === sortable;
+      JS);
+    $this->assertJsCondition('window.mediaSortableRetained');
+
     // Move first item (Dog) to the end.
     // Order: Cat - Bear - Dog.
     $this->sortableAfter('[data-media-library-item-delta="0"]', '[data-media-library-item-delta="2"]', '.js-media-library-selection');
@@ -601,6 +631,7 @@ class EntityReferenceWidgetTest extends MediaLibraryTestBase {
     // Order: Cat - Dog.
     $wrapper->find('css', "[aria-label='Remove Bear']")->press();
     $this->waitForText('Bear has been removed.');
+    $this->assertJsCondition('!window.previousMediaSelection.isConnected && !Sortable.get(window.previousMediaSelection)');
     $page->pressButton('Save');
 
     $assert_session->elementTextContains('css', '.field--name-field-unlimited-media > .field__items > .field__item:last-child', 'Dog');

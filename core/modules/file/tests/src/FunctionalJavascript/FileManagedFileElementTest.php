@@ -131,17 +131,39 @@ class FileManagedFileElementTest extends WebDriverTestBase {
     // Fast uploads can finish before WebDriver inspects the page. Record the
     // indicator when Ajax inserts it.
     $session->executeScript(<<<'JS'
+      document.addEventListener('drupal:ajax-before-send', ({ detail: { ajax } }) => {
+        const receive = ajax.receiveResponse;
+        ajax.receiveResponse = (...args) => new Promise((resolve) => {
+          window.finishProgressUpload = () => resolve(receive.apply(ajax, args));
+        });
+      }, { once: true });
       const widget = document.querySelector('.js-form-managed-file');
       const observer = new MutationObserver(() => {
-        const indicator = widget.querySelector('.ajax-progress-bar .progress__description');
-        if (indicator) {
-          window.managedFileProgressMessage = indicator.textContent.trim();
+        const bar = widget.querySelector('.ajax-progress-bar');
+        const description = bar?.querySelector('.progress__description');
+        if (description) {
+          window.managedFileProgressMessage = description.textContent.trim();
+          bar.style.cssText = 'display:none; padding: 8px 0; margin: 10px 0';
+          const animate = bar.animate;
+          bar.animate = (frames, options) => {
+            window.managedFileProgressFrames = frames;
+            return animate.call(bar, frames, options);
+          };
           observer.disconnect();
         }
       });
       observer.observe(widget, { childList: true, subtree: true });
       JS);
     $session->getPage()->attachFileToField('files[file]', $file_system->realpath($filename));
+    $this->assertJsCondition(<<<'JS'
+      (() => {
+        const frames = window.managedFileProgressFrames;
+        return typeof window.finishProgressUpload === 'function' && frames?.[0].height === '0' &&
+          frames[0].paddingTop === '0' && frames[0].marginBottom === '0' &&
+          frames[1].paddingTop === '8px' && frames[1].marginBottom === '10px';
+      })()
+      JS);
+    $session->executeScript('window.finishProgressUpload();');
     $this->assertNotNull($this->assertSession()->waitForLink(basename($filename)));
     $this->assertSame('Processing...', $session->evaluateScript('window.managedFileProgressMessage'));
     $this->assertSession()->elementNotExists('css', '.js-form-managed-file .ajax-progress-bar');
@@ -175,6 +197,36 @@ class FileManagedFileElementTest extends WebDriverTestBase {
     $assert->fieldValueEquals('files[other_file]', '');
     $assert->elementExists('css', "$file .file-upload-js-error");
     $this->assertSame($fid, $this->getLastFileId());
+
+    $this->getSession()->executeScript(<<<'JS'
+      const input = document.querySelector('input[name="files[file]"]');
+      input.multiple = true;
+      const { fileExtensions } = input.dataset;
+      input.dataset.fileExtensions = 'x';
+      const selection = new DataTransfer();
+      selection.items.add(new File(['valid'], 'valid.x'));
+      selection.items.add(new File(['invalid'], 'invalid.y'));
+      input.files = selection.files;
+      input.dispatchEvent(new Event('change', { bubbles: true, cancelable: true }));
+      input.dataset.fileExtensions = fileExtensions;
+      input.multiple = false;
+      JS);
+    $assert->elementTextContains('css', "$file .file-upload-js-error", 'invalid.y');
+    $assert->fieldValueEquals('files[file]', '');
+
+    // A managed file button disables only other inputs in the same form.
+    $this->getSession()->executeScript(<<<'JS'
+      const upload = document.querySelector('[data-drupal-selector$="file-upload-button"]');
+      const otherInput = upload.form.querySelector('input[name="files[other_file]"]');
+      const extraForm = document.createElement('form');
+      extraForm.innerHTML = '<div class="js-form-managed-file"><input class="js-form-file" type="file"></div>';
+      document.body.append(extraForm);
+      const extraInput = extraForm.querySelector('input');
+      Drupal.file.disableFields({ currentTarget: upload });
+      window.onlySubmittingFormLocked = otherInput.disabled && !extraInput.disabled;
+      extraForm.remove();
+      JS);
+    $this->assertJsCondition('window.onlySubmittingFormLocked');
 
     $page->attachFileToField('files[file]', $file_system->realpath($valid));
     $this->assertNotNull($assert->waitForLink(basename($valid)));

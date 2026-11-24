@@ -7,8 +7,7 @@
   const { ajax, behaviors, debounce, announce, formatPlural } = Drupal;
 
   /*
-   * Boolean that tracks if block listing is currently being filtered. Declared
-   * outside of behaviors so value is retained on rebuild.
+   * Tracks filtered block lists across behavior attachments within a chooser.
    */
   const filteredBlockLists = new WeakSet();
 
@@ -305,7 +304,11 @@
 
       function disableContentPreview(canvas, scope) {
         canvas.classList.add('layout-builder--content-preview-disabled');
-        scope.querySelectorAll(blockSelector).forEach((block) => {
+        const blocks = Array.from(scope.querySelectorAll(blockSelector));
+        if (scope.matches?.(blockSelector)) {
+          blocks.unshift(scope);
+        }
+        blocks.forEach((block) => {
           if (!block.querySelector(`:scope > ${placeholderSelector}`)) {
             const label = Drupal.theme(
               'layoutBuilderPrependContentPreviewPlaceholderLabel',
@@ -321,6 +324,14 @@
         canvas
           .querySelectorAll(placeholderSelector)
           .forEach((label) => label.remove());
+        canvas.querySelectorAll(`${blockSelector} > *`).forEach((child) => {
+          if (child.style.display === 'none') {
+            child.style.removeProperty('display');
+          }
+          if (getComputedStyle(child).display === 'none') {
+            child.style.display = 'revert';
+          }
+        });
       }
 
       once('layout-builder-preview', toggle).forEach((checkbox) => {

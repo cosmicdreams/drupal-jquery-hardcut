@@ -71,7 +71,9 @@
             .closest('.js-media-library-widget')
             .querySelectorAll('.js-media-library-item-weight')
             .forEach((weight) => {
-              weight.parentElement.style.display = active ? '' : 'none';
+              const wrapper = weight.parentElement;
+              wrapper.style.display =
+                getComputedStyle(wrapper).display === 'none' ? '' : 'none';
             });
         });
         toggle.textContent = strings.show;

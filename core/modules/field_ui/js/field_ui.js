@@ -14,12 +14,11 @@
    */
   Drupal.behaviors.fieldUIFieldStorageAddForm = {
     attach(context) {
-      const [form] = once(
+      once(
         'field_ui_add',
         '[data-drupal-selector="field-ui-field-storage-add-form"]',
         context,
-      );
-      if (form) {
+      ).forEach((form) => {
         // Add a few 'js-form-required' and 'form-required' css classes here.
         // We can not use the Form API '#required' property because both label
         // elements for "add new" and "re-use existing" can never be filled and
@@ -34,7 +33,7 @@
           .forEach((label) =>
             label.classList.add('js-form-required', 'form-required'),
           );
-      }
+      });
     },
   };
 
@@ -64,55 +63,37 @@
     },
   };
 
-  // Storage changes can replace the configuration form. Keep its submit
-  // button disabled through the command queue, including overlapping requests.
-  const pendingRequests = new WeakMap();
-  const requestOwners = new WeakMap();
-  const submitSelector =
-    '.field-config-edit-form [data-drupal-selector="edit-submit"]';
+  const submitSelector = '[data-drupal-selector="edit-submit"]';
 
-  document.addEventListener(
-    'drupal:ajax-before-send',
-    ({ detail: { ajax } }) => {
-      if (ajax.wrapper !== '#field-combined') {
-        return;
-      }
-      const form = ajax.element?.closest?.('.field-config-edit-form');
-      if (form) {
-        const owner = form.closest('dialog') || document;
-        pendingRequests.set(owner, (pendingRequests.get(owner) ?? 0) + 1);
-        requestOwners.set(ajax, owner);
-        const button = form.querySelector(
-          '[data-drupal-selector="edit-submit"]',
-        );
-        if (button) {
-          button.disabled = true;
-        }
-      }
-    },
-  );
-  document.addEventListener('drupal:ajax-complete', ({ detail: { ajax } }) => {
-    const owner = requestOwners.get(ajax);
-    if (owner) {
-      requestOwners.delete(ajax);
-      const count = pendingRequests.get(owner) - 1;
-      pendingRequests.set(owner, count);
-      const button = owner.querySelector(submitSelector);
-      if (button) {
-        button.disabled = count > 0;
-      }
-    }
-  });
-
-  Drupal.behaviors.fieldUICombinedForm = {
-    attach(context) {
-      context.querySelectorAll(submitSelector).forEach((button) => {
-        if (pendingRequests.get(button.closest('dialog') || document)) {
-          button.disabled = true;
+  /**
+   * Keeps inline and dialog Save buttons in the same state.
+   *
+   * @param {boolean} disabled
+   *   Whether Save is disabled.
+   */
+  function setSaveDisabled(disabled) {
+    document
+      .querySelectorAll(`.field-config-edit-form ${submitSelector}`)
+      .forEach((button) => {
+        button.disabled = disabled;
+        const visibleButton = button
+          .closest('dialog')
+          ?.querySelector(
+            `[data-dialog-button-for="${CSS.escape(button.id)}"]`,
+          );
+        if (visibleButton) {
+          visibleButton.disabled = disabled;
         }
       });
-    },
-  };
+  }
+
+  // Disable Save while Ajax can rebuild the field configuration form.
+  document.addEventListener('drupal:ajax-before-send', () =>
+    setSaveDisabled(true),
+  );
+  document.addEventListener('drupal:ajax-complete', () =>
+    setSaveDisabled(false),
+  );
 
   /**
    * Namespace for the field UI overview.
@@ -488,8 +469,8 @@
               rows.forEach((row) => {
                 const text = Array.from(
                   row.querySelectorAll('.form-item'),
-                  (item) => item.textContent,
-                ).join(' ');
+                  (item) => ` ${item.textContent}`,
+                ).join('');
                 row.style.display = text.toLowerCase().includes(query)
                   ? ''
                   : 'none';
@@ -534,12 +515,6 @@
             return;
           }
           this.clickHandler(clickToSelectEl, input);
-          input.addEventListener('focus', () =>
-            clickToSelectEl.classList.add('focus'),
-          );
-          input.addEventListener('blur', () =>
-            clickToSelectEl.classList.remove('focus'),
-          );
           if (input.classList.contains('error')) {
             clickToSelectEl.classList.add('error');
           }
@@ -561,10 +536,17 @@
     },
     // Handles adding and removing classes for the different states.
     selectHandler(clickToSelect, input) {
+      once('field-card-focus', input).forEach(() => {
+        input.addEventListener('focus', () =>
+          clickToSelect.classList.add('focus'),
+        );
+        input.addEventListener('blur', () =>
+          clickToSelect.classList.remove('focus'),
+        );
+      });
       input.checked = true;
-      clickToSelect
-        .closest('form')
-        ?.querySelectorAll('.js-click-to-select.selected')
+      document
+        .querySelectorAll('.js-click-to-select.selected')
         .forEach((item) => {
           item.classList.remove('selected');
         });

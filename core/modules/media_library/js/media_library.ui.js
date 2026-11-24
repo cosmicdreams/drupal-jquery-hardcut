@@ -107,19 +107,19 @@
             if (!ajaxObject.isResponseCurrent()) {
               return;
             }
-            const content = library.querySelector('#media-library-content');
-            if (content?.isConnected) {
+            const content = document.getElementById('media-library-content');
+            if (content) {
               tabbable(content)[0]?.focus();
             }
           };
           ajaxObject.execute();
 
           // Set the selected tab.
-          menu
-            .querySelectorAll('.active-tab')
+          document
+            .querySelectorAll('.js-media-library-menu .active-tab')
             .forEach((marker) => marker.remove());
-          menu
-            .querySelectorAll('a')
+          document
+            .querySelectorAll('.js-media-library-menu a')
             .forEach((tab) => tab.classList.remove('active'));
           link.classList.add('active');
           const { title } = link.dataset;
@@ -213,7 +213,10 @@
               // link. Move the focus back to the clicked link when the view is
               // replaced.
               if (focusSelector) {
-                library.querySelector(focusSelector)?.focus();
+                document
+                  .getElementById('media-library-view')
+                  ?.querySelector(focusSelector)
+                  ?.focus();
               }
               // Announce the new view is loaded to screen readers.
               if (displayAnnouncement) {
@@ -235,26 +238,18 @@
     },
   };
 
-  const remainingSlots = new WeakMap();
+  let selectionRemaining;
 
   /**
-   * Updates the selected item count inside the library's button pane.
+   * Updates the selected item count inside the library button pane.
    *
-   * @param {HTMLElement} library
-   *   The wrapper of the media library.
    * @param {number} remaining
    *   The number of remaining slots.
    */
-  function updateSelectionCount(library, remaining) {
-    const count = library
-      .closest('.media-library-widget-modal')
-      ?.querySelector('.js-media-library-selected-count');
-    if (!count) {
-      return;
-    }
+  function updateSelectionCount(remaining) {
     const { length } = Drupal.MediaLibrary.currentSelection;
     // A negative value means an unlimited selection.
-    count.textContent =
+    const text =
       remaining < 0
         ? Drupal.formatPlural(
             length,
@@ -267,84 +262,92 @@
             '@selected of @count items selected',
             { '@selected': length },
           );
+    document
+      .querySelectorAll('.js-media-library-selected-count')
+      .forEach((count) => {
+        count.textContent = text;
+      });
   }
 
   /**
-   * Update the media library selection when loaded or media items are selected.
+   * Updates the media library selection when loaded or media items are selected.
    *
    * @type {Drupal~behavior}
    */
   Drupal.behaviors.MediaLibraryItemSelection = {
     attach(context, settings) {
-      const selector =
-        '.js-media-library-views-form, .js-media-library-add-form';
-      const forms = context.matches?.(selector)
-        ? [context]
-        : context.querySelectorAll(selector);
-      const currentSelection = Drupal.MediaLibrary.currentSelection;
+      const forms = Array.from(
+        context.querySelectorAll(
+          '.js-media-library-views-form, .js-media-library-add-form',
+        ),
+      );
       const remaining = settings.media_library?.selection_remaining;
+      if (!forms.length || remaining === undefined) {
+        return;
+      }
+      selectionRemaining = remaining;
 
-      forms.forEach((form) => {
-        // The upload step replaces the library wrapper with the add form.
-        const library =
-          form.closest('#drupal-modal') ??
-          form.closest('#media-library-wrapper');
-        if (!library || remaining === undefined) {
-          return;
+      const { currentSelection } = Drupal.MediaLibrary;
+      const items = forms.flatMap((form) =>
+        Array.from(
+          form.querySelectorAll(
+            '.js-media-library-item input[type="checkbox"]',
+          ),
+        ),
+      );
+      const selectionFields = forms.flatMap((form) =>
+        Array.from(form.querySelectorAll('#media-library-modal-selection')),
+      );
+
+      function checkEnabled() {
+        updateSelectionCount(remaining);
+        if (remaining < 0 || currentSelection.length <= remaining) {
+          document.getElementById('media-library-messages')?.replaceChildren();
         }
-        remainingSlots.set(library, remaining);
-        const items = form.querySelectorAll(
-          '.js-media-library-item input[type="checkbox"]',
-        );
-        const selection = form.querySelector('#media-library-modal-selection');
-
-        function checkEnabled() {
-          updateSelectionCount(library, remaining);
-          if (remaining < 0 || currentSelection.length <= remaining) {
-            library.querySelector('#media-library-messages')?.replaceChildren();
-          }
-          const atLimit = remaining > 0 && currentSelection.length >= remaining;
-          items.forEach((item) => {
-            const disabled = atLimit && !item.checked;
-            item.disabled = disabled;
-            item
-              .closest('.js-media-library-item')
-              .classList.toggle('media-library-item--disabled', disabled);
-          });
-        }
-
-        // Update the selection array and both forms when an item is selected.
-        once('media-item-change', items).forEach((item) => {
-          item.addEventListener('change', () => {
-            const index = currentSelection.indexOf(item.value);
-            if (item.checked && index === -1) {
-              currentSelection.push(item.value);
-            } else if (!item.checked && index !== -1) {
-              currentSelection.splice(index, 1);
-            }
-
-            const value = currentSelection.join();
-            if (selection) {
-              selection.value = value;
-              selection.dispatchEvent(new Event('change', { bubbles: true }));
-            }
-
-            library
-              .querySelectorAll('.js-media-library-add-form-current-selection')
-              .forEach((input) => {
-                input.value = value;
-              });
-          });
+        const atLimit = remaining > 0 && currentSelection.length >= remaining;
+        items.forEach((item) => {
+          const disabled = atLimit && !item.checked;
+          item.disabled = disabled;
+          item
+            .closest('.js-media-library-item')
+            .classList.toggle('media-library-item--disabled', disabled);
         });
-        checkEnabled();
-        if (selection) {
-          once('media-library-selection-change', selection).forEach((input) => {
-            input.addEventListener('change', checkEnabled);
-          });
-        }
+      }
 
-        // Restore the selection after switching tabs or filtering the view.
-        currentSelection.forEach((id) => {
+      once('media-item-change', items).forEach((item) => {
+        item.addEventListener('change', () => {
+          const index = currentSelection.indexOf(item.value);
+          if (item.checked && index === -1) {
+            currentSelection.push(item.value);
+          } else if (!item.checked && index !== -1) {
+            currentSelection.splice(index, 1);
+          }
+
+          const value = currentSelection.join();
+          const selection = document.getElementById(
+            'media-library-modal-selection',
+          );
+          if (selection) {
+            selection.value = value;
+            selection.dispatchEvent(new Event('change', { bubbles: true }));
+          }
+          document
+            .querySelectorAll('.js-media-library-add-form-current-selection')
+            .forEach((input) => {
+              input.value = value;
+            });
+        });
+      });
+      checkEnabled();
+      once('media-library-selection-change', selectionFields).forEach(
+        (input) => {
+          input.addEventListener('change', checkEnabled);
+        },
+      );
+
+      // Restore the selection after switching tabs or filtering the view.
+      currentSelection.forEach((id) => {
+        forms.forEach((form) => {
           form
             .querySelectorAll(
               `input[type="checkbox"][value="${CSS.escape(id)}"]`,
@@ -360,16 +363,22 @@
         return;
       }
       window.addEventListener('dialog:aftercreate', ({ target }) => {
-        const pane = target
-          .closest('.media-library-widget-modal')
-          ?.querySelector('.drupal-dialog-buttonpane');
-        if (pane && target.querySelector('#media-library-wrapper')) {
-          pane.insertAdjacentHTML(
-            'beforeend',
-            Drupal.theme('mediaLibrarySelectionCount'),
-          );
-          updateSelectionCount(target, remainingSlots.get(target) ?? remaining);
+        if (!target.closest('.media-library-widget-modal')) {
+          return;
         }
+        document
+          .querySelectorAll(
+            '.media-library-widget-modal .drupal-dialog-buttonpane',
+          )
+          .forEach((pane) => {
+            if (!pane.querySelector('.js-media-library-selected-count')) {
+              pane.insertAdjacentHTML(
+                'beforeend',
+                Drupal.theme('mediaLibrarySelectionCount'),
+              );
+            }
+          });
+        updateSelectionCount(selectionRemaining);
       });
     },
   };

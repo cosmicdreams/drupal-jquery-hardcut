@@ -111,8 +111,14 @@ class ManageFieldsTest extends WebDriverTestBase {
     $this->assertTrue($horse_field_row->isVisible());
     $this->assertTrue($horseradish_field_row->isVisible());
     $this->assertTrue($carrot_field_row->isVisible());
-    // Filter by 'horse' field name.
-    $filter->setValue('horse');
+    // Isolate the space added by the filter from whitespace in the markup.
+    $session->executeScript(<<<'JS'
+      document.querySelectorAll('.js-reuse-table tbody tr').forEach((row) => {
+        const source = row.querySelector('.form-item');
+        source.textContent = source.textContent.trim();
+      });
+      JS);
+    $filter->setValue(' field_horse');
     $page->waitFor(1, static fn () => !$carrot_field_row->isVisible());
     $this->assertTrue($horse_field_row->isVisible());
     $this->assertTrue($horseradish_field_row->isVisible());
@@ -172,6 +178,17 @@ class ManageFieldsTest extends WebDriverTestBase {
     $this->clickLink('Number');
     $assert_session->assertWaitOnAjaxRequest();
     $assert_session->waitForText('Add field: Number');
+
+    $this->getSession()->executeScript(<<<'JS'
+      const region = document.createElement('div');
+      const form = '<form data-drupal-selector="field-ui-field-storage-add-form"><div class="js-form-item-label"><label>Label</label></div></form>';
+      region.innerHTML = form.repeat(2);
+      document.body.append(region);
+      Drupal.behaviors.fieldUIFieldStorageAddForm.attach(region);
+      window.requiredFieldLabels = region.querySelectorAll('label.js-form-required.form-required').length;
+      region.remove();
+      JS);
+    $this->assertJsCondition('window.requiredFieldLabels === 2');
     $buttons = $this->assertSession()->elementExists('css', '.drupal-dialog-buttonpane');
     // Test validation.
     $buttons->pressButton('Continue');
@@ -209,7 +226,18 @@ class ManageFieldsTest extends WebDriverTestBase {
 
     $page->fillField('label', $field_name);
     $this->assertNotEmpty($text_plain = $page->find('xpath', '//*[text() = "Short text"]')->getParent());
+    $this->getSession()->executeScript(<<<'JS'
+      const input = document.querySelector('.js-click-to-select input[value="string"]');
+      input.dispatchEvent(new FocusEvent('focus'));
+      window.unselectedFieldCardIsUnstyled = !input.closest('.js-click-to-select').classList.contains('focus');
+      const selected = document.createElement('div');
+      selected.id = 'other-selected-card';
+      selected.className = 'js-click-to-select selected';
+      document.body.append(selected);
+      JS);
+    $this->assertJsCondition('window.unselectedFieldCardIsUnstyled');
     $text_plain->click();
+    $this->assertJsCondition('!document.getElementById("other-selected-card").classList.contains("selected")');
     $this->assertTrue($assert_session->elementExists('css', '[name="field_options_wrapper"][value="string"]')->isSelected());
     $buttons = $this->assertSession()->elementExists('css', '.drupal-dialog-buttonpane');
     $buttons->pressButton('Continue');

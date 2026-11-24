@@ -282,12 +282,33 @@
         widget.querySelectorAll('div.ajax-progress-bar').forEach((bar) => {
           if (getComputedStyle(bar).display === 'none') {
             bar.style.display = 'block';
+            const {
+              height,
+              paddingTop,
+              paddingBottom,
+              marginTop,
+              marginBottom,
+            } = getComputedStyle(bar);
             bar.animate(
               [
-                { height: '0', overflow: 'hidden' },
-                { height: `${bar.offsetHeight}px`, overflow: 'hidden' },
+                {
+                  height: '0',
+                  paddingTop: '0',
+                  paddingBottom: '0',
+                  marginTop: '0',
+                  marginBottom: '0',
+                  overflow: 'hidden',
+                },
+                {
+                  height,
+                  paddingTop,
+                  paddingBottom,
+                  marginTop,
+                  marginBottom,
+                  overflow: 'hidden',
+                },
               ],
-              400,
+              { duration: 400, easing: 'ease-in-out' },
             );
           }
         });

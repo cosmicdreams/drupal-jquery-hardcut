@@ -83,6 +83,28 @@ class BlockFilterTest extends WebDriverTestBase {
     $expected_message = '0 blocks are available in the modified list.';
     $this->assertAnnounceContains($expected_message);
 
+    $session->executeScript(<<<'JS'
+      const input = document.querySelector('input.block-filter-text');
+      const table = document.querySelector(input.dataset.element);
+      const copy = table.cloneNode(true);
+      table.after(copy);
+      once.remove('block-filter-text', input);
+      // Reattach using a new input so both matches are present at setup time.
+      input.replaceWith(input.cloneNode(true));
+      Drupal.attachBehaviors();
+      JS);
+    $assertSession->elementExists('css', '.block-filter-text')->setValue('Powered by');
+    $this->assertJsCondition(<<<'JS'
+      (() => {
+        const input = document.querySelector('input.block-filter-text');
+        const tables = [...document.querySelectorAll(input.dataset.element)];
+        return tables.length === 2 && tables.every((table) => {
+          const rows = [...table.tBodies[0].rows].filter((row) => row.getClientRects().length);
+          return rows.length === 1 && rows[0].textContent.includes('Powered by');
+        });
+      })()
+      JS);
+
     $this->placeBlock('test_xss');
     $this->failOnJavascriptConsoleErrors = FALSE;
     $this->drupalGet('admin/structure/block');

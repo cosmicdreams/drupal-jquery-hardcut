@@ -30,6 +30,7 @@
           text: button.value || button.textContent,
           class: button.className,
           'data-once': button.dataset.once,
+          'data-dialog-button-for': button.id,
           disabled: button.disabled,
           click() {
             if (button instanceof HTMLInputElement) {
