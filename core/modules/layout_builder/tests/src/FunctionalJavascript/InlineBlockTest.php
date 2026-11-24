@@ -177,7 +177,7 @@ class InlineBlockTest extends InlineBlockTestBase {
       $this->assertCount(1, $blocks);
       $block = array_pop($blocks);
       $this->assertEquals($block->getRevisionId(), $revision_id);
-      $this->assertEquals('The block body', $block->get('body')->getValue()[0]['value']);
+      $this->assertEquals('<p><strong>The block body</strong></p>', $block->get('body')->getValue()[0]['value']);
     }
     else {
       // The block should not be visible.
