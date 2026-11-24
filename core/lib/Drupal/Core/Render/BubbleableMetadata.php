@@ -106,15 +106,8 @@ class BubbleableMetadata extends CacheableMetadata implements AttachmentsInterfa
   /**
    * Merges two attachments arrays (which live under the '#attached' key).
    *
-   * The values under the 'drupalSettings' key are merged in a special way, to
-   * match the behavior of:
-   *
-   * @code
-   *   jQuery.extend(true, {}, $settings_items[0], $settings_items[1], ...)
-   * @endcode
-   *
-   * This means integer indices are preserved just like string indices are,
-   * rather than re-indexed as is common in PHP array merging.
+   * The values under 'drupalSettings' are merged recursively, preserving both
+   * integer and string keys.
    *
    * Example:
    * @code
@@ -129,8 +122,7 @@ class BubbleableMetadata extends CacheableMetadata implements AttachmentsInterfa
    * // ['d', 'b', 'c'], not ['a', 'b', 'c', 'd'].
    * @endcode
    *
-   * By following jQuery.extend() merge logic rather than common PHP array merge
-   * logic, the following are ensured:
+   * Preserving keys ensures the following:
    * - Attaching JavaScript settings is idempotent: attaching the same settings
    *   twice does not change the output sent to the browser.
    * - If pieces of the page are rendered in separate PHP requests and the

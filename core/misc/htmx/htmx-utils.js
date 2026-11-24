@@ -18,7 +18,6 @@
      * @return object
      *   The merged object.
      *
-     * @see https://youmightnotneedjquery.com/#deep_extend
      */
     mergeSettings(current, ...sources) {
       if (!current) {

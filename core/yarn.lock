@@ -2896,13 +2896,11 @@ __metadata:
     eslint-formatter-gitlab: "npm:^7.2.0"
     eslint-plugin-import: "npm:^2.32.0"
     eslint-plugin-jsdoc: "npm:^64.5.4"
-    eslint-plugin-no-jquery: "npm:^6.0.0"
     eslint-plugin-prettier: "npm:^5.5.6"
     eslint-plugin-yml: "npm:^1.19.1"
     glob: "npm:^13.0.6"
     globals: "npm:^17.12.0"
     htmx.org: "npm:4.0.1"
-    jquery: "npm:^4.0.0"
     jsdom: "npm:^30.1.0"
     loadjs: "npm:^4.3.0"
     minimist: "npm:^1.2.8"
@@ -4438,21 +4436,6 @@ __metadata:
   languageName: node
   linkType: hard
 
-"eslint-plugin-no-jquery@npm:^6.0.0":
-  version: 6.0.0
-  resolution: "eslint-plugin-no-jquery@npm:6.0.0"
-  peerDependencies:
-    eslint: ">=8.0.0"
-    oxlint: ">=1.52.0"
-  peerDependenciesMeta:
-    eslint:
-      optional: true
-    oxlint:
-      optional: true
-  checksum: 10c0/25b540640da9ea4a3cb5544721cb49c0a053e6779b0debe365b63afbb684173f8f92b3a8f40215ae3d07e1767ad8725db7a009acb928869d7268bb8ce8f443de
-  languageName: node
-  linkType: hard
-
 "eslint-plugin-prettier@npm:^5.5.6":
   version: 5.5.6
   resolution: "eslint-plugin-prettier@npm:5.5.6"
@@ -5739,20 +5722,6 @@ __metadata:
     merge-stream: "npm:^2.0.0"
     supports-color: "npm:^8.0.0"
   checksum: 10c0/8c4737ffd03887b3c6768e4cc3ca0269c0336c1e4b1b120943958ddb035ed2a0fc6acab6dc99631720a3720af4e708ff84fb45382ad1e83c27946adf3623969b
-  languageName: node
-  linkType: hard
-
-"jquery@npm:>=1.12.0 <5.0.0":
-  version: 3.7.1
-  resolution: "jquery@npm:3.7.1"
-  checksum: 10c0/808cfbfb758438560224bf26e17fcd5afc7419170230c810dd11f5c1792e2263e2970cca8d659eb84fcd9acc301edb6d310096e450277d54be4f57071b0c82d9
-  languageName: node
-  linkType: hard
-
-"jquery@npm:^4.0.0":
-  version: 4.0.0
-  resolution: "jquery@npm:4.0.0"
-  checksum: 10c0/06d8d0f51121af5a691f8b59c74823157bb5b60eea915b30eaa920d6c0ffd91e60ba81e9b97bd8203f331f9dd8d0ec9a4b010935ea314bdd2f15453c29bc780b
   languageName: node
   linkType: hard
 

@@ -132,7 +132,7 @@ class CommandsTest extends WebDriverTestBase {
   }
 
   /**
-   * Tests common Ajax commands on a page without jQuery.
+   * Tests common Ajax commands.
    */
   public function testCouncilNativeCommands(): void {
     $this->drupalGet('ajax-test/native-request', ['query' => ['commands' => 1]]);
@@ -149,11 +149,11 @@ class CommandsTest extends WebDriverTestBase {
           { command: 'insert', selector: "[data-fixture ~= 'beta']", method: 'html',
             data: '<div style="display:none"><span class="ajax-new-content">Visible</span></div>' },
         ]);
-        return [typeof jQuery, target.style.width, target.style.cssFloat,
+        return [target.style.width, target.style.cssFloat,
           Drupal.ajax.elementData.get(target, 'state'), getComputedStyle(target.firstElementChild).display];
       })()
       JS);
-    $this->assertSame(['undefined', '42px', 'left', 7, 'block'], $result);
+    $this->assertSame(['42px', 'left', 7, 'block'], $result);
   }
 
   /**

@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Drupal\FunctionalJavascriptTests\Core\Form;
 
+use Drupal\FunctionalJavascriptTests\DrupalSelenium2Driver;
 use Drupal\FunctionalJavascriptTests\WebDriverTestBase;
 use PHPUnit\Framework\Attributes\Group;
 use PHPUnit\Framework\Attributes\RunTestsInSeparateProcesses;
@@ -35,9 +36,6 @@ class DropButtonTest extends WebDriverTestBase {
     \Drupal::service('theme_installer')->install([$theme]);
     $this->config('system.theme')->set('default', $theme)->save();
     $this->drupalGet('form-test/dropbutton');
-    if ($theme === 'stark') {
-      $this->assertSame('undefined', $this->getSession()->evaluateScript('typeof window.jQuery'));
-    }
 
     $assert = $this->assertSession();
     $wrapper = $assert->elementExists('css', '.dropbutton-wrapper');
@@ -59,7 +57,9 @@ class DropButtonTest extends WebDriverTestBase {
    * Activates the focused button through the browser keyboard input source.
    */
   private function pressEnter(): void {
-    $this->getSession()->getDriver()->getWebDriverSession()->postActions([
+    $driver = $this->getSession()->getDriver();
+    assert($driver instanceof DrupalSelenium2Driver);
+    $driver->getWebDriverSession()->postActions([
       'actions' => [
         [
           'type' => 'key',

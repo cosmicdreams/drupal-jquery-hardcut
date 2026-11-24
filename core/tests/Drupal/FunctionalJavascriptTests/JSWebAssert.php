@@ -47,7 +47,6 @@ class JSWebAssert extends WebAssert {
           return true;
         }
         return window.drupalCumulativeXhrCount >= 1 &&
-          (typeof jQuery === 'undefined' || (jQuery.active === 0 && jQuery(':animated').length === 0)) &&
           (typeof window.drupalTestHasActiveAnimations !== 'function' || !window.drupalTestHasActiveAnimations());
       })()
       JS;

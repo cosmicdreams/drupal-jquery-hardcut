@@ -90,12 +90,12 @@ class AjaxResponseTest extends UnitTestCase {
       'Drupal\Core\Ajax\HtmlCommand', [
         'setting1' => 'value1',
         'setting2' => 'value2',
-      ], ['jquery', 'drupal'], 'two');
+      ], ['once', 'drupal'], 'two');
     $command_three = $this->createCommandMockWithSettingsAndLibrariesAttachments(
       'Drupal\Core\Ajax\InsertCommand', [
         'setting1' => 'overridden',
         'setting3' => 'value3',
-      ], ['jquery', 'ajax'], 'three');
+      ], ['once', 'ajax'], 'three');
 
     $response->addCommand($command_one);
     $response->addCommand($command_two);
@@ -105,7 +105,7 @@ class AjaxResponseTest extends UnitTestCase {
 
     $response->mergeWith($response2);
     self::assertEquals([
-      'library' => ['jquery', 'drupal', 'jquery', 'ajax'],
+      'library' => ['once', 'drupal', 'once', 'ajax'],
       'drupalSettings' => [
         'setting1' => 'overridden',
         'setting2' => 'value2',

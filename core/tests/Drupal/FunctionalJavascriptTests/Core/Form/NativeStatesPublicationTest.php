@@ -56,12 +56,6 @@ final class NativeStatesPublicationTest extends WebDriverTestBase {
     $assert = $this->assertSession();
     $native = $assert->elementExists('css', '#states-test-native');
     $this->assertFalse($native->isVisible());
-    $this->assertSame('undefined', $session->evaluateScript('typeof window.jQuery'));
-    $this->assertSame([], $session->evaluateScript(<<<'JS'
-      performance.getEntriesByType('resource')
-        .map(({ name }) => new URL(name).pathname)
-        .filter((path) => path.includes('/assets/vendor/jquery/'))
-      JS));
     $session->executeScript(<<<'JS'
       document.querySelector('input[name="choice[1]"]').classList.add('colon:choice');
       const dependent = document.querySelector('#states-test-native').cloneNode(true);
@@ -410,7 +404,6 @@ final class NativeStatesPublicationTest extends WebDriverTestBase {
     $assert = $this->assertSession();
     $page = $session->getPage();
 
-    $this->assertSame('undefined', $session->evaluateScript('typeof window.jQuery'));
     $this->assertSame([], $session->evaluateScript('window.statesDeprecationLog'), 'Page-load deprecation log captured before attach is empty.');
 
     $textfield = $assert->elementExists('css', 'input[name="textfield"]');

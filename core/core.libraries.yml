@@ -610,22 +610,6 @@ internal.floating-ui:
     assets/vendor/floating-ui/floating-ui.core.umd.min.js: { minified: true }
     assets/vendor/floating-ui/floating-ui.dom.umd.min.js: { minified: true }
 
-jquery:
-  remote: https://github.com/jquery/jquery
-  version: "4.0.0"
-  license:
-    name: MIT
-    url: https://raw.githubusercontent.com/jquery/jquery/4.0.0/LICENSE.txt
-    gpl-compatible: true
-  js:
-    # jquery.min.js is explicitly set to preprocess: false to prevent its
-    # inclusion in JavaScript aggregates. This prevents it being duplicated
-    # across different aggregates which can include different combinations of
-    # libraries that depend on jQuery, so that it is only downloaded once per
-    # browser instead of potentially multiple times from different pages.
-    assets/vendor/jquery/jquery.min.js: { preprocess: false, minified: true, preserve_override_order: true }
-    misc/jquery.no-conflict.js: { preprocess: false, minified: false }
-
 normalize:
   remote: https://github.com/necolas/normalize.css
   version: "8.0.1"

@@ -83,14 +83,6 @@ const assetsFolder = `${coreFolder}/assets/vendor`;
       ],
     },
     {
-      pack: 'jquery',
-      files: [
-        { from: 'dist/jquery.js', to: 'jquery.js' },
-        { from: 'dist/jquery.min.js', to: 'jquery.min.js' },
-        { from: 'dist/jquery.min.map', to: 'jquery.min.map' },
-      ],
-    },
-    {
       pack: 'normalize.css',
       folder: 'normalize-css',
       library: 'normalize',
@@ -99,6 +91,15 @@ const assetsFolder = `${coreFolder}/assets/vendor`;
     {
       pack: '@drupal/once',
       folder: 'once',
+      process: {
+        // Use a native array in the unminified documentation examples.
+        '.js': ({ contents }) => [{
+          contents: contents.replace(
+            /( \* \/\/ Array or Array-like of Element\.\n \* once(?:\.\w+)?\('[^']+', )\w+\(('\[[^']+\]')\)/g,
+            '$1Array.from(document.querySelectorAll($2))',
+          ),
+        }],
+      },
       files: [
         { from: 'dist/once.js', to: 'once.js' },
         { from: 'dist/once.min.js', to: 'once.min.js' },

@@ -56,7 +56,7 @@ class ProgressTest extends WebDriverTestBase {
             document.body.append(progress.elementNode);
             progress.startMonitoring(uri, 10);
           });
-          return [typeof jQuery, trace, await done];
+          return [trace, await done];
         }
         finally {
           Object.assign(XMLHttpRequest.prototype, { open, setRequestHeader, send });
@@ -64,7 +64,6 @@ class ProgressTest extends WebDriverTestBase {
       })()
       JS);
     $this->assertSame([
-      'undefined',
       [['POST', '?progress=1&value=a%20b%7e&_format=json'], NULL],
       [100, 'POST XMLHttpRequest'],
     ], $result);

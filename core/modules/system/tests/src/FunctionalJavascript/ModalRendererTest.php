@@ -97,8 +97,7 @@ class ModalRendererTest extends WebDriverTestBase {
     $this->assertJsCondition('document.activeElement === tabbable.tabbable(document.querySelector(".drupal-dialog .drupal-dialog-content"))[1]');
     $this->assertJsCondition('document.activeElement === document.querySelector(".drupal-dialog .form-text")');
 
-    // By default, buttons within "action" form elements are changed to jQuery
-    // ui buttons and moved into the 'drupal-dialog-buttonpane' container.
+    // By default, form action buttons move into the dialog button pane.
     $this->drupalGet('/dialog_renderer-test-links');
     $this->clickLink('Auto buttons default!');
     $this->assertNotNull($session_assert->waitForElement('css', '.drupal-dialog-buttonpane .drupal-dialog-buttonset .js-form-submit'));

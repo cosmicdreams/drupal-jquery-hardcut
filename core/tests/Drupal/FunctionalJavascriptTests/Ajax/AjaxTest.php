@@ -333,7 +333,7 @@ class AjaxTest extends WebDriverTestBase {
   }
 
   /**
-   * Tests the shared transport on a page without jQuery.
+   * Tests the shared transport.
    */
   public function testNativeRequestTransport(): void {
     $this->drupalGet('ajax-test/native-request');
@@ -341,7 +341,6 @@ class AjaxTest extends WebDriverTestBase {
 
     // The response and the load callback are available before control returns.
     $this->assertSame([
-      'undefined',
       200,
       'GET',
       'tag=a%20b',
@@ -359,7 +358,7 @@ class AjaxTest extends WebDriverTestBase {
         });
         const response = JSON.parse(request.responseText);
         return [
-          typeof jQuery, request.status, response.method, response.query,
+          request.status, response.method, response.query,
           response.requestedWith, loaded,
         ];
       })()
@@ -440,18 +439,15 @@ class AjaxTest extends WebDriverTestBase {
   }
 
   /**
-   * Tests the Ajax behavior and command queue without a compatibility library.
+   * Tests that the Ajax behavior runs the command queue.
    */
-  public function testAjaxPageWithoutJquery(): void {
+  public function testAjaxBehaviorRunsCommands(): void {
     $this->drupalGet('ajax-test/native-request', ['query' => ['commands' => 1]]);
-    $session = $this->getSession();
-    $this->assertSame('undefined', $session->evaluateScript('typeof jQuery'));
     $this->clickLink('Send native Ajax request');
     $this->assertSession()->assertExpectedAjaxRequest(1);
     $result = json_decode($this->assertSession()->elementExists('css', '#request-lane-echo')->getText(), TRUE, flags: JSON_THROW_ON_ERROR);
     $this->assertSame('XMLHttpRequest', $result['requestedWith']);
     $this->assertSame('POST', $result['method']);
-    $this->assertSame('undefined', $session->evaluateScript('typeof jQuery'));
   }
 
   /**

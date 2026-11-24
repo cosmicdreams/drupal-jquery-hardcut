@@ -74,39 +74,16 @@ class AttachedAssetsTest extends KernelTestBase {
   }
 
   /**
-   * Tests that a render attachment can add a legacy asset.
-   */
-  public function testExplicitLegacyAttachment(): void {
-    $build['#attached']['library'][] = 'common_test/files';
-    $build['#attached']['library'][] = 'core/drupal.states';
-    $language = \Drupal::languageManager()->getCurrentLanguage();
-    $legacy_paths = static fn (array $assets): array => array_values(preg_grep(
-      '#^core/(?:assets/vendor/jquery/|misc/(?:jquery\.form|position|jquery\.no-conflict)\.js$)#',
-      array_keys($assets),
-    ));
-    $resolve = function (array $build) use ($language): array {
-      $assets = AttachedAssets::createFromRenderArray($build);
-      [$header, $footer] = $this->assetResolver->getJsAssets($assets, FALSE, $language);
-      return $header + $footer + $this->assetResolver->getCssAssets($assets, FALSE, $language);
-    };
-    $this->assertSame([], $legacy_paths($resolve($build)));
-
-    $build['#attached']['library'][] = 'core/jquery';
-    $jquery_paths = [
-      'core/assets/vendor/jquery/jquery.min.js',
-      'core/misc/jquery.no-conflict.js',
-    ];
-    $this->assertSame($jquery_paths, $legacy_paths($resolve($build)));
-  }
-
-  /**
-   * Tests non-existing libraries.
+   * Tests that attaching an unknown library adds no assets.
    */
   public function testLibraryUnknown(): void {
-    $build['#attached']['library'][] = 'core/unknown';
-    $assets = AttachedAssets::createFromRenderArray($build);
-
-    $this->assertSame([], $this->assetResolver->getJsAssets($assets, FALSE, \Drupal::languageManager()->getCurrentLanguage())[0], 'Unknown library was not added to the page.');
+    $language = \Drupal::languageManager()->getCurrentLanguage();
+    foreach (['unknown', 'jquery'] as $library) {
+      $this->assertFalse($this->container->get('library.discovery')->getLibraryByName('core', $library));
+      $assets = AttachedAssets::createFromRenderArray(['#attached' => ['library' => ["core/$library"]]]);
+      $this->assertSame([[], []], $this->assetResolver->getJsAssets($assets, FALSE, $language));
+      $this->assertSame([], $this->assetResolver->getCssAssets($assets, FALSE, $language));
+    }
   }
 
   /**

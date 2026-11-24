@@ -142,12 +142,6 @@ class TableDragTest extends WebDriverTestBase {
           Array.isArray(rowObject.group) && rowObject.group[0] === row;
       })()
       JS));
-    if ($this->defaultTheme === 'stark') {
-      $this->assertSame('undefined', $session->evaluateScript('typeof window.jQuery'));
-      $this->assertFalse($session->evaluateScript(
-        '"$table" in Drupal.tableDrag["tabledrag-test-table"]',
-      ));
-    }
 
     // Check that rows weight selects are hidden.
     $this->assertFalse($weight_select1->isVisible());
@@ -556,9 +550,6 @@ class TableDragTest extends WebDriverTestBase {
    */
   public function testAjaxChangedWarning(): void {
     $this->drupalGet('tabledrag_test', ['query' => ['ajax' => 1]]);
-    if ($this->defaultTheme === 'stark') {
-      $this->assertTrue($this->getSession()->evaluateScript("typeof jQuery === 'undefined'"));
-    }
     $assert = $this->assertSession();
     $this->assertSame(
       "Cannot read properties of undefined (reading 'id')",

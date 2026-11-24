@@ -403,7 +403,7 @@ use Drupal\Core\Extension\ThemeSettingsProvider;
  * 'drupalSettings' — for JavaScript settings) to attach these response-level
  * values. Example:
  * @code
- * $build['#attached']['library'][] = 'core/jquery';
+ * $build['#attached']['library'][] = 'core/drupal';
  * $build['#attached']['drupalSettings']['foo'] = 'bar';
  * $build['#attached']['feed'][] = [$url, $this->t('Feed title')];
  * @endcode
@@ -860,8 +860,10 @@ function hook_element_plugin_alter(array &$definitions) {
  * @see \Drupal\Core\Asset\AssetResolver
  */
 function hook_js_alter(&$javascript, \Drupal\Core\Asset\AttachedAssetsInterface $assets, \Drupal\Core\Language\LanguageInterface $language) {
-  // Swap out jQuery to use an updated version of the library.
-  $javascript['core/assets/vendor/jquery/jquery.min.js']['data'] = \Drupal::service('extension.list.module')->getPath('jquery_update') . '/jquery.js';
+  // Replace a script with a module-specific implementation.
+  if (isset($javascript['core/misc/announce.js'])) {
+    $javascript['core/misc/announce.js']['data'] = \Drupal::service('extension.list.module')->getPath('mymodule') . '/js/announce.js';
+  }
 }
 
 /**
@@ -927,7 +929,7 @@ function hook_library_info_build(): array {
         ],
       ],
       'dependencies' => [
-        'core/jquery',
+        'core/drupal',
       ],
     ];
   }
@@ -1074,7 +1076,7 @@ function hook_page_attachments(array &$attachments): void {
 
   // Conditionally attach an asset to the page.
   if (!\Drupal::currentUser()->hasPermission('may pet kittens')) {
-    $attachments['#attached']['library'][] = 'core/jquery';
+    $attachments['#attached']['library'][] = 'core/drupal';
   }
 }
 
@@ -1097,8 +1099,8 @@ function hook_page_attachments(array &$attachments): void {
  */
 function hook_page_attachments_alter(array &$attachments): void {
   // Conditionally remove an asset.
-  if (in_array('core/jquery', $attachments['#attached']['library'])) {
-    $index = array_search('core/jquery', $attachments['#attached']['library']);
+  if (in_array('core/drupal', $attachments['#attached']['library'])) {
+    $index = array_search('core/drupal', $attachments['#attached']['library']);
     unset($attachments['#attached']['library'][$index]);
   }
 }

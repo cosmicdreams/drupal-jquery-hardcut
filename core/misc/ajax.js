@@ -42,7 +42,7 @@
   };
 
   /**
-   * Returns the type name used by the pinned jQuery.param().
+   * Returns the type name used in form encoding.
    *
    * @param {*} value
    *   The value to inspect.
@@ -81,7 +81,7 @@
   }
 
   /**
-   * Deeply copies plain objects and arrays as jQuery.extend(true, ...) did.
+   * Deeply copies plain objects and arrays.
    *
    * @param {object} target
    *   The object to copy into.
@@ -130,7 +130,7 @@
    */
   function buildParams(prefix, value, traditional, add) {
     if (Array.isArray(value)) {
-      // Visit every index, including holes, as jQuery.each() did.
+      // Visit every array index, including holes.
       for (let index = 0; index < value.length; index++) {
         const item = value[index];
         if (traditional || rBracket.test(prefix)) {
@@ -155,7 +155,7 @@
   }
 
   /**
-   * Encodes data as the pinned jQuery.param() did.
+   * Encodes data for a query string or a form body.
    *
    * @param {object|Array<{name: string, value: *}>} data
    *   An object, or a list of name and value pairs.
@@ -316,7 +316,7 @@
       .map((callback) => callback.apply(context, args));
   }
 
-  // Cache-busting values, as jQuery generated them.
+  // Generate a distinct cache-busting value per request.
   let nonce = Date.now();
 
   /**
@@ -421,7 +421,7 @@
           ) {
             return false;
           }
-          // As jQuery opened the request after beforeSend, use its changes.
+          // Use the settings after beforeSend has run.
           const opened = {
             url: settings.url,
             method: `${settings.type}`.toUpperCase(),
@@ -455,7 +455,7 @@
         },
       },
       ({ status, response, error, xhr }) => {
-        // As in jQuery, a request cancelled before sending has no callbacks.
+        // A request cancelled before sending has no callbacks.
         if (status === 'canceled') {
           return;
         }
@@ -655,7 +655,7 @@
       const body = new FormData();
       values.forEach(({ name, value }) => body.append(name, value));
       if (settings.extraData) {
-        // Matches the plugin's decoding of jQuery.param() output.
+        // Decode the form values before appending them to FormData.
         param(settings.extraData, settings.traditional)
           .split('&')
           .forEach((pair) => {
@@ -2177,7 +2177,7 @@
   const pixelProperties =
     /^(?:border(?:-(?:top|right|bottom|left))?(?:-width)?|(?:margin|padding)(?:-(?:top|right|bottom|left))?|top|right|bottom|left|(?:(?:min|max)-)?(?:width|height))$/;
 
-  // The pinned jQuery style hooks clamp single numeric box values.
+  // Clamp single numeric values for box dimensions.
   const nonNegativeProperties = /^(?:width|height|padding|border-width)$/;
   const cssNumber = /^([+-]?(?:\d*\.)?\d+(?:e[+-]?\d+)?)([a-z%]*)$/i;
 

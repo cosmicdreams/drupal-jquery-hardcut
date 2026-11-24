@@ -175,7 +175,7 @@ class Datetime extends DateElementBase {
    *     right HTML5 format for the chosen element if an HTML5 element is used,
    *     otherwise defaults to DateFormat::load('html_time')->getPattern().
    *   - #date_time_callbacks: An array of optional callbacks for the time
-   *     element. Can be used to add a jQuery timepicker or an 'All day'
+   *     element. Can be used to add a time picker or an 'All day'
    *     checkbox.
    *   - #date_year_range: A description of the range of years to allow, like
    *     '1900:2050', '-3:+3' or '2000:+3', where the first value describes the

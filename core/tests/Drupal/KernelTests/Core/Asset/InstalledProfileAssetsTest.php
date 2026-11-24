@@ -115,23 +115,8 @@ class InstalledProfileAssetsTest extends KernelTestBase {
     ));
     unset($footer['drupalSettings']);
     $actual = ['libraries' => $libraries, 'css' => $metadata($css), 'js' => $metadata($footer)];
-    // The fixture records resolution at 92e5c3a3047.
     $baseline = Json::decode(file_get_contents(__DIR__ . '/fixtures/effective-assets-pinned.json'));
-    $expected = $baseline['profiles']["$profile:$theme"];
-    // Dropbuttons and announcements have shed these pinned dependencies.
-    $removed_libraries = ['core/jquery', 'core/drupal.debounce'];
-    $expected['libraries'] = array_values(array_diff($expected['libraries'], $removed_libraries));
-    $expected['js'] = array_values(array_filter($expected['js'], static fn (array $asset): bool => !in_array($asset['library'], $removed_libraries, TRUE)));
-    $dropbutton_library = 'core/drupal.dropbutton';
-    $event_library = 'core/drupal.form.events';
-    $library_index = array_search($dropbutton_library, $expected['libraries'], TRUE);
-    array_splice($expected['libraries'], $library_index, 0, [$event_library]);
-    $asset_index = array_search('core/misc/dropbutton/dropbutton.js', array_column($expected['js'], 'data'), TRUE);
-    $form_events = $expected['js'][$asset_index];
-    $form_events['data'] = 'core/misc/form-events.js';
-    $form_events['library'] = $event_library;
-    array_splice($expected['js'], $asset_index, 0, [$form_events]);
-    $this->assertSame($expected, $actual);
+    $this->assertSame($baseline['profiles']["$profile:$theme"], $actual);
   }
 
 }

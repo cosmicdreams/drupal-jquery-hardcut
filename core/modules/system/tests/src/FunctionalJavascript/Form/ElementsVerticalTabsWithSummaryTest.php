@@ -30,7 +30,6 @@ class ElementsVerticalTabsWithSummaryTest extends WebDriverTestBase {
    */
   public function testDynamicSummary(): void {
     $this->drupalGet('form_test/vertical-tabs-with-summary');
-    $this->assertSame('undefined', $this->getSession()->evaluateScript('typeof window.jQuery'));
     $this->assertSession()->elementTextEquals('css', '.vertical-tabs__menu-item.first .vertical-tabs__menu-item-title', 'Tab 1');
     $this->assertSession()->elementTextEquals('css', '.vertical-tabs__menu-item.first .vertical-tabs__menu-item-summary', 'Summary 1');
     $this->assertSession()->elementTextEquals('css', '.vertical-tabs__menu-item.last .vertical-tabs__menu-item-title', 'Tab 2');

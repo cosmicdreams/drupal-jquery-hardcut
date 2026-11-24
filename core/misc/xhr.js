@@ -70,7 +70,7 @@
     request.setRequestHeader = (name, value) => {
       requestHeaders.set(name, value);
     };
-    // An abort before sending cancels the request, as with jQuery.
+    // An abort before sending cancels the request.
     let aborted = false;
     request.abort = () => {
       aborted = true;
@@ -167,7 +167,7 @@
             settle('success', response);
           }
         });
-        // jQuery passed an empty error for a network failure.
+        // A network failure has no response status text.
         ['error', 'timeout', 'abort'].forEach((status) => {
           xhr.addEventListener(status, () =>
             settle(status, undefined, status === 'error' ? '' : status),

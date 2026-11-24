@@ -3,18 +3,11 @@
 namespace Drupal\Core\Ajax;
 
 /**
- * AJAX command for calling the jQuery insert() method.
+ * An Ajax command for prepending content to each match.
  *
- * The 'insert/prepend' command instructs the client to use jQuery's prepend()
- * method to prepend the given render array or HTML content to the inside each
- * element matched by the given selector.
+ * The 'insert/prepend' command operates on elements that match the selector.
  *
- * This command is implemented by Drupal.AjaxCommands.prototype.insert()
- * defined in misc/ajax.js.
- *
- * @see http://docs.jquery.com/Manipulation/prepend#content
- *
- * @ingroup ajax
+ * @see Drupal.AjaxCommands.prototype.insert
  */
 class PrependCommand extends InsertCommand {
 

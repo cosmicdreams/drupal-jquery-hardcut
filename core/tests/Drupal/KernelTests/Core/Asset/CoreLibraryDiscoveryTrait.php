@@ -16,13 +16,6 @@ use Symfony\Component\Finder\Finder;
 trait CoreLibraryDiscoveryTrait {
 
   /**
-   * The jQuery family of libraries.
-   */
-  private const JQUERY_LIBRARIES = [
-    'core/jquery',
-  ];
-
-  /**
    * {@inheritdoc}
    */
   public function register(ContainerBuilder $container): void {
@@ -62,6 +55,7 @@ trait CoreLibraryDiscoveryTrait {
     // The module extension list normally knows only the active profile.
     $module_list = $this->container->get('extension.list.module');
     foreach ($profiles as $name => $profile) {
+      // @phpstan-ignore method.deprecated (The inactive test profiles have no registered path.)
       $module_list->setPathname($name, $profile->getPathname());
     }
 

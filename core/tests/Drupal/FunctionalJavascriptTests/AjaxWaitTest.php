@@ -52,12 +52,11 @@ JS);
   }
 
   /**
-   * Tests that XMLHttpRequest and fetch are tracked without a jQuery global.
+   * Tests that XMLHttpRequest and fetch are tracked.
    */
   public function testNativeRequests(): void {
     $this->drupalGet('user');
     $this->getSession()->executeScript(<<<JS
-      window.jQuery = undefined;
       const xhr = new XMLHttpRequest();
       xhr.open('GET', window.location.href);
       xhr.send();

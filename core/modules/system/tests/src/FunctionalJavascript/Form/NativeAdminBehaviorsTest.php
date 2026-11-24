@@ -30,7 +30,6 @@ class NativeAdminBehaviorsTest extends WebDriverTestBase {
    */
   public function testLocaleBehaviors(): void {
     $this->drupalGet('form-test/admin-behaviors');
-    $this->assertSame('undefined', $this->getSession()->evaluateScript('typeof window.jQuery'));
     $assert = $this->assertSession();
     $page = $this->getSession()->getPage();
     $edit = '#locale-translate-edit-form';
@@ -74,7 +73,6 @@ class NativeAdminBehaviorsTest extends WebDriverTestBase {
    */
   public function testTextSummaries(): void {
     $this->drupalGet('form-test/admin-behaviors');
-    $this->assertSame('undefined', $this->getSession()->evaluateScript('typeof window.jQuery'));
     $assert = $this->assertSession();
     $empty = $assert->elementExists('css', '.js-text-format-wrapper:has(#empty-summary)');
     $wrapper = $assert->elementExists('css', '.js-text-summary-wrapper', $empty);

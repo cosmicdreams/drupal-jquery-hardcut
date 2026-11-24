@@ -1,24 +1,11 @@
 // cspell:ignore UIDOM
-import { readFileSync } from 'node:fs';
 import { defineConfig } from 'eslint/config';
 import importPlugin from 'eslint-plugin-import';
-import noJQuery from 'eslint-plugin-no-jquery';
 import prettierConfig from 'eslint-plugin-prettier/recommended';
 import ymlConfig from 'eslint-plugin-yml';
 import jsdoc from 'eslint-plugin-jsdoc';
 import js from '@eslint/js';
 import globals from 'globals';
-
-import { jqueryPlugin, jqueryRules } from './scripts/js/jquery-ratchet.mjs';
-const jqueryRatchet = JSON.parse(
-  readFileSync(
-    new URL(
-      './tests/Drupal/KernelTests/Core/Asset/fixtures/jquery-source-allow-list.json',
-      import.meta.url,
-    ),
-    'utf8',
-  ),
-);
 
 export default defineConfig(
   {
@@ -50,9 +37,6 @@ export default defineConfig(
   prettierConfig,
   ymlConfig.configs['flat/recommended'],
   {
-    plugins: {
-      'no-jquery': noJQuery,
-    },
     languageOptions: {
       ecmaVersion: 2020,
       globals: {
@@ -62,7 +46,6 @@ export default defineConfig(
         Drupal: 'readonly',
         drupalSettings: 'readonly',
         drupalTranslations: 'readonly',
-        jQuery: 'readonly',
         _: 'readonly',
         Cookies: 'readonly',
         htmx: 'readonly',
@@ -105,7 +88,10 @@ export default defineConfig(
         },
       ],
       'yml/indent': ['error', 2],
-      ...noJQuery.configs.all.rules,
+      'no-restricted-globals': [
+        'error',
+        { globals: ['jQuery', '$'], checkGlobalObject: true },
+      ],
     },
     settings: {
       jsdoc: {
@@ -115,11 +101,5 @@ export default defineConfig(
         },
       },
     },
-  },
-  {
-    files: ['**/*.{js,mjs,cjs}'],
-    ignores: Object.keys(jqueryRatchet.sources),
-    plugins: { 'drupal-jquery': jqueryPlugin },
-    rules: jqueryRules,
   },
 );

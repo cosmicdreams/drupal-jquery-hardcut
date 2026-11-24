@@ -28,7 +28,6 @@ JavaScript
 
   htmx - Zero-Clause BSD
 
-  jQuery - Copyright (c) OpenJS Foundation and other contributors
 
   LoadJS - Copyright (c) 2015 Andres Morey
 

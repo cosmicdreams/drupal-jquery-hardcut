@@ -48,7 +48,6 @@ class MachineNameTest extends WebDriverTestBase {
    */
   public function testReplacementAndTruncation(): void {
     $this->drupalGet('form-test/machine-name');
-    $this->assertSame('undefined', $this->getSession()->evaluateScript('typeof window.jQuery'));
     $assert = $this->assertSession();
     $label = $assert->fieldExists('machine_name_2_label');
     $preview = '#edit-machine-name-2-label-machine-name-suffix .machine-name-value';
@@ -70,7 +69,6 @@ class MachineNameTest extends WebDriverTestBase {
   public function testMachineName(): void {
     // Visit the machine name test page which contains two machine name fields.
     $this->drupalGet('form-test/machine-name');
-    $this->assertSame('undefined', $this->getSession()->evaluateScript('typeof window.jQuery'));
 
     // Test values for conversion.
     $test_values = [

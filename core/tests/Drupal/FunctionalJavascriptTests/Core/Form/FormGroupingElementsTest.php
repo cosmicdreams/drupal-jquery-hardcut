@@ -51,7 +51,6 @@ class FormGroupingElementsTest extends WebDriverTestBase {
     // Request the group vertical tabs testing page with a fragment identifier
     // to the second element.
     $this->drupalGet('form-test/group-vertical-tabs', ['fragment' => 'edit-element-2']);
-    $this->assertSame('undefined', $session->evaluateScript('typeof window.jQuery'));
 
     $page = $session->getPage();
 
@@ -105,11 +104,10 @@ class FormGroupingElementsTest extends WebDriverTestBase {
 
     // Request the group details testing page.
     $this->drupalGet('form-test/group-details');
-    $this->assertSame('undefined', $session->evaluateScript('typeof window.jQuery'));
 
     $page = $session->getPage();
 
-    // Verify native details-aria.js toggles aria-expanded without jQuery on
+    // Verify native details-aria.js toggles aria-expanded on
     // server-rendered open="open" details.
     $summary = $page->find('css', '#edit-meta > summary');
     $summary->click();
@@ -219,7 +217,6 @@ class FormGroupingElementsTest extends WebDriverTestBase {
   public function testNativeFormSummary(): void {
     $this->drupalGet('form-test/group-details');
     $session = $this->getSession();
-    $this->assertSame('undefined', $session->evaluateScript('typeof window.jQuery'));
     $session->executeScript(<<<'JS'
       const form = document.body.appendChild(document.createElement('form'));
       form.id = 'summary-test-form';
@@ -254,7 +251,6 @@ class FormGroupingElementsTest extends WebDriverTestBase {
   public function testFormEventBindingsDetach(): void {
     $this->drupalGet('form-test/group-details');
     $session = $this->getSession();
-    $this->assertSame('undefined', $session->evaluateScript('typeof window.jQuery'));
     $session->executeScript(<<<'JS'
       (async () => {
         const region = document.body.appendChild(document.createElement('div'));
@@ -353,7 +349,6 @@ class FormGroupingElementsTest extends WebDriverTestBase {
   public function testUnloadBatchIgnoresUnrelatedMutations(): void {
     $this->drupalGet('form-test/group-details');
     $session = $this->getSession();
-    $this->assertSame('undefined', $session->evaluateScript('typeof window.jQuery'));
     $session->executeScript(<<<'JS'
       (async () => {
         const region = document.body.appendChild(document.createElement('div'));
@@ -399,7 +394,6 @@ class FormGroupingElementsTest extends WebDriverTestBase {
   public function testUnloadBatchSettlesWhenTargetsStay(): void {
     $this->drupalGet('form-test/group-details');
     $session = $this->getSession();
-    $this->assertSame('undefined', $session->evaluateScript('typeof window.jQuery'));
     $session->executeScript(<<<'JS'
       (async () => {
         const disconnect = MutationObserver.prototype.disconnect;

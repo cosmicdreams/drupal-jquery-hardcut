@@ -1,5 +1,0 @@
-# Remove entries when their resolved closures stop reaching the jQuery family.
-- default_admin/core/jquery
-- stark/core/jquery
-- starterkit_theme/core/jquery
-- umami/core/jquery

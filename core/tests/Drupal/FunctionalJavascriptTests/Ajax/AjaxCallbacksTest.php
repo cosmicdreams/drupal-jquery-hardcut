@@ -32,7 +32,6 @@ class AjaxCallbacksTest extends WebDriverTestBase {
 
     // Test Ajax callback when date changes.
     $this->drupalGet('ajax_forms_test_ajax_element_form');
-    $this->assertSame('undefined', $this->getSession()->evaluateScript('typeof window.jQuery?.fn.ajaxSubmit'));
     $this->assertNotEmpty($this->getSession()->getPage()->find('xpath', '//div[@id="ajax_date_value"][text()="No date yet selected"]'));
     $this->getSession()->executeScript(<<<'JS'
       const input = document.querySelector('[data-drupal-selector=edit-date]');

@@ -32,11 +32,6 @@ class TabbingManagerTest extends WebDriverTestBase {
   public function testTabbingOrder(): void {
     $this->drupalGet('tabbingmanager-test');
     $session = $this->getSession();
-    $this->assertTrue($session->evaluateScript(<<<'JS'
-      !Array.from(document.querySelectorAll('link[rel="stylesheet"]')).some(
-        (asset) => asset.href.includes('/jquery.ui/')
-      )
-      JS));
     $focus = fn (): string => $session->evaluateScript('document.activeElement.id');
 
     $session->executeScript("document.getElementById('third').focus()");
@@ -73,14 +68,13 @@ class TabbingManagerTest extends WebDriverTestBase {
   }
 
   /**
-   * Tests that tabbing works without the jQuery library.
+   * Tests that focus trapping and document-wide constraints in Stark.
    */
-  public function testTabbingWithoutJquery(): void {
+  public function testStarkFocusConstraints(): void {
     \Drupal::service('theme_installer')->install(['stark']);
     $this->config('system.theme')->set('default', 'stark')->save();
     $this->drupalGet('tabbingmanager-test');
     $session = $this->getSession();
-    $this->assertSame('undefined', $session->evaluateScript('typeof window.jQuery'));
     $this->assertSame(['none', 'none'], $session->evaluateScript(<<<'JS'
       (() => {
         const probe = document.body.appendChild(document.createElement('div'));
@@ -89,11 +83,6 @@ class TabbingManagerTest extends WebDriverTestBase {
         const style = getComputedStyle(probe);
         return [style.transitionProperty, style.animationName];
       })()
-      JS));
-    $this->assertTrue($session->evaluateScript(<<<'JS'
-      !Array.from(document.querySelectorAll('script[src], link[href]')).some((asset) =>
-        /[\/]jquery(?:[./-]|$)/i.test(asset.src || asset.href)
-      )
       JS));
     $session->executeScript(<<<'JS'
       const root = document.getElementById('tabbingmanager-test-container');

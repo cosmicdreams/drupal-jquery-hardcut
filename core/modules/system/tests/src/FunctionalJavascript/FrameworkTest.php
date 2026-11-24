@@ -77,11 +77,7 @@ class FrameworkTest extends WebDriverTestBase {
     $this->assertContains($expected['library_1'], $new_libraries, "Page state now has the {$expected['library_1']} library.");
 
     // Verify the expected JS file was added, both to drupalSettings, and as
-    // the third AJAX command for inclusion into the HTML. By testing for an
-    // exact HTML string containing the SCRIPT tag, we also ensure that
-    // unexpected JavaScript code, such as a jQuery.extend() that would
-    // potentially clobber rather than properly merge settings, didn't
-    // accidentally get added.
+    // the third AJAX command for inclusion into the HTML.
     $this->assertContains($expected['library_2'], $new_libraries, "Page state now has the {$expected['library_2']} library.");
   }
 
