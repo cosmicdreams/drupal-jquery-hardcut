@@ -103,7 +103,7 @@ class EffectiveAssetResolutionTest extends KernelTestBase {
     $already_loaded = $context === 'already-loaded';
     $loaded = $already_loaded ? ['core/drupal.checkbox', 'system/base'] : [];
     // The fixture records groups at 92e5c3a3047.
-    $baseline = Json::decode(file_get_contents(__DIR__ . '/fixtures/effective-assets-pinned.json'));
+    $baseline = Json::decode(file_get_contents(__DIR__ . '/fixtures/effective-assets-baseline.json'));
     $expected_groups = $baseline['groups'][$context];
     $this->enableModules(['common_test']);
     $this->container->get('theme_installer')->install(['stark']);

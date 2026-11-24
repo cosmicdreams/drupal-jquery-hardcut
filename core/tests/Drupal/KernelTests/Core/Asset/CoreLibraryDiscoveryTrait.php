@@ -45,12 +45,8 @@ trait CoreLibraryDiscoveryTrait {
     // are enabled as modules so their libraries can be discovered as well.
     $this->enableModules(array_keys($modules + $profiles));
 
-    $extensions = ['core'];
-    foreach ($modules + $profiles + $themes as $name => $extension) {
-      if (is_file("$this->root/{$extension->getPath()}/$name.libraries.yml")) {
-        $extensions[] = $name;
-      }
-    }
+    // Modules can provide libraries through hooks without a YAML file.
+    $extensions = ['core', ...array_keys($modules + $profiles + $themes)];
 
     // The module extension list normally knows only the active profile.
     $module_list = $this->container->get('extension.list.module');

@@ -115,7 +115,7 @@ class InstalledProfileAssetsTest extends KernelTestBase {
     ));
     unset($footer['drupalSettings']);
     $actual = ['libraries' => $libraries, 'css' => $metadata($css), 'js' => $metadata($footer)];
-    $baseline = Json::decode(file_get_contents(__DIR__ . '/fixtures/effective-assets-pinned.json'));
+    $baseline = Json::decode(file_get_contents(__DIR__ . '/fixtures/effective-assets-baseline.json'));
     $this->assertSame($baseline['profiles']["$profile:$theme"], $actual);
   }
 
