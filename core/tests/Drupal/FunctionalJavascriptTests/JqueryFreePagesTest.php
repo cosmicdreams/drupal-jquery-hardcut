@@ -219,11 +219,16 @@ class JqueryFreePagesTest extends WebDriverTestBase {
     $this->config('system.theme')->set('default', 'stark')->set('admin', 'stark')->save();
     $this->config('system.performance')->set('js.preprocess', FALSE)->save();
     $this->installAssetObserver();
-    $this->drupalLogin($this->createUser([], NULL, TRUE));
-
     $this->createContentType(['type' => 'page', 'name' => 'Page']);
+    $this->drupalLogin($this->createUser([
+      'administer filters',
+      'create page content',
+      'use text format basic_html',
+      'view the administration theme',
+    ]));
+
     $this->drupalGet('node/add/page');
-    $this->getSession()->getPage()->selectFieldOption('body[0][format]', 'basic_html');
+    $this->assertSession()->elementExists('css', 'input[data-editor-for][name="body[0][format]"][value="basic_html"]');
     $this->assertNotNull($this->assertSession()->waitForElementVisible('css', '.ck-editor'));
     $this->assertSame([], $this->observedEdges(), 'CKEditor 5 runtime');
 
