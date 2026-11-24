@@ -19,7 +19,7 @@
 
   function serialize(widget) {
     const format = activeFormat(widget);
-    if (format) {
+    if (format && !widget.destroying) {
       Drupal.editorDetach(widget.field, format, 'serialize');
     }
     // The value and its format must describe the same editor while a switch
@@ -27,7 +27,7 @@
     widget.select.value = widget.field.dataset.editorActiveTextFormat;
   }
 
-  async function changeTextEditor(widget, newFormatID) {
+  async function changeTextEditor(widget, newFormatID, trigger) {
     const { field, select, formats, listeners } = widget;
     const previousFormatID = field.dataset.editorActiveTextFormat;
     const previousFormat = activeFormat(widget);
@@ -41,12 +41,15 @@
       field.isConnected &&
       select.isConnected;
     try {
+      const needsFilter =
+        newFormatID !== previousFormatID && format && !format.isXssSafe;
       let filtered = false;
-      if (newFormatID !== previousFormatID && format && !format.isXssSafe) {
-        let value;
-        // An edit made while the request is in flight must also be filtered.
-        do {
-          Drupal.editorDetach(field, previousFormat, 'serialize');
+      let value;
+      do {
+        if (needsFilter) {
+          if (!widget.destroying) {
+            Drupal.editorDetach(field, previousFormat, 'serialize');
+          }
           value = field.value;
           // eslint-disable-next-line no-await-in-loop
           const response = await fetch(
@@ -71,17 +74,24 @@
           if (!isCurrent()) {
             return;
           }
-          Drupal.editorDetach(field, previousFormat, 'serialize');
-        } while (field.value !== value);
-      }
+          if (!widget.destroying) {
+            Drupal.editorDetach(field, previousFormat, 'serialize');
+          }
+          if (field.value !== value) {
+            continue;
+          }
+        }
 
-      if (!widget.destroying) {
-        widget.destroying = Drupal.editorDetach(field, previousFormat);
-      }
-      await widget.destroying;
-      if (!isCurrent()) {
-        return;
-      }
+        widget.destroying ??= Promise.resolve(
+          Drupal.editorDetach(field, previousFormat, trigger),
+        );
+        // eslint-disable-next-line no-await-in-loop
+        await widget.destroying;
+        if (!isCurrent()) {
+          return;
+        }
+        // The textarea can change during filtering or editor teardown.
+      } while (needsFilter && field.value !== value);
       widget.destroying = null;
       if (filtered !== false) {
         field.value = filtered;
@@ -126,7 +136,9 @@
 
     const format = formats[newFormatID];
     // Inspect the current editor content rather than a stale textarea value.
-    Drupal.editorDetach(field, activeFormat(widget), 'serialize');
+    if (!widget.destroying) {
+      Drupal.editorDetach(field, activeFormat(widget), 'serialize');
+    }
     if (!field.value || !format?.editorSupportsContentFiltering) {
       changeTextEditor(widget, newFormatID);
       return;
@@ -238,9 +250,6 @@
     },
 
     detach(context, settings, trigger) {
-      if (trigger === 'move') {
-        return;
-      }
       const candidates = context.matches?.(selector)
         ? context
         : context.querySelectorAll(selector);
@@ -248,6 +257,15 @@
         const widget = widgets.get(select);
         if (trigger === 'serialize') {
           serialize(widget);
+          return;
+        }
+        if (trigger === 'move') {
+          const formatID = widget.field.dataset.editorActiveTextFormat;
+          widget.confirmation?.close();
+          select.value = formatID;
+          // Tabledrag moves the row synchronously. Reattach once the old
+          // editor has finished tearing down and the row is in place.
+          changeTextEditor(widget, formatID, trigger);
           return;
         }
 

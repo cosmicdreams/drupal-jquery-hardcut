@@ -70,9 +70,10 @@ class ImageTest extends ImageTestTestBase {
   }
 
   /**
-   * Tests that destroying an editor aborts its pending image upload.
+   * Tests that switching formats aborts the pending upload without a warning.
    */
   public function testDetachDuringUpload(): void {
+    $this->config('filter.settings')->set('always_show_fallback_choice', TRUE)->save();
     $this->drupalGet($this->host->toUrl('edit-form'));
     $this->waitForEditor();
     $this->getSession()->executeScript(<<<'JS'
@@ -99,18 +100,26 @@ class ImageTest extends ImageTestTestBase {
         }
       };
 
-      const wrapper = editor.sourceElement.closest('.js-text-format-wrapper');
-      window.removeEditorUnderTest = () => {
-        Drupal.detachBehaviors(wrapper, null, 'unload');
-        wrapper.remove();
+      const notification = editor.plugins.get('Notification');
+      const showWarning = notification.showWarning.bind(notification);
+      window.editorUploadWarnings = [];
+      notification.showWarning = (message, options) => {
+        window.editorUploadWarnings.push(message);
+        return showWarning(message, options);
       };
-      const repository = editor.plugins.get('FileRepository');
-      const loader = repository.createLoader(new File(['image'], 'image.png'));
-      loader.upload().catch(() => {});
       JS);
+    $page = $this->getSession()->getPage();
+    $image = $this->getTestFiles('image')[0];
+    $this->assertSession()->elementExists('css', '.ck-file-dialog-button input[type="file"]')
+      ->attachFile($this->container->get('file_system')->realpath($image->uri));
     $this->assertJsCondition('window.pendingEditorUpload === true');
-    $this->getSession()->executeScript('window.removeEditorUnderTest();');
-    $this->assertJsCondition('window.abortedEditorUpload === true && Drupal.CKEditor5Instances.size === 0');
+    $page->selectFieldOption('body[0][format]', 'plain_text');
+    $this->assertJsCondition(<<<'JS'
+      window.abortedEditorUpload === true &&
+      Drupal.CKEditor5Instances.size === 0 &&
+      document.querySelector('textarea[name="body[0][value]"]').dataset.editorActiveTextFormat === 'plain_text'
+      JS);
+    $this->assertSame([], $this->getSession()->evaluateScript('window.editorUploadWarnings'));
   }
 
 }
