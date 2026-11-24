@@ -82,9 +82,11 @@
           }
         }
 
-        widget.destroying ??= Promise.resolve(
-          Drupal.editorDetach(field, previousFormat, trigger),
-        );
+        if (!widget.destroying) {
+          widget.destroying = Promise.resolve(
+            Drupal.editorDetach(field, previousFormat, trigger),
+          );
+        }
         // eslint-disable-next-line no-await-in-loop
         await widget.destroying;
         if (!isCurrent()) {
