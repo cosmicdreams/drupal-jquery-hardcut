@@ -656,7 +656,7 @@
       });
       ckeditorAjaxDialog.dialogOpener = opener;
       ckeditorAjaxDialog.isResponseCurrent = () =>
-        opener.isConnected && isCurrent();
+        opener?.isConnected && isCurrent();
       ckeditorAjaxDialog.commands.openDialog = (ajax, response, status) => {
         Drupal.AjaxCommands.prototype.openDialog(ajax, response, status);
         const content = document.querySelector(response.selector);

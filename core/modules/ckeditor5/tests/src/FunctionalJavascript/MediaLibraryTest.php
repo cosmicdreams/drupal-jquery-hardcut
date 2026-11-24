@@ -229,6 +229,37 @@ class MediaLibraryTest extends WebDriverTestBase {
   }
 
   /**
+   * Tests that a late dialog response cannot open for a destroyed editor.
+   */
+  public function testDestroyedEditorIgnoresOpenDialogResponse(): void {
+    $this->drupalGet('/node/add/blog');
+    $this->waitForEditor();
+    $session = $this->getSession();
+    $session->executeScript(<<<'JS'
+      const request = Drupal.ajaxRequest;
+      Drupal.ajaxRequest = (options, complete) => {
+        if (!options.url.includes('media-library')) {
+          return request(options, complete);
+        }
+        Drupal.ajaxRequest = request;
+        return request(options, (response) => {
+          window.completeEditorDialogRequest = () => complete(response);
+        });
+      };
+      JS);
+    $this->pressEditorButton('Insert Media');
+    $this->assertJsCondition('typeof window.completeEditorDialogRequest === "function"');
+    $session->executeScript(<<<'JS'
+      const editor = Array.from(Drupal.CKEditor5Instances.values())[0];
+      Drupal.detachBehaviors(editor.sourceElement.closest('.js-text-format-wrapper'));
+      window.completeEditorDialogRequest();
+      JS);
+    $assert = $this->assertSession();
+    $assert->assertWaitOnAjaxRequest();
+    $assert->elementNotExists('css', 'dialog[open] #media-library-content');
+  }
+
+  /**
    * Tests that a late Media Library save cannot reach another editor.
    */
   public function testClosedDialogIgnoresSave(): void {

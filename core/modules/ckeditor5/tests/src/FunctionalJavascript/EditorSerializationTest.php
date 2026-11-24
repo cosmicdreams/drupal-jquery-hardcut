@@ -86,6 +86,17 @@ class EditorSerializationTest extends CKEditor5TestBase {
    */
   public function testMoveDuringPendingFormatSwitch(): void {
     $this->openSectionsForm();
+    $session = $this->getSession();
+    $session->executeScript(<<<'JS'
+      window.alternateAttachments = [];
+      const attach = Drupal.editorAttach;
+      Drupal.editorAttach = (field, format) => {
+        if (field === window.switchingEditor.sourceElement && format.format === 'alternate') {
+          window.alternateAttachments.push(field.value);
+        }
+        attach(field, format);
+      };
+      JS);
     $this->beginPendingFormatSwitch();
     $assert = $this->assertSession();
     $row = 'tr.draggable:has(textarea[name="field_sections[0][value]"])';
@@ -108,6 +119,41 @@ class EditorSerializationTest extends CKEditor5TestBase {
           editor?.state === 'ready' && editor.getData() === '<p>Edited before the format switch.</p>';
       })()
       JS);
+    $this->assertSame(['<p>Edited before the format switch.</p>'], $session->evaluateScript('window.alternateAttachments'));
+    $session->executeScript('window.completeFormatSwitch();');
+    $this->assertJsCondition('window.alternateAttachments.length === 2');
+    $this->assertSame([
+      '<p>Edited before the format switch.</p>',
+      '<p>Filtered text.</p>',
+    ], $session->evaluateScript('window.alternateAttachments'));
+  }
+
+  /**
+   * Tests restoring the plain text format guidelines after canceling.
+   */
+  public function testCancelRestoresFormatGuidelines(): void {
+    $this->createSectionsField();
+    $field = FieldConfig::loadByName('node', 'page', 'field_sections');
+    $this->assertInstanceOf(FieldConfig::class, $field);
+    $field->setSetting('allowed_formats', ['plain_text', 'alternate'])->save();
+    $node = $this->drupalCreateNode([
+      'type' => 'page',
+      'uid' => $this->loggedInUser->id(),
+      'field_sections' => [['value' => 'First section.', 'format' => 'plain_text']],
+    ]);
+    $this->drupalGet($node->toUrl('edit-form'));
+    $assert = $this->assertSession();
+    $selector = '.js-filter-wrapper:has(select[name="field_sections[0][format]"]) [data-drupal-format-id="plain_text"]';
+    $assert->elementExists('css', $selector);
+    // The guidelines can be empty even when the format's container is shown.
+    $shown = "getComputedStyle(document.querySelector('$selector')).display !== 'none'";
+    $this->assertJsCondition($shown);
+
+    $this->getSession()->getPage()->selectFieldOption('field_sections[0][format]', 'alternate');
+    $this->assertJsCondition("!($shown)");
+    $assert->elementExists('css', 'dialog.editor-change-text-format-modal')->pressButton('Cancel');
+    $assert->fieldValueEquals('field_sections[0][format]', 'plain_text');
+    $this->assertJsCondition($shown);
   }
 
   /**
@@ -330,17 +376,11 @@ class EditorSerializationTest extends CKEditor5TestBase {
       window.sectionsEditor()?.state === 'ready' &&
         window.sectionsEditor().sourceElement.dataset.editorActiveTextFormat === 'ckeditor5'
       JS);
-    $session->executeScript(<<<'JS'
-      Drupal.detachBehaviors(window.sectionsEditor().sourceElement.form, drupalSettings, 'serialize');
-      JS);
-    $assert->fieldValueEquals('field_sections[0][value]', $edit ? '<p>Edited in the alternate format.</p>' : $original);
-    if ($edit) {
-      $page->pressButton('Save');
-      $assert->addressEquals($node->toUrl()->toString());
-      $saved = $this->container->get('entity_type.manager')->getStorage('node')->loadUnchanged($node->id());
-      $this->assertSame('ckeditor5', $saved->field_sections->format);
-      $this->assertSame('<p>Edited in the alternate format.</p>', $saved->field_sections->value);
-    }
+    $page->pressButton('Save');
+    $assert->addressEquals($node->toUrl()->toString());
+    $saved = $this->container->get('entity_type.manager')->getStorage('node')->loadUnchanged($node->id());
+    $this->assertSame('ckeditor5', $saved->field_sections->format);
+    $this->assertSame($edit ? '<p>Edited in the alternate format.</p>' : '<p>Original text.</p>', $saved->field_sections->value);
   }
 
   /**

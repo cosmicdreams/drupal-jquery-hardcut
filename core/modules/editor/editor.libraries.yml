@@ -7,7 +7,6 @@ drupal.editor:
     - core/drupalSettings
     - core/once
     - core/drupal.dialog
-    - core/drupal.announce
 
 drupal.editor.dialog:
   version: VERSION
