@@ -182,42 +182,49 @@ class FileManagedFileElementTest extends WebDriverTestBase {
     file_put_contents($oversized, str_repeat('a', 33));
     file_put_contents($valid, 'valid');
 
-    $this->drupalGet('file/test/0/0/0', ['query' => ['validate_upload' => 1]]);
+    $this->drupalGet('file/test/0/0/1', ['query' => ['validate_upload' => 1]]);
     $assert = $this->assertSession();
     $page = $this->getSession()->getPage();
-    $file = '.js-form-managed-file:has(input[name="files[file]"])';
-    $other = '.js-form-managed-file:has(input[name="files[other_file]"])';
+    $file = '.js-form-managed-file:has(input[name="files[file][]"])';
+    $other = '.js-form-managed-file:has(input[name="files[other_file][]"])';
     $fid = $this->getLastFileId();
 
-    $page->attachFileToField('files[file]', $file_system->realpath($wrong_extension));
+    $page->attachFileToField('files[file][]', $file_system->realpath($wrong_extension));
     $assert->elementTextContains('css', "$file .file-upload-js-error", 'Only files with the following extensions are allowed');
-    $assert->fieldValueEquals('files[file]', '');
-    $page->attachFileToField('files[other_file]', $file_system->realpath($oversized));
+    $assert->fieldValueEquals('files[file][]', '');
+    $page->attachFileToField('files[other_file][]', $file_system->realpath($oversized));
     $assert->elementTextContains('css', "$other .file-upload-js-error", 'The maximum allowed file size is 32 bytes');
-    $assert->fieldValueEquals('files[other_file]', '');
+    $assert->fieldValueEquals('files[other_file][]', '');
     $assert->elementExists('css', "$file .file-upload-js-error");
     $this->assertSame($fid, $this->getLastFileId());
 
-    $this->getSession()->executeScript(<<<'JS'
-      const input = document.querySelector('input[name="files[file]"]');
-      input.multiple = true;
-      const { fileExtensions } = input.dataset;
-      input.dataset.fileExtensions = 'x';
-      const selection = new DataTransfer();
-      selection.items.add(new File(['valid'], 'valid.x'));
-      selection.items.add(new File(['invalid'], 'invalid.y'));
-      input.files = selection.files;
-      input.dispatchEvent(new Event('change', { bubbles: true, cancelable: true }));
-      input.dataset.fileExtensions = fileExtensions;
-      input.multiple = false;
-      JS);
-    $assert->elementTextContains('css', "$file .file-upload-js-error", 'invalid.y');
-    $assert->fieldValueEquals('files[file]', '');
+    // Use the real multiple input and let the change event upload the valid
+    // file. Verify the rejected filename is still shown after replacement.
+    foreach ([
+      ['valid-extension.txt', 'invalid.jpg', 'invalid', 'following extensions are allowed'],
+      ['valid-size.txt', 'oversized.txt', str_repeat('a', 33), 'maximum allowed file size is 32 bytes'],
+    ] as [$valid_name, $invalid_name, $invalid_contents, $message]) {
+      $selection = json_encode([$valid_name, $invalid_name, $invalid_contents], JSON_THROW_ON_ERROR);
+      $this->getSession()->executeScript(<<<JS
+        const [validName, invalidName, invalidContents] = $selection;
+        const input = document.querySelector('input[name="files[file][]"]');
+        const selection = new DataTransfer();
+        selection.items.add(new File(['valid'], validName));
+        selection.items.add(new File([invalidContents], invalidName));
+        input.files = selection.files;
+        input.dispatchEvent(new Event('change', { bubbles: true, cancelable: true }));
+        JS);
+      $this->assertNotNull($assert->waitForLink($valid_name));
+      $assert->assertWaitOnAjaxRequest();
+      $assert->linkNotExists($invalid_name);
+      $assert->elementTextContains('css', "$file .file-upload-js-error", $invalid_name);
+      $assert->elementTextContains('css', "$file .file-upload-js-error", $message);
+    }
 
     // A managed file button disables only other inputs in the same form.
     $this->getSession()->executeScript(<<<'JS'
       const upload = document.querySelector('[data-drupal-selector$="file-upload-button"]');
-      const otherInput = upload.form.querySelector('input[name="files[other_file]"]');
+      const otherInput = upload.form.querySelector('input[name="files[other_file][]"]');
       const extraForm = document.createElement('form');
       extraForm.innerHTML = '<div class="js-form-managed-file"><input class="js-form-file" type="file"></div>';
       document.body.append(extraForm);
@@ -228,7 +235,7 @@ class FileManagedFileElementTest extends WebDriverTestBase {
       JS);
     $this->assertJsCondition('window.onlySubmittingFormLocked');
 
-    $page->attachFileToField('files[file]', $file_system->realpath($valid));
+    $page->attachFileToField('files[file][]', $file_system->realpath($valid));
     $this->assertNotNull($assert->waitForLink(basename($valid)));
     $assert->elementNotExists('css', "$file .file-upload-js-error");
     $assert->elementExists('css', "$other .file-upload-js-error");

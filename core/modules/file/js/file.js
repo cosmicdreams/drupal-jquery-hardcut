@@ -165,43 +165,57 @@
         ?.toLowerCase()
         .split(/ +/);
       const limit = Number(input.dataset.fileMaxSize);
-      const files = Array.from(input.files);
-      const invalidExtension =
-        extensions?.length &&
-        files.find(
-          (file) =>
-            !extensions.some((extension) =>
-              file.name.toLowerCase().endsWith(`.${extension}`),
+      const validFiles = [];
+      const errors = [];
+      Array.from(input.files).forEach((file) => {
+        if (
+          extensions?.length &&
+          !extensions.some((extension) =>
+            file.name.toLowerCase().endsWith(`.${extension}`),
+          )
+        ) {
+          errors.push(
+            Drupal.t(
+              'The selected file %filename cannot be uploaded. Only files with the following extensions are allowed: %extensions.',
+              {
+                '%filename': file.name,
+                '%extensions': input.dataset.fileExtensions
+                  .split(/ +/)
+                  .join(', '),
+              },
             ),
-        );
-      const oversized = limit > 0 && files.find((file) => file.size > limit);
-      let error;
-      if (invalidExtension) {
-        error = Drupal.t(
-          'The selected file %filename cannot be uploaded. Only files with the following extensions are allowed: %extensions.',
-          {
-            '%filename': invalidExtension.name,
-            '%extensions': input.dataset.fileExtensions.split(/ +/).join(', '),
-          },
-        );
-      } else if (oversized) {
-        error = Drupal.t(
-          'The selected file %filename cannot be uploaded. The maximum allowed file size is %size.',
-          {
-            '%filename': oversized.name,
-            '%size': input.dataset.fileMaxSizeLabel,
-          },
-        );
+          );
+        } else if (limit > 0 && file.size > limit) {
+          errors.push(
+            Drupal.t(
+              'The selected file %filename cannot be uploaded. The maximum allowed file size is %size.',
+              {
+                '%filename': file.name,
+                '%size': input.dataset.fileMaxSizeLabel,
+              },
+            ),
+          );
+        } else {
+          validFiles.push(file);
+        }
+      });
+
+      if (!errors.length) {
+        return;
       }
 
-      if (error) {
-        widget.insertAdjacentHTML(
-          'afterbegin',
-          `<div class="messages messages--error file-upload-js-error" aria-live="polite">${error}</div>`,
-        );
+      widget.insertAdjacentHTML(
+        'afterbegin',
+        `<div class="messages messages--error file-upload-js-error" aria-live="polite">${errors.join('<br>')}</div>`,
+      );
+      if (!validFiles.length) {
         input.value = '';
-        // Cancel all other change event handlers.
         event.stopImmediatePropagation();
+      } else {
+        // FileList is read-only. Replace it with the files that can upload.
+        const selection = new DataTransfer();
+        validFiles.forEach((file) => selection.items.add(file));
+        input.files = selection.files;
       }
     },
 
@@ -214,12 +228,39 @@
      *   The event triggered. For example `change.autoFileUpload`.
      */
     triggerUploadButton(event) {
-      event.currentTarget
-        .closest('.js-form-managed-file')
+      const input = event.currentTarget;
+      const widget = input.closest('.js-form-managed-file');
+      const error = widget?.querySelector('.file-upload-js-error');
+      widget
         ?.querySelectorAll(
           '.js-form-submit[data-drupal-selector$="upload-button"]',
         )
         .forEach((button) => {
+          const ajax =
+            error &&
+            Drupal.ajax?.instances.find(
+              (request) => request?.element === button,
+            );
+          if (ajax && !ajax.ajaxing) {
+            // Keep the rejected filenames visible when the upload replaces
+            // this widget or advances to the next step of the upload form.
+            const { insert } = Drupal.AjaxCommands.prototype;
+            ajax.commands.insert = (request, response, status) => {
+              const preserveError = widget.contains(error);
+              const elements = insert(request, response, status);
+              if (preserveError && elements?.length && !widget.isConnected) {
+                const selector = `input[type="file"][name="${CSS.escape(input.name)}"]`;
+                const replacement = elements
+                  .map((element) => element.querySelector(selector))
+                  .find(Boolean);
+                (
+                  replacement?.closest('.js-form-managed-file') ?? elements[0]
+                ).prepend(error);
+                ajax.commands.insert = insert;
+              }
+              return elements;
+            };
+          }
           button.dispatchEvent(
             new MouseEvent('mousedown', { bubbles: true, cancelable: true }),
           );
