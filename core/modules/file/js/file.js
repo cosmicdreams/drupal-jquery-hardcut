@@ -243,7 +243,7 @@
             // this widget or advances to the next step of the upload form.
             const { insert } = Drupal.AjaxCommands.prototype;
             ajax.commands.insert = (request, response, status) => {
-              const preserveError = widget.contains(error);
+              const preserveError = widget.isConnected && widget.contains(error);
               const elements = insert(request, response, status);
               if (preserveError && elements?.length && !widget.isConnected) {
                 const selector = `input[type="file"][name="${CSS.escape(input.name)}"]`;

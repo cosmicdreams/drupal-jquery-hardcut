@@ -257,6 +257,53 @@ class FileManagedFileElementTest extends WebDriverTestBase {
   }
 
   /**
+   * Tests cleanup when a mixed upload leaves the widget on the page.
+   */
+  public function testMixedUploadInsertCleanup(): void {
+    $this->drupalGet('file/test/0/0/1', ['query' => ['validate_upload' => 1]]);
+    $session = $this->getSession();
+    $result = $session->evaluateScript(<<<'JS'
+      (async () => {
+        const input = document.querySelector('input[name="files[file][]"]');
+        const widget = input.closest('.js-form-managed-file');
+        const button = widget.querySelector('[data-drupal-selector$="upload-button"]');
+        const ajax = Drupal.ajax.instances.find((instance) => instance?.element === button);
+        const { beforeSend, success } = ajax;
+        const selectFiles = () => {
+          const selection = new DataTransfer();
+          selection.items.add(new File(['valid'], 'valid.txt'));
+          selection.items.add(new File(['invalid'], 'invalid.jpg'));
+          input.files = selection.files;
+          input.dispatchEvent(new Event('change', { bubbles: true, cancelable: true }));
+        };
+
+        try {
+          ajax.beforeSend = () => false;
+          selectFiles();
+          const afterCancellation = Object.hasOwn(ajax.commands, 'insert');
+          ajax.beforeSend = beforeSend;
+
+          ajax.success = () => success.call(ajax, [
+            { command: 'insert', selector: '.file-upload-js-error', method: 'append', data: '<span></span>' },
+          ]);
+          const completed = new Promise((resolve) => {
+            document.addEventListener('drupal:ajax-complete', resolve, { once: true });
+          });
+          selectFiles();
+          await completed;
+          return [afterCancellation, Object.hasOwn(ajax.commands, 'insert'), widget.isConnected];
+        }
+        finally {
+          ajax.beforeSend = beforeSend;
+          ajax.success = success;
+        }
+      })()
+      JS);
+    $this->assertSame([FALSE, FALSE, TRUE], $result);
+    $this->assertSession()->elementTextContains('css', '.file-upload-js-error', 'invalid.jpg');
+  }
+
+  /**
    * Retrieves the fid of the last inserted file.
    */
   protected function getLastFileId(): int {

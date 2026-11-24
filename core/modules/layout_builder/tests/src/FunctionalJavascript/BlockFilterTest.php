@@ -5,6 +5,8 @@ declare(strict_types=1);
 namespace Drupal\Tests\layout_builder\FunctionalJavascript;
 
 use Behat\Mink\Element\NodeElement;
+use Drupal\field\Entity\FieldConfig;
+use Drupal\field\Entity\FieldStorageConfig;
 use Drupal\FunctionalJavascriptTests\WebDriverTestBase;
 use Drupal\layout_builder\Entity\LayoutBuilderEntityViewDisplay;
 use PHPUnit\Framework\Attributes\Group;
@@ -45,6 +47,18 @@ class BlockFilterTest extends WebDriverTestBase {
       'configure any layout',
     ]));
     $this->createContentType(['type' => 'bundle_with_section_field']);
+    // Provide a match in content fields alongside the menu and system blocks.
+    $field_storage = FieldStorageConfig::create([
+      'field_name' => 'field_admin_notes',
+      'entity_type' => 'node',
+      'type' => 'string',
+    ]);
+    $field_storage->save();
+    FieldConfig::create([
+      'field_storage' => $field_storage,
+      'bundle' => 'bundle_with_section_field',
+      'label' => 'Administration notes',
+    ])->save();
     LayoutBuilderEntityViewDisplay::load('node.bundle_with_section_field.default')
       ->enableLayoutBuilder()
       ->setOverridable()
