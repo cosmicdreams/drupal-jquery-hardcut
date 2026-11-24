@@ -123,7 +123,11 @@ class EntityReferenceWidgetTest extends MediaLibraryTestBase {
     // Open the two-slot widget. Its initial tab shows the Type One media.
     $button = '.js-media-library-open-button[name^="field_twin_media"]';
     $assert->elementExists('css', $button);
-    $session->executeScript("document.querySelector('$button').click();");
+    $session->executeScript(<<<JS
+      document.querySelector('$button').dispatchEvent(
+        new MouseEvent('mousedown', { bubbles: true, cancelable: true })
+      );
+      JS);
     $this->assertNotNull($assert->waitForElementVisible('css', '#drupal-modal .js-media-library-item'));
     $this->assertSelectedMediaCount('0 of 2 items selected');
 
