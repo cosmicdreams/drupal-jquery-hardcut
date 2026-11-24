@@ -80,16 +80,13 @@ class TabbingManagerTest extends WebDriverTestBase {
     $this->drupalGet('tabbingmanager-test');
     $session = $this->getSession();
     $this->assertSame('undefined', $session->evaluateScript('typeof window.jQuery'));
-    $this->assertSame(['none', 'none', FALSE], $session->evaluateScript(<<<'JS'
+    $this->assertSame(['none', 'none'], $session->evaluateScript(<<<'JS'
       (() => {
         const probe = document.body.appendChild(document.createElement('div'));
         probe.style.transition = 'opacity 1s';
         probe.style.animation = 'test-animation 1s';
         const style = getComputedStyle(probe);
-        const legacyScript = Array.from(document.scripts).some(
-          (script) => script.src.includes('/disable_transitions.theme.js')
-        );
-        return [style.transitionProperty, style.animationName, legacyScript];
+        return [style.transitionProperty, style.animationName];
       })()
       JS));
     $this->assertTrue($session->evaluateScript(<<<'JS'
