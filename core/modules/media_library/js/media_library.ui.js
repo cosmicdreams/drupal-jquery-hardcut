@@ -285,7 +285,10 @@
       const remaining = settings.media_library?.selection_remaining;
 
       forms.forEach((form) => {
-        const library = form.closest('#media-library-wrapper');
+        // The upload step replaces the library wrapper with the add form.
+        const library =
+          form.closest('#drupal-modal') ??
+          form.closest('#media-library-wrapper');
         if (!library || remaining === undefined) {
           return;
         }
@@ -357,19 +360,15 @@
         return;
       }
       window.addEventListener('dialog:aftercreate', ({ target }) => {
-        const library = target.querySelector('#media-library-wrapper');
         const pane = target
           .closest('.media-library-widget-modal')
           ?.querySelector('.drupal-dialog-buttonpane');
-        if (library && pane) {
+        if (pane && target.querySelector('#media-library-wrapper')) {
           pane.insertAdjacentHTML(
             'beforeend',
             Drupal.theme('mediaLibrarySelectionCount'),
           );
-          updateSelectionCount(
-            library,
-            remainingSlots.get(library) ?? remaining,
-          );
+          updateSelectionCount(target, remainingSlots.get(target) ?? remaining);
         }
       });
     },
@@ -388,7 +387,7 @@
       if (!once('media-library-clear-selection', 'html').length) {
         return;
       }
-      window.addEventListener('dialog:beforeclose', ({ target }) => {
+      window.addEventListener('dialog:afterclose', ({ target }) => {
         if (target.closest('.media-library-widget-modal')) {
           // Keep the array reference used by existing listeners.
           Drupal.MediaLibrary.currentSelection.length = 0;
