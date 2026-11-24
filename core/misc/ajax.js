@@ -234,9 +234,7 @@
         const option = element.options[i];
         if (option.selected && !option.disabled) {
           if (one) {
-            // A text format switch may still be filtering or tearing down
-            // the editor. Submit the format of the serialized value.
-            return Drupal.editorGetActiveTextFormat?.(element) ?? option.value;
+            return option.value;
           }
           values.push(option.value);
         }

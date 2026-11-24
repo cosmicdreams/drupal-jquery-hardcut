@@ -24,91 +24,76 @@
     }
   }
 
+  /**
+   * Filters the textarea value before attaching the selected format's editor.
+   * @param {HTMLTextAreaElement} field
+   *   The source textarea.
+   * @param {object} format
+   *   The selected format's editor settings.
+   * @param {string} previousFormatID
+   *   The previously active text format ID.
+   * @param {AbortSignal} signal
+   *   The signal for canceling a superseded switch.
+   * @return {Promise<string|false>}
+   *   The filtered value, or false to keep the existing value.
+   */
+  async function filterWhenSwitching(field, format, previousFormatID, signal) {
+    const response = await fetch(
+      Drupal.url(`editor/filter_xss/${format.format}`),
+      {
+        method: 'POST',
+        body: new URLSearchParams({
+          value: field.value,
+          original_format_id: previousFormatID,
+        }),
+        signal,
+      },
+    );
+    if (!response.ok) {
+      throw new Error(response.statusText);
+    }
+    return response.json();
+  }
+
   async function changeTextEditor(widget, newFormatID, trigger) {
     const { field, select, formats, listeners } = widget;
     const previousFormatID = field.dataset.editorActiveTextFormat;
-    const previousFormat = activeFormat(widget);
     const format = formats[newFormatID];
     const request = new AbortController();
     widget.request?.abort();
     widget.request = request;
-    const isCurrent = () =>
-      !request.signal.aborted &&
-      !listeners.signal.aborted &&
-      field.isConnected &&
-      select.isConnected;
-    try {
-      const needsFilter =
-        newFormatID !== previousFormatID && format && !format.isXssSafe;
-      let filtered = false;
-      let value;
-      do {
-        if (needsFilter) {
-          if (!widget.destroying) {
-            Drupal.editorDetach(field, previousFormat, 'serialize');
-          }
-          value = field.value;
-          // eslint-disable-next-line no-await-in-loop
-          const response = await fetch(
-            Drupal.url(`editor/filter_xss/${format.format}`),
-            {
-              method: 'POST',
-              body: new URLSearchParams({
-                value,
-                original_format_id: previousFormatID,
-              }),
-              signal: request.signal,
-            },
-          );
-          if (!isCurrent()) {
-            return;
-          }
-          if (!response.ok) {
-            throw new Error(response.statusText);
-          }
-          // eslint-disable-next-line no-await-in-loop
-          filtered = await response.json();
-          if (!isCurrent()) {
-            return;
-          }
-          if (!widget.destroying) {
-            Drupal.editorDetach(field, previousFormat, 'serialize');
-          }
-          if (field.value !== value) {
-            continue;
-          }
-        }
 
-        if (!widget.destroying) {
-          widget.destroying = Promise.resolve(
-            Drupal.editorDetach(field, previousFormat, trigger),
-          );
-        }
-        // eslint-disable-next-line no-await-in-loop
-        await widget.destroying;
-        if (!isCurrent()) {
-          return;
-        }
-        // The textarea can change during filtering or editor teardown.
-      } while (needsFilter && field.value !== value);
+    try {
+      if (!widget.destroying) {
+        widget.destroying = Promise.resolve(
+          Drupal.editorDetach(field, formats[previousFormatID], trigger),
+        );
+      }
+
+      // Detaching flushes the editor into the textarea before filtering starts.
+      const filtering =
+        trigger !== 'move' && format && !format.isXssSafe
+          ? filterWhenSwitching(field, format, previousFormatID, request.signal)
+          : false;
+      field.dataset.editorActiveTextFormat = newFormatID;
+
+      // Wait for asynchronous editor teardown before attaching the replacement.
+      const [filtered] = await Promise.all([filtering, widget.destroying]);
+      if (
+        request.signal.aborted ||
+        listeners.signal.aborted ||
+        !field.isConnected ||
+        !select.isConnected
+      ) {
+        return;
+      }
       widget.destroying = null;
       if (filtered !== false) {
         field.value = filtered;
       }
-      field.dataset.editorActiveTextFormat = newFormatID;
       Drupal.editorAttach(field, format);
-      if (select.value !== newFormatID) {
-        select.value = newFormatID;
-        select.dispatchEvent(new Event('change'));
-      }
     } catch (error) {
-      if (isCurrent()) {
-        select.value = previousFormatID;
-        select.dispatchEvent(new Event('change'));
-        Drupal.announce(
-          Drupal.t('The text format could not be changed.'),
-          'assertive',
-        );
+      if (!request.signal.aborted) {
         console.error(error);
       }
     } finally {
@@ -122,21 +107,13 @@
     const { field, select, formats } = widget;
     const activeFormatID = field.dataset.editorActiveTextFormat;
     const newFormatID = select.value;
-    widget.request?.abort();
     widget.confirmation?.close();
 
     if (newFormatID === activeFormatID) {
-      if (widget.destroying) {
-        changeTextEditor(widget, newFormatID);
-      }
       return;
     }
 
     const format = formats[newFormatID];
-    // Inspect the current editor content rather than a stale textarea value.
-    if (!widget.destroying) {
-      Drupal.editorDetach(field, activeFormat(widget), 'serialize');
-    }
     if (!field.value || !format?.editorSupportsContentFiltering) {
       changeTextEditor(widget, newFormatID);
       return;
@@ -156,8 +133,8 @@
           text: Drupal.t('Continue'),
           class: 'button button--primary',
           click() {
-            confirmation.close();
             changeTextEditor(widget, newFormatID);
+            confirmation.close();
           },
         },
         {
@@ -256,10 +233,6 @@
             ) {
               formData.set(field.name, field.dataset.editorValueOriginal);
             }
-            const formatID = field.dataset.editorActiveTextFormat;
-            if (select.value !== formatID && formData.has(select.name)) {
-              formData.set(select.name, formatID);
-            }
           },
           { signal },
         );
@@ -278,10 +251,11 @@
         }
         if (trigger === 'move') {
           const formatID = widget.field.dataset.editorActiveTextFormat;
-          widget.confirmation?.close();
-          // Tabledrag moves the row synchronously. Reattach once the old
-          // editor has finished tearing down and the row is in place.
-          changeTextEditor(widget, formatID, trigger);
+          // A confirmed switch has already detached the editor and will
+          // attach its replacement after the row has moved.
+          if (!widget.destroying) {
+            changeTextEditor(widget, formatID, trigger);
+          }
           return;
         }
 
@@ -296,20 +270,6 @@
       });
     },
   };
-
-  /**
-   * Returns the format of the serialized value during a pending switch.
-   *
-   * @param {HTMLSelectElement} select
-   *   The text format selector.
-   *
-   * @return {string|undefined}
-   *   The active format ID, if the selector is managed by Editor.
-   *
-   * @internal
-   */
-  Drupal.editorGetActiveTextFormat = (select) =>
-    widgets.get(select)?.field.dataset.editorActiveTextFormat;
 
   /**
    * Attaches editor behaviors to the field.

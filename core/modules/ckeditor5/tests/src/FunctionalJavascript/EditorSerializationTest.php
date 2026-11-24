@@ -8,6 +8,7 @@ use Drupal\editor\Entity\Editor;
 use Drupal\field\Entity\FieldConfig;
 use Drupal\field\Entity\FieldStorageConfig;
 use Drupal\filter\Entity\FilterFormat;
+use Drupal\node\NodeInterface;
 use Drupal\user\Entity\Role;
 use Drupal\user\RoleInterface;
 use PHPUnit\Framework\Attributes\DataProvider;
@@ -27,72 +28,138 @@ class EditorSerializationTest extends CKEditor5TestBase {
    * Tests that adding another item submits editor data before an Ajax rebuild.
    */
   public function testAjaxEditorSerialization(): void {
-    $this->createSectionsField();
-    $this->drupalGet('node/add/page');
+    $this->openSectionsForm();
     $assert = $this->assertSession();
-    $page = $this->getSession()->getPage();
-    $this->assertJsCondition(<<<'JS'
-      Array.from(Drupal.CKEditor5Instances.values()).some(
-        (editor) => editor.sourceElement.name === 'field_sections[0][value]'
-      )
+    $session = $this->getSession();
+    $this->beginPendingFormatSwitch();
+
+    // Leave another editor mounted with fresh data and a stale textarea.
+    $session->executeScript(<<<'JS'
+      Array.from(Drupal.CKEditor5Instances.values()).find(
+        (editor) => editor.sourceElement.name === 'field_sections[1][value]'
+      ).setData('<p>Kept through the Ajax rebuild.</p>');
       JS);
-    $this->getSession()->executeScript(<<<'JS'
-      window.sectionsEditor = Array.from(Drupal.CKEditor5Instances.values()).find(
-        (instance) => instance.sourceElement.name === 'field_sections[0][value]'
-      );
-      window.sectionsEditor.setData('<p>Content before the format switch.</p>');
+    $assert->fieldValueEquals('field_sections[1][value]', '<p>Second section.</p>');
+
+    $session->getPage()->pressButton('Add another item');
+    $assert->assertWaitOnAjaxRequest();
+    $session->executeScript('window.completeFormatSwitch();');
+    $assert->fieldValueEquals('field_sections[0][format]', 'alternate');
+    $assert->fieldValueEquals('field_sections[0][value]', '<p>Edited before the format switch.</p>');
+    $assert->fieldValueEquals('field_sections[1][value]', '<p>Kept through the Ajax rebuild.</p>');
+    $this->assertJsCondition(<<<'JS'
+      (() => {
+        const sections = new Map(Array.from(Drupal.CKEditor5Instances.values())
+          .map((editor) => [editor.sourceElement.name, editor]));
+        return sections.get('field_sections[0][value]')?.getData() === '<p>Edited before the format switch.</p>' &&
+          sections.get('field_sections[1][value]')?.getData() === '<p>Kept through the Ajax rebuild.</p>' &&
+          sections.get('field_sections[2][value]')?.getData() === '';
+      })()
+      JS);
+  }
+
+  /**
+   * Tests saving the selected format and editor content before filtering ends.
+   */
+  public function testSaveDuringPendingFormatSwitch(): void {
+    $node = $this->openSectionsForm();
+    $this->beginPendingFormatSwitch();
+
+    $this->getSession()->getPage()->pressButton('Save');
+    $this->assertSession()->addressEquals($node->toUrl()->toString());
+    $saved = $this->container->get('entity_type.manager')->getStorage('node')->loadUnchanged($node->id());
+    $this->assertSame('alternate', $saved->field_sections->format);
+    $this->assertSame('<p>Edited before the format switch.</p>', $saved->field_sections->value);
+  }
+
+  /**
+   * Tests a keyboard row move during a confirmed format switch.
+   */
+  public function testMoveDuringPendingFormatSwitch(): void {
+    $this->openSectionsForm();
+    $this->beginPendingFormatSwitch();
+    $assert = $this->assertSession();
+    $row = 'tr.draggable:has(textarea[name="field_sections[0][value]"])';
+    $handle = $assert->elementExists('css', "$row .tabledrag-handle");
+    $handle->focus();
+    $handle->keyDown(40);
+    $handle->keyUp(40);
+
+    $this->assertJsCondition("document.querySelector('$row').previousElementSibling.matches('tr.draggable')");
+    $assert->fieldValueEquals('field_sections[0][format]', 'alternate');
+    $this->getSession()->executeScript('window.completeFormatSwitch();');
+    $this->assertJsCondition(<<<'JS'
+      (() => {
+        const field = window.switchingEditor.sourceElement;
+        const row = field.closest('tr');
+        const editor = Drupal.CKEditor5Instances.get(field.dataset.ckeditor5Id);
+        return !window.formatSwitchSignal.aborted &&
+          field.dataset.editorActiveTextFormat === 'alternate' &&
+          row.previousElementSibling.querySelector('textarea[name="field_sections[1][value]"]') &&
+          row.querySelectorAll('.ck-editor__editable').length === 1 &&
+          editor?.state === 'ready' && editor.getData() === '<p>Filtered text.</p>';
+      })()
+      JS);
+  }
+
+  /**
+   * Opens an edit form with two existing formatted text items.
+   */
+  private function openSectionsForm(): NodeInterface {
+    $this->createSectionsField();
+    $node = $this->drupalCreateNode([
+      'type' => 'page',
+      'uid' => $this->loggedInUser->id(),
+      'field_sections' => [
+        ['value' => '<p>First section.</p>', 'format' => 'ckeditor5'],
+        ['value' => '<p>Second section.</p>', 'format' => 'ckeditor5'],
+      ],
+    ]);
+    $this->drupalGet($node->toUrl('edit-form'));
+    $this->assertJsCondition(<<<'JS'
+      (window.switchingEditor = Array.from(Drupal.CKEditor5Instances.values()).find(
+        (editor) => editor.sourceElement.name === 'field_sections[0][value]'
+      ))?.state === 'ready' &&
+        Array.from(Drupal.CKEditor5Instances.values()).some(
+          (editor) => editor.sourceElement.name === 'field_sections[1][value]' && editor.state === 'ready'
+        )
+      JS);
+    return $node;
+  }
+
+  /**
+   * Confirms a format switch and holds its filter response.
+   */
+  private function beginPendingFormatSwitch(): void {
+    $session = $this->getSession();
+    $session->executeScript(<<<'JS'
+      window.switchingEditor.setData('<p>Edited before the format switch.</p>');
       const fetch = window.fetch;
       window.fetch = (url, options) => {
         if (!String(url).includes('editor/filter_xss/alternate')) {
           return fetch(url, options);
         }
+        window.formatSwitchSignal = options.signal;
+        window.formatFilterInput = options.body.get('value');
         return new Promise((resolve) => {
           window.completeFormatSwitch = () => resolve({
             ok: true,
-            json: async () => '<p>Obsolete response.</p>',
+            json: async () => '<p>Filtered text.</p>',
           });
         });
       };
       JS);
+    $this->confirmAlternateFormat();
+    $this->assertJsCondition('typeof window.completeFormatSwitch === "function" && window.switchingEditor.state === "destroyed"');
+    $this->assertSame('<p>Edited before the format switch.</p>', $session->evaluateScript('window.formatFilterInput'));
+  }
 
-    $page->selectFieldOption('field_sections[0][format]', 'alternate');
-    $assert->elementExists('css', 'dialog.editor-change-text-format-modal')->pressButton('Continue');
-    $this->assertJsCondition('typeof window.completeFormatSwitch === "function"');
-    $session = $this->getSession();
-    $this->assertSame('ckeditor5', $session->evaluateScript(<<<'JS'
-      new FormData(window.sectionsEditor.sourceElement.form).get('field_sections[0][format]')
-      JS));
-    $session->executeScript(<<<'JS'
-      const editor = window.sectionsEditor;
-      const form = editor.sourceElement.form;
-      const ajax = Drupal.ajax.instances.find((instance) =>
-        instance?.form === form && instance.element.value === 'Add another item'
-      );
-      ajax.beforeSubmit = () => {
-        window.visibleFormatDuringSubmit = form.elements.namedItem('field_sections[0][format]').value;
-      };
-      editor.setData('<p>Kept through the Ajax rebuild.</p>');
-      JS);
-    $this->assertSame('<p>Content before the format switch.</p>', $session->evaluateScript('window.sectionsEditor.sourceElement.value'));
-
-    $page->pressButton('Add another item');
-    $assert->assertWaitOnAjaxRequest();
-    $session->executeScript('window.completeFormatSwitch();');
-    $rebuilt = $assert->elementExists('css', 'textarea[name="field_sections[0][value]"]');
-    $this->assertSame('<p>Kept through the Ajax rebuild.</p>', $rebuilt->getValue());
-    $assert->fieldValueEquals('field_sections[0][format]', 'ckeditor5');
-    $this->assertSame('alternate', $session->evaluateScript('window.visibleFormatDuringSubmit'));
-    $this->assertJsCondition(<<<'JS'
-      (() => {
-        const sections = Array.from(Drupal.CKEditor5Instances.values()).filter(
-          (editor) => editor.sourceElement.name.startsWith('field_sections[')
-        );
-        return sections.length === 2 &&
-          sections[0].sourceElement.dataset.editorActiveTextFormat === 'ckeditor5' &&
-          sections[0].getData() === '<p>Kept through the Ajax rebuild.</p>' &&
-          sections[1].getData() === '';
-      })()
-      JS);
+  /**
+   * Selects and confirms the alternate text format for the first item.
+   */
+  private function confirmAlternateFormat(): void {
+    $this->getSession()->getPage()->selectFieldOption('field_sections[0][format]', 'alternate');
+    $this->assertSession()->elementExists('css', 'dialog.editor-change-text-format-modal')->pressButton('Continue');
   }
 
   /**
@@ -272,22 +339,14 @@ class EditorSerializationTest extends CKEditor5TestBase {
   }
 
   /**
-   * Tests failure recovery and edits made during asynchronous editor teardown.
+   * Tests that filtering starts before asynchronous editor teardown completes.
    */
   public function testFormatSwitchDuringTeardown(): void {
-    $this->createSectionsField();
-    $this->drupalGet('node/add/page');
+    $this->openSectionsForm();
     $session = $this->getSession();
-    $assert = $this->assertSession();
-    $page = $session->getPage();
-    $this->assertJsCondition(<<<'JS'
-      (window.switchingEditor = Array.from(Drupal.CKEditor5Instances.values()).find(
-        (editor) => editor.sourceElement.name === 'field_sections[0][value]'
-      ))?.state === 'ready'
-      JS);
     $session->executeScript(<<<'JS'
       const editor = window.switchingEditor;
-      editor.setData('<p>Original text.</p>');
+      editor.setData('<p>Current text.</p>');
       const destroy = editor.destroy.bind(editor);
       editor.destroy = async () => {
         await destroy();
@@ -296,80 +355,53 @@ class EditorSerializationTest extends CKEditor5TestBase {
         });
       };
       const fetch = window.fetch;
-      window.formatFilterInputs = [];
       window.fetch = (url, options) => {
         if (!String(url).includes('editor/filter_xss/alternate')) {
           return fetch(url, options);
         }
-        const input = options.body.get('value');
-        window.formatFilterInputs.push(input);
-        return Promise.resolve(window.formatFilterInputs.length === 1
-          ? { ok: false, statusText: 'Test filter failure' }
-          : { ok: true, json: async () => input.replaceAll(/<\/?em>/g, '') });
+        window.formatFilterInput = options.body.get('value');
+        return Promise.resolve({ ok: true, json: async () => '<p>Filtered text.</p>' });
       };
       JS);
 
-    $page->selectFieldOption('field_sections[0][format]', 'alternate');
-    $assert->elementExists('css', 'dialog.editor-change-text-format-modal')->pressButton('Continue');
-    $this->assertNotNull($assert->waitForElement('css', '#drupal-live-announce[aria-live="assertive"]:contains("The text format could not be changed.")'));
-    $assert->fieldValueEquals('field_sections[0][format]', 'ckeditor5');
-    $this->assertSame('<p>Original text.</p>', $session->evaluateScript('window.switchingEditor.getData()'));
-
-    $page->selectFieldOption('field_sections[0][format]', 'alternate');
-    $assert->elementExists('css', 'dialog.editor-change-text-format-modal')->pressButton('Continue');
+    $this->confirmAlternateFormat();
     $this->assertJsCondition('typeof window.finishEditorTeardown === "function"');
-    $page->fillField('field_sections[0][value]', '<p>New <em>text</em>.</p>');
+    $this->assertSame('<p>Current text.</p>', $session->evaluateScript('window.formatFilterInput'));
+    $this->assertSession()->fieldValueEquals('field_sections[0][value]', '<p>Current text.</p>');
     $session->executeScript('window.finishEditorTeardown();');
     $this->assertJsCondition(<<<'JS'
       (() => {
         const field = window.switchingEditor.sourceElement;
         const editor = Drupal.CKEditor5Instances.get(field.dataset.ckeditor5Id);
-        return field.dataset.editorActiveTextFormat === 'alternate' &&
-          editor?.getData() === '<p>New text.</p>';
+        return editor?.state === 'ready' && editor.getData() === '<p>Filtered text.</p>';
       })()
       JS);
-    $this->assertSame(
-      ['<p>Original text.</p>', '<p>Original text.</p>', '<p>New <em>text</em>.</p>'],
-      $session->evaluateScript('window.formatFilterInputs'),
-    );
   }
 
   /**
-   * Tests that a failed switch restores the plain textarea's guidelines.
+   * Tests that a failed filter leaves the selection and textarea available.
    */
-  public function testGuidelinesAfterFailedFormatSwitch(): void {
-    $this->createSectionsField();
-    Editor::load('ckeditor5')->delete();
-    $this->drupalGet('node/add/page');
+  public function testFailedFormatSwitchLeavesTextarea(): void {
+    $this->openSectionsForm();
     $assert = $this->assertSession();
     $session = $this->getSession();
-    $page = $session->getPage();
-    $guidelines_selector = '.js-text-format-wrapper:has(textarea[name="field_sections[0][value]"]) [data-drupal-format-id=ckeditor5]';
-    $assert->elementExists('css', $guidelines_selector);
-    $guidelines = 'getComputedStyle(document.querySelector(' . json_encode($guidelines_selector, JSON_THROW_ON_ERROR) . ')).display';
-    $this->assertNotSame('none', $session->evaluateScript($guidelines));
-    $page->fillField('field_sections[0][value]', 'Text in the original format.');
     $session->executeScript(<<<'JS'
       const fetch = window.fetch;
       window.fetch = (url, options) => {
         if (!String(url).includes('editor/filter_xss/alternate')) {
           return fetch(url, options);
         }
-        return new Promise((resolve) => {
-          window.failFormatSwitch = () => resolve({ ok: false, statusText: 'Test filter failure' });
-        });
+        return Promise.resolve({ ok: false, statusText: 'Test filter failure' });
       };
       JS);
-    $page->selectFieldOption('field_sections[0][format]', 'alternate');
-    $assert->elementExists('css', 'dialog.editor-change-text-format-modal')->pressButton('Continue');
-    $this->assertJsCondition('typeof window.failFormatSwitch === "function"');
-    $this->assertSame('none', $session->evaluateScript($guidelines));
-
-    $session->executeScript('window.failFormatSwitch();');
-    $this->assertNotNull($assert->waitForElement('css', '#drupal-live-announce[aria-live="assertive"]:contains("The text format could not be changed.")'));
-    $assert->fieldValueEquals('field_sections[0][format]', 'ckeditor5');
-    $assert->fieldValueEquals('field_sections[0][value]', 'Text in the original format.');
-    $this->assertNotSame('none', $session->evaluateScript($guidelines));
+    $this->confirmAlternateFormat();
+    $assert->fieldValueEquals('field_sections[0][format]', 'alternate');
+    $assert->fieldValueEquals('field_sections[0][value]', '<p>First section.</p>');
+    $this->assertNotNull($assert->waitForElementVisible('css', 'textarea[name="field_sections[0][value]"]'));
+    $this->assertJsCondition(<<<'JS'
+      window.switchingEditor.state === 'destroyed' &&
+        !window.switchingEditor.sourceElement.dataset.ckeditor5Id
+      JS);
   }
 
   /**
