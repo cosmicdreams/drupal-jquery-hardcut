@@ -1,0 +1,11 @@
+services:
+  Drupal\test_jquery_free\ReadinessScanner:
+    arguments:
+      - '%app.root%'
+      - '@module_handler'
+      - '@theme_handler'
+      - '@library.discovery'
+      - '@logger.channel.test_jquery_free'
+  logger.channel.test_jquery_free:
+    parent: logger.channel_base
+    arguments: ['test_jquery_free']

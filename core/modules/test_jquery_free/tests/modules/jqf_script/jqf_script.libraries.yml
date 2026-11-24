@@ -1,0 +1,7 @@
+capture:
+  header: true
+  js:
+    js/capture.js: { weight: -101, preprocess: false }
+script:
+  js:
+    js/probe.js: { preprocess: false }

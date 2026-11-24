@@ -1,0 +1,7 @@
+legacy:
+  dependencies:
+    - core/jquery
+    - core/jquery.once
+    - core/internal.jquery_ui
+    - core/internal.jquery.form
+    - core/drupal
