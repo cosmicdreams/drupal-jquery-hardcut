@@ -9,7 +9,7 @@ use Drupal\FunctionalJavascriptTests\WebDriverTestBase;
 use PHPUnit\Framework\Attributes\Group;
 use PHPUnit\Framework\Attributes\RunTestsInSeparateProcesses;
 
-// cspell:ignore Completeajax handleajax jqxhr nocontent prefilter prefilters Successajax
+// cspell:ignore nocontent
 /**
  * Tests AJAX responses.
  */

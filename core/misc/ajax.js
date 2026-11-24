@@ -1169,8 +1169,7 @@
       drupalSettings.ajaxTrustedUrl[this.url] = true;
     }
 
-    // Set the options for the ajaxSubmit function.
-    // The 'this' variable will not persist inside of the options object.
+    // Capture the Ajax instance for the request callbacks.
     const ajax = this;
 
     /**
@@ -1467,10 +1466,7 @@
         // If setClick is set, we must set this to ensure that the button's
         // value is passed.
         if (ajax.setClick) {
-          // Mark the clicked button. 'form.clk' is a special variable for
-          // ajaxSubmit that tells the system which element got clicked to
-          // trigger the submit. Without it there would be no 'op' or
-          // equivalent.
+          // Include the clicked button's value in the serialized form data.
           element.form.clk = element;
         }
 
