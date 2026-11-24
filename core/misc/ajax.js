@@ -1816,7 +1816,7 @@
       (executionQueue, key) =>
         executionQueue.then(() => {
           const { command } = response[key];
-          // Even a superseded response must apply settings and load assets
+          // A superseded response still updates asset state and loads assets
           // (settings, add_css, add_js, including scripts for placeholders).
           // Recheck freshness after each await before applying page updates:
           // inserts, removals, changed, restripe, focus, scrollTop, history,
@@ -2036,12 +2036,19 @@
     let owner = form;
     if (form && !form.isConnected) {
       const buildId = form.elements.namedItem('form_build_id')?.value;
+      const formSelector = form.getAttribute('data-drupal-selector');
       owner =
         (buildId &&
           findAll(
             `form:has(input[name="form_build_id"][value="${CSS.escape(buildId)}"])`,
           )[0]) ||
         (form.id && findAll(`form[id="${CSS.escape(form.id)}"]`)[0]);
+      if (!owner && formSelector) {
+        const matches = findAll(
+          `form[data-drupal-selector="${CSS.escape(formSelector)}"]`,
+        );
+        owner = matches.length === 1 ? matches[0] : null;
+      }
       if (!owner) {
         return;
       }
@@ -2559,6 +2566,16 @@
      *   The XMLHttpRequest status.
      */
     settings(ajax, response, status) {
+      if (ajax.isResponseCurrent?.() === false) {
+        // Keep the library list available to subsequent requests without
+        // restoring settings for page content this response no longer owns.
+        const { ajaxPageState } = response.settings;
+        if (response.merge && ajaxPageState) {
+          extendDeep(drupalSettings, { ajaxPageState });
+        }
+        return;
+      }
+
       const ajaxSettings = drupalSettings.ajax;
 
       // Clean up drupalSettings.ajax.

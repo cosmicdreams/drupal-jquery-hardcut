@@ -6,10 +6,12 @@ namespace Drupal\Tests\field_ui\FunctionalJavascript;
 
 use Drupal\field\Entity\FieldConfig;
 use Drupal\field\Entity\FieldStorageConfig;
+use Drupal\FunctionalJavascriptTests\DrupalSelenium2Driver;
 use Drupal\FunctionalJavascriptTests\WebDriverTestBase;
 use Drupal\Tests\field_ui\Traits\FieldUiJSTestTrait;
 use PHPUnit\Framework\Attributes\Group;
 use PHPUnit\Framework\Attributes\RunTestsInSeparateProcesses;
+use WebDriver\Key;
 
 // cspell:ignore horserad
 /**
@@ -290,6 +292,34 @@ class ManageFieldsTest extends WebDriverTestBase {
     $this->assertTrue($assert_session->waitForText('Saved ' . $field_name . ' configuration.'));
     $this->assertNotNull($field_storage = FieldStorageConfig::loadByName('node', "field_$field_name"));
     $this->assertEquals('test_field', $field_storage->getType());
+  }
+
+  /**
+   * Tests keyboard focus when a storage setting rebuilds the field edit form.
+   */
+  public function testFocusAfterCardinalityChange(): void {
+    $this->drupalGet('admin/structure/types/manage/article/fields/node.article.body');
+    $session = $this->getSession();
+    $assert = $this->assertSession();
+    $selector = 'input[name="field_storage[subform][cardinality_number]"]';
+    $assert->elementExists('css', $selector)->focus();
+    $form_selector = '#field-combined form';
+    $form = $assert->elementExists('css', $form_selector);
+    $form_id = $form->getAttribute('id');
+    $form_data_selector = $form->getAttribute('data-drupal-selector');
+
+    // Type the new limit, then commit it by tabbing to Help text.
+    $driver = $session->getDriver();
+    assert($driver instanceof DrupalSelenium2Driver);
+    $driver->getWebDriverSession()
+      ->element('css selector', $selector)
+      ->postValue(['text' => Key::END . Key::BACKSPACE . '2' . Key::TAB]);
+    $assert->assertExpectedAjaxRequest(1);
+    $assert->fieldValueEquals('field_storage[subform][cardinality_number]', '2');
+    $form = $assert->elementExists('css', $form_selector);
+    $this->assertNotSame($form_id, $form->getAttribute('id'));
+    $this->assertSame($form_data_selector, $form->getAttribute('data-drupal-selector'));
+    $this->assertSame('description', $session->evaluateScript('document.activeElement.name'));
   }
 
   /**

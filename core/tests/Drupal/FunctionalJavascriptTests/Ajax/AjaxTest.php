@@ -1128,14 +1128,15 @@ JS);
       const region = document.createElement('div');
       region.id = 'shared-replacement';
       region.innerHTML = `
-        <form id="first-form">
+        <form id="first-form" data-drupal-selector="first-form">
           <input id="shared-field--first" data-drupal-selector="shared-field">
         </form>
-        <form id="second-form">
+        <form id="second-form" data-drupal-selector="second-form">
+          <input name="form_build_id" type="hidden" value="second-build">
           <input id="shared-field--old" data-drupal-selector="shared-field">
         </form>`;
       document.body.append(region);
-      const replace = (formId, fieldId, replacement) => {
+      const replace = (formId, buildId, fieldId, replacement) => {
         const field = document.getElementById(fieldId);
         field.dataset.refocusBlur = 'true';
         field.focus();
@@ -1145,26 +1146,26 @@ JS);
           selector: '#shared-replacement',
           method: 'html',
           data: `
-            <form id="first-form">
+            <form id="first-form" data-drupal-selector="first-form">
               <input id="shared-field--first" data-drupal-selector="shared-field">
             </form>
-            <form id="${formId}">
-              <input name="form_build_id" type="hidden" value="second-build">
+            <form id="${formId}" data-drupal-selector="second-form">
+              <input name="form_build_id" type="hidden" value="${buildId}">
               <div id="shared-field--description">Field description</div>
               ${replacement}
             </form>`,
         }], 'success');
       };
       window.replaceSharedForms = replace;
-      replace('second-form', 'shared-field--old',
+      replace('second-form', 'second-build--1', 'shared-field--old',
         '<input id="shared-field--exact" data-drupal-selector="shared-field">');
       JS);
     $this->assertJsCondition('document.activeElement.id === "shared-field--exact"');
 
-    // With a regenerated form ID, match its build ID. The field's generated
-    // selector also changes, so focus must fall back to a focusable control.
+    // Both form IDs change on rebuild. Match the stable form selector, then
+    // fall back to the generated field ID without matching its description.
     $session->executeScript(<<<'JS'
-      window.replaceSharedForms('rebuilt-form', 'shared-field--exact',
+      window.replaceSharedForms('second-form--1', 'second-build--2', 'shared-field--exact',
         '<input id="shared-field--rebuilt" data-drupal-selector="shared-field--rebuilt">');
       JS);
     $this->assertJsCondition('document.activeElement.id === "shared-field--rebuilt"');

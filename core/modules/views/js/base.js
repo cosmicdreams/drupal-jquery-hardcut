@@ -64,7 +64,15 @@
    *   An internal path.
    */
   Drupal.Views.getPath = function (href) {
-    const url = new URL(href, document.baseURI);
+    if (href.trimStart().startsWith('#')) {
+      return '';
+    }
+    let url;
+    try {
+      url = new URL(href, document.baseURI);
+    } catch {
+      return '';
+    }
     if (
       url.origin !== window.location.origin ||
       !url.pathname.startsWith(drupalSettings.path.baseUrl)

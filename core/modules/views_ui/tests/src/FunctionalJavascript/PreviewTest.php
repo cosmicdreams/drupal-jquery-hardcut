@@ -166,6 +166,30 @@ class PreviewTest extends WebDriverTestBase {
   }
 
   /**
+   * Tests that a preview anchor follows its fragment without an Ajax request.
+   */
+  public function testPreviewFragmentLink(): void {
+    $this->drupalGet('admin/structure/views/view/test_preview/edit/default');
+    $this->getSession()->getPage()->pressButton('Update preview');
+    $this->assertSession()->assertExpectedAjaxRequest(1);
+    $session = $this->getSession();
+    $session->executeScript(<<<'JS'
+      const preview = document.querySelector('#views-live-preview');
+      preview.insertAdjacentHTML('beforeend', `
+        <a href="#preview-target">Jump within preview</a>
+        <div id="preview-target">Target</div>
+        <a href="http://[">Malformed link</a>
+      `);
+      Drupal.attachBehaviors();
+      JS);
+
+    $this->assertJsCondition('Drupal.Views.getPath("http://[") === ""');
+    $this->clickLink('Jump within preview');
+    $this->assertJsCondition('location.hash === "#preview-target" && document.querySelector("#views-live-preview #preview-target:target") !== null');
+    $this->assertSame(1, $session->evaluateScript('window.drupalCumulativeXhrCount'));
+  }
+
+  /**
    * Tests that the arguments field follows the presence of contextual filters.
    */
   #[DataProviderExternal(AdminAjaxTest::class, 'viewsThemes')]

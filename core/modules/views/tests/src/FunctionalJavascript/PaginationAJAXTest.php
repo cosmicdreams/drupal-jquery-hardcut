@@ -151,6 +151,57 @@ class PaginationAJAXTest extends WebDriverTestBase {
   }
 
   /**
+   * Tests that only the current pager response scrolls to its view.
+   */
+  public function testPagerScroll(): void {
+    $this->config('views.view.test_content_ajax')
+      ->set('display.default.display_options.pager.options.items_per_page', 5)
+      ->save();
+    $this->drupalGet('test-content-ajax');
+    $session = $this->getSession();
+    $assert = $this->assertSession();
+
+    // Give the viewport room to scroll and isolate the pager's scroll command
+    // from automatic scroll adjustments when the view is replaced.
+    $session->executeScript(<<<'JS'
+      document.documentElement.style.overflowAnchor = 'none';
+      const { view_dom_id } = Object.values(drupalSettings.views.ajaxViews)[0];
+      window.pagingView = '.js-view-dom-id-' + view_dom_id;
+      const view = document.querySelector(pagingView);
+      view.insertAdjacentHTML('beforebegin', '<div style="height: 200vh"></div>');
+      view.insertAdjacentHTML('afterend', '<div style="height: 200vh"></div>');
+      view.querySelector('a[title="Go to page 2"]').click();
+      JS);
+    $assert->assertWaitOnAjaxRequest();
+    $this->assertGreaterThan(0, $session->evaluateScript('scrollY'));
+    $this->assertJsCondition('Math.abs(document.querySelector(pagingView).getBoundingClientRect().top) < innerHeight / 4');
+
+    $session->executeScript(<<<'JS'
+      const prototype = Drupal.Ajax.prototype;
+      const queue = prototype.commandExecutionQueue;
+      prototype.commandExecutionQueue = function (response, status) {
+        prototype.commandExecutionQueue = queue;
+        window.oldPagerWouldScroll = Object.values(response).some(({ command, selector }) =>
+          command === 'scrollTop' && selector === pagingView);
+        return new Promise((resolve) => {
+          window.finishOldPager = () => resolve(queue.call(this, response, status));
+        });
+      };
+      document.querySelector(pagingView + ' a[title="Go to first page"]').click();
+      JS);
+    $this->assertJsCondition('window.oldPagerWouldScroll');
+    $this->clickLink('Go to page 3');
+    $this->assertJsCondition('[...Drupal.ajax.pendingRequests()].length === 1 && new URL(location.href).searchParams.get("page") === "2"');
+    $session->executeScript(<<<'JS'
+      window.scrollTo(0, 0);
+      window.finishOldPager();
+      JS);
+    $assert->assertWaitOnAjaxRequest();
+    $this->assertJsCondition('scrollY === 0');
+    $this->assertJsCondition('new URL(location.href).searchParams.get("page") === "2"');
+  }
+
+  /**
    * Tests that attachment pager and sort links refresh the outer view.
    */
   public function testAttachmentPaginationAndSorting(): void {
