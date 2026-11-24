@@ -120,8 +120,8 @@ class EntityReferenceWidgetTest extends MediaLibraryTestBase {
     $session->executeScript('Drupal.dialog.get(document.getElementById("drupal-modal")).close();');
     $assert = $this->assertSession();
     $assert->assertNoElementAfterWait('css', 'dialog[open]');
-    // Open the two-slot widget. Its initial tab shows the Type One media.
-    $button = '.js-media-library-open-button[name^="field_twin_media"]';
+    // Open the single-type widget, which only shows Type One media.
+    $button = '.js-media-library-open-button[name^="field_single_media_type"]';
     $assert->elementExists('css', $button);
     $session->executeScript(<<<JS
       document.querySelector('$button').dispatchEvent(
@@ -129,11 +129,11 @@ class EntityReferenceWidgetTest extends MediaLibraryTestBase {
       );
       JS);
     $this->assertNotNull($assert->waitForElementVisible('css', '#drupal-modal .js-media-library-item'));
-    $this->assertSelectedMediaCount('0 of 2 items selected');
+    $this->assertSelectedMediaCount('0 of 1 item selected');
 
     $session->executeScript('window.finishMediaTab();');
     $assert->assertWaitOnAjaxRequest();
-    $this->assertSelectedMediaCount('0 of 2 items selected');
+    $this->assertSelectedMediaCount('0 of 1 item selected');
     $assert->elementExists('named', ['checkbox', 'Select Dog']);
   }
 
