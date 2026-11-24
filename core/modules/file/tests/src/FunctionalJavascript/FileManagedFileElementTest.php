@@ -257,7 +257,7 @@ class FileManagedFileElementTest extends WebDriverTestBase {
   }
 
   /**
-   * Tests cleanup when a mixed upload leaves the widget on the page.
+   * Tests cleanup after a mixed upload and when its widget unloads.
    */
   public function testMixedUploadInsertCleanup(): void {
     $this->drupalGet('file/test/0/0/1', ['query' => ['validate_upload' => 1]]);
@@ -291,7 +291,45 @@ class FileManagedFileElementTest extends WebDriverTestBase {
           });
           selectFiles();
           await completed;
-          return [afterCancellation, Object.hasOwn(ajax.commands, 'insert'), widget.isConnected];
+          const afterCompletion = Object.hasOwn(ajax.commands, 'insert');
+          const errorVisible = widget.isConnected &&
+            widget.querySelector('.file-upload-js-error').textContent.includes('invalid.jpg');
+
+          ajax.success = () => success.call(ajax, []);
+          const { addEventListener, removeEventListener } = document;
+          let uploadListener;
+          let listenerRemoved = false;
+          document.addEventListener = function (type, listener, ...options) {
+            if (type === 'drupal:ajax-complete') {
+              uploadListener = listener;
+            }
+            return addEventListener.call(this, type, listener, ...options);
+          };
+          document.removeEventListener = function (type, listener, ...options) {
+            if (type === 'drupal:ajax-complete' && listener === uploadListener) {
+              listenerRemoved = true;
+            }
+            return removeEventListener.call(this, type, listener, ...options);
+          };
+
+          let pending;
+          let afterUnload;
+          try {
+            selectFiles();
+            pending = ajax.ajaxing && Object.hasOwn(ajax.commands, 'insert');
+            Drupal.detachBehaviors(widget, drupalSettings, 'unload');
+            widget.remove();
+            afterUnload = Object.hasOwn(ajax.commands, 'insert');
+          }
+          finally {
+            delete document.addEventListener;
+            delete document.removeEventListener;
+          }
+          await new Promise((resolve) => {
+            document.addEventListener('drupal:ajax-complete', resolve, { once: true });
+          });
+          return { afterCancellation, afterCompletion, errorVisible, pending,
+            afterUnload, listenerRemoved };
         }
         finally {
           ajax.beforeSend = beforeSend;
@@ -299,8 +337,14 @@ class FileManagedFileElementTest extends WebDriverTestBase {
         }
       })()
       JS);
-    $this->assertSame([FALSE, FALSE, TRUE], $result);
-    $this->assertSession()->elementTextContains('css', '.file-upload-js-error', 'invalid.jpg');
+    $this->assertEquals([
+      'afterCancellation' => FALSE,
+      'afterCompletion' => FALSE,
+      'errorVisible' => TRUE,
+      'pending' => TRUE,
+      'afterUnload' => FALSE,
+      'listenerRemoved' => TRUE,
+    ], $result);
   }
 
   /**

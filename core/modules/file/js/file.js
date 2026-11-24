@@ -10,6 +10,7 @@
 (function (Drupal, once) {
   const validationSelector = 'input[data-file-extensions]';
   const fileSelector = 'input[type="file"]';
+  const pendingMixedUploads = new WeakMap();
 
   /**
    * Attach behaviors to the file fields passed in the settings.
@@ -64,12 +65,13 @@
             ...(context instanceof Element ? [context] : []),
             ...context.querySelectorAll(fileSelector),
           ])
-          .forEach((input) =>
+          .forEach((input) => {
+            pendingMixedUploads.get(input)?.();
             input.removeEventListener(
               'change',
               Drupal.file.triggerUploadButton,
-            ),
-          );
+            );
+          });
       }
     },
   };
@@ -230,6 +232,7 @@
           const restoreInsert = () => {
             delete ajax.commands.insert;
             document.removeEventListener('drupal:ajax-complete', onComplete);
+            pendingMixedUploads.delete(input);
           };
           const onComplete = (event) => {
             if (event.detail.ajax === ajax) {
@@ -238,6 +241,7 @@
           };
           const preserveSelectionError = ajax && !ajax.ajaxing;
           if (preserveSelectionError) {
+            pendingMixedUploads.set(input, restoreInsert);
             document.addEventListener('drupal:ajax-complete', onComplete);
             // Keep the rejected filenames visible when the upload replaces
             // this widget or advances to the next step of the upload form.
@@ -254,7 +258,6 @@
                 (
                   replacement?.closest('.js-form-managed-file') ?? elements[0]
                 ).prepend(error);
-                restoreInsert();
               }
               return elements;
             };
