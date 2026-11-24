@@ -255,25 +255,17 @@ class MoveBlockFormTest extends WebDriverTestBase {
    * @internal
    */
   protected function assertRegionBlocksOrder(int $section_delta, string $region, array $expected_block_selectors): void {
-    $page = $this->getSession()->getPage();
-    $assert_session = $this->assertSession();
-
-    $assert_session->assertWaitOnAjaxRequest();
-    $assert_session->assertNoElementAfterWait('css', '#drupal-off-canvas');
-
-    $region_selector = "[data-layout-delta=\"$section_delta\"] [data-region=\"$region\"]";
-
-    // Get all blocks currently in the region.
-    $blocks = $page->findAll('css', "$region_selector [data-layout-block-uuid]");
-    $this->assertSameSize($expected_block_selectors, $blocks);
-
-    /** @var \Behat\Mink\Element\NodeElement $block */
-    foreach ($blocks as $block) {
-      $block_selector = array_shift($expected_block_selectors);
-      $assert_session->elementsCount('css', "$region_selector $block_selector", 1);
-      $expected_block = $page->find('css', "$region_selector $block_selector");
-      $this->assertSame($expected_block->getAttribute('data-layout-block-uuid'), $block->getAttribute('data-layout-block-uuid'));
-    }
+    $this->assertSession()->assertNoElementAfterWait('css', '#drupal-off-canvas');
+    $selector = json_encode(sprintf('[data-layout-delta="%d"] [data-region="%s"] [data-layout-block-uuid]', $section_delta, $region), JSON_THROW_ON_ERROR);
+    $expected = json_encode($expected_block_selectors, JSON_THROW_ON_ERROR);
+    $this->assertJsCondition(<<<JS
+      (() => {
+        const blocks = Array.from(document.querySelectorAll($selector));
+        const expected = $expected;
+        return blocks.length === expected.length &&
+          blocks.every((block, index) => block.matches(expected[index]));
+      })()
+      JS);
   }
 
   /**
