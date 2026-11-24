@@ -203,7 +203,7 @@ abstract class InlineBlockTestBase extends WebDriverTestBase {
     $page->pressButton('Update');
     $assert_session->assertNoElementAfterWait('css', '#drupal-off-canvas');
     $assert_session->assertWaitOnAjaxRequest();
-    $this->assertDialogClosedAndTextVisible($new_body, ($block_css_locator ?: static::INLINE_BLOCK_LOCATOR) . ' strong');
+    $this->assertDialogClosedAndTextVisible($new_body, $block_css_locator . ' strong');
   }
 
   /**
@@ -259,9 +259,9 @@ abstract class InlineBlockTestBase extends WebDriverTestBase {
       'label' => $label,
       'revision' => 1,
     ], TRUE);
-    FieldConfig::loadByName('block_content', $id, 'body')
-      ->setSetting('allowed_formats', ['inline_block_html'])
-      ->save();
+    $body = FieldConfig::loadByName('block_content', $id, 'body');
+    $this->assertInstanceOf(FieldConfig::class, $body);
+    $body->setSetting('allowed_formats', ['inline_block_html'])->save();
   }
 
 }
