@@ -13,10 +13,13 @@ use Drupal\test_jquery_free\Controller\ReadinessReportController;
 use Drupal\test_jquery_free\Drush\Commands\ReadinessReportCommand;
 use Drupal\test_jquery_free\Form\ReadinessRescanForm;
 use Drupal\test_jquery_free\ReadinessScanner;
+use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\Attributes\Group;
 use PHPUnit\Framework\Attributes\RunTestsInSeparateProcesses;
 use Symfony\Component\Console\Tester\CommandTester;
 use Symfony\Component\Filesystem\Filesystem;
+
+// cspell:ignore rescan rescans
 
 /**
  * Tests the report using installed extension fixtures and library discovery.
@@ -118,7 +121,7 @@ final class ReadinessScannerTest extends KernelTestBase {
     $this->assertFinding($findings['jqf_alter'], 'jqf_clean/recipient', 'Library depends on jqf_clean/recipient → core/jquery');
     $this->assertContains([
       'source' => $this->fixtureSite . '/modules/jqf_script/js/probe.js',
-      'line' => 7,
+      'line' => 6,
       'theme' => NULL,
       'reason' => 'Possible jQuery reference',
     ], $findings['jqf_script']);
@@ -133,6 +136,82 @@ final class ReadinessScannerTest extends KernelTestBase {
     $this->assertArrayNotHasKey('core', $findings);
     $this->assertFinding($findings['jqf_alter'], 'core/drupalSettings', "library definition error: The 'header' key in the library definition 'drupalSettings' in extension 'core' is invalid: it must be a boolean.");
     $this->assertFinding($findings['jqf_dependency'], 'jqf_dependency/legacy', 'Library depends on jqf_dependency/legacy → core/jquery');
+  }
+
+  /**
+   * Tests attribution when a hook removes a required core library field.
+   */
+  #[DataProvider('removedLibraryFields')]
+  public function testRemovedLibraryField(string $field, string $library, string $error): void {
+    $this->container->get('state')->set('jqf_alter.remove_field', $field);
+    $findings = $this->container->get(ReadinessScanner::class)->scan();
+    $this->assertFinding($findings['jqf_alter'], "core/$library", 'library definition error: ' . $error);
+  }
+
+  /**
+   * Supplies library fields checked together during normalization.
+   */
+  public static function removedLibraryFields(): array {
+    return [
+      'js' => ['js', 'htmx', "Incomplete library definition for definition 'htmx' in extension 'core'"],
+      'css' => [
+        'css',
+        'drupal.fieldgroup',
+        "Incomplete library definition for definition 'drupal.fieldgroup' in extension 'core'",
+      ],
+      'drupalSettings' => [
+        'drupalSettings',
+        'drupalSettings',
+        "Incomplete library definition for definition 'drupalSettings' in extension 'core'",
+      ],
+      'license' => [
+        'license',
+        'loadjs',
+        "Missing license information in library definition for definition 'loadjs' extension 'core': it has a remote, but no license.",
+      ],
+    ];
+  }
+
+  /**
+   * Tests that definition-only errors use their own status and warning.
+   */
+  public function testDefinitionOnlyError(): void {
+    $path = $this->root . '/' . $this->fixtureSite . '/modules/jqf_clean/jqf_clean.libraries.yml';
+    file_put_contents($path, "\ninvalid:\n  js: {}\n  header: invalid\n", FILE_APPEND);
+    $logger = new TestLogger();
+    $this->container->get('logger.channel.test_jquery_free')->addLogger($logger);
+    $this->container->get(ReadinessScanner::class)->scan();
+    $requirements = $this->container->get('module_handler')->invoke('test_jquery_free', 'runtime_requirements');
+    $this->assertSame('3 extensions with possible jQuery dependencies', (string) $requirements['test_jquery_free']['value']);
+    $this->assertSame('2 extensions with library definition errors', (string) $requirements['test_jquery_free_library_errors']['value']);
+    $this->assertSame(RequirementSeverity::Warning, $requirements['test_jquery_free_library_errors']['severity']);
+
+    $records = $logger->recordsByLevel[RfcLogLevel::WARNING];
+    $clean_records = array_values(array_filter($records, static fn (array $record): bool => $record['context']['@extension'] === 'jqf_clean'));
+    $this->assertCount(1, $clean_records);
+    $this->assertSame('@extension has library definition errors (@reason).', $clean_records[0]['message']);
+    $this->assertStringContainsString("The 'header' key", $clean_records[0]['context']['@reason']);
+    foreach ($records as $record) {
+      if (str_contains($record['message'], 'depends on jQuery')) {
+        $this->assertStringNotContainsString('library definition error', $record['context']['@reason']);
+      }
+    }
+  }
+
+  /**
+   * Tests paging saved findings without limiting the command output.
+   */
+  public function testReportPager(): void {
+    $path = $this->root . '/' . $this->fixtureSite . '/modules/jqf_script/many.js';
+    file_put_contents($path, str_repeat("jQuery();\n", 55));
+    $rows = $this->container->get(ReadinessScanner::class)->rows();
+    $this->assertGreaterThan(50, count($rows));
+    $controller = ReadinessReportController::create($this->container);
+    $first_page = $controller->report();
+    $this->assertSame('pager', $first_page['pager']['#type']);
+    $this->assertSame(array_map('array_values', array_slice($rows, 0, 50)), $first_page['report']['#rows']);
+    $this->container->get('request_stack')->getCurrentRequest()->query->set('page', '1');
+    $this->assertSame(array_map('array_values', array_slice($rows, 50)), $controller->report()['report']['#rows']);
   }
 
   /**
@@ -173,15 +252,16 @@ final class ReadinessScannerTest extends KernelTestBase {
     $this->assertSame(0, $command->execute([]));
     $this->assertStringContainsString($advisory, $command->getDisplay());
     $this->assertStringContainsString('jqf_dependency/legacy', $command->getDisplay());
-    $this->assertCount(3, $logger->recordsByLevel[RfcLogLevel::WARNING]);
+    $this->assertCount(4, $logger->recordsByLevel[RfcLogLevel::WARNING]);
 
     $this->assertSame(0, $command->execute(['--rescan' => TRUE, '--format' => 'json'], ['capture_stderr_separately' => TRUE]));
     $this->assertSame($expected_rows, json_decode($command->getDisplay(), TRUE, flags: JSON_THROW_ON_ERROR));
     $form = [];
-    ReadinessRescanForm::create($this->container)->submitForm($form, new FormState());
+    $rescan = unserialize(serialize(ReadinessRescanForm::create($this->container)));
+    $rescan->submitForm($form, new FormState());
     $records = $logger->recordsByLevel[RfcLogLevel::WARNING];
-    $this->assertSame(array_merge(...array_fill(0, 3, ['jqf_alter', 'jqf_dependency', 'jqf_script'])), array_column(array_column($records, 'context'), '@extension'));
-    $this->assertSame('@extension depends on jQuery (@reason). jQuery is removed from Drupal core; test this module with test_jquery_free enabled. See https://www.drupal.org/node/CHANGE_RECORD.', $records[0]['message']);
+    $this->assertSame(array_merge(...array_fill(0, 3, ['jqf_alter', 'jqf_alter', 'jqf_dependency', 'jqf_script'])), array_column(array_column($records, 'context'), '@extension'));
+    $this->assertSame('@extension depends on jQuery (@reason). jQuery is removed from Drupal core; test this module with test_jquery_free enabled. See https://www.drupal.org/node/CHANGE_RECORD.', $records[1]['message']);
     $this->assertSame('test_jquery_free', $records[0]['context']['channel']);
 
     $this->container->get('library.discovery')->clear();

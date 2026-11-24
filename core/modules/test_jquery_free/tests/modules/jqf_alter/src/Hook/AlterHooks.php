@@ -30,6 +30,19 @@ final class AlterHooks {
       $libraries['once']['dependencies'][] = 'core/jquery';
       $libraries['drupalSettings']['dependencies'][] = 'core/jquery';
       $libraries['drupalSettings']['dependencies'][] = 42;
+      if ($field = \Drupal::state()->get('jqf_alter.remove_field')) {
+        $library = match ($field) {
+          'js' => 'htmx',
+          'css' => 'drupal.fieldgroup',
+          'drupalSettings' => 'drupalSettings',
+          'license' => 'loadjs',
+        };
+        // Make drupalSettings a settings-only definition for this case.
+        if ($field === 'drupalSettings') {
+          unset($libraries[$library]['js'], $libraries[$library]['dependencies']);
+        }
+        unset($libraries[$library][$field]);
+      }
     }
     if ($extension === 'jqf_clean') {
       $libraries['recipient']['dependencies'][] = 'core/jquery';

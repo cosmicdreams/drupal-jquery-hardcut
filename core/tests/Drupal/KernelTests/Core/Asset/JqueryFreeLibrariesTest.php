@@ -67,13 +67,21 @@ class JqueryFreeLibrariesTest extends KernelTestBase {
   public function testPhpLibraryReferences(): void {
     $files = $this->coreFiles('/\.(?:php|inc|module|install|profile|theme|engine)$/')
       ->exclude('assets/vendor');
+    // The canary exercises discovery of legacy IDs by adding them through
+    // these test hooks. Keep the rest of core and the fixtures checked.
+    $canary_fixture_references = [
+      'modules/test_jquery_free/tests/modules/jqf_alter/src/Hook/AlterHooks.php:core/jquery' => TRUE,
+      'modules/test_jquery_free/tests/themes/jqf_extend/src/Hook/ExtendHooks.php:core/jquery.ui.dialog' => TRUE,
+    ];
     $references = [];
     foreach ($files as $file) {
+      $path = $file->getRelativePathname();
       foreach (token_get_all($file->getContents()) as $token) {
         if (is_array($token) && $token[0] === T_CONSTANT_ENCAPSED_STRING) {
           $literal = substr($token[1], 1, -1);
-          if (preg_match('~^[a-z0-9_]+/(?:internal\.)?jquery(?:[./_-]|$)~i', $literal) === 1) {
-            $references[] = "{$file->getRelativePathname()}:{$token[2]} references $literal";
+          if (preg_match('~^[a-z0-9_]+/(?:internal\.)?jquery(?:[./_-]|$)~i', $literal) === 1
+            && !isset($canary_fixture_references["$path:$literal"])) {
+            $references[] = "$path:{$token[2]} references $literal";
           }
         }
       }

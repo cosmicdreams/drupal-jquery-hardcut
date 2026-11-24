@@ -27,12 +27,25 @@ final class ReadinessHooks {
   #[Hook('runtime_requirements')]
   public function runtimeRequirements(): array {
     $findings = $this->scanner->cachedFindings();
-    $count = count($findings ?? []);
-    return [
+    $dependencies = [];
+    $definition_errors = [];
+    foreach ($findings ?? [] as $extension => $rows) {
+      foreach ($rows as $row) {
+        if (ReadinessScanner::isDefinitionError($row['reason'])) {
+          $definition_errors[$extension] = TRUE;
+        }
+        else {
+          $dependencies[$extension] = TRUE;
+        }
+      }
+    }
+    $count = count($dependencies);
+    $report_link = Link::createFromRoute($this->t('View the jQuery readiness report'), 'test_jquery_free.report')->toRenderable();
+    $requirements = [
       'test_jquery_free' => [
         'title' => $this->t('jQuery readiness'),
         'value' => $findings === NULL ? $this->t('Scan needed') : $this->formatPlural($count, '1 extension with possible jQuery dependencies', '@count extensions with possible jQuery dependencies'),
-        'description' => Link::createFromRoute($this->t('View the jQuery readiness report'), 'test_jquery_free.report')->toRenderable(),
+        'description' => $report_link,
         'severity' => match (TRUE) {
           $findings === NULL => RequirementSeverity::Info,
           $count > 0 => RequirementSeverity::Warning,
@@ -40,6 +53,15 @@ final class ReadinessHooks {
         },
       ],
     ];
+    if ($definition_errors) {
+      $requirements['test_jquery_free_library_errors'] = [
+        'title' => $this->t('Library definition errors'),
+        'value' => $this->formatPlural(count($definition_errors), '1 extension with library definition errors', '@count extensions with library definition errors'),
+        'description' => $report_link,
+        'severity' => RequirementSeverity::Warning,
+      ];
+    }
+    return $requirements;
   }
 
   /**

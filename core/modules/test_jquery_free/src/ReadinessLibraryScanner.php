@@ -8,10 +8,14 @@ use Drupal\Core\Asset\Exception\InvalidLibrariesOverrideSpecificationException;
 use Drupal\Core\Extension\Extension;
 use Drupal\Core\Theme\ActiveTheme;
 
+// cspell:ignore farbtastic selectmenu
+
 /**
  * Traces jQuery dependencies in the library graph for each installed theme.
  */
 final class ReadinessLibraryScanner {
+
+  public const ERROR_PREFIX = 'library definition error: ';
 
   // Core library IDs from 447e9c9df2f, Drupal 8–11 history, and the hard cut.
   private const JQUERY_LIBRARIES = [
@@ -96,7 +100,7 @@ final class ReadinessLibraryScanner {
         $rows = $this->scanTheme($this->buildActiveTheme($name, $extensions), $extensions, $external);
       }
       catch (\Throwable $e) {
-        $rows = [[$name, $name, 'library definition error: ' . $e->getMessage()]];
+        $rows = [[$name, $name, self::ERROR_PREFIX . $e->getMessage()]];
       }
       foreach ($rows as [$extension, $source, $reason]) {
         if (isset($external[$extension])) {
@@ -167,7 +171,7 @@ final class ReadinessLibraryScanner {
       $author = $extensions_by_path[$path];
       foreach ($overrides as $id => $override) {
         if (!ReadinessLibraryParser::isLibraryId($id)) {
-          $rows[] = [$author, (string) $id, 'library definition error: libraries-override keys must be library IDs.'];
+          $rows[] = [$author, (string) $id, self::ERROR_PREFIX . 'libraries-override keys must be library IDs.'];
           continue;
         }
         $override_owners[$id] = $author;
@@ -196,7 +200,7 @@ final class ReadinessLibraryScanner {
             [$source, $author] = $failure;
           }
         }
-        $rows[] = [$author ?? $name, $source, 'library definition error: ' . $message];
+        $rows[] = [$author ?? $name, $source, self::ERROR_PREFIX . $message];
         continue;
       }
       foreach ($libraries as $library => $definition) {
@@ -212,12 +216,12 @@ final class ReadinessLibraryScanner {
             $replacements[$id] = [$definition['override'], $author];
           }
           else {
-            $rows[] = [$author, $id, 'library definition error: Override must be a library ID or false.'];
+            $rows[] = [$author, $id, self::ERROR_PREFIX . 'Override must be a library ID or false.'];
           }
           continue;
         }
         foreach ($parser->getDependencyErrors($library) as [$author, $reason]) {
-          $rows[] = [$author, $id, 'library definition error: ' . $reason];
+          $rows[] = [$author, $id, self::ERROR_PREFIX . $reason];
         }
         $dependencies = $definition['dependencies'];
         foreach (is_array($dependencies) ? $dependencies : [] as $dependency) {
@@ -232,7 +236,7 @@ final class ReadinessLibraryScanner {
     // the definition. Keep them as edges so the report retains the chain.
     foreach ($replacements as $id => [$target, $author]) {
       if (!isset($graph[$target])) {
-        $rows[] = [$author, $id, "library definition error: The specified library $target does not exist."];
+        $rows[] = [$author, $id, self::ERROR_PREFIX . "The specified library $target does not exist."];
         if (!self::isJqueryLibrary($target)) {
           continue;
         }
@@ -245,12 +249,12 @@ final class ReadinessLibraryScanner {
           continue;
         }
         if (!is_array($targets) || !array_is_list($targets)) {
-          $rows[] = [$author, $id, 'library definition error: libraries-extend must be a list of library IDs.'];
+          $rows[] = [$author, $id, self::ERROR_PREFIX . 'libraries-extend must be a list of library IDs.'];
         }
         foreach (is_array($targets) ? $targets : [] as $key => $target) {
           if (!ReadinessLibraryParser::isLibraryId($target) || !isset($graph[$target])) {
             $label = is_string($target) ? $target : get_debug_type($target);
-            $rows[] = [$author, $id, "library definition error: Invalid library extension $label at key $key."];
+            $rows[] = [$author, $id, self::ERROR_PREFIX . "Invalid library extension $label at key $key."];
             if (!is_string($target) || !self::isJqueryLibrary($target)) {
               continue;
             }
@@ -263,12 +267,12 @@ final class ReadinessLibraryScanner {
     foreach (array_intersect_key($theme_chain, $external) as $author => $extension) {
       $libraries = $extension->info['libraries'] ?? [];
       if (!is_array($libraries)) {
-        $rows[] = [$author, $author, 'library definition error: Global libraries must be a list of library IDs.'];
+        $rows[] = [$author, $author, self::ERROR_PREFIX . 'Global libraries must be a list of library IDs.'];
         continue;
       }
       foreach ($libraries as $key => $id) {
         if (!ReadinessLibraryParser::isLibraryId($id)) {
-          $rows[] = [$author, $author, "library definition error: Global library at key $key must be a library ID."];
+          $rows[] = [$author, $author, self::ERROR_PREFIX . "Global library at key $key must be a library ID."];
           continue;
         }
         foreach ($this->chains($graph, [], [$id]) as $chain) {

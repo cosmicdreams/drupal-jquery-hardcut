@@ -33,6 +33,8 @@ final class ReadinessLibraryParser extends LibraryDiscoveryParser {
 
   /**
    * Malformed dependencies and their authors for the current extension.
+   *
+   * @var array<string, array<int|string, array{array{bool, mixed}, string}>>
    */
   private array $malformed = [];
 
@@ -78,11 +80,11 @@ final class ReadinessLibraryParser extends LibraryDiscoveryParser {
     // Core names the library in its explicit validation exceptions.
     [$field, $pattern] = match (TRUE) {
       $error instanceof IncompleteLibraryDefinitionException => [
-        'dependencies',
+        'asset_or_dependencies',
         "/^Incomplete library definition for definition '([^']+)'/",
       ],
       $error instanceof LibraryDefinitionMissingLicenseException => [
-        'remote',
+        'required_license',
         "/^Missing license information in library definition for definition '([^']+)'/",
       ],
       $error instanceof \LogicException => ['header', "/^The 'header' key in the library definition '([^']+)'/"],
@@ -200,12 +202,33 @@ final class ReadinessLibraryParser extends LibraryDiscoveryParser {
   private function recordDefinitionAuthors(array $before, array $after, string $author): void {
     $this->definitionAuthors = array_intersect_key($this->definitionAuthors, $after);
     foreach ($after as $library => $definition) {
-      foreach (['dependencies', 'header', 'js', 'remote'] as $field) {
+      $previous = $before[$library] ?? [];
+      // Credit the hook that makes a previously valid definition invalid.
+      $failures = $this->definitionFailures($definition);
+      foreach ($this->definitionFailures($previous) as $check => $was_invalid) {
+        if (!$failures[$check]) {
+          unset($this->definitionAuthors[$library][$check]);
+        }
+        elseif (!$was_invalid || !isset($before[$library])) {
+          $this->definitionAuthors[$library][$check] = $author;
+        }
+      }
+      foreach (['header', 'js'] as $field) {
         if (!isset($before[$library]) || ($definition[$field] ?? NULL) !== ($before[$library][$field] ?? NULL)) {
           $this->definitionAuthors[$library][$field] = $author;
         }
       }
     }
+  }
+
+  /**
+   * Identifies normalization failures that depend on multiple fields.
+   */
+  private function definitionFailures(mixed $definition): array {
+    return [
+      'asset_or_dependencies' => !isset($definition['js']) && !isset($definition['css']) && !isset($definition['drupalSettings']) && !isset($definition['dependencies']),
+      'required_license' => isset($definition['remote']) && !isset($definition['license']),
+    ];
   }
 
   /**

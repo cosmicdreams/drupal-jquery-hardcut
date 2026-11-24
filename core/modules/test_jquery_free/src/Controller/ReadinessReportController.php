@@ -5,8 +5,11 @@ declare(strict_types=1);
 namespace Drupal\test_jquery_free\Controller;
 
 use Drupal\Core\Controller\ControllerBase;
+use Drupal\Core\Pager\PagerManagerInterface;
 use Drupal\test_jquery_free\Form\ReadinessRescanForm;
 use Drupal\test_jquery_free\ReadinessScanner;
+
+// cspell:ignore rescan
 
 /**
  * Displays the jQuery readiness report.
@@ -15,6 +18,7 @@ final class ReadinessReportController extends ControllerBase {
 
   public function __construct(
     private readonly ReadinessScanner $scanner,
+    private readonly PagerManagerInterface $pagerManager,
   ) {}
 
   /**
@@ -22,6 +26,8 @@ final class ReadinessReportController extends ControllerBase {
    */
   public function report(): array {
     $rows = $this->scanner->cachedRows();
+    $page_size = 50;
+    $pager = $this->pagerManager->createPager(count($rows ?? []), $page_size);
     return [
       'advisory' => [
         '#prefix' => '<p>',
@@ -38,11 +44,12 @@ final class ReadinessReportController extends ControllerBase {
           $this->t('Theme'),
           $this->t('Reason'),
         ],
-        '#rows' => array_map('array_values', $rows ?? []),
+        '#rows' => array_map('array_values', array_slice($rows ?? [], $pager->getCurrentPage() * $page_size, $page_size)),
         '#empty' => $rows === NULL
           ? $this->t('No scan yet')
           : $this->t('No jQuery references found in enabled contributed or custom extensions.'),
       ],
+      'pager' => ['#type' => 'pager'],
       '#cache' => ['max-age' => 0],
     ];
   }

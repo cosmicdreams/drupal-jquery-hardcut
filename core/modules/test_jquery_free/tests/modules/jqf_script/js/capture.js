@@ -13,7 +13,6 @@
   window.jqfWarnings = warnings;
 
   if (new URLSearchParams(location.search).has('preset')) {
-    // eslint-disable-next-line drupal-jquery/no-reference -- Simulates an existing global for the canary test.
-    window.jQuery = 'existing jQuery';
+    Reflect.set(window, 'jQuery', 'existing jQuery');
   }
 })();

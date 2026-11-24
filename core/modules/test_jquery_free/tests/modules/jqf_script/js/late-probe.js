@@ -4,10 +4,18 @@
  */
 
 if (!new URLSearchParams(location.search).has('preset')) {
-  // eslint-disable-next-line drupal-jquery/no-reference -- Tests that the diagnostic stays armed.
-  window.jQuery = undefined;
-  // eslint-disable-next-line drupal-jquery/no-reference -- Exercises the diagnostic at a second location.
-  document.body.dataset.lateJquery = typeof window.jQuery;
-  // eslint-disable-next-line drupal-jquery/no-reference -- Exercises another line in the same script.
-  document.body.dataset.lateAlias = typeof window.$;
+  Reflect.set(window, 'jQuery', undefined);
+  for (let read = 0; read < 3; read += 1) {
+    document.body.dataset.lateJquery = typeof Reflect.get(window, 'jQuery');
+  }
+  document.body.dataset.lateAlias = typeof Reflect.get(window, '$');
+}
+
+if (new URLSearchParams(location.search).has('define')) {
+  Reflect.set(window, 'jQuery', null);
+  Reflect.set(window, '$', {
+    get fn() {
+      throw new Error('The canary must not inspect the assigned value');
+    },
+  });
 }

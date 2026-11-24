@@ -13,12 +13,16 @@ use Drupal\Core\Extension\ThemeHandlerInterface;
 use Psr\Log\LoggerInterface;
 use Symfony\Component\Finder\Finder;
 
+// cspell:ignore rescan
+
 /**
  * Finds jQuery references in enabled contributed and custom extensions.
  */
 final class ReadinessScanner {
 
   private const WARNING = '@extension depends on jQuery (@reason). jQuery is removed from Drupal core; test this module with test_jquery_free enabled. See https://www.drupal.org/node/CHANGE_RECORD.';
+
+  private const DEFINITION_WARNING = '@extension has library definition errors (@reason).';
 
   private const CACHE_ID = 'test_jquery_free.readiness';
 
@@ -102,10 +106,21 @@ final class ReadinessScanner {
     }
     ksort($findings);
     foreach ($findings as $name => $rows) {
-      $this->logger->warning(self::WARNING, [
-        '@extension' => $name,
-        '@reason' => implode(', ', array_unique(array_column($rows, 'reason'))),
-      ]);
+      $reasons = [];
+      foreach (array_unique(array_column($rows, 'reason')) as $reason) {
+        if (self::isDefinitionError($reason)) {
+          $reasons[self::DEFINITION_WARNING][] = substr($reason, strlen(ReadinessLibraryScanner::ERROR_PREFIX));
+        }
+        else {
+          $reasons[self::WARNING][] = $reason;
+        }
+      }
+      foreach ($reasons as $message => $messages) {
+        $this->logger->warning($message, [
+          '@extension' => $name,
+          '@reason' => implode(', ', $messages),
+        ]);
+      }
     }
 
     $this->cache->set(self::CACHE_ID, [
@@ -113,6 +128,13 @@ final class ReadinessScanner {
       'extensions' => $fingerprints,
     ], Cache::PERMANENT, ['library_info', 'config:core.extension']);
     return $findings;
+  }
+
+  /**
+   * Distinguishes definition errors from possible jQuery dependencies.
+   */
+  public static function isDefinitionError(string $reason): bool {
+    return str_starts_with($reason, ReadinessLibraryScanner::ERROR_PREFIX);
   }
 
   /**
