@@ -21,6 +21,7 @@ final class ReadinessReportController extends ControllerBase {
    * Builds a table of jQuery findings.
    */
   public function report(): array {
+    $rows = $this->scanner->cachedRows();
     return [
       'rescan' => $this->formBuilder()->getForm(ReadinessRescanForm::class),
       'report' => [
@@ -32,8 +33,10 @@ final class ReadinessReportController extends ControllerBase {
           $this->t('Theme'),
           $this->t('Reason'),
         ],
-        '#rows' => array_map('array_values', $this->scanner->rows()),
-        '#empty' => $this->t('No jQuery references found in enabled contributed or custom extensions.'),
+        '#rows' => array_map('array_values', $rows ?? []),
+        '#empty' => $rows === NULL
+          ? $this->t('No scan yet')
+          : $this->t('No jQuery references found in enabled contributed or custom extensions.'),
       ],
       '#cache' => ['max-age' => 0],
     ];

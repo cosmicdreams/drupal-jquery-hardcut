@@ -59,9 +59,6 @@
           writable: true,
           value,
         });
-        if (name === 'jQuery' && typeof value?.fn?.jquery === 'string') {
-          console.warn(presentWarning);
-        }
       },
     });
   });

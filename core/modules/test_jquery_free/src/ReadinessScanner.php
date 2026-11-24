@@ -139,8 +139,23 @@ final class ReadinessScanner {
    *   Findings with extension names included in each row.
    */
   public function rows(bool $rescan = FALSE): array {
+    return self::flattenFindings($this->scan($rescan));
+  }
+
+  /**
+   * Returns saved report rows, or NULL if there is no current scan.
+   */
+  public function cachedRows(): ?array {
+    $findings = $this->cachedFindings();
+    return $findings === NULL ? NULL : self::flattenFindings($findings);
+  }
+
+  /**
+   * Flattens extension findings for display.
+   */
+  private static function flattenFindings(array $grouped_findings): array {
     $rows = [];
-    foreach ($this->scan($rescan) as $extension => $findings) {
+    foreach ($grouped_findings as $extension => $findings) {
       foreach ($findings as $finding) {
         $rows[] = ['extension' => $extension] + $finding;
       }

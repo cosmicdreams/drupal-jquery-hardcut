@@ -79,8 +79,23 @@ final class ReadinessScannerTest extends KernelTestBase {
     $theme_manager->setActiveTheme($stark);
     $this->assertSame($this->fixtureSite . '/modules/jqf_dependency', $this->container->get('module_handler')->getModule('jqf_dependency')->getPath());
 
+    $discovery = $this->container->get('library.discovery');
+    $expected_libraries = $discovery->getLibrariesByExtension('jqf_script');
+    $expected_defaults = $theme_manager->getDefaultTemplateVariables();
+    $discovery->reset();
+    $theme_manager->resetActiveTheme();
+    $theme_manager->setActiveTheme($stark);
+    $cache = $this->container->get('cache.discovery');
+    $child_cache_key = 'library_info:jqf_extend';
+    $child_cache = $cache->get($child_cache_key)->data ?? NULL;
+
     $findings = $this->container->get(ReadinessScanner::class)->scan();
     $this->assertSame($stark, $theme_manager->getActiveTheme());
+    $this->assertSame($expected_defaults, $theme_manager->getDefaultTemplateVariables());
+    $this->assertSame($expected_libraries, $discovery->getLibrariesByExtension('jqf_script'));
+    $discovery->destruct();
+    $this->assertSame($child_cache, $cache->get($child_cache_key)->data ?? NULL);
+    $this->assertSame($expected_libraries, $cache->get('library_info:stark')->data['jqf_script']);
     $this->assertArrayNotHasKey('core', $findings);
     $this->assertArrayNotHasKey('jqf_clean', $findings);
     $this->assertFinding($findings['jqf_script'], 'jqf_script/transitive', 'Library depends on jqf_script/transitive → jqf_dependency/cycle → jqf_dependency/legacy → core/jquery', 'jqf_global, stark');
@@ -88,9 +103,15 @@ final class ReadinessScannerTest extends KernelTestBase {
     $this->assertFinding($findings['jqf_dependency'], 'jqf_dependency/legacy', 'Library depends on jqf_dependency/legacy → core/tabbable.jquery.shim');
     $this->assertFinding($findings['jqf_extend'], 'core/drupalSettings', 'Library depends on core/drupalSettings → jqf_dependency/legacy → core/jquery', 'jqf_extend');
     $this->assertFinding($findings['jqf_extend'], 'core/drupalSettings', 'Library depends on core/drupalSettings → core/jquery.ui.dialog', 'jqf_extend');
-    $this->assertFinding($findings['jqf_global'], 'core/tabbable.jquery.shim', 'Theme attaches core/tabbable.jquery.shim', 'jqf_global');
-    $this->assertFinding($findings['jqf_global'], 'core/once', 'library definition error: The specified library jqf_global/missing does not exist.', 'jqf_global');
-    $this->assertFinding($findings['jqf_alter'], 'core/once', 'Library depends on core/once → core/jquery', 'jqf_extend, stark');
+    $this->assertFinding($findings['jqf_global'], 'core/tabbable.jquery.shim', 'Theme attaches core/tabbable.jquery.shim', 'jqf_extend, jqf_global');
+    $this->assertFinding($findings['jqf_global'], 'core/drupalSettings', 'Theme attaches core/drupalSettings → jqf_dependency/legacy → core/jquery.once', 'jqf_extend');
+    $this->assertFinding($findings['jqf_global'], 'jqf_script/script', 'Library depends on jqf_script/script → jqf_dependency/legacy → core/jquery', 'jqf_extend, jqf_global');
+    $this->assertNotContains('jqf_script/script', array_column($findings['jqf_extend'], 'source'));
+    $this->assertFinding($findings['jqf_global'], 'core/once', 'library definition error: The specified library jqf_global/missing does not exist.', 'jqf_extend, jqf_global');
+    $this->assertFinding($findings['jqf_extend'], 'core/drupalSettings', 'library definition error: Invalid library extension int at key 1.', 'jqf_extend');
+    $this->assertFinding($findings['jqf_alter'], 'core/once', 'Library depends on core/once → core/jquery', 'stark');
+    $this->assertFinding($findings['jqf_alter'], 'core/drupalSettings', 'Library depends on core/drupalSettings → core/jquery');
+    $this->assertFinding($findings['jqf_alter'], 'core/drupalSettings', 'library definition error: Dependency at key 1 must be a library ID.');
     $this->assertFinding($findings['jqf_alter'], 'jqf_clean/recipient', 'Library depends on jqf_clean/recipient → core/jquery');
     $this->assertContains([
       'source' => $this->fixtureSite . '/modules/jqf_script/js/probe.js',
@@ -113,6 +134,11 @@ final class ReadinessScannerTest extends KernelTestBase {
     $this->assertNull($scanner->cachedFindings());
     $this->assertSame('Scan needed', (string) $requirements()['value']);
     $this->assertSame(RequirementSeverity::Info, $requirements()['severity']);
+    $this->assertSame([], $logger->recordsByLevel[RfcLogLevel::WARNING] ?? []);
+
+    $report = ReadinessReportController::create($this->container)->report();
+    $this->assertSame('No scan yet', (string) $report['report']['#empty']);
+    $this->assertNull($scanner->cachedFindings());
     $this->assertSame([], $logger->recordsByLevel[RfcLogLevel::WARNING] ?? []);
 
     $expected_rows = $scanner->rows();

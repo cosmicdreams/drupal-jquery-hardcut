@@ -6,8 +6,6 @@ namespace Drupal\test_jquery_free;
 
 use Drupal\Core\Extension\Extension;
 use Drupal\Core\Theme\ActiveTheme;
-use Drupal\Core\Theme\ThemeInitializationInterface;
-use Drupal\Core\Theme\ThemeManagerInterface;
 
 /**
  * Traces jQuery dependencies in the library graph for each installed theme.
@@ -74,8 +72,7 @@ final class ReadinessLibraryScanner {
 
   public function __construct(
     private readonly ReadinessLibraryParser $parser,
-    private readonly ThemeManagerInterface $themeManager,
-    private readonly ThemeInitializationInterface $themeInitialization,
+    private readonly string $root,
   ) {}
 
   /**
@@ -91,34 +88,20 @@ final class ReadinessLibraryScanner {
    */
   public function scan(array $extensions, array $themes): array {
     $external = array_filter($extensions, static fn (Extension $extension): bool => !str_starts_with($extension->getPath() . '/', 'core/'));
-    $original = $this->themeManager->hasActiveTheme() ? $this->themeManager->getActiveTheme() : NULL;
     $themes = $themes ?: ['core'];
     $scans = [];
-    try {
-      foreach ($themes as $name) {
-        $rows = [];
-        try {
-          $theme = $this->themeInitialization->getActiveThemeByName($name);
-          $this->themeManager->setActiveTheme($theme);
-          $rows = $this->scanTheme($theme, $extensions, $external);
-        }
-        catch (\Throwable $e) {
-          $rows[] = [$name, $name, 'library definition error: ' . $e->getMessage()];
-        }
-        foreach ($rows as [$extension, $source, $reason]) {
-          if (isset($external[$extension])) {
-            $key = json_encode([$extension, $source, $reason], JSON_THROW_ON_ERROR | JSON_INVALID_UTF8_SUBSTITUTE);
-            $scans[$key][$name] = TRUE;
-          }
-        }
+    foreach ($themes as $name) {
+      try {
+        $rows = $this->scanTheme($this->buildActiveTheme($name, $extensions), $extensions, $external);
       }
-    }
-    finally {
-      if ($original !== NULL) {
-        $this->themeManager->setActiveTheme($original);
+      catch (\Throwable $e) {
+        $rows = [[$name, $name, 'library definition error: ' . $e->getMessage()]];
       }
-      else {
-        $this->themeManager->resetActiveTheme();
+      foreach ($rows as [$extension, $source, $reason]) {
+        if (isset($external[$extension])) {
+          $key = json_encode([$extension, $source, $reason], JSON_THROW_ON_ERROR | JSON_INVALID_UTF8_SUBSTITUTE);
+          $scans[$key][$name] = TRUE;
+        }
       }
     }
 
@@ -136,9 +119,40 @@ final class ReadinessLibraryScanner {
   }
 
   /**
+   * Builds the theme context needed for hooks and library overrides.
+   */
+  private function buildActiveTheme(string $name, array $extensions): ActiveTheme {
+    $theme = $extensions[$name] ?? new Extension($this->root, 'theme', 'core/core.info.yml');
+    $base_themes = [];
+    $ancestor = $theme;
+    while (isset($ancestor->base_theme)) {
+      $base = $ancestor->base_theme;
+      if (!isset($extensions[$base]) || $base === $name || isset($base_themes[$base])) {
+        throw new \UnexpectedValueException("Invalid base theme $base for $name.");
+      }
+      $ancestor = $base_themes[$base] = $extensions[$base];
+    }
+
+    $overrides = [];
+    foreach (array_reverse($base_themes, TRUE) + [$name => $theme] as $extension) {
+      if (!empty($extension->info['libraries-override'])) {
+        $overrides[$extension->getPath()] = $extension->info['libraries-override'];
+      }
+    }
+    return new ActiveTheme([
+      'name' => $name,
+      'path' => $theme->getPath(),
+      'extension' => $theme,
+      'base_theme_extensions' => $base_themes,
+      'libraries_override' => $overrides,
+    ]);
+  }
+
+  /**
    * Discovers dependencies and declaration owners for a single theme.
    */
   private function scanTheme(ActiveTheme $theme, array $extensions, array $external): array {
+    $parser = $this->parser->forTheme($theme);
     $theme_chain = array_reverse($theme->getBaseThemeExtensions(), TRUE) + [$theme->getName() => $theme->getExtension()];
     $extensions_by_path = [];
     foreach ($theme_chain as $name => $extension) {
@@ -150,19 +164,23 @@ final class ReadinessLibraryScanner {
     $replacements = [];
     foreach (['core', ...array_keys($extensions)] as $name) {
       $override_owners = [];
+      $replacement_owners = [];
       foreach ($theme->getLibrariesOverride() as $path => $overrides) {
         foreach ($overrides as $id => $override) {
           if (str_starts_with($id, "$name/")) {
             $override_owners[$id] = $extensions_by_path[$path];
+            if (is_string($override) || $override === FALSE) {
+              $replacement_owners[$id] = $extensions_by_path[$path];
+            }
           }
         }
       }
       try {
-        $libraries = $this->parser->buildByExtension($name);
+        $libraries = $parser->buildByExtension($name);
       }
       catch (\Throwable $e) {
         $message = $e->getMessage();
-        $author = $this->parser->getFailedAlterAuthor();
+        $author = $parser->getFailedAlterAuthor();
         $source = $name;
         if ($author === NULL) {
           foreach ($override_owners as $id => $theme_author) {
@@ -183,7 +201,7 @@ final class ReadinessLibraryScanner {
         }
         $graph[$id] = [];
         if (isset($definition['override'])) {
-          $author = $override_owners[$id] ?? $name;
+          $author = $replacement_owners[$id] ?? $name;
           if (is_string($definition['override'])) {
             $replacements[$id] = [$definition['override'], $author];
           }
@@ -192,13 +210,14 @@ final class ReadinessLibraryScanner {
           }
           continue;
         }
-        $dependencies = $definition['dependencies'];
-        if (!is_array($dependencies) || count(array_filter($dependencies, static fn (mixed $dependency): bool => is_string($dependency) && str_contains($dependency, '/'))) !== count($dependencies)) {
-          $rows[] = [$name, $id, 'library definition error: dependencies must be a list of library IDs.'];
-          continue;
+        foreach ($parser->getDependencyErrors($library) as [$author, $reason]) {
+          $rows[] = [$author, $id, 'library definition error: ' . $reason];
         }
-        foreach ($dependencies as $dependency) {
-          $graph[$id][$dependency][$this->parser->getDependencyAuthor($library, $dependency, $name)] = TRUE;
+        $dependencies = $definition['dependencies'];
+        foreach (is_array($dependencies) ? $dependencies : [] as $dependency) {
+          if (ReadinessLibraryParser::isLibraryId($dependency)) {
+            $graph[$id][$dependency][$parser->getDependencyAuthor($library, $dependency, $name)] = TRUE;
+          }
         }
       }
     }
@@ -221,12 +240,11 @@ final class ReadinessLibraryScanner {
         }
         if (!is_array($targets) || !array_is_list($targets)) {
           $rows[] = [$author, $id, 'library definition error: libraries-extend must be a list of library IDs.'];
-          continue;
         }
-        foreach ($targets as $target) {
-          if (!is_string($target) || !isset($graph[$target])) {
+        foreach (is_array($targets) ? $targets : [] as $key => $target) {
+          if (!ReadinessLibraryParser::isLibraryId($target) || !isset($graph[$target])) {
             $label = is_string($target) ? $target : get_debug_type($target);
-            $rows[] = [$author, $id, "library definition error: Invalid library extension $label."];
+            $rows[] = [$author, $id, "library definition error: Invalid library extension $label at key $key."];
             if (!is_string($target) || !self::isJqueryLibrary($target)) {
               continue;
             }
@@ -234,15 +252,21 @@ final class ReadinessLibraryScanner {
           $graph[$id][$target][$author] = TRUE;
         }
       }
-      if (isset($external[$author])) {
-        foreach ($extension->info['libraries'] ?? [] as $id) {
-          if (!is_string($id)) {
-            $rows[] = [$author, $author, 'library definition error: Global libraries must be library IDs.'];
-            continue;
-          }
-          foreach ($this->chains($graph, [], [$id]) as $chain) {
-            $rows[] = [$author, $id, 'Theme attaches ' . implode(' → ', $chain)];
-          }
+    }
+
+    foreach (array_intersect_key($theme_chain, $external) as $author => $extension) {
+      $libraries = $extension->info['libraries'] ?? [];
+      if (!is_array($libraries)) {
+        $rows[] = [$author, $author, 'library definition error: Global libraries must be a list of library IDs.'];
+        continue;
+      }
+      foreach ($libraries as $key => $id) {
+        if (!ReadinessLibraryParser::isLibraryId($id)) {
+          $rows[] = [$author, $author, "library definition error: Global library at key $key must be a library ID."];
+          continue;
+        }
+        foreach ($this->chains($graph, [], [$id]) as $chain) {
+          $rows[] = [$author, $id, 'Theme attaches ' . implode(' → ', $chain)];
         }
       }
     }

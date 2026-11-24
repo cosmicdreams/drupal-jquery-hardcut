@@ -8,6 +8,7 @@ use Drupal\Component\Serialization\Exception\InvalidDataTypeException;
 use Drupal\Component\Utility\NestedArray;
 use Drupal\Core\Asset\Exception\InvalidLibraryFileException;
 use Drupal\Core\Asset\LibraryDiscoveryParser;
+use Drupal\Core\Theme\ActiveTheme;
 
 /**
  * Records who adds dependencies while Drupal parses a library definition.
@@ -22,15 +23,49 @@ final class ReadinessLibraryParser extends LibraryDiscoveryParser {
   private array $authors = [];
 
   /**
+   * Malformed dependencies and their authors for the current extension.
+   */
+  private array $malformed = [];
+
+  /**
    * The extension whose alter callback is running or threw an exception.
    */
   private ?string $alteringExtension = NULL;
+
+  /**
+   * Creates a parser with a private theme manager for the given theme.
+   */
+  public function forTheme(ActiveTheme $theme): self {
+    $parser = clone $this;
+    $parser->themeManager = clone $this->themeManager;
+    $parser->themeManager->setActiveTheme($theme);
+    return $parser;
+  }
+
+  /**
+   * Checks whether a value has the extension/library form of a library ID.
+   */
+  public static function isLibraryId(mixed $value): bool {
+    return is_string($value) && preg_match('~^[^/\s]+/[^/\s]+$~D', $value) === 1;
+  }
 
   /**
    * Returns the author of a dependency in the last parsed extension.
    */
   public function getDependencyAuthor(string $library, string $dependency, string $extension): string {
     return $this->authors[$library][$dependency] ?? $extension;
+  }
+
+  /**
+   * Yields each malformed dependency and the extension that introduced it.
+   */
+  public function getDependencyErrors(string $library): iterable {
+    foreach ($this->malformed[$library] ?? [] as $key => [$entry, $author]) {
+      $reason = $entry[0]
+        ? "Dependency at key $key must be a library ID."
+        : 'Dependencies must be a list of library IDs.';
+      yield [$author, $reason];
+    }
   }
 
   /**
@@ -45,6 +80,7 @@ final class ReadinessLibraryParser extends LibraryDiscoveryParser {
    */
   protected function parseLibraryInfo($extension, $path) {
     $this->authors = [];
+    $this->malformed = [];
     $this->alteringExtension = NULL;
     // Match the core parser's initial definitions, then observe each alter
     // callback in Drupal's module and theme hook order.
@@ -62,6 +98,7 @@ final class ReadinessLibraryParser extends LibraryDiscoveryParser {
       $libraries = NestedArray::mergeDeep($libraries, $this->moduleHandler->invoke($extension, 'library_info_build'));
     }
 
+    $this->recordMalformedDependencies($libraries, $extension);
     $context2 = NULL;
     $alter = function (callable $listener, string $author) use (&$libraries, &$extension, &$context2): void {
       $before = $this->dependencies($libraries);
@@ -69,6 +106,7 @@ final class ReadinessLibraryParser extends LibraryDiscoveryParser {
       $listener($libraries, $extension, $context2);
       $this->alteringExtension = NULL;
       $after = $this->dependencies($libraries);
+      $this->recordMalformedDependencies($libraries, $author);
       foreach ($this->authors as $id => $authors) {
         $this->authors[$id] = array_intersect_key($authors, $after[$id] ?? []);
       }
@@ -91,13 +129,42 @@ final class ReadinessLibraryParser extends LibraryDiscoveryParser {
   private function dependencies(array $libraries): array {
     $dependencies = [];
     foreach ($libraries as $id => $definition) {
-      foreach ((array) ($definition['dependencies'] ?? []) as $dependency) {
-        if (is_string($dependency)) {
+      $entries = $definition['dependencies'] ?? [];
+      foreach (is_array($entries) ? $entries : [] as $dependency) {
+        if (self::isLibraryId($dependency)) {
           $dependencies[$id][$dependency] = TRUE;
         }
       }
     }
     return $dependencies;
+  }
+
+  /**
+   * Preserves the author of each malformed entry across alter callbacks.
+   */
+  private function recordMalformedDependencies(array $libraries, string $author): void {
+    $malformed = [];
+    foreach ($libraries as $id => $definition) {
+      if (!is_array($definition) || !array_key_exists('dependencies', $definition)) {
+        continue;
+      }
+      $entries = $definition['dependencies'];
+      $is_array = is_array($entries);
+      // Keep the previous keys to look up the original author after a match.
+      $previous = array_map(static fn (array $entry): array => $entry[0], $this->malformed[$id] ?? []);
+      foreach ($is_array ? $entries : [$entries] as $key => $dependency) {
+        if ($is_array && self::isLibraryId($dependency)) {
+          continue;
+        }
+        $entry = [$is_array, $dependency];
+        $prior_key = array_search($entry, $previous, TRUE);
+        $malformed[$id][$key] = [$entry, $prior_key === FALSE ? $author : $this->malformed[$id][$prior_key][1]];
+        if ($prior_key !== FALSE) {
+          unset($previous[$prior_key]);
+        }
+      }
+    }
+    $this->malformed = $malformed;
   }
 
 }

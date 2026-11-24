@@ -42,6 +42,19 @@ final class CanaryTest extends WebDriverTestBase {
     $this->assertSame('jQuery readiness: %s accessed window.%s', $warnings[0][0]);
     $this->assertFalse($session->evaluateScript('Object.prototype.propertyIsEnumerable.call(window, "jQuery")'));
 
+    $this->assertTrue($session->evaluateScript(<<<'JS'
+      (() => {
+        const assigned = {
+          get fn() {
+            throw new Error('The canary must not read fn');
+          },
+        };
+        window.jQuery = assigned;
+        return window.jQuery === assigned;
+      })()
+      JS));
+    $this->assertSame($warnings, $session->evaluateScript('window.jqfWarnings'));
+
     $this->drupalGet('test-jquery-free/probe', ['query' => ['preset' => 1]]);
     $this->assertSession()->elementExists('css', 'body[data-jquery="string"][data-alias="undefined"]');
     $this->assertSame('existing jQuery', $session->evaluateScript('window.jQuery'));
@@ -55,10 +68,25 @@ final class CanaryTest extends WebDriverTestBase {
    * Tests a rescan from the administrative report.
    */
   public function testReportRescan(): void {
-    $account = $this->drupalCreateUser(['administer site configuration']);
-    $this->drupalLogin($account);
-    $this->drupalGet('admin/reports/jquery-readiness');
-    $this->assertSession()->responseContains('No jQuery references found');
+    $report = 'admin/reports/jquery-readiness';
+    $this->drupalLogin($this->drupalCreateUser([]));
+    $this->drupalGet($report);
+    $this->assertSession()->pageTextContains('You are not authorized to access this page.');
+    $this->assertSession()->buttonNotExists('Rescan');
+
+    $this->drupalLogin($this->drupalCreateUser(['administer site configuration']));
+    foreach ([
+      'document.querySelector("[name=form_token]").remove()',
+      'document.querySelector("[name=form_token]").value = "invalid"',
+    ] as $tamper) {
+      $this->drupalGet($report);
+      $this->assertSession()->pageTextContains('No scan yet');
+      $this->getSession()->executeScript($tamper);
+      $this->submitForm([], 'Rescan');
+      $this->assertSession()->pageTextContains('The form has become outdated.');
+      $this->drupalGet($report);
+      $this->assertSession()->pageTextContains('No scan yet');
+    }
     $this->submitForm([], 'Rescan');
     $this->assertSession()->addressEquals('admin/reports/jquery-readiness');
     $this->assertSession()->responseContains('No jQuery references found');
