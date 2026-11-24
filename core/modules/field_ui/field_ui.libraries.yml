@@ -6,7 +6,6 @@ drupal.field_ui:
     theme:
       css/field_ui.admin.css: {}
   dependencies:
-    - core/jquery
     - core/drupal
     - core/drupalSettings
     - core/once

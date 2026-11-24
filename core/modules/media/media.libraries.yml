@@ -10,7 +10,6 @@ type_form:
   js:
     js/type_form.js: {}
   dependencies:
-    - core/jquery
     - core/drupal.form
 
 oembed.formatter:
