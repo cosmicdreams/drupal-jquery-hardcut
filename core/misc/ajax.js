@@ -2158,9 +2158,11 @@
         ? Math.max(0, speed)
         : ({ fast: 200, slow: 600 }[speed] ?? 400);
     if (duration) {
+      const opacity = Number(getComputedStyle(element).opacity);
       Drupal.trackAnimation(
         element.animate(
-          [{ opacity: 0 }, { opacity: getComputedStyle(element).opacity }],
+          // Keep visible content readable from the first animation frame.
+          [{ opacity: Math.min(0.01, opacity) }, { opacity }],
           {
             duration,
             easing: 'ease-in-out',
