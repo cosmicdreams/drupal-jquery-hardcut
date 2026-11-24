@@ -6,6 +6,7 @@ import ymlConfig from 'eslint-plugin-yml';
 import jsdoc from 'eslint-plugin-jsdoc';
 import js from '@eslint/js';
 import globals from 'globals';
+import { jqueryPlugin } from './scripts/js/jquery-ratchet.mjs';
 
 export default defineConfig(
   {
@@ -37,6 +38,7 @@ export default defineConfig(
   prettierConfig,
   ymlConfig.configs['flat/recommended'],
   {
+    plugins: { 'drupal-jquery': jqueryPlugin },
     languageOptions: {
       ecmaVersion: 2020,
       globals: {
@@ -92,6 +94,7 @@ export default defineConfig(
         'error',
         { globals: ['jQuery', '$'], checkGlobalObject: true },
       ],
+      'drupal-jquery/no-reference': 'error',
     },
     settings: {
       jsdoc: {
