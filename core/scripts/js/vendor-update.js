@@ -93,12 +93,21 @@ const assetsFolder = `${coreFolder}/assets/vendor`;
       folder: 'once',
       process: {
         // Use a native array in the unminified documentation examples.
-        '.js': ({ contents }) => [{
-          contents: contents.replace(
-            /( \* \/\/ Array or Array-like of Element\.\n \* once(?:\.\w+)?\('[^']+', )\w+\(('\[[^']+\]')\)/g,
-            '$1Array.from(document.querySelectorAll($2))',
-          ),
-        }],
+        '.js': ({ file, contents }) => {
+          if (file.to !== 'once.js') {
+            return [{ contents }];
+          }
+          const examples = /( \* \/\/ Array or Array-like of Element\.\n \* once(?:\.\w+)?\('[^']+', )jQuery\(('\[[^']+\]')\)/g;
+          if ([...contents.matchAll(examples)].length !== 3) {
+            throw new Error('Expected three jQuery examples in once.js. Update the vendor rewrite.');
+          }
+          return [{
+            contents: contents.replace(
+              examples,
+              '$1Array.from(document.querySelectorAll($2))',
+            ),
+          }];
+        },
       },
       files: [
         { from: 'dist/once.js', to: 'once.js' },

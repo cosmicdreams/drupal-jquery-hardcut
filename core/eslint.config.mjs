@@ -8,13 +8,19 @@ import js from '@eslint/js';
 import globals from 'globals';
 import { jqueryPlugin } from './scripts/js/jquery-ratchet.mjs';
 
+const jqueryOnlyPaths = [
+  '**/build/**/*',
+  'scripts/**/*',
+  'modules/ckeditor5/webpack.config.js',
+  'themes/default_admin/migration/js/*.js',
+];
+
 export default defineConfig(
   {
     ignores: [
       'assets/vendor/**/*',
       'node_modules/**/*',
       '**/js_test_files/**/*',
-      '**/build/**/*',
       'modules/locale/tests/js/locale_test.js',
 
       // Ignore deliberately malformed YAML files.
@@ -25,84 +31,94 @@ export default defineConfig(
       'tests/Drupal/Tests/Composer/Plugin/Scaffold/fixtures/drupal-assets-fixture/assets/default.services.yml',
       'tests/Drupal/Tests/Composer/Plugin/Scaffold/fixtures/drupal-profile/assets/profile.default.services.yml',
       'modules/system/tests/themes/sdc_theme_test/components/bar/bar.component.yml',
-
-      // Temporary until they are brought up to standards.
-      'scripts/**/*',
-      'modules/ckeditor5/webpack.config.js',
-      'themes/default_admin/migration/js/*.js',
     ],
   },
-  js.configs.recommended,
-  importPlugin.flatConfigs.recommended,
-  jsdoc.configs['flat/recommended'],
-  prettierConfig,
-  ymlConfig.configs['flat/recommended'],
   {
+    files: ['**/*.{js,mjs,cjs}'],
     plugins: { 'drupal-jquery': jqueryPlugin },
-    languageOptions: {
-      ecmaVersion: 2020,
-      globals: {
-        ...globals.browser,
-        ...globals.node,
-
-        Drupal: 'readonly',
-        drupalSettings: 'readonly',
-        drupalTranslations: 'readonly',
-        _: 'readonly',
-        Cookies: 'readonly',
-        htmx: 'readonly',
-        loadjs: 'readonly',
-        Shepherd: 'readonly',
-        Sortable: 'readonly',
-        once: 'readonly',
-        CKEditor5: 'readonly',
-        CKEDITOR: 'readonly',
-        tabbable: 'readonly',
-        transliteration: 'readonly',
-        bodyScrollLock: 'readonly',
-        FloatingUIDOM: 'readonly',
-      },
-    },
     rules: {
-      'prettier/prettier': 'error',
-      'no-unexpected-multiline': ['off'],
-      'consistent-return': ['off'],
-      'no-underscore-dangle': ['off'],
-      'max-nested-callbacks': ['warn', 3],
-      'import/no-mutable-exports': ['warn'],
-      'no-plusplus': [
-        'warn',
-        {
-          allowForLoopAfterthoughts: true,
-        },
-      ],
-      'no-param-reassign': ['off'],
-      'no-prototype-builtins': ['off'],
-      'no-unused-vars': ['warn'],
-      'operator-linebreak': [
-        'error',
-        'after',
-        {
-          overrides: {
-            '?': 'ignore',
-            ':': 'ignore',
-          },
-        },
-      ],
-      'yml/indent': ['error', 2],
       'no-restricted-globals': [
         'error',
         { globals: ['jQuery', '$'], checkGlobalObject: true },
       ],
       'drupal-jquery/no-reference': 'error',
     },
-    settings: {
-      jsdoc: {
-        tagNamePreference: {
-          returns: 'return',
-          property: 'prop',
+  },
+  {
+    files: jqueryOnlyPaths,
+    // These files can have directives for rules that we don't run here.
+    linterOptions: { noInlineConfig: true },
+  },
+  {
+    ignores: jqueryOnlyPaths,
+    extends: [
+      js.configs.recommended,
+      importPlugin.flatConfigs.recommended,
+      jsdoc.configs['flat/recommended'],
+      prettierConfig,
+      ymlConfig.configs['flat/recommended'],
+      {
+        languageOptions: {
+          ecmaVersion: 2020,
+          globals: {
+            ...globals.browser,
+            ...globals.node,
+
+            Drupal: 'readonly',
+            drupalSettings: 'readonly',
+            drupalTranslations: 'readonly',
+            _: 'readonly',
+            Cookies: 'readonly',
+            htmx: 'readonly',
+            loadjs: 'readonly',
+            Shepherd: 'readonly',
+            Sortable: 'readonly',
+            once: 'readonly',
+            CKEditor5: 'readonly',
+            CKEDITOR: 'readonly',
+            tabbable: 'readonly',
+            transliteration: 'readonly',
+            bodyScrollLock: 'readonly',
+            FloatingUIDOM: 'readonly',
+          },
+        },
+        rules: {
+          'prettier/prettier': 'error',
+          'no-unexpected-multiline': ['off'],
+          'consistent-return': ['off'],
+          'no-underscore-dangle': ['off'],
+          'max-nested-callbacks': ['warn', 3],
+          'import/no-mutable-exports': ['warn'],
+          'no-plusplus': [
+            'warn',
+            {
+              allowForLoopAfterthoughts: true,
+            },
+          ],
+          'no-param-reassign': ['off'],
+          'no-prototype-builtins': ['off'],
+          'no-unused-vars': ['warn'],
+          'operator-linebreak': [
+            'error',
+            'after',
+            {
+              overrides: {
+                '?': 'ignore',
+                ':': 'ignore',
+              },
+            },
+          ],
+          'yml/indent': ['error', 2],
+        },
+        settings: {
+          jsdoc: {
+            tagNamePreference: {
+              returns: 'return',
+              property: 'prop',
+            },
+          },
         },
       },
-    },
+    ],
   },
 );

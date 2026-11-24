@@ -5,6 +5,7 @@
 
 const jqueryNames = new Set(['jQuery', '$']);
 const globalObjects = new Set(['window', 'globalThis', 'self', 'global']);
+const documentNames = new Set(['document']);
 const moduleLoaders = new Set(['require', 'define']);
 
 function literalString(node) {
@@ -15,10 +16,10 @@ function literalString(node) {
   return node?.type === 'Literal' ? node.value : undefined;
 }
 
-function propertyName(node) {
-  return !node.computed && node.key?.type === 'Identifier'
-    ? node.key.name
-    : literalString(node.key);
+function propertyName(node, key = node.key) {
+  return !node.computed && key?.type === 'Identifier'
+    ? key.name
+    : literalString(key);
 }
 
 export const jqueryPlugin = {
@@ -57,6 +58,13 @@ export const jqueryPlugin = {
           if (isGlobal(node, globalObjects)) {
             return true;
           }
+          if (node?.type === 'MemberExpression') {
+            const name = propertyName(node, node.property);
+            return (
+              (globalObjects.has(name) && isGlobalObject(node.object)) ||
+              (name === 'defaultView' && isGlobal(node.object, documentNames))
+            );
+          }
           if (node?.type !== 'Identifier') {
             return false;
           }
@@ -64,13 +72,25 @@ export const jqueryPlugin = {
           const definition = variable?.defs[0];
           // Follow simple local aliases of the browser global object. Requiring
           // a single initialization keeps reassignment and cycles out of scope.
-          return (
-            definition?.type === 'Variable' &&
+          if (
+            definition?.type !== 'Variable' ||
             variable.references.filter((reference) => reference.isWrite())
-              .length === 1 &&
-            definition.node.id.type === 'Identifier' &&
-            definition.node.init?.end < node.start &&
-            isGlobalObject(definition.node.init)
+              .length !== 1 ||
+            !(definition.node.init?.end < node.start)
+          ) {
+            return false;
+          }
+          let name = definition.name;
+          // Each destructured property on the path must still be a global
+          // object, e.g. const { window: { self: browser } } = globalThis.
+          while (name.parent.type === 'Property') {
+            if (!globalObjects.has(propertyName(name.parent))) {
+              return false;
+            }
+            name = name.parent.parent;
+          }
+          return (
+            name === definition.node.id && isGlobalObject(definition.node.init)
           );
         }
 
@@ -82,19 +102,22 @@ export const jqueryPlugin = {
           const specifier = literalString(node);
           if (
             typeof specifier === 'string' &&
-            /(?:^|\/)(?:jquery(?:[.-]ui)?(?=\/|$)|jquery(?:[.-]ui|\.form)?(?:[.-]\d[\d.]*)?(?:[.-]min)?\.js(?:$|[?#]))/i.test(
-              specifier,
-            )
+            (/^(?:@[^/]+\/)?jquery/i.test(specifier) ||
+              /(?:^|\/)(?:jquery(?:[.-]ui)?\/|jquery(?:[.-]ui|\.form)?(?:[.-]\d[\d.]*)?(?:[.-]min)?\.js(?:$|[?#]))/i.test(
+                specifier,
+              ))
           ) {
             report(node);
           }
         }
 
-        function checkDestructuring(pattern, source) {
-          if (pattern?.type === 'ObjectPattern' && isGlobalObject(source)) {
+        function checkDestructuring(pattern) {
+          if (pattern?.type === 'ObjectPattern') {
             for (const property of pattern.properties) {
               if (jqueryNames.has(propertyName(property))) {
                 report(property);
+              } else if (globalObjects.has(propertyName(property))) {
+                checkDestructuring(property.value);
               }
             }
           }
@@ -102,18 +125,20 @@ export const jqueryPlugin = {
 
         return {
           MemberExpression(node) {
-            const name = node.computed
-              ? literalString(node.property)
-              : node.property.name;
+            const name = propertyName(node, node.property);
             if (jqueryNames.has(name) && isGlobalObject(node.object)) {
               report(node);
             }
           },
           VariableDeclarator(node) {
-            checkDestructuring(node.id, node.init);
+            if (isGlobalObject(node.init)) {
+              checkDestructuring(node.id);
+            }
           },
           'AssignmentExpression, AssignmentPattern'(node) {
-            checkDestructuring(node.left, node.right);
+            if (isGlobalObject(node.right)) {
+              checkDestructuring(node.left);
+            }
           },
           'ImportDeclaration, ExportNamedDeclaration, ExportAllDeclaration'(
             node,
