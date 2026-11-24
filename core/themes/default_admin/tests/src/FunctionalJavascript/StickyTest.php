@@ -77,7 +77,8 @@ class StickyTest extends WebDriverTestBase {
       callback([{ intersectionRatio: 0 }]);
       window.stickyPairMatches = pair.lastElementChild.hasAttribute('data-offset-top') &&
         document.querySelectorAll('.region-sticky[data-offset-top]').length === 1;
-      Drupal.behaviors.adminSticky.detach(pair, drupalSettings, 'unload');
+      Drupal.detachBehaviors(pair.firstElementChild, drupalSettings, 'unload');
+      pair.firstElementChild.remove();
       pair.remove();
       JS);
     $this->assertJsCondition('window.stickyMarkerIsObserved && window.stickyPairMatches && window.stickyMarkerIsDisconnected');

@@ -619,12 +619,18 @@ class EntityReferenceWidgetTest extends MediaLibraryTestBase {
       const sortable = Sortable.get(window.previousMediaSelection);
       Drupal.behaviors.MediaLibraryWidgetSortable.attach(widget);
       window.mediaSortableRetained = !!sortable && Sortable.get(window.previousMediaSelection) === sortable;
+      Drupal.detachBehaviors(window.previousMediaSelection, drupalSettings, 'unload');
+      window.mediaSortableReleased = !Sortable.get(window.previousMediaSelection);
+      Drupal.attachBehaviors(widget);
       JS);
-    $this->assertJsCondition('window.mediaSortableRetained');
+    $this->assertJsCondition('window.mediaSortableRetained && window.mediaSortableReleased');
 
     // Move first item (Dog) to the end.
     // Order: Cat - Bear - Dog.
-    $this->sortableAfter('[data-media-library-item-delta="0"]', '[data-media-library-item-delta="2"]', '.js-media-library-selection');
+    $this->dragSortableItem(
+      $assert_session->elementExists('css', '#field_unlimited_media-media-library-wrapper [data-media-library-item-delta="0"] .js-media-library-item-preview'),
+      $assert_session->elementExists('css', '#field_unlimited_media-media-library-wrapper [data-media-library-item-delta="2"] .js-media-library-item-preview'),
+    );
 
     $wrapper = $assert_session->elementExists('css', '.field--name-field-unlimited-media');
     // Remove second item (Bear).
@@ -634,6 +640,7 @@ class EntityReferenceWidgetTest extends MediaLibraryTestBase {
     $this->assertJsCondition('!window.previousMediaSelection.isConnected && !Sortable.get(window.previousMediaSelection)');
     $page->pressButton('Save');
 
+    $assert_session->elementTextContains('css', '.field--name-field-unlimited-media > .field__items > .field__item:first-child', 'Cat');
     $assert_session->elementTextContains('css', '.field--name-field-unlimited-media > .field__items > .field__item:last-child', 'Dog');
   }
 
@@ -655,7 +662,10 @@ class EntityReferenceWidgetTest extends MediaLibraryTestBase {
 
     // Change positions.
     // Order: Cat - Dog.
-    $this->sortableAfter('[data-media-library-item-delta="0"]', '[data-media-library-item-delta="1"]', '.js-media-library-selection');
+    $this->dragSortableItem(
+      $assert_session->elementExists('css', '#field_unlimited_media-media-library-wrapper [data-media-library-item-delta="0"] .js-media-library-item-preview'),
+      $assert_session->elementExists('css', '#field_unlimited_media-media-library-wrapper [data-media-library-item-delta="1"] .js-media-library-item-preview'),
+    );
 
     $this->openMediaLibraryForField('field_unlimited_media');
     $this->selectMediaItem(2);
@@ -665,6 +675,7 @@ class EntityReferenceWidgetTest extends MediaLibraryTestBase {
     $page->pressButton('Save');
 
     $assert_session->elementTextContains('css', '.field--name-field-unlimited-media > .field__items > .field__item:first-child', 'Cat');
+    $assert_session->elementTextContains('css', '.field--name-field-unlimited-media > .field__items > .field__item:nth-child(2)', 'Dog');
     $assert_session->elementTextContains('css', '.field--name-field-unlimited-media > .field__items > .field__item:last-child', 'Bear');
   }
 
@@ -680,13 +691,6 @@ class EntityReferenceWidgetTest extends MediaLibraryTestBase {
   protected function assertAnnounceContains(string $expected_message): void {
     $assert_session = $this->assertSession();
     $this->assertNotEmpty($assert_session->waitForElement('css', "#drupal-live-announce:contains('$expected_message')"));
-  }
-
-  /**
-   * {@inheritdoc}
-   */
-  protected function sortableUpdate($item, $from, $to = NULL): void {
-    $this->getSession()->executeScript("Sortable.get(document.querySelector('$from')).option('onEnd')();");
   }
 
   /**

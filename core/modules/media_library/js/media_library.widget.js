@@ -2,6 +2,8 @@
  * @file media_library.widget.js
  */
 ((Drupal, Sortable, once) => {
+  const selectionSelector = '.js-media-library-selection';
+
   /**
    * Allows users to re-order their selection with drag+drop.
    *
@@ -13,31 +15,28 @@
   Drupal.behaviors.MediaLibraryWidgetSortable = {
     attach(context) {
       // Allow media items to be re-sorted with drag+drop in the widget.
-      once(
-        'media-library-widget-sortable',
-        '.js-media-library-selection',
-        context,
-      ).forEach((widget) => {
-        Sortable.create(widget, {
-          draggable: '.js-media-library-item',
-          handle: '.js-media-library-item-preview',
-          onEnd: () => {
-            Array.from(widget.children).forEach((child, index) => {
-              child.querySelector('.js-media-library-item-weight').value =
-                index;
-            });
-          },
-        });
-      });
+      once('media-library-widget-sortable', selectionSelector, context).forEach(
+        (widget) => {
+          Sortable.create(widget, {
+            draggable: '.js-media-library-item',
+            handle: '.js-media-library-item-preview',
+            onEnd: () => {
+              Array.from(widget.children).forEach((child, index) => {
+                child.querySelector('.js-media-library-item-weight').value =
+                  index;
+              });
+            },
+          });
+        },
+      );
     },
     detach(context, settings, trigger) {
       if (trigger === 'unload') {
         once
-          .remove(
-            'media-library-widget-sortable',
-            '.js-media-library-selection',
-            context,
-          )
+          .remove('media-library-widget-sortable', [
+            ...(context instanceof Element ? [context] : []),
+            ...context.querySelectorAll(selectionSelector),
+          ])
           .forEach((widget) => Sortable.get(widget)?.destroy());
       }
     },

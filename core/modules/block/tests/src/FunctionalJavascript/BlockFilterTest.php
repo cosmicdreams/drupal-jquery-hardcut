@@ -90,7 +90,10 @@ class BlockFilterTest extends WebDriverTestBase {
       table.after(copy);
       once.remove('block-filter-text', input);
       // Reattach using a new input so both matches are present at setup time.
-      input.replaceWith(input.cloneNode(true));
+      const firstInput = input.cloneNode(true);
+      const secondInput = input.cloneNode(true);
+      secondInput.id = 'second-block-filter';
+      input.replaceWith(firstInput, secondInput);
       Drupal.attachBehaviors();
       JS);
     $assertSession->elementExists('css', '.block-filter-text')->setValue('Powered by');
@@ -102,6 +105,17 @@ class BlockFilterTest extends WebDriverTestBase {
           const rows = [...table.tBodies[0].rows].filter((row) => row.getClientRects().length);
           return rows.length === 1 && rows[0].textContent.includes('Powered by');
         });
+      })()
+      JS);
+
+    $assertSession->elementExists('css', '#second-block-filter')->setValue('Pan-Galactic Gargle Blaster');
+    $this->assertJsCondition(<<<'JS'
+      (() => {
+        const input = document.getElementById('second-block-filter');
+        const tables = [...document.querySelectorAll(input.dataset.element)];
+        return tables.length === 2 && tables.every((table) =>
+          [...table.tBodies[0].rows].every((row) => !row.getClientRects().length)
+        );
       })()
       JS);
 

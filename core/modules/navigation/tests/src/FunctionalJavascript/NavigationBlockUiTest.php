@@ -8,7 +8,6 @@ use Drupal\FunctionalJavascriptTests\DrupalSelenium2Driver;
 use Drupal\FunctionalJavascriptTests\WebDriverTestBase;
 use Drupal\Tests\block\Traits\BlockCreationTrait;
 use Drupal\Tests\contextual\FunctionalJavascript\ContextualLinkClickTrait;
-use Drupal\Tests\layout_builder\FunctionalJavascript\LayoutBuilderSortTrait;
 use Drupal\Tests\system\Traits\OffCanvasTestTrait;
 use Drupal\user\UserInterface;
 use PHPUnit\Framework\Attributes\Group;
@@ -24,7 +23,6 @@ class NavigationBlockUiTest extends WebDriverTestBase {
 
   use BlockCreationTrait;
   use ContextualLinkClickTrait;
-  use LayoutBuilderSortTrait;
   use OffCanvasTestTrait;
 
   /**

@@ -102,8 +102,7 @@
    * @param {HTMLElement} to
    *   The HTML element representing the current parent of item
    *
-   * @internal This method is a callback for layoutBuilderBlockDrag and is used
-   *  in FunctionalJavascript tests. It may be renamed if the test changes.
+   * @internal
    *  @see https://www.drupal.org/node/3084730
    */
   Drupal.layoutBuilderBlockUpdate = function (item, from, to) {
@@ -156,7 +155,10 @@
     detach(context, settings, trigger) {
       if (trigger === 'unload') {
         once
-          .remove('layout-builder-block-drag', regionSelector, context)
+          .remove('layout-builder-block-drag', [
+            ...(context instanceof Element ? [context] : []),
+            ...context.querySelectorAll(regionSelector),
+          ])
           .forEach((region) => Sortable.get(region)?.destroy());
       }
     },

@@ -191,11 +191,10 @@
         return;
       }
 
-      const elements = once.remove(
-        'contextual-render',
-        '[data-contextual-id]',
-        context,
-      );
+      const elements = once.remove('contextual-render', [
+        ...(context instanceof Element ? [context] : []),
+        ...context.querySelectorAll('[data-contextual-id]'),
+      ]);
       elements.forEach((element) => pendingPlaceholders.delete(element));
       const { instances } = Drupal.contextual;
       for (let index = instances.length - 1; index >= 0; index--) {
@@ -289,9 +288,19 @@
           focus: () => this.focus(),
           blur: () => this.blur(),
         });
+        // Ajax links stop the click before it reaches the contextual wrapper.
+        element.addEventListener(
+          'click',
+          (event) => {
+            if (this.links?.contains(event.target.closest('a'))) {
+              this.close().blur();
+              this.render();
+            }
+          },
+          listenerOptions,
+        );
         this.links?.querySelectorAll('a').forEach((link) =>
           listeners(link, {
-            click: () => this.close().blur(),
             touchend: Drupal.contextual.ContextualModelView.touchEndToClick,
             focus: () => this.focus(),
             blur: () => this.waitCloseThenBlur(),

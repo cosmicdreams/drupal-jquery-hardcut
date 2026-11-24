@@ -295,14 +295,18 @@
     },
 
     detach(context, settings, trigger) {
+      const selector = '[data-editor-for]';
       let editors;
       // The 'serialize' trigger indicates that we should simply update the
       // underlying element with the new text, without destroying the editor.
       if (trigger === 'serialize') {
         // Keep the once marker when serializing without destroying the editor.
-        editors = once.filter('editor', '[data-editor-for]', context);
+        editors = once.filter('editor', selector, context);
       } else {
-        editors = once.remove('editor', '[data-editor-for]', context);
+        editors = once.remove('editor', [
+          ...(context instanceof Element ? [context] : []),
+          ...context.querySelectorAll(selector),
+        ]);
       }
 
       editors.forEach((editor) => {

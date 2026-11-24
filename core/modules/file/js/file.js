@@ -8,6 +8,10 @@
  */
 
 (function (Drupal, once) {
+  const validationSelector =
+    'input[data-file-extensions], input[data-file-max-size]';
+  const fileSelector = 'input[type="file"]';
+
   /**
    * Attach behaviors to the file fields passed in the settings.
    *
@@ -20,22 +24,17 @@
    */
   Drupal.behaviors.fileValidateAutoAttach = {
     attach(context) {
-      once(
-        'fileValidate',
-        'input[data-file-extensions], input[data-file-max-size]',
-        context,
-      ).forEach((input) =>
+      once('fileValidate', validationSelector, context).forEach((input) =>
         input.addEventListener('change', Drupal.file.validateExtension),
       );
     },
     detach(context, settings, trigger) {
       if (trigger === 'unload') {
         once
-          .remove(
-            'fileValidate',
-            'input[data-file-extensions], input[data-file-max-size]',
-            context,
-          )
+          .remove('fileValidate', [
+            ...(context instanceof Element ? [context] : []),
+            ...context.querySelectorAll(validationSelector),
+          ])
           .forEach((input) =>
             input.removeEventListener('change', Drupal.file.validateExtension),
           );
@@ -55,14 +54,17 @@
    */
   Drupal.behaviors.fileAutoUpload = {
     attach(context) {
-      once('auto-file-upload', 'input[type="file"]', context).forEach((input) =>
+      once('auto-file-upload', fileSelector, context).forEach((input) =>
         input.addEventListener('change', Drupal.file.triggerUploadButton),
       );
     },
     detach(context, settings, trigger) {
       if (trigger === 'unload') {
         once
-          .remove('auto-file-upload', 'input[type="file"]', context)
+          .remove('auto-file-upload', [
+            ...(context instanceof Element ? [context] : []),
+            ...context.querySelectorAll(fileSelector),
+          ])
           .forEach((input) =>
             input.removeEventListener(
               'change',

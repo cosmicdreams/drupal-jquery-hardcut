@@ -36,7 +36,10 @@
     detach(context, settings, trigger) {
       if (trigger === 'unload') {
         once
-          .remove('adminSticky', watcherSelector, context)
+          .remove('adminSticky', [
+            ...(context instanceof Element ? [context] : []),
+            ...context.querySelectorAll(watcherSelector),
+          ])
           .forEach((watcher) => {
             observers.get(watcher)?.disconnect();
             observers.delete(watcher);

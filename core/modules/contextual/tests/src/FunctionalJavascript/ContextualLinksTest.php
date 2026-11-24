@@ -133,9 +133,39 @@ class ContextualLinksTest extends WebDriverTestBase {
     $this->assertJsCondition('document.activeElement.closest("#block-branding .contextual-links") !== null');
 
     $ajax_link = '#block-branding .contextual-links .use-ajax';
+    $session = $this->getSession();
+    // The failed request is expected to report an uncaught Ajax error.
+    $this->failOnJavascriptConsoleErrors = FALSE;
+    // Hold the first request until the open menu has been checked, then fail
+    // it at the transport boundary.
+    $session->executeScript(<<<'JS'
+      const send = XMLHttpRequest.prototype.send;
+      XMLHttpRequest.prototype.send = function () {
+        XMLHttpRequest.prototype.send = send;
+        window.failContextualRequest = () => this.dispatchEvent(new Event('error'));
+      };
+      window.contextualErrors = [];
+      window.addEventListener('error', (event) => {
+        window.contextualErrors.push(event.error?.name ?? event.message);
+      });
+      JS);
+
+    $webdriver->element('css selector', $ajax_link)->postValue(['text' => Key::ENTER]);
+    $this->assertJsCondition('typeof window.failContextualRequest === "function"');
+    $this->assertSame('true', $trigger->getAttribute('aria-pressed'));
+    $this->assertTrue($assert->elementExists('css', $ajax_link)->isVisible());
+
+    $session->executeScript('window.failContextualRequest();');
+    $this->assertJsCondition('window.contextualErrors.length > 0');
+    $assert->pageTextContains('Oops, something went wrong.');
+    $this->assertSame('true', $trigger->getAttribute('aria-pressed'));
+    $this->assertTrue($assert->elementExists('css', $ajax_link)->isVisible());
+
+    // Retry without reopening the menu.
     $webdriver->element('css selector', $ajax_link)->postValue(['text' => Key::ENTER]);
     $this->assertNotNull($assert->waitForElementVisible('css', '#drupal-modal'));
     $assert->elementTextContains('css', '#drupal-modal', 'Everything is contextual!');
+    $this->assertSame(['AjaxError'], $session->evaluateScript('window.contextualErrors'));
   }
 
   /**
