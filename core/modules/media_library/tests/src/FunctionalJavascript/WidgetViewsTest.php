@@ -204,9 +204,9 @@ class WidgetViewsTest extends MediaLibraryTestBase {
       ])->save();
       $bundles[$id] = $id;
     }
-    FieldConfig::loadByName('node', 'basic_page', 'field_unlimited_media')
-      ->setSetting('handler_settings', ['target_bundles' => $bundles])
-      ->save();
+    $field = FieldConfig::loadByName('node', 'basic_page', 'field_unlimited_media');
+    $this->assertInstanceOf(FieldConfig::class, $field);
+    $field->setSetting('handler_settings', ['target_bundles' => $bundles])->save();
 
     $this->drupalGet('node/add/basic_page');
     $menu = $this->openMediaLibraryForField('field_unlimited_media');
