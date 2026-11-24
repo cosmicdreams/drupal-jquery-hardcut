@@ -14,7 +14,6 @@ drupal.contextual-links:
     contextual:
       theme: null
   dependencies:
-    - core/jquery
     - core/drupal
     - core/drupalSettings
     - core/once

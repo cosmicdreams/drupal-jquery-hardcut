@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Drupal\Tests\navigation\FunctionalJavascript;
 
+use Drupal\FunctionalJavascriptTests\DrupalSelenium2Driver;
 use Drupal\FunctionalJavascriptTests\WebDriverTestBase;
 use Drupal\Tests\block\Traits\BlockCreationTrait;
 use Drupal\Tests\contextual\FunctionalJavascript\ContextualLinkClickTrait;
@@ -12,6 +13,7 @@ use Drupal\Tests\system\Traits\OffCanvasTestTrait;
 use Drupal\user\UserInterface;
 use PHPUnit\Framework\Attributes\Group;
 use PHPUnit\Framework\Attributes\RunTestsInSeparateProcesses;
+use WebDriver\Key;
 
 /**
  * Tests that the navigation block UI exists and stores data correctly.
@@ -76,7 +78,12 @@ class NavigationBlockUiTest extends WebDriverTestBase {
 
     // Edit the layout and add a block that contains a form.
     $this->drupalGet($layout_url);
-    $this->getSession()->getPage()->pressButton('Enable edit mode');
+    $edit_mode = $this->assertSession()->buttonExists('Enable edit mode');
+    $edit_mode->focus();
+    $driver = $this->getSession()->getDriver();
+    assert($driver instanceof DrupalSelenium2Driver);
+    $driver->getWebDriverSession()->element('xpath', $edit_mode->getXpath())
+      ->postValue(['text' => Key::ENTER]);
     $this->assertSession()->assertWaitOnAjaxRequest();
     $this->openAddBlockForm('Layout Builder form block test form api form block');
     $this->getSession()->getPage()->checkField('settings[label_display]');

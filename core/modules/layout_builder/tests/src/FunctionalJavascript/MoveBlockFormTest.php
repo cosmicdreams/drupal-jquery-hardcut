@@ -40,7 +40,6 @@ class MoveBlockFormTest extends WebDriverTestBase {
    * {@inheritdoc}
    */
   protected function setUp(): void {
-    $this->markTestSkipped("Skipped temporarily for random fails.");
 
     parent::setUp();
     $page = $this->getSession()->getPage();
@@ -121,7 +120,6 @@ class MoveBlockFormTest extends WebDriverTestBase {
     // Move the body block into the first region above existing block.
     $this->openBodyMoveForm(1, 'content', ['Body (current)', 'Links']);
     $page->selectFieldOption('Region', '0:first');
-    $this->markTestSkipped("Skipped temporarily for random fails.");
     $this->assertBlockTable(['Powered by Drupal', 'Body (current)']);
     $this->moveBlockWithKeyboard('up', 'Body', ['Body (current)*', 'Powered by Drupal']);
     $page->pressButton('Move');
@@ -195,14 +193,13 @@ class MoveBlockFormTest extends WebDriverTestBase {
    * @internal
    */
   protected function assertBlockTable(array $expected_block_labels): void {
-    $page = $this->getSession()->getPage();
-    $this->assertSession()->assertWaitOnAjaxRequest();
-    $block_tds = $page->findAll('css', '.layout-builder-components-table__block-label');
-    $this->assertSameSize($block_tds, $expected_block_labels);
-    /** @var \Behat\Mink\Element\NodeElement $block_td */
-    foreach ($block_tds as $block_td) {
-      $this->assertSame(array_shift($expected_block_labels), trim($block_td->getText()));
-    }
+    $labels = json_encode($expected_block_labels, JSON_THROW_ON_ERROR);
+    $this->assertJsCondition(<<<JS
+      JSON.stringify(Array.from(
+        document.querySelectorAll('.layout-builder-components-table__block-label'),
+        (label) => label.textContent.trim()
+      )) === JSON.stringify($labels)
+      JS);
   }
 
   /**
@@ -223,6 +220,7 @@ class MoveBlockFormTest extends WebDriverTestBase {
     $key = $keys[$direction];
     $handle = $this->findRowHandle($block_label);
 
+    $handle->focus();
     $handle->keyDown($key);
     $handle->keyUp($key);
 

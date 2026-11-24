@@ -26,7 +26,7 @@ trait LayoutBuilderSortTrait {
   var fromElement = document.querySelector(from);
   var toElement = document.querySelector(to);
 
-  Drupal.layoutBuilderBlockUpdate(sourceElement, fromElement, toElement)
+  Sortable.get(fromElement).option('onEnd')({ item: sourceElement, from: fromElement, to: toElement });
 
 })('{$item}', '{$from}', '{$to}')
 

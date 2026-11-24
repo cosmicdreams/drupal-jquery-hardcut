@@ -7,6 +7,8 @@ namespace Drupal\Tests\layout_builder\FunctionalJavascript;
 use Drupal\FunctionalJavascriptTests\WebDriverTestBase;
 use Drupal\Tests\block_content\Traits\BlockContentCreationTrait;
 use Drupal\Tests\contextual\FunctionalJavascript\ContextualLinkClickTrait;
+use Drupal\user\Entity\Role;
+use Drupal\user\RoleInterface;
 use PHPUnit\Framework\Attributes\Group;
 use PHPUnit\Framework\Attributes\RunTestsInSeparateProcesses;
 
@@ -69,6 +71,22 @@ class LayoutBuilderUiTest extends WebDriverTestBase {
     // Enable layout builder.
     $this->drupalGet(static::FIELD_UI_PREFIX . '/display/default');
     $this->submitForm(['layout[enabled]' => TRUE], 'Save');
+  }
+
+  /**
+   * Tests that contextual links outside the layout are removed.
+   */
+  public function testContextualLinksOutsideLayout(): void {
+    $this->grantPermissions(Role::load(RoleInterface::AUTHENTICATED_ID), ['administer blocks']);
+    $this->placeBlock('system_branding_block', ['id' => 'branding']);
+    $assert = $this->assertSession();
+
+    $this->drupalGet('user');
+    $this->assertNotNull($assert->waitForElement('css', '#block-branding .contextual .trigger'));
+    $this->drupalGet(static::FIELD_UI_PREFIX . '/display/default/layout');
+    $this->assertNotNull($assert->waitForElement('css', '#layout-builder .contextual .trigger'));
+    $assert->elementExists('css', '#block-branding');
+    $assert->elementNotExists('css', '#block-branding [data-contextual-id]');
   }
 
   /**
