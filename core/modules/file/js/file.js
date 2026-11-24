@@ -8,8 +8,7 @@
  */
 
 (function (Drupal, once) {
-  const validationSelector =
-    'input[data-file-extensions], input[data-file-max-size]';
+  const validationSelector = 'input[data-file-extensions]';
   const fileSelector = 'input[type="file"]';
 
   /**
@@ -162,16 +161,15 @@
       widget.querySelector('.file-upload-js-error')?.remove();
 
       const extensions = input.dataset.fileExtensions
-        ?.toLowerCase()
-        .split(/ +/);
-      const limit = Number(input.dataset.fileMaxSize);
+        ?.split(/\s+/)
+        .filter(Boolean);
       const validFiles = [];
       const errors = [];
       Array.from(input.files).forEach((file) => {
         if (
           extensions?.length &&
           !extensions.some((extension) =>
-            file.name.toLowerCase().endsWith(`.${extension}`),
+            file.name.toLowerCase().endsWith(`.${extension.toLowerCase()}`),
           )
         ) {
           errors.push(
@@ -179,19 +177,7 @@
               'The selected file %filename cannot be uploaded. Only files with the following extensions are allowed: %extensions.',
               {
                 '%filename': file.name,
-                '%extensions': input.dataset.fileExtensions
-                  .split(/ +/)
-                  .join(', '),
-              },
-            ),
-          );
-        } else if (limit > 0 && file.size > limit) {
-          errors.push(
-            Drupal.t(
-              'The selected file %filename cannot be uploaded. The maximum allowed file size is %size.',
-              {
-                '%filename': file.name,
-                '%size': input.dataset.fileMaxSizeLabel,
+                '%extensions': extensions.join(', '),
               },
             ),
           );
@@ -241,7 +227,18 @@
             Drupal.ajax?.instances.find(
               (request) => request?.element === button,
             );
-          if (ajax && !ajax.ajaxing) {
+          const restoreInsert = () => {
+            delete ajax.commands.insert;
+            document.removeEventListener('drupal:ajax-complete', onComplete);
+          };
+          const onComplete = (event) => {
+            if (event.detail.ajax === ajax) {
+              restoreInsert();
+            }
+          };
+          const preserveSelectionError = ajax && !ajax.ajaxing;
+          if (preserveSelectionError) {
+            document.addEventListener('drupal:ajax-complete', onComplete);
             // Keep the rejected filenames visible when the upload replaces
             // this widget or advances to the next step of the upload form.
             const { insert } = Drupal.AjaxCommands.prototype;
@@ -256,7 +253,7 @@
                 (
                   replacement?.closest('.js-form-managed-file') ?? elements[0]
                 ).prepend(error);
-                ajax.commands.insert = insert;
+                restoreInsert();
               }
               return elements;
             };
@@ -264,6 +261,9 @@
           button.dispatchEvent(
             new MouseEvent('mousedown', { bubbles: true, cancelable: true }),
           );
+          if (preserveSelectionError && !ajax.ajaxing) {
+            restoreInsert();
+          }
         });
     },
 

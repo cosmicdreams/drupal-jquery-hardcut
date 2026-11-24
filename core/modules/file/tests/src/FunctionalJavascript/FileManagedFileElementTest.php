@@ -176,10 +176,8 @@ class FileManagedFileElementTest extends WebDriverTestBase {
   public function testClientValidation(): void {
     $file_system = $this->container->get('file_system');
     $wrong_extension = $file_system->tempnam('temporary://', 'invalid') . '.jpg';
-    $oversized = $file_system->tempnam('temporary://', 'oversized') . '.txt';
     $valid = $file_system->tempnam('temporary://', 'valid') . '.txt';
     file_put_contents($wrong_extension, 'wrong extension');
-    file_put_contents($oversized, str_repeat('a', 33));
     file_put_contents($valid, 'valid');
 
     $this->drupalGet('file/test/0/0/1', ['query' => ['validate_upload' => 1]]);
@@ -192,34 +190,27 @@ class FileManagedFileElementTest extends WebDriverTestBase {
     $page->attachFileToField('files[file][]', $file_system->realpath($wrong_extension));
     $assert->elementTextContains('css', "$file .file-upload-js-error", 'Only files with the following extensions are allowed');
     $assert->fieldValueEquals('files[file][]', '');
-    $page->attachFileToField('files[other_file][]', $file_system->realpath($oversized));
-    $assert->elementTextContains('css', "$other .file-upload-js-error", 'The maximum allowed file size is 32 bytes');
+    $page->attachFileToField('files[other_file][]', $file_system->realpath($wrong_extension));
+    $assert->elementTextContains('css', "$other .file-upload-js-error", 'Only files with the following extensions are allowed');
     $assert->fieldValueEquals('files[other_file][]', '');
     $assert->elementExists('css', "$file .file-upload-js-error");
     $this->assertSame($fid, $this->getLastFileId());
 
     // Use the real multiple input and let the change event upload the valid
     // file. Verify the rejected filename is still shown after replacement.
-    foreach ([
-      ['valid-extension.txt', 'invalid.jpg', 'invalid', 'following extensions are allowed'],
-      ['valid-size.txt', 'oversized.txt', str_repeat('a', 33), 'maximum allowed file size is 32 bytes'],
-    ] as [$valid_name, $invalid_name, $invalid_contents, $message]) {
-      $selection = json_encode([$valid_name, $invalid_name, $invalid_contents], JSON_THROW_ON_ERROR);
-      $this->getSession()->executeScript(<<<JS
-        const [validName, invalidName, invalidContents] = $selection;
-        const input = document.querySelector('input[name="files[file][]"]');
-        const selection = new DataTransfer();
-        selection.items.add(new File(['valid'], validName));
-        selection.items.add(new File([invalidContents], invalidName));
-        input.files = selection.files;
-        input.dispatchEvent(new Event('change', { bubbles: true, cancelable: true }));
-        JS);
-      $this->assertNotNull($assert->waitForLink($valid_name));
-      $assert->assertWaitOnAjaxRequest();
-      $assert->linkNotExists($invalid_name);
-      $assert->elementTextContains('css', "$file .file-upload-js-error", $invalid_name);
-      $assert->elementTextContains('css', "$file .file-upload-js-error", $message);
-    }
+    $this->getSession()->executeScript(<<<'JS'
+      const input = document.querySelector('input[name="files[file][]"]');
+      const selection = new DataTransfer();
+      selection.items.add(new File(['valid'], 'valid-extension.txt'));
+      selection.items.add(new File(['invalid'], 'invalid.jpg'));
+      input.files = selection.files;
+      input.dispatchEvent(new Event('change', { bubbles: true, cancelable: true }));
+      JS);
+    $this->assertNotNull($assert->waitForLink('valid-extension.txt'));
+    $assert->assertWaitOnAjaxRequest();
+    $assert->linkNotExists('invalid.jpg');
+    $assert->elementTextContains('css', "$file .file-upload-js-error", 'invalid.jpg');
+    $assert->elementTextContains('css', "$file .file-upload-js-error", 'following extensions are allowed');
 
     // A managed file button disables only other inputs in the same form.
     $this->getSession()->executeScript(<<<'JS'
@@ -239,6 +230,30 @@ class FileManagedFileElementTest extends WebDriverTestBase {
     $this->assertNotNull($assert->waitForLink(basename($valid)));
     $assert->elementNotExists('css', "$file .file-upload-js-error");
     $assert->elementExists('css', "$other .file-upload-js-error");
+  }
+
+  /**
+   * Tests that whitespace-only extensions do not enable browser validation.
+   */
+  public function testBlankExtensions(): void {
+    $this->drupalGet('file/test/0/0/1', ['query' => ['blank_extensions' => 1]]);
+    $assert = $this->assertSession();
+    $assert->elementNotExists('css', 'input[name="files[file][]"][data-file-extensions]');
+
+    // Exercise the client guard even if a form provides a blank attribute.
+    $this->assertJsCondition(<<<'JS'
+      (() => {
+        const input = document.querySelector('input[name="files[file][]"]');
+        const selection = new DataTransfer();
+        selection.items.add(new File(['valid'], 'valid.txt'));
+        input.files = selection.files;
+        input.dataset.fileExtensions = '   ';
+        input.addEventListener('validate-extension', Drupal.file.validateExtension, { once: true });
+        input.dispatchEvent(new Event('validate-extension', { cancelable: true }));
+        return input.files.length === 1;
+      })()
+      JS);
+    $assert->elementNotExists('css', '.file-upload-js-error');
   }
 
   /**

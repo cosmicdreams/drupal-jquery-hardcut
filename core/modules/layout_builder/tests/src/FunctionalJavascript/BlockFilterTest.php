@@ -90,6 +90,17 @@ class BlockFilterTest extends WebDriverTestBase {
     $contentFieldsCategory->click();
     $this->assertFalse($promotedLink->isVisible());
 
+    foreach (['ad' => 3, 'adm' => 2] as $query => $count) {
+      $filter->setValue($query);
+      $this->assertAnnounceContains("$count blocks are available in the modified list.");
+      $this->assertCount($count, $this->filterVisibleElements($blocks));
+      $this->assertCount($count, $this->filterVisibleElements($categories));
+    }
+    $filter->setValue('ad');
+    $this->assertAnnounceContains('3 blocks are available in the modified list.');
+    $this->assertCount(3, $this->filterVisibleElements($blocks));
+    $this->assertCount(3, $this->filterVisibleElements($categories));
+
     // Filtering searches even a category the user closed.
     $filter->setValue('Promoted');
     $this->assertAnnounceContains('1 block is available in the modified list.');

@@ -16,7 +16,6 @@ use Drupal\Core\Security\StaticTrustedCallbackHelper;
 use Drupal\Core\Security\TrustedCallbackInterface;
 use Drupal\Core\Security\UntrustedCallbackException;
 use Drupal\Core\Site\Settings;
-use Drupal\Core\StringTranslation\ByteSizeMarkup;
 use Drupal\Core\Url;
 use Drupal\file\Entity\File;
 use Drupal\file\Upload\ManagedFileElementHelper;
@@ -385,15 +384,10 @@ class ManagedFile extends FormElementBase {
       }
     }
 
-    // Expose the file constraints to client-side validation.
-    if (!empty($element['#upload_validators']['FileExtension']['extensions'])) {
-      $extensions = $element['#upload_validators']['FileExtension']['extensions'];
-      $element['upload']['#attributes']['data-file-extensions'] = implode(' ', preg_split('/\s+/', trim($extensions), -1, PREG_SPLIT_NO_EMPTY));
-    }
-    if (!empty($element['#upload_validators']['FileSizeLimit']['fileLimit'])) {
-      $size_limit = $element['#upload_validators']['FileSizeLimit']['fileLimit'];
-      $element['upload']['#attributes']['data-file-max-size'] = $size_limit;
-      $element['upload']['#attributes']['data-file-max-size-label'] = (string) ByteSizeMarkup::create($size_limit);
+    // Expose the allowed extensions to client-side validation.
+    $extensions = trim($element['#upload_validators']['FileExtension']['extensions'] ?? '');
+    if ($extensions !== '') {
+      $element['upload']['#attributes']['data-file-extensions'] = implode(' ', preg_split('/\s+/', $extensions));
     }
 
     // Prefix and suffix used for Ajax replacement.
