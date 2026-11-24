@@ -51,6 +51,14 @@ class FileModuleTestForm extends FormBase {
       '#size' => 13,
       '#multiple' => (bool) $multiple,
     ];
+    if ($this->getRequest()->query->getBoolean('validate_upload')) {
+      $form['nested']['file']['#upload_validators'] = [
+        'FileExtension' => ['extensions' => 'txt'],
+        'FileSizeLimit' => ['fileLimit' => 32],
+      ];
+      $form['other_file'] = $form['nested']['file'];
+      $form['other_file']['#title'] = $this->t('Other managed file');
+    }
     if ($this->getRequest()->query->getBoolean('upload_progress')) {
       $form['nested']['file']['#progress_indicator'] = 'bar';
       if (!extension_loaded('uploadprogress')) {

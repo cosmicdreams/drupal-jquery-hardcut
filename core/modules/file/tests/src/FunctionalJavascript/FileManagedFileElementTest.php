@@ -149,6 +149,40 @@ class FileManagedFileElementTest extends WebDriverTestBase {
   }
 
   /**
+   * Tests rejecting files in the browser without clearing another field's error.
+   */
+  public function testClientValidation(): void {
+    $file_system = $this->container->get('file_system');
+    $wrong_extension = $file_system->tempnam('temporary://', 'invalid') . '.jpg';
+    $oversized = $file_system->tempnam('temporary://', 'oversized') . '.txt';
+    $valid = $file_system->tempnam('temporary://', 'valid') . '.txt';
+    file_put_contents($wrong_extension, 'wrong extension');
+    file_put_contents($oversized, str_repeat('a', 33));
+    file_put_contents($valid, 'valid');
+
+    $this->drupalGet('file/test/0/0/0', ['query' => ['validate_upload' => 1]]);
+    $assert = $this->assertSession();
+    $page = $this->getSession()->getPage();
+    $file = '.js-form-managed-file:has(input[name="files[file]"])';
+    $other = '.js-form-managed-file:has(input[name="files[other_file]"])';
+    $fid = $this->getLastFileId();
+
+    $page->attachFileToField('files[file]', $file_system->realpath($wrong_extension));
+    $assert->elementTextContains('css', "$file .file-upload-js-error", 'Only files with the following extensions are allowed');
+    $assert->fieldValueEquals('files[file]', '');
+    $page->attachFileToField('files[other_file]', $file_system->realpath($oversized));
+    $assert->elementTextContains('css', "$other .file-upload-js-error", 'The maximum allowed file size is 32 bytes');
+    $assert->fieldValueEquals('files[other_file]', '');
+    $assert->elementExists('css', "$file .file-upload-js-error");
+    $this->assertSame($fid, $this->getLastFileId());
+
+    $page->attachFileToField('files[file]', $file_system->realpath($valid));
+    $this->assertNotNull($assert->waitForLink(basename($valid)));
+    $assert->elementNotExists('css', "$file .file-upload-js-error");
+    $assert->elementExists('css', "$other .file-upload-js-error");
+  }
+
+  /**
    * Retrieves the fid of the last inserted file.
    */
   protected function getLastFileId(): int {

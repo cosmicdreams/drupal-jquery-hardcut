@@ -16,6 +16,7 @@ use Drupal\Core\Security\StaticTrustedCallbackHelper;
 use Drupal\Core\Security\TrustedCallbackInterface;
 use Drupal\Core\Security\UntrustedCallbackException;
 use Drupal\Core\Site\Settings;
+use Drupal\Core\StringTranslation\ByteSizeMarkup;
 use Drupal\Core\Url;
 use Drupal\file\Entity\File;
 use Drupal\file\Upload\ManagedFileElementHelper;
@@ -384,11 +385,15 @@ class ManagedFile extends FormElementBase {
       }
     }
 
-    // Add the extension list to the page as JavaScript settings.
-    if (isset($element['#upload_validators']['FileExtension']['extensions'])) {
-      $allowed_extensions = $element['#upload_validators']['FileExtension']['extensions'];
-      $extension_list = implode(',', array_filter(explode(' ', $allowed_extensions)));
-      $element['upload']['#attached']['drupalSettings']['file']['elements']['#' . $id] = $extension_list;
+    // Expose the file constraints to client-side validation.
+    if (!empty($element['#upload_validators']['FileExtension']['extensions'])) {
+      $extensions = $element['#upload_validators']['FileExtension']['extensions'];
+      $element['upload']['#attributes']['data-file-extensions'] = implode(' ', preg_split('/\s+/', trim($extensions), -1, PREG_SPLIT_NO_EMPTY));
+    }
+    if (!empty($element['#upload_validators']['FileSizeLimit']['fileLimit'])) {
+      $size_limit = $element['#upload_validators']['FileSizeLimit']['fileLimit'];
+      $element['upload']['#attributes']['data-file-max-size'] = $size_limit;
+      $element['upload']['#attributes']['data-file-max-size-label'] = (string) ByteSizeMarkup::create($size_limit);
     }
 
     // Prefix and suffix used for Ajax replacement.
