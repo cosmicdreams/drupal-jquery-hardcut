@@ -23,6 +23,11 @@ final class ReadinessReportController extends ControllerBase {
   public function report(): array {
     $rows = $this->scanner->cachedRows();
     return [
+      'advisory' => [
+        '#prefix' => '<p>',
+        '#plain_text' => $this->t('Advisory: static analysis is best-effort. Enable this module and exercise the site to confirm, using the browser console canary.'),
+        '#suffix' => '</p>',
+      ],
       'rescan' => $this->formBuilder()->getForm(ReadinessRescanForm::class),
       'report' => [
         '#type' => 'table',

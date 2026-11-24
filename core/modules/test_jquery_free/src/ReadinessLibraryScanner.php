@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Drupal\test_jquery_free;
 
+use Drupal\Core\Asset\Exception\InvalidLibrariesOverrideSpecificationException;
 use Drupal\Core\Extension\Extension;
 use Drupal\Core\Theme\ActiveTheme;
 
@@ -160,21 +161,25 @@ final class ReadinessLibraryScanner {
     }
 
     $rows = [];
+    $override_owners = [];
+    $replacement_owners = [];
+    foreach ($theme->getLibrariesOverride() as $path => $overrides) {
+      $author = $extensions_by_path[$path];
+      foreach ($overrides as $id => $override) {
+        if (!ReadinessLibraryParser::isLibraryId($id)) {
+          $rows[] = [$author, (string) $id, 'library definition error: libraries-override keys must be library IDs.'];
+          continue;
+        }
+        $override_owners[$id] = $author;
+        if (is_string($override) || $override === FALSE) {
+          $replacement_owners[$id] = $author;
+        }
+      }
+    }
+
     $graph = [];
     $replacements = [];
     foreach (['core', ...array_keys($extensions)] as $name) {
-      $override_owners = [];
-      $replacement_owners = [];
-      foreach ($theme->getLibrariesOverride() as $path => $overrides) {
-        foreach ($overrides as $id => $override) {
-          if (str_starts_with($id, "$name/")) {
-            $override_owners[$id] = $extensions_by_path[$path];
-            if (is_string($override) || $override === FALSE) {
-              $replacement_owners[$id] = $extensions_by_path[$path];
-            }
-          }
-        }
-      }
       try {
         $libraries = $parser->buildByExtension($name);
       }
@@ -183,12 +188,12 @@ final class ReadinessLibraryScanner {
         $author = $parser->getFailedAlterAuthor();
         $source = $name;
         if ($author === NULL) {
-          foreach ($override_owners as $id => $theme_author) {
-            if (str_contains($message, $id)) {
-              $author = $theme_author;
-              $source = $id;
-              break;
-            }
+          if ($e instanceof InvalidLibrariesOverrideSpecificationException && preg_match('~(?:^Library asset |Trying to override )([^/\s]+/[^/\s]+)/~', $message, $matches)) {
+            $source = $matches[1];
+            $author = $override_owners[$source] ?? NULL;
+          }
+          elseif ($failure = $parser->getNormalizationFailure($name, $e)) {
+            [$source, $author] = $failure;
           }
         }
         $rows[] = [$author ?? $name, $source, 'library definition error: ' . $message];
@@ -196,12 +201,13 @@ final class ReadinessLibraryScanner {
       }
       foreach ($libraries as $library => $definition) {
         $id = "$name/$library";
+        $provider = ReadinessLibraryParser::libraryProvider($name, $library);
         if (($definition['override'] ?? NULL) === FALSE) {
           continue;
         }
         $graph[$id] = [];
         if (isset($definition['override'])) {
-          $author = $replacement_owners[$id] ?? $name;
+          $author = $replacement_owners[$id] ?? $provider;
           if (is_string($definition['override'])) {
             $replacements[$id] = [$definition['override'], $author];
           }
@@ -216,7 +222,7 @@ final class ReadinessLibraryScanner {
         $dependencies = $definition['dependencies'];
         foreach (is_array($dependencies) ? $dependencies : [] as $dependency) {
           if (ReadinessLibraryParser::isLibraryId($dependency)) {
-            $graph[$id][$dependency][$parser->getDependencyAuthor($library, $dependency, $name)] = TRUE;
+            $graph[$id][$dependency][$parser->getDependencyAuthor($library, $dependency, $provider)] = TRUE;
           }
         }
       }

@@ -13,6 +13,7 @@ use Symfony\Component\Console\Formatter\OutputFormatter;
 use Symfony\Component\Console\Helper\Table;
 use Symfony\Component\Console\Input\InputInterface;
 use Symfony\Component\Console\Input\InputOption;
+use Symfony\Component\Console\Output\ConsoleOutputInterface;
 use Symfony\Component\Console\Output\OutputInterface;
 
 /**
@@ -52,10 +53,15 @@ final class ReadinessReportCommand extends Command {
     }
 
     $rows = $this->scanner->rows($input->getOption('rescan'));
+    $advisory = 'Advisory: static analysis is best-effort. Enable this module and exercise the site to confirm, using the browser console canary.';
     if ($format === 'json') {
+      if ($output instanceof ConsoleOutputInterface) {
+        $output->getErrorOutput()->writeln($advisory);
+      }
       $output->writeln(json_encode($rows, JSON_THROW_ON_ERROR | JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES), OutputInterface::OUTPUT_RAW);
     }
     else {
+      $output->writeln($advisory);
       $table = new Table($output);
       $table->setHeaders(['Extension', 'Library or file', 'Line', 'Theme', 'Reason']);
       foreach ($rows as $row) {

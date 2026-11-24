@@ -24,6 +24,9 @@ final class AlterHooks {
         \Drupal::service('library.discovery')->getLibrariesByExtension('jqf_script');
         $theme_manager->getDefaultTemplateVariables();
       }
+      if (\Drupal::state()->get('jqf_alter.invalid_header', FALSE)) {
+        $libraries['drupalSettings']['header'] = 'invalid';
+      }
       $libraries['once']['dependencies'][] = 'core/jquery';
       $libraries['drupalSettings']['dependencies'][] = 'core/jquery';
       $libraries['drupalSettings']['dependencies'][] = 42;

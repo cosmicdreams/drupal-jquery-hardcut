@@ -6,7 +6,9 @@ namespace Drupal\test_jquery_free;
 
 use Drupal\Component\Serialization\Exception\InvalidDataTypeException;
 use Drupal\Component\Utility\NestedArray;
+use Drupal\Core\Asset\Exception\IncompleteLibraryDefinitionException;
 use Drupal\Core\Asset\Exception\InvalidLibraryFileException;
+use Drupal\Core\Asset\Exception\LibraryDefinitionMissingLicenseException;
 use Drupal\Core\Asset\LibraryDiscoveryParser;
 use Drupal\Core\Theme\ActiveTheme;
 
@@ -21,6 +23,13 @@ final class ReadinessLibraryParser extends LibraryDiscoveryParser {
    * @var array<string, array<string, string>>
    */
   private array $authors = [];
+
+  /**
+   * The authors of altered fields that library normalization validates.
+   *
+   * @var array<string, array<string, string>>
+   */
+  private array $definitionAuthors = [];
 
   /**
    * Malformed dependencies and their authors for the current extension.
@@ -47,6 +56,49 @@ final class ReadinessLibraryParser extends LibraryDiscoveryParser {
    */
   public static function isLibraryId(mixed $value): bool {
     return is_string($value) && preg_match('~^[^/\s]+/[^/\s]+$~D', $value) === 1;
+  }
+
+  /**
+   * Returns the declaring extension for a library, including components.
+   */
+  public static function libraryProvider(string $extension, string $library): string {
+    if ($extension === 'core' && preg_match('/^components\.([a-z0-9_]+)--/', $library, $matches)) {
+      return $matches[1];
+    }
+    return $extension;
+  }
+
+  /**
+   * Identifies the library and author when normalization names the library.
+   *
+   * @return array{string, string}|null
+   *   The library ID and author, when known.
+   */
+  public function getNormalizationFailure(string $extension, \Throwable $error): ?array {
+    // Core names the library in its explicit validation exceptions.
+    [$field, $pattern] = match (TRUE) {
+      $error instanceof IncompleteLibraryDefinitionException => [
+        'dependencies',
+        "/^Incomplete library definition for definition '([^']+)'/",
+      ],
+      $error instanceof LibraryDefinitionMissingLicenseException => [
+        'remote',
+        "/^Missing license information in library definition for definition '([^']+)'/",
+      ],
+      $error instanceof \LogicException => ['header', "/^The 'header' key in the library definition '([^']+)'/"],
+      $error instanceof \UnexpectedValueException => [
+        'js',
+        '~^The ' . preg_quote($extension, '~') . '/(\S+) library defines a positive weight~',
+      ],
+      default => [NULL, NULL],
+    };
+    if ($pattern === NULL || !preg_match($pattern, $error->getMessage(), $matches)) {
+      return NULL;
+    }
+
+    $library = $matches[1];
+    $author = $this->definitionAuthors[$library][$field] ?? self::libraryProvider($extension, $library);
+    return ["$extension/$library", $author];
   }
 
   /**
@@ -80,6 +132,7 @@ final class ReadinessLibraryParser extends LibraryDiscoveryParser {
    */
   protected function parseLibraryInfo($extension, $path) {
     $this->authors = [];
+    $this->definitionAuthors = [];
     $this->malformed = [];
     $this->alteringExtension = NULL;
     // Match the core parser's initial definitions, then observe each alter
@@ -101,10 +154,12 @@ final class ReadinessLibraryParser extends LibraryDiscoveryParser {
     $this->recordMalformedDependencies($libraries, $extension);
     $context2 = NULL;
     $alter = function (callable $listener, string $author) use (&$libraries, &$extension, &$context2): void {
-      $before = $this->dependencies($libraries);
+      $before = $libraries;
       $this->alteringExtension = $author;
       $listener($libraries, $extension, $context2);
       $this->alteringExtension = NULL;
+      $this->recordDefinitionAuthors($before, $libraries, $author);
+      $before = $this->dependencies($before);
       $after = $this->dependencies($libraries);
       $this->recordMalformedDependencies($libraries, $author);
       foreach ($this->authors as $id => $authors) {
@@ -140,6 +195,20 @@ final class ReadinessLibraryParser extends LibraryDiscoveryParser {
   }
 
   /**
+   * Records changes to fields checked by core library normalization.
+   */
+  private function recordDefinitionAuthors(array $before, array $after, string $author): void {
+    $this->definitionAuthors = array_intersect_key($this->definitionAuthors, $after);
+    foreach ($after as $library => $definition) {
+      foreach (['dependencies', 'header', 'js', 'remote'] as $field) {
+        if (!isset($before[$library]) || ($definition[$field] ?? NULL) !== ($before[$library][$field] ?? NULL)) {
+          $this->definitionAuthors[$library][$field] = $author;
+        }
+      }
+    }
+  }
+
+  /**
    * Preserves the author of each malformed entry across alter callbacks.
    */
   private function recordMalformedDependencies(array $libraries, string $author): void {
@@ -158,7 +227,8 @@ final class ReadinessLibraryParser extends LibraryDiscoveryParser {
         }
         $entry = [$is_array, $dependency];
         $prior_key = array_search($entry, $previous, TRUE);
-        $malformed[$id][$key] = [$entry, $prior_key === FALSE ? $author : $this->malformed[$id][$prior_key][1]];
+        $entry_author = $prior_key === FALSE ? self::libraryProvider($author, $id) : $this->malformed[$id][$prior_key][1];
+        $malformed[$id][$key] = [$entry, $entry_author];
         if ($prior_key !== FALSE) {
           unset($previous[$prior_key]);
         }

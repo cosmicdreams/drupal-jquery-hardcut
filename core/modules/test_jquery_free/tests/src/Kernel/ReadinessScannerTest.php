@@ -101,6 +101,9 @@ final class ReadinessScannerTest extends KernelTestBase {
     $this->assertFinding($findings['jqf_script'], 'jqf_script/transitive', 'Library depends on jqf_script/transitive → jqf_dependency/cycle → jqf_dependency/legacy → core/jquery', 'jqf_global, stark');
     $this->assertFinding($findings['jqf_dependency'], 'jqf_dependency/legacy', 'Library depends on jqf_dependency/legacy → core/drupal.jquery.position');
     $this->assertFinding($findings['jqf_dependency'], 'jqf_dependency/legacy', 'Library depends on jqf_dependency/legacy → core/tabbable.jquery.shim');
+    $this->assertFinding($findings['jqf_dependency'], 'core/components.jqf_dependency--legacy', 'Library depends on core/components.jqf_dependency--legacy → core/jquery');
+    $this->assertFinding($findings['jqf_global'], '42', 'library definition error: libraries-override keys must be library IDs.', 'jqf_extend, jqf_global');
+    $this->assertFinding($findings['jqf_global'], 'invalid', 'library definition error: libraries-override keys must be library IDs.', 'jqf_extend, jqf_global');
     $this->assertFinding($findings['jqf_extend'], 'core/drupalSettings', 'Library depends on core/drupalSettings → jqf_dependency/legacy → core/jquery', 'jqf_extend');
     $this->assertFinding($findings['jqf_extend'], 'core/drupalSettings', 'Library depends on core/drupalSettings → core/jquery.ui.dialog', 'jqf_extend');
     $this->assertFinding($findings['jqf_global'], 'core/tabbable.jquery.shim', 'Theme attaches core/tabbable.jquery.shim', 'jqf_extend, jqf_global');
@@ -122,6 +125,17 @@ final class ReadinessScannerTest extends KernelTestBase {
   }
 
   /**
+   * Tests attribution when core rejects an altered library definition.
+   */
+  public function testNormalizationFailure(): void {
+    $this->container->get('state')->set('jqf_alter.invalid_header', TRUE);
+    $findings = $this->container->get(ReadinessScanner::class)->scan();
+    $this->assertArrayNotHasKey('core', $findings);
+    $this->assertFinding($findings['jqf_alter'], 'core/drupalSettings', "library definition error: The 'header' key in the library definition 'drupalSettings' in extension 'core' is invalid: it must be a boolean.");
+    $this->assertFinding($findings['jqf_dependency'], 'jqf_dependency/legacy', 'Library depends on jqf_dependency/legacy → core/jquery');
+  }
+
+  /**
    * Tests cached status, invalidation, report output, and explicit rescans.
    */
   public function testCacheAndReport(): void {
@@ -137,6 +151,8 @@ final class ReadinessScannerTest extends KernelTestBase {
     $this->assertSame([], $logger->recordsByLevel[RfcLogLevel::WARNING] ?? []);
 
     $report = ReadinessReportController::create($this->container)->report();
+    $advisory = 'Advisory: static analysis is best-effort. Enable this module and exercise the site to confirm, using the browser console canary.';
+    $this->assertSame($advisory, (string) $report['advisory']['#plain_text']);
     $this->assertSame('No scan yet', (string) $report['report']['#empty']);
     $this->assertNull($scanner->cachedFindings());
     $this->assertSame([], $logger->recordsByLevel[RfcLogLevel::WARNING] ?? []);
@@ -151,13 +167,15 @@ final class ReadinessScannerTest extends KernelTestBase {
     $this->assertSame(array_map('array_values', $expected_rows), $report['report']['#rows']);
     $this->assertSame('Rescan', (string) $report['rescan']['submit']['#value']);
     $command = new CommandTester(ReadinessReportCommand::create($this->container));
-    $this->assertSame(0, $command->execute(['--format' => 'json']));
+    $this->assertSame(0, $command->execute(['--format' => 'json'], ['capture_stderr_separately' => TRUE]));
     $this->assertSame($expected_rows, json_decode($command->getDisplay(), TRUE, flags: JSON_THROW_ON_ERROR));
+    $this->assertSame($advisory, trim($command->getErrorOutput()));
     $this->assertSame(0, $command->execute([]));
+    $this->assertStringContainsString($advisory, $command->getDisplay());
     $this->assertStringContainsString('jqf_dependency/legacy', $command->getDisplay());
     $this->assertCount(3, $logger->recordsByLevel[RfcLogLevel::WARNING]);
 
-    $this->assertSame(0, $command->execute(['--rescan' => TRUE, '--format' => 'json']));
+    $this->assertSame(0, $command->execute(['--rescan' => TRUE, '--format' => 'json'], ['capture_stderr_separately' => TRUE]));
     $this->assertSame($expected_rows, json_decode($command->getDisplay(), TRUE, flags: JSON_THROW_ON_ERROR));
     $form = [];
     ReadinessRescanForm::create($this->container)->submitForm($form, new FormState());

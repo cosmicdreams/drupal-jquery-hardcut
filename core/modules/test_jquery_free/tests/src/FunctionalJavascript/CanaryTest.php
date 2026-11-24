@@ -90,6 +90,7 @@ final class CanaryTest extends WebDriverTestBase {
     $this->submitForm([], 'Rescan');
     $this->assertSession()->addressEquals('admin/reports/jquery-readiness');
     $this->assertSession()->pageTextContains('No jQuery references found');
+    $this->assertSession()->pageTextContains('Advisory: static analysis is best-effort. Enable this module and exercise the site to confirm, using the browser console canary.');
     $this->drupalGet($report);
     $this->assertSession()->pageTextContains('No jQuery references found');
   }
