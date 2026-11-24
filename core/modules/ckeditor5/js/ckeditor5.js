@@ -524,6 +524,8 @@
         return;
       }
 
+      // Keep change tracking registered while flushing Source Editing data.
+      editor?.updateSourceElement();
       element.removeAttribute('data-ckeditor5-id');
       element.removeAttribute('contentEditable');
       Drupal.CKEditor5Instances.delete(id);
@@ -532,8 +534,6 @@
         return initializing.get(element);
       }
 
-      // Keep the editor value before destroying the editable.
-      editor.updateSourceElement();
       return editor
         .destroy()
         .catch((error) => {

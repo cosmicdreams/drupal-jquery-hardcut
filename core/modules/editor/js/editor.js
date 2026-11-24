@@ -22,9 +22,6 @@
     if (format && !widget.destroying) {
       Drupal.editorDetach(widget.field, format, 'serialize');
     }
-    // The value and its format must describe the same editor while a switch
-    // is waiting for the filter or for the previous editor to be destroyed.
-    widget.select.value = widget.field.dataset.editorActiveTextFormat;
   }
 
   async function changeTextEditor(widget, newFormatID, trigger) {
@@ -101,14 +98,15 @@
         field.dataset.editorValueOriginal = filtered;
       }
       field.dataset.editorActiveTextFormat = newFormatID;
-      select.value = newFormatID;
       Drupal.editorAttach(field, format);
+      if (select.value !== newFormatID) {
+        select.value = newFormatID;
+        select.dispatchEvent(new Event('change'));
+      }
     } catch (error) {
       if (isCurrent()) {
         select.value = previousFormatID;
-        if (widget.destroying) {
-          changeTextEditor(widget, previousFormatID);
-        }
+        select.dispatchEvent(new Event('change'));
         Drupal.announce(
           Drupal.t('The text format could not be changed.'),
           'assertive',
@@ -248,6 +246,16 @@
           },
           { signal },
         );
+        field.form?.addEventListener(
+          'formdata',
+          ({ formData }) => {
+            const formatID = field.dataset.editorActiveTextFormat;
+            if (select.value !== formatID && formData.has(select.name)) {
+              formData.set(select.name, formatID);
+            }
+          },
+          { signal },
+        );
       });
     },
 
@@ -264,7 +272,6 @@
         if (trigger === 'move') {
           const formatID = widget.field.dataset.editorActiveTextFormat;
           widget.confirmation?.close();
-          select.value = formatID;
           // Tabledrag moves the row synchronously. Reattach once the old
           // editor has finished tearing down and the row is in place.
           changeTextEditor(widget, formatID, trigger);
@@ -282,6 +289,20 @@
       });
     },
   };
+
+  /**
+   * Returns the format of the serialized value during a pending switch.
+   *
+   * @param {HTMLSelectElement} select
+   *   The text format selector.
+   *
+   * @return {string|undefined}
+   *   The active format ID, if the selector is managed by Editor.
+   *
+   * @internal
+   */
+  Drupal.editorGetActiveTextFormat = (select) =>
+    widgets.get(select)?.field.dataset.editorActiveTextFormat;
 
   /**
    * Attaches editor behaviors to the field.

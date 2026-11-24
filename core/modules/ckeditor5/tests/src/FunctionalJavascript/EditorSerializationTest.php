@@ -8,7 +8,9 @@ use Drupal\editor\Entity\Editor;
 use Drupal\field\Entity\FieldConfig;
 use Drupal\field\Entity\FieldStorageConfig;
 use Drupal\filter\Entity\FilterFormat;
+use Drupal\user\Entity\Role;
 use Drupal\user\RoleInterface;
+use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\Attributes\Group;
 use PHPUnit\Framework\Attributes\RunTestsInSeparateProcesses;
 
@@ -35,15 +37,10 @@ class EditorSerializationTest extends CKEditor5TestBase {
       )
       JS);
     $this->getSession()->executeScript(<<<'JS'
-      const editor = Array.from(Drupal.CKEditor5Instances.values()).find(
+      window.sectionsEditor = Array.from(Drupal.CKEditor5Instances.values()).find(
         (instance) => instance.sourceElement.name === 'field_sections[0][value]'
       );
-      editor.setData('<p>Kept through the Ajax rebuild.</p>');
-      Drupal.detachBehaviors(editor.sourceElement.closest('.js-text-format-wrapper'), drupalSettings, 'serialize');
-      document.dispatchEvent(new CustomEvent('drupalViewportOffsetChange', {
-        detail: { top: 24, right: 0, bottom: 0, left: 0 },
-      }));
-      window.serializedEditorOffset = editor.ui.viewportOffset.top;
+      window.sectionsEditor.setData('<p>Content before the format switch.</p>');
       const fetch = window.fetch;
       window.fetch = (url, options) => {
         if (!String(url).includes('editor/filter_xss/alternate')) {
@@ -57,14 +54,34 @@ class EditorSerializationTest extends CKEditor5TestBase {
         });
       };
       JS);
-    $this->assertSame(24, $this->getSession()->evaluateScript('window.serializedEditorOffset'));
 
     $page->selectFieldOption('field_sections[0][format]', 'alternate');
     $assert->elementExists('css', 'dialog.editor-change-text-format-modal')->pressButton('Continue');
     $this->assertJsCondition('typeof window.completeFormatSwitch === "function"');
+    $session = $this->getSession();
+    $this->assertSame('ckeditor5', $session->evaluateScript(<<<'JS'
+      new FormData(window.sectionsEditor.sourceElement.form).get('field_sections[0][format]')
+      JS));
+    $session->executeScript(<<<'JS'
+      const editor = window.sectionsEditor;
+      const form = editor.sourceElement.form;
+      const ajax = Drupal.ajax.instances.find((instance) =>
+        instance?.form === form && instance.element.value === 'Add another item'
+      );
+      ajax.beforeSubmit = () => {
+        window.visibleFormatDuringSubmit = form.elements.namedItem('field_sections[0][format]').value;
+      };
+      editor.setData('<p>Kept through the Ajax rebuild.</p>');
+      JS);
+    $this->assertSame('<p>Content before the format switch.</p>', $session->evaluateScript('window.sectionsEditor.sourceElement.value'));
+
     $page->pressButton('Add another item');
     $assert->assertWaitOnAjaxRequest();
-    $this->getSession()->executeScript('window.completeFormatSwitch();');
+    $session->executeScript('window.completeFormatSwitch();');
+    $rebuilt = $assert->elementExists('css', 'textarea[name="field_sections[0][value]"]');
+    $this->assertSame('<p>Kept through the Ajax rebuild.</p>', $rebuilt->getValue());
+    $assert->fieldValueEquals('field_sections[0][format]', 'ckeditor5');
+    $this->assertSame('alternate', $session->evaluateScript('window.visibleFormatDuringSubmit'));
     $this->assertJsCondition(<<<'JS'
       (() => {
         const sections = Array.from(Drupal.CKEditor5Instances.values()).filter(
@@ -79,24 +96,88 @@ class EditorSerializationTest extends CKEditor5TestBase {
   }
 
   /**
-   * Tests focus and editor data when tabledrag moves a formatted field row.
+   * Tests viewport offsets after serialization while the editor stays mounted.
    */
-  public function testTableDragEditorReattachment(): void {
+  public function testToolbarDisplacementAfterSerialization(): void {
+    $this->container->get('module_installer')->install(['navigation']);
+    Role::load(RoleInterface::AUTHENTICATED_ID)->grantPermission('access navigation')->save();
     $this->createSectionsField();
-    $this->drupalGet('node/add/page');
+    $node = $this->drupalCreateNode([
+      'type' => 'page',
+      'uid' => $this->loggedInUser->id(),
+    ]);
+    $this->getSession()->resizeWindow(1400, 900);
+    $this->drupalGet($node->toUrl('edit-form'));
+    $this->assertNotNull($this->assertSession()->waitForElementVisible('css', '.top-bar[data-offset-top]'));
+    $this->assertJsCondition(<<<'JS'
+      (window.displacedEditor = Array.from(Drupal.CKEditor5Instances.values()).find(
+        (editor) => editor.sourceElement.name === 'field_sections[0][value]'
+      ))?.state === 'ready'
+      JS);
+
+    $this->getSession()->executeScript(<<<'JS'
+      const toolbar = document.querySelector('.top-bar[data-offset-top]');
+      const editor = window.displacedEditor;
+      Drupal.detachBehaviors(editor.sourceElement.form, drupalSettings, 'serialize');
+      window.previousToolbarOffset = toolbar.getBoundingClientRect().bottom;
+      toolbar.style.setProperty('--admin-toolbar-top-bar-height', '120px');
+      Drupal.displace();
+      JS);
+    $this->assertJsCondition(<<<'JS'
+      (() => {
+        const offset = document.querySelector('.top-bar[data-offset-top]').getBoundingClientRect().bottom;
+        return offset > window.previousToolbarOffset &&
+          Drupal.displace.offsets.top === offset &&
+          window.displacedEditor.ui.viewportOffset.top === offset;
+      })()
+      JS);
+  }
+
+  /**
+   * Tests moving a row with changes still in the Source Editing textarea.
+   */
+  #[DataProvider('tableDragModes')]
+  public function testTableDragEditorReattachment(bool $keyboard): void {
+    $this->createSectionsField();
+    $editor = Editor::load('ckeditor5');
+    $settings = $editor->getSettings();
+    $settings['toolbar']['items'][] = 'sourceEditing';
+    $settings['plugins']['ckeditor5_sourceEditing']['allowed_tags'] = [];
+    $editor->setSettings($settings)->save();
+
+    $node = $this->drupalCreateNode([
+      'type' => 'page',
+      'uid' => $this->loggedInUser->id(),
+      'field_sections' => [
+        ['value' => '<p>First section.</p>', 'format' => 'ckeditor5'],
+        ['value' => '<p>Original second section.</p>', 'format' => 'ckeditor5'],
+      ],
+    ]);
+    $this->getSession()->resizeWindow(1400, 1200);
+    $this->drupalGet($node->toUrl('edit-form'));
     $assert = $this->assertSession();
-    $this->getSession()->getPage()->pressButton('Add another item');
-    $assert->assertWaitOnAjaxRequest();
     $this->assertJsCondition(<<<'JS'
       (window.movedEditor = Array.from(Drupal.CKEditor5Instances.values()).find(
         (editor) => editor.sourceElement.name === 'field_sections[1][value]'
       ))?.state === 'ready'
       JS);
-    $this->getSession()->executeScript("window.movedEditor.setData('<p>Moved text.</p>');");
-    $handle = $assert->elementExists('css', 'tr.draggable:has(textarea[name="field_sections[1][value]"]) .tabledrag-handle');
-    $handle->focus();
-    $handle->keyDown(38);
-    $handle->keyUp(38);
+    $first_row = 'tr.draggable:has(textarea[name="field_sections[0][value]"])';
+    $moved_row = 'tr.draggable:has(textarea[name="field_sections[1][value]"])';
+    $row = $assert->elementExists('css', $moved_row);
+    $assert->elementExists('xpath', './/button[span[text()="Source"]]', $row)->click();
+    $source = $assert->elementExists('css', "$moved_row .ck-source-editing-area textarea");
+    $source->setValue('<p>Moved source text.</p>');
+    $this->assertSame('false', $this->getSession()->evaluateScript('window.movedEditor.sourceElement.dataset.editorValueIsChanged'));
+
+    $handle = $assert->elementExists('css', "$moved_row .tabledrag-handle");
+    if ($keyboard) {
+      $handle->focus();
+      $handle->keyDown(38);
+      $handle->keyUp(38);
+    }
+    else {
+      $handle->dragTo($assert->elementExists('css', "$first_row .tabledrag-handle"));
+    }
 
     $this->assertJsCondition(<<<'JS'
       (() => {
@@ -106,11 +187,26 @@ class EditorSerializationTest extends CKEditor5TestBase {
         const reattached = Drupal.CKEditor5Instances.get(field.dataset.ckeditor5Id);
         return previous.state === 'destroyed' &&
           row === row.parentElement.firstElementChild &&
-          document.activeElement === row.querySelector('.tabledrag-handle') &&
-          reattached?.getData() === '<p>Moved text.</p>' &&
+          reattached?.state === 'ready' &&
           row.querySelectorAll('.ck-editor__editable').length === 1;
       })()
       JS);
+    $this->assertSame('<p>Moved source text.</p>', $this->getSession()->evaluateScript(
+      'Drupal.CKEditor5Instances.get(window.movedEditor.sourceElement.dataset.ckeditor5Id).getData()',
+    ));
+    if ($keyboard) {
+      $this->assertJsCondition("document.activeElement.matches('$moved_row .tabledrag-handle')");
+    }
+  }
+
+  /**
+   * Provides the two ways of moving a table row.
+   */
+  public static function tableDragModes(): array {
+    return [
+      'keyboard' => [TRUE],
+      'pointer' => [FALSE],
+    ];
   }
 
   /**
@@ -174,6 +270,44 @@ class EditorSerializationTest extends CKEditor5TestBase {
       ['<p>Original text.</p>', '<p>Original text.</p>', '<p>New <em>text</em>.</p>'],
       $session->evaluateScript('window.formatFilterInputs'),
     );
+  }
+
+  /**
+   * Tests that a failed switch restores the plain textarea's guidelines.
+   */
+  public function testGuidelinesAfterFailedFormatSwitch(): void {
+    $this->createSectionsField();
+    Editor::load('ckeditor5')->delete();
+    $this->drupalGet('node/add/page');
+    $assert = $this->assertSession();
+    $session = $this->getSession();
+    $page = $session->getPage();
+    $guidelines_selector = '.js-text-format-wrapper:has(textarea[name="field_sections[0][value]"]) [data-drupal-format-id=ckeditor5]';
+    $assert->elementExists('css', $guidelines_selector);
+    $guidelines = 'getComputedStyle(document.querySelector(' . json_encode($guidelines_selector, JSON_THROW_ON_ERROR) . ')).display';
+    $this->assertNotSame('none', $session->evaluateScript($guidelines));
+    $page->fillField('field_sections[0][value]', 'Text in the original format.');
+    $session->executeScript(<<<'JS'
+      const fetch = window.fetch;
+      window.fetch = (url, options) => {
+        if (!String(url).includes('editor/filter_xss/alternate')) {
+          return fetch(url, options);
+        }
+        return new Promise((resolve) => {
+          window.failFormatSwitch = () => resolve({ ok: false, statusText: 'Test filter failure' });
+        });
+      };
+      JS);
+    $page->selectFieldOption('field_sections[0][format]', 'alternate');
+    $assert->elementExists('css', 'dialog.editor-change-text-format-modal')->pressButton('Continue');
+    $this->assertJsCondition('typeof window.failFormatSwitch === "function"');
+    $this->assertSame('none', $session->evaluateScript($guidelines));
+
+    $session->executeScript('window.failFormatSwitch();');
+    $this->assertNotNull($assert->waitForElement('css', '#drupal-live-announce[aria-live="assertive"]:contains("The text format could not be changed.")'));
+    $assert->fieldValueEquals('field_sections[0][format]', 'ckeditor5');
+    $assert->fieldValueEquals('field_sections[0][value]', 'Text in the original format.');
+    $this->assertNotSame('none', $session->evaluateScript($guidelines));
   }
 
   /**
