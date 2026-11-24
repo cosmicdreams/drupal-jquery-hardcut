@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Drupal\Tests\media_library\FunctionalJavascript;
 
+use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\Attributes\Group;
 use PHPUnit\Framework\Attributes\RunTestsInSeparateProcesses;
 
@@ -169,6 +170,70 @@ class WidgetViewsTest extends MediaLibraryTestBase {
     $assert_session->pageTextContains('Dog');
     $assert_session->pageTextContains('Bear');
     $assert_session->pageTextNotContains('Turtle');
+  }
+
+  /**
+   * Tests switching displays while a media type response is pending.
+   */
+  #[DataProvider('responseOrders')]
+  public function testOverlappingTypeAndDisplayRequests(bool $type_first): void {
+    $this->drupalGet('node/add/basic_page');
+    $menu = $this->openMediaLibraryForField('field_no_add_media');
+    $session = $this->getSession();
+    $assert = $this->assertSession();
+
+    // Hold both real responses so the test controls their delivery order.
+    $session->executeScript(<<<'JS'
+      const request = Drupal.ajaxRequest;
+      window.pickerResponses = {};
+      Drupal.ajaxRequest = (options, complete) => {
+        const query = new URL(options.url, document.baseURI).searchParams;
+        const type = query.get('media_library_selected_type');
+        if (!type) {
+          return request(options, complete);
+        }
+        const key = type === 'type_two' ? 'type' : 'table';
+        return request(options, (response) => new Promise((resolve) => {
+          window.pickerResponses[key] = () => resolve(complete(response));
+        }));
+      };
+      JS);
+    $assert->elementExists('css', 'a[data-title="Type Two"]', $menu)->click();
+    $this->assertJsCondition('typeof window.pickerResponses.type === "function"');
+    $session->getPage()->clickLink('Table');
+    $this->assertJsCondition('typeof window.pickerResponses.table === "function"');
+
+    if ($type_first) {
+      $session->executeScript('window.pickerResponses.type();');
+      $this->assertAnnounceContains('Showing Type Two media.');
+      $session->executeScript('window.pickerResponses.table();');
+      $this->assertAnnounceContains('Changed to table view.');
+      $this->assertAnnounceContains('Showing Type One media.');
+    }
+    else {
+      $session->executeScript('window.pickerResponses.table();');
+      $this->assertAnnounceContains('Changed to table view.');
+      $session->executeScript('window.pickerResponses.type();');
+      $this->assertAnnounceContains('Showing Type Two media.');
+    }
+
+    $assert->assertWaitOnAjaxRequest();
+    $title = $type_first ? 'Type One' : 'Type Two';
+    $assert->elementTextEquals('css', '.js-media-library-menu a.active', "Show $title media (selected)");
+    $display = $type_first ? 'widget_table' : 'widget';
+    $view = ".js-media-library-view[data-view-display-id=\"$display\"]";
+    $assert->elementTextContains('css', $view, $type_first ? 'Bear' : 'Turtle');
+    $assert->elementTextNotContains('css', $view, $type_first ? 'Turtle' : 'Bear');
+  }
+
+  /**
+   * Provides both response orders for overlapping picker requests.
+   */
+  public static function responseOrders(): array {
+    return [
+      'type response first' => [TRUE],
+      'table response first' => [FALSE],
+    ];
   }
 
 }

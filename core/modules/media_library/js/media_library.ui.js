@@ -32,8 +32,6 @@
     });
   };
 
-  const libraryRequests = new WeakMap();
-
   /**
    * Keeps partial responses tied to their library and dialog session.
    *
@@ -46,11 +44,37 @@
    */
   function trackLibraryRequest(library, link, request) {
     const origin = Drupal.dialog?.requestOrigin(link);
-    libraryRequests.set(library, request);
     request.isResponseCurrent = () =>
-      library.isConnected &&
-      libraryRequests.get(library) === request &&
-      (Drupal.dialog?.hasOpenOrigin(origin) ?? true);
+      library.isConnected && (Drupal.dialog?.hasOpenOrigin(origin) ?? true);
+  }
+
+  /**
+   * Marks the tab for the media type being shown and announces the change.
+   * @param {HTMLElement} tab
+   *   The tab for the displayed media type.
+   */
+  function selectMediaType(tab) {
+    const menu = tab.closest('.js-media-library-menu');
+    menu.querySelector('.active-tab')?.remove();
+    menu.querySelector('a.active')?.classList.remove('active');
+    tab.classList.add('active');
+    const { title } = tab.dataset;
+    tab.innerHTML = Drupal.t(
+      '<span class="visually-hidden">Show </span>@title<span class="visually-hidden"> media</span><span class="active-tab visually-hidden"> (selected)</span>',
+      { '@title': title },
+    );
+    Drupal.announce(Drupal.t('Showing @title media.', { '@title': title }));
+  }
+
+  /**
+   * Reads the selected media type from a picker link.
+   * @param {HTMLAnchorElement} link
+   *   A media type tab or a view display link.
+   * @return {string|null}
+   *   The media type machine name.
+   */
+  function getMediaType(link) {
+    return new URL(link.href).searchParams.get('media_library_selected_type');
   }
 
   /**
@@ -102,35 +126,18 @@
           });
 
           trackLibraryRequest(library, link, ajaxObject);
-          // Move focus after replacement and behavior attachment.
+          // Update the tab and move focus after replacing the content.
           ajaxObject.afterSuccess = () => {
             if (!ajaxObject.isResponseCurrent()) {
               return;
             }
-            const content = document.getElementById('media-library-content');
+            selectMediaType(link);
+            const content = library.querySelector('#media-library-content');
             if (content) {
               tabbable(content)[0]?.focus();
             }
           };
           ajaxObject.execute();
-
-          // Set the selected tab.
-          document
-            .querySelectorAll('.js-media-library-menu .active-tab')
-            .forEach((marker) => marker.remove());
-          document
-            .querySelectorAll('.js-media-library-menu a')
-            .forEach((tab) => tab.classList.remove('active'));
-          link.classList.add('active');
-          const { title } = link.dataset;
-          link.innerHTML = Drupal.t(
-            '<span class="visually-hidden">Show </span>@title<span class="visually-hidden"> media</span><span class="active-tab visually-hidden"> (selected)</span>',
-            { '@title': title },
-          );
-
-          Drupal.announce(
-            Drupal.t('Showing @title media.', { '@title': title }),
-          );
         });
       });
     },
@@ -213,14 +220,23 @@
               // link. Move the focus back to the clicked link when the view is
               // replaced.
               if (focusSelector) {
-                document
-                  .getElementById('media-library-view')
-                  ?.querySelector(focusSelector)
+                library
+                  .querySelector(`#media-library-view ${focusSelector}`)
                   ?.focus();
               }
               // Announce the new view is loaded to screen readers.
               if (displayAnnouncement) {
                 Drupal.announce(displayAnnouncement);
+              }
+              // The display link may have been clicked while a type change
+              // was pending. Its response shows the type from the link.
+              const type = getMediaType(link);
+              const tabs = library.querySelectorAll('.js-media-library-menu a');
+              const tab = Array.from(tabs).find(
+                (candidate) => getMediaType(candidate) === type,
+              );
+              if (tab && !tab.classList.contains('active')) {
+                selectMediaType(tab);
               }
             };
           }
