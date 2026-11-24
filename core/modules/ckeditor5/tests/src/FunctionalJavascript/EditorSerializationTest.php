@@ -14,6 +14,7 @@ use Drupal\user\RoleInterface;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\Attributes\Group;
 use PHPUnit\Framework\Attributes\RunTestsInSeparateProcesses;
+use PHPUnit\Framework\Attributes\TestWith;
 
 /**
  * Tests editor serialization and a pending format switch during Ajax rebuilds.
@@ -27,7 +28,8 @@ class EditorSerializationTest extends CKEditor5TestBase {
   /**
    * Tests that adding another item submits editor data before an Ajax rebuild.
    */
-  #[DataProvider('formatRoundTripCases')]
+  #[TestWith([FALSE], 'unchanged')]
+  #[TestWith([TRUE], 'edited')]
   public function testAjaxEditorSerialization(bool $edit): void {
     $original = "<p>First section.</p>\n<p>Another paragraph.</p>";
     $this->openSectionsForm($original);
@@ -334,8 +336,10 @@ class EditorSerializationTest extends CKEditor5TestBase {
   /**
    * Tests serializing after switching to a restrictive format and back.
    */
-  #[DataProvider('formatRoundTripCases')]
-  public function testFormatRoundTrip(bool $edit): void {
+  #[TestWith([FALSE], 'unchanged')]
+  #[TestWith([TRUE], 'edited')]
+  #[TestWith([FALSE, TRUE], 'unchanged Ajax serialization')]
+  public function testFormatRoundTrip(bool $edit, bool $ajax = FALSE): void {
     $this->createSectionsField();
     $format = FilterFormat::load('ckeditor5');
     $html_filter = $format->filters('filter_html')->getConfiguration();
@@ -376,21 +380,18 @@ class EditorSerializationTest extends CKEditor5TestBase {
       window.sectionsEditor()?.state === 'ready' &&
         window.sectionsEditor().sourceElement.dataset.editorActiveTextFormat === 'ckeditor5'
       JS);
+    if ($ajax) {
+      $session->executeScript(<<<'JS'
+        Drupal.detachBehaviors(window.sectionsEditor().sourceElement.form, drupalSettings, 'serialize');
+        JS);
+      $assert->fieldValueEquals('field_sections[0][value]', $original);
+      return;
+    }
     $page->pressButton('Save');
     $assert->addressEquals($node->toUrl()->toString());
     $saved = $this->container->get('entity_type.manager')->getStorage('node')->loadUnchanged($node->id());
     $this->assertSame('ckeditor5', $saved->field_sections->format);
     $this->assertSame($edit ? '<p>Edited in the alternate format.</p>' : '<p>Original text.</p>', $saved->field_sections->value);
-  }
-
-  /**
-   * Provides cases with and without an edit in the restrictive format.
-   */
-  public static function formatRoundTripCases(): array {
-    return [
-      'unchanged' => [FALSE],
-      'edited' => [TRUE],
-    ];
   }
 
   /**

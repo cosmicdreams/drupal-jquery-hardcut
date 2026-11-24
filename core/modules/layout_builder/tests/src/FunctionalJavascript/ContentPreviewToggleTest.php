@@ -12,6 +12,7 @@ use Drupal\layout_builder\Section;
 use Drupal\layout_builder\SectionComponent;
 use Drupal\Tests\contextual\FunctionalJavascript\ContextualLinkClickTrait;
 use Drupal\Tests\system\Traits\OffCanvasTestTrait;
+use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\Attributes\Group;
 use PHPUnit\Framework\Attributes\RunTestsInSeparateProcesses;
 
@@ -168,6 +169,41 @@ class ContentPreviewToggleTest extends WebDriverTestBase {
     $this->assertTrue($assert_session->waitForText('The layout override has been saved.'));
     $this->drupalGet('node/1/layout');
     $this->assertOrderInPage([$content_preview_body_text, 'Placeholder for the "Links" field']);
+  }
+
+  /**
+   * Tests preview visibility in core themes.
+   */
+  #[DataProvider('previewThemes')]
+  public function testPreviewVisibility(string $theme): void {
+    $this->container->get('theme_installer')->install([$theme]);
+    $this->config('system.theme')->set('default', $theme)->save();
+
+    $preview_text = 'The body of the layout preview.';
+    $node = $this->createNode([
+      'type' => 'bundle_for_this_particular_test',
+      'body' => $preview_text,
+    ]);
+    $this->drupalGet('node/' . $node->id() . '/layout');
+    $page = $this->getSession()->getPage();
+    $assert = $this->assertSession();
+    $assert->elementTextContains('css', '#layout-builder', $preview_text);
+
+    $page->uncheckField('layout-builder-content-preview');
+    $assert->elementTextNotContains('css', '#layout-builder', $preview_text);
+
+    $page->checkField('layout-builder-content-preview');
+    $assert->elementTextContains('css', '#layout-builder', $preview_text);
+  }
+
+  /**
+   * Provides additional themes to test alongside Starterkit.
+   */
+  public static function previewThemes(): array {
+    return [
+      'Stark' => ['stark'],
+      'Default Admin' => ['default_admin'],
+    ];
   }
 
   /**

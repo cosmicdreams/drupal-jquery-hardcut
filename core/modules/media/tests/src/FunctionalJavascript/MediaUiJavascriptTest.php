@@ -23,6 +23,7 @@ class MediaUiJavascriptTest extends MediaJavascriptTestBase {
    */
   protected static $modules = [
     'block',
+    'language',
     'media_test_source',
   ];
 
@@ -141,9 +142,23 @@ class MediaUiJavascriptTest extends MediaJavascriptTestBase {
     $page->selectFieldOption('source', 'test');
     $page->fillField('Test config value', 'This is new config value.');
     $page->selectFieldOption('field_map[attribute_1]', 'name');
+
+    $workflow_summary = 'a[href="#edit-workflow"] .vertical-tabs__menu-item-summary';
+    $assert_session->elementTextEquals('css', $workflow_summary, 'Published');
+    $page->clickLink('Publishing options');
     $page->checkField('options[new_revision]');
     $page->uncheckField('options[status]');
     $page->checkField('options[queue_thumbnail_downloads]');
+    $this->assertNotNull($assert_session->waitForElement('css', $workflow_summary . ':contains("Not published, Create new revision, Queue thumbnail downloads")'));
+
+    $language_summary = 'a[href="#edit-language"] .vertical-tabs__menu-item-summary';
+    $assert_session->elementTextEquals('css', $language_summary, "Site's default language (English)");
+    $page->clickLink('Language settings');
+    $page->selectFieldOption('Default language', 'en');
+    $this->assertJsCondition("document.querySelector('$language_summary').textContent === 'English'");
+    $page->checkField('Show language selector on create and edit pages');
+    $this->assertNotNull($assert_session->waitForElement('css', $language_summary . ':contains("English, Show language selector on create and edit pages")'));
+
     $page->pressButton('Save');
     // The wait prevents intermittent test failures.
     $result = $assert_session->waitForLink('Add media type');
