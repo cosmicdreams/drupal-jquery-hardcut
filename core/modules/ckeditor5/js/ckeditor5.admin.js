@@ -388,39 +388,29 @@
         // that can catch blur-causing events before the blur happens. If the
         // tooltip is hidden before the blur event, the outline will disappear
         // correctly.
-        element.addEventListener('keydown', (e) => {
-          const keyCodeDirections = {
-            9: 'tab',
-            37: 'left',
-            38: 'up',
-            39: 'right',
-            40: 'down',
-          };
+        const horizontalOffset = (key) =>
+          (key === 'ArrowLeft') === (document.documentElement.dir === 'ltr')
+            ? -1
+            : 1;
+        element.addEventListener('keydown', ({ key }) => {
+          const isActive = element.closest(
+            '[data-button-list="ckeditor5-toolbar-active-buttons"]',
+          );
+          const isHorizontal = key === 'ArrowLeft' || key === 'ArrowRight';
+          const canMoveHorizontally =
+            isHorizontal &&
+            (horizontalOffset(key) < 0
+              ? element.previousElementSibling
+              : element.nextElementSibling);
           if (
-            ['tab', 'left', 'up', 'right', 'down'].includes(
-              keyCodeDirections[e.keyCode],
-            )
+            key === 'Tab' ||
+            (isActive
+              ? key === 'ArrowUp' || canMoveHorizontally
+              : key === 'ArrowDown')
           ) {
-            let hideTip = false;
-            const isActive = e.target.closest(
-              '[data-button-list="ckeditor5-toolbar-active-buttons"]',
-            );
-            if (isActive) {
-              if (
-                ['tab', 'left', 'up', 'right'].includes(
-                  keyCodeDirections[e.keyCode],
-                )
-              ) {
-                hideTip = true;
-              }
-            } else if (['tab', 'down'].includes(keyCodeDirections[e.keyCode])) {
-              hideTip = true;
-            }
-            if (hideTip) {
-              element
-                .querySelector('[data-expanded]')
-                ?.setAttribute('data-expanded', 'false');
-            }
+            element
+              .querySelector('[data-expanded]')
+              ?.setAttribute('data-expanded', 'false');
           }
         });
 
@@ -439,7 +429,6 @@
             'ArrowUp',
             'ArrowDown',
           ];
-          const dir = document.documentElement.dir;
           if (supportedKeys.includes(event.key)) {
             if (event.currentTarget.dataset.divider.toLowerCase() === 'true') {
               switch (event.key) {
@@ -476,35 +465,11 @@
                 return child === element;
               });
               switch (event.key) {
-                case 'ArrowLeft': {
-                  const leftOffset = dir === 'ltr' ? -1 : 1;
-                  if (
-                    !moveWithinSelectedButtons(
-                      selectedButtons,
-                      element,
-                      leftOffset,
-                    )
-                  ) {
-                    break;
-                  }
-                  // Move focus to left or right from the current index depending
-                  // on current language direction. Use index instead of the
-                  // data-id because dividers don't have a unique ID.
-                  root
-                    .querySelectorAll(
-                      '[data-button-list="ckeditor5-toolbar-active-buttons"] li',
-                    )
-                    [index + leftOffset].focus();
-                  break;
-                }
+                case 'ArrowLeft':
                 case 'ArrowRight': {
-                  const rightOffset = dir === 'ltr' ? 1 : -1;
+                  const offset = horizontalOffset(event.key);
                   if (
-                    !moveWithinSelectedButtons(
-                      selectedButtons,
-                      element,
-                      rightOffset,
-                    )
+                    !moveWithinSelectedButtons(selectedButtons, element, offset)
                   ) {
                     break;
                   }
@@ -515,7 +480,7 @@
                     .querySelectorAll(
                       '[data-button-list="ckeditor5-toolbar-active-buttons"] li',
                     )
-                    [index + rightOffset].focus();
+                    [index + offset].focus();
                   break;
                 }
                 case 'ArrowUp': {

@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Drupal\Tests\ckeditor5\FunctionalJavascript;
 
+use Drupal\FunctionalJavascriptTests\DrupalSelenium2Driver;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\Attributes\Group;
 use PHPUnit\Framework\Attributes\RunTestsInSeparateProcesses;
@@ -167,6 +168,30 @@ JS;
     $button = '[data-id="blockQuote"]';
     $announcement = '#drupal-live-announce';
 
+    // Pressing the outward arrow at either end leaves focus and the tooltip
+    // in place.
+    $driver = $this->getSession()->getDriver();
+    $this->assertInstanceOf(DrupalSelenium2Driver::class, $driver);
+    foreach (['first' => "\u{E012}", 'last' => "\u{E014}"] as $edge => $key) {
+      $item = "$active li:$edge-child";
+      $assert->elementExists('css', $item)->focus();
+      $driver->getWebDriverSession()->postActions([
+        'actions' => [
+          [
+            'type' => 'key',
+            'id' => 'keyboard',
+            'actions' => [
+              ['type' => 'keyDown', 'value' => $key],
+              ['type' => 'keyUp', 'value' => $key],
+            ],
+          ],
+        ],
+      ]);
+      $this->assertJsCondition("document.activeElement.matches('$item')");
+      $tooltip = $assert->elementExists('css', "$item .ckeditor5-toolbar-tooltip");
+      $this->assertTrue($tooltip->isVisible());
+    }
+
     $assert->elementExists('css', "$available $button")->focus();
     $this->triggerKeyUp("$available $button", 'ArrowDown');
     $assert->assertWaitOnAjaxRequest();
@@ -192,6 +217,17 @@ JS;
     $assert->elementExists('css', "$available $button");
     $this->assertNotNull($assert->waitForElement('css', "$announcement:contains('has been removed from the active toolbar')"));
     $this->assertJsCondition('document.activeElement.dataset.id === "blockQuote"');
+
+    $divider = '[data-id="divider"]';
+    $divider_template = '[data-button-list="ckeditor5-toolbar-divider-buttons"] ' . $divider;
+    $neighbor = $assert->elementExists('css', "$active li:last-child")->getAttribute('data-id');
+    $assert->elementExists('css', $divider_template)->focus();
+    $this->triggerKeyUp($divider_template, 'ArrowDown');
+    $assert->assertWaitOnAjaxRequest();
+    $this->assertJsCondition("document.activeElement.matches('$active li:last-child$divider')");
+    $this->triggerKeyUp("$active li:last-child$divider", 'ArrowUp');
+    $assert->assertWaitOnAjaxRequest();
+    $this->assertJsCondition("document.activeElement.matches('$active li:last-child[data-id=\"$neighbor\"]')");
   }
 
   /**
