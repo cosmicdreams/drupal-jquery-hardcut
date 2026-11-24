@@ -5,21 +5,19 @@
 ((Drupal, once) => {
   Drupal.behaviors.allowedTagsListener = {
     attach: function attach(context) {
-      once(
-        'ajax-conflict-prevention',
-        '[data-drupal-selector="filter-format-edit-form"], [data-drupal-selector="filter-format-add-form"]',
-        context,
-      ).forEach((form) => {
+      const selector =
+        '[data-drupal-selector="filter-format-edit-form"], [data-drupal-selector="filter-format-add-form"]';
+      const forms = context.matches?.(selector)
+        ? context
+        : context.querySelectorAll(selector);
+      once('ajax-conflict-prevention', forms).forEach((form) => {
         // When the form is submitted, remove the disabled attribute from all
         // AJAX enabled form elements. The disabled state is added as part of
         // AJAX processing, but will prevent the value from being added to
-        // $form_state.
+        // the form state.
         form.addEventListener('submit', () => {
           once
-            .filter(
-              'drupal-ajax',
-              '[data-drupal-selector="filter-format-edit-form"] [disabled], [data-drupal-selector="filter-format-add-form"] [disabled]',
-            )
+            .filter('drupal-ajax', '[disabled]', form)
             // eslint-disable-next-line max-nested-callbacks
             .forEach((disabledElement) => {
               disabledElement.removeAttribute('disabled');
@@ -62,9 +60,7 @@
       // These callbacks provide real-time validation that should be present for
       // both text formats using CKEditor 5 and text formats in the process of
       // switching to CKEditor 5, but prevented from doing so by validation.
-      if (
-        this.form.querySelector('#edit-editor-editor').value !== 'ckeditor5'
-      ) {
+      if (this.form?.elements['editor[editor]']?.value !== 'ckeditor5') {
         return;
       }
     }

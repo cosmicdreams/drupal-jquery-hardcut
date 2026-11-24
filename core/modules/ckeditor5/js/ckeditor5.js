@@ -3,7 +3,7 @@
  * CKEditor 5 implementation of {@link Drupal.editors} API.
  */
 
-((Drupal, debounce, CKEDITOR, $, once) => {
+((Drupal, debounce, CKEDITOR, once) => {
   /**
    * The CKEditor 5 instances.
    *
@@ -17,6 +17,8 @@
    * @type {Map}
    */
   const callbacks = new Map();
+  const initializing = new WeakMap();
+  const dialogCallbacks = new WeakMap();
 
   /**
    * List of element ids with the required attribute.
@@ -367,8 +369,12 @@
         editorConfig.ui = { ...editorConfig.ui, overlayContainer: dialog };
       }
 
-      ClassicEditor.create(element, editorConfig)
+      const creation = ClassicEditor.create(element, editorConfig)
         .then((editor) => {
+          if (getElementId(element) !== id || !element.isConnected) {
+            return editor.destroy();
+          }
+
           /**
            * Injects a temporary <p> into CKEditor and then calculates the entire
            * height of the amount of the <p> tags from the passed in rows value.
@@ -436,7 +442,9 @@
           const disabledMutationObserver = new MutationObserver(() => {
             readOnlyIfDisabled();
           });
-          disabledMutationObserver.observe(element, { attributes: true });
+          disabledMutationObserver.observe(element, {
+            attributeFilter: ['disabled'],
+          });
           readOnlyIfDisabled();
 
           // Integrate CKEditor 5 viewport offset with Drupal displace.
@@ -462,6 +470,7 @@
             updateViewportOffset,
           );
           editor.once('destroy', () => {
+            disabledMutationObserver.disconnect();
             document.removeEventListener(
               'drupalViewportOffsetChange',
               updateViewportOffset,
@@ -488,7 +497,13 @@
           );
           // eslint-disable-next-line no-console
           console.error(error);
+        })
+        .finally(() => {
+          if (initializing.get(element) === creation) {
+            initializing.delete(element);
+          }
         });
+      initializing.set(element, creation);
     },
 
     /**
@@ -504,32 +519,32 @@
     detach(element, format, trigger) {
       const id = getElementId(element);
       const editor = Drupal.CKEditor5Instances.get(id);
-      if (!editor) {
+      if (trigger === 'serialize') {
+        editor?.updateSourceElement();
         return;
       }
 
-      if (trigger === 'serialize') {
-        editor.updateSourceElement();
-      } else {
-        element.removeAttribute('contentEditable');
-        // Return the promise to allow external code to queue code to
-        // execute after the destroy is complete.
-        return editor
-          .destroy()
-          .then(() => {
-            // Clean up stored references.
-            Drupal.CKEditor5Instances.delete(id);
-            callbacks.delete(id);
-            if (required.has(id)) {
-              element.setAttribute('required', 'required');
-              required.delete(id);
-            }
-          })
-          .catch((error) => {
-            // eslint-disable-next-line no-console
-            console.error(error);
-          });
+      element.removeAttribute('data-ckeditor5-id');
+      element.removeAttribute('contentEditable');
+      Drupal.CKEditor5Instances.delete(id);
+      callbacks.delete(id);
+      if (!editor) {
+        return initializing.get(element);
       }
+
+      // Keep the editor value before destroying the editable.
+      editor.updateSourceElement();
+      return editor
+        .destroy()
+        .catch((error) => {
+          // eslint-disable-next-line no-console
+          console.error(error);
+        })
+        .finally(() => {
+          if (required.delete(id)) {
+            element.required = true;
+          }
+        });
     },
 
     /**
@@ -598,13 +613,6 @@
    */
   Drupal.ckeditor5 = {
     /**
-     * Variable storing the current dialog's save callback.
-     *
-     * @type {?function}
-     */
-    saveCallback: null,
-
-    /**
      * Open a dialog for a Drupal-based plugin.
      *
      * This dynamically loads the native dialog code using the Drupal Ajax
@@ -616,8 +624,12 @@
      *   A function to be called upon saving the dialog.
      * @param {object} dialogSettings
      *   An object containing settings for the dialog.
+     * @param {function} [isCurrent]
+     *   Whether the editor that requested this dialog is still active.
      */
-    openDialog(url, saveCallback, dialogSettings) {
+    openDialog(url, saveCallback, dialogSettings, isCurrent = () => true) {
+      const opener = document.activeElement;
+      dialogSettings = { ...dialogSettings };
       // Add a consistent dialog class.
       dialogSettings.classes = dialogSettings.classes || {};
       const classes = dialogSettings.classes['drupal-dialog']
@@ -636,17 +648,32 @@
       const ckeditorAjaxDialog = Drupal.ajax({
         dialog: dialogSettings,
         dialogType: 'modal',
-        selector: '.ckeditor5-dialog-loading-link',
         url,
         progress: { type: 'fullscreen' },
         submit: {
           editor_object: {},
         },
       });
+      ckeditorAjaxDialog.dialogOpener = opener;
+      ckeditorAjaxDialog.isResponseCurrent = () =>
+        opener.isConnected && isCurrent();
+      ckeditorAjaxDialog.commands.openDialog = (ajax, response, status) => {
+        Drupal.AjaxCommands.prototype.openDialog(ajax, response, status);
+        const content = document.querySelector(response.selector);
+        const dialog = content && Drupal.dialog.get(content);
+        const origin = Drupal.dialog.requestOrigin(dialog?.element);
+        if (
+          origin?.element === dialog?.element &&
+          origin?.generation === ajax.dialogGeneration
+        ) {
+          dialogCallbacks.set(dialog.element, (values) => {
+            if (ckeditorAjaxDialog.isResponseCurrent()) {
+              saveCallback(values);
+            }
+          });
+        }
+      };
       ckeditorAjaxDialog.execute();
-
-      // Store the save callback to be executed when this dialog is closed.
-      Drupal.ckeditor5.saveCallback = saveCallback;
     },
   };
 
@@ -695,38 +722,16 @@
     }
   }
 
-  $(window).on(
-    'hashchange.ckeditor',
+  window.addEventListener(
+    'hashchange',
     redirectTextareaFragmentToCKEditor5Instance,
   );
 
-  // Respond to new dialogs that are opened by CKEditor, closing the AJAX loader.
-  window.addEventListener('dialog:beforecreate', () => {
-    const dialogLoading = document.querySelector('.ckeditor5-dialog-loading');
-
-    if (dialogLoading) {
-      dialogLoading.addEventListener(
-        'transitionend',
-        function removeDialogLoading() {
-          dialogLoading.remove();
-        },
-      );
-      dialogLoading.style.transition = 'top 0.5s ease';
-      dialogLoading.style.top = '-40px';
-    }
+  window.addEventListener('editor:dialogsave', ({ detail }) => {
+    dialogCallbacks.get(detail.dialog)?.(detail.values);
   });
 
-  // Respond to dialogs that are saved, sending data back to CKEditor.
-  $(window).on('editor:dialogsave', (e, values) => {
-    if (Drupal.ckeditor5.saveCallback) {
-      Drupal.ckeditor5.saveCallback(values);
-    }
+  window.addEventListener('dialog:afterclose', ({ dialog }) => {
+    dialogCallbacks.delete(dialog.element);
   });
-
-  // Respond to dialogs that are closed, removing the current save handler.
-  window.addEventListener('dialog:afterclose', () => {
-    if (Drupal.ckeditor5.saveCallback) {
-      Drupal.ckeditor5.saveCallback = null;
-    }
-  });
-})(Drupal, Drupal.debounce, CKEDITOR, jQuery, once);
+})(Drupal, Drupal.debounce, CKEDITOR, once);

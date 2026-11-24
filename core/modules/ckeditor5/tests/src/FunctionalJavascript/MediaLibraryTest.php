@@ -165,6 +165,7 @@ class MediaLibraryTest extends WebDriverTestBase {
     $media_preview_selector = '.ck-content .ck-widget.drupal-media .media';
     $this->drupalGet('/node/add/blog');
     $this->waitForEditor();
+    $this->getEditorButton('Insert Media')->focus();
     $this->pressEditorButton('Insert Media');
     $assert_session = $this->assertSession();
     $page = $this->getSession()->getPage();
@@ -184,6 +185,7 @@ class MediaLibraryTest extends WebDriverTestBase {
     $assert_session->elementExists('css', '.js-media-library-item')->click();
     $assert_session->elementExists('css', '.drupal-dialog-buttonpane')->pressButton('Insert selected');
     $this->assertNotEmpty($assert_session->waitForElementVisible('css', $media_preview_selector));
+    $this->assertJsCondition('document.activeElement.textContent.trim() === "Insert Media"');
     $xpath = new \DOMXPath($this->getEditorDataAsDom());
     $drupal_media = $xpath->query('//drupal-media')[0];
     $expected_attributes = [

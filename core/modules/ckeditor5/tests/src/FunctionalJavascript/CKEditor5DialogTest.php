@@ -148,7 +148,7 @@ class CKEditor5DialogTest extends CKEditor5TestBase {
       (function() {
         let captured = null;
         const originalAjax = Drupal.ajax;
-        Drupal.ajax = function(settings) { captured = settings; return { execute: function() {} }; };
+        Drupal.ajax = function(settings) { captured = settings; return { commands: {}, execute: function() {} }; };
         Drupal.ckeditor5.openDialog('/test', function() {}, {});
         Drupal.ajax = originalAjax;
         return { width: captured.dialog.width, autoResizeType: typeof captured.dialog.autoResize };
@@ -162,7 +162,7 @@ class CKEditor5DialogTest extends CKEditor5TestBase {
       (function() {
         let captured = null;
         const originalAjax = Drupal.ajax;
-        Drupal.ajax = function(settings) { captured = settings; return { execute: function() {} }; };
+        Drupal.ajax = function(settings) { captured = settings; return { commands: {}, execute: function() {} }; };
         Drupal.ckeditor5.openDialog('/test', function() {}, { width: '500px' });
         Drupal.ajax = originalAjax;
         return captured.dialog.width;
@@ -175,7 +175,7 @@ class CKEditor5DialogTest extends CKEditor5TestBase {
       (function() {
         let captured = null;
         const originalAjax = Drupal.ajax;
-        Drupal.ajax = function(settings) { captured = settings; return { execute: function() {} }; };
+        Drupal.ajax = function(settings) { captured = settings; return { commands: {}, execute: function() {} }; };
         Drupal.ckeditor5.openDialog('/test', function() {}, { autoResize: false });
         Drupal.ajax = originalAjax;
         return captured.dialog.autoResize;
@@ -188,7 +188,7 @@ class CKEditor5DialogTest extends CKEditor5TestBase {
       (function() {
         let captured = null;
         const originalAjax = Drupal.ajax;
-        Drupal.ajax = function(settings) { captured = settings; return { execute: function() {} }; };
+        Drupal.ajax = function(settings) { captured = settings; return { commands: {}, execute: function() {} }; };
         Drupal.ckeditor5.openDialog('/test', function() {}, { autoResize: true });
         Drupal.ajax = originalAjax;
         return captured.dialog.autoResize;
@@ -202,7 +202,7 @@ class CKEditor5DialogTest extends CKEditor5TestBase {
       (function() {
         let captured = null;
         const originalAjax = Drupal.ajax;
-        Drupal.ajax = function(settings) { captured = settings; return { execute: function() {} }; };
+        Drupal.ajax = function(settings) { captured = settings; return { commands: {}, execute: function() {} }; };
         Drupal.ckeditor5.openDialog('/test', function() {}, { classes: { 'drupal-dialog': 'my-custom-class' } });
         Drupal.ajax = originalAjax;
         return captured.dialog.classes['drupal-dialog'];

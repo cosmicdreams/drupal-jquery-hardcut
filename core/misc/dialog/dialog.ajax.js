@@ -90,7 +90,7 @@
     }
     const options = {
       ...response.dialogOptions,
-      opener: ajax.element || document.activeElement,
+      opener: ajax.dialogOpener || ajax.element || document.activeElement,
       removeOnClose: true,
     };
     options.explicitButtons = Boolean(options.buttons);

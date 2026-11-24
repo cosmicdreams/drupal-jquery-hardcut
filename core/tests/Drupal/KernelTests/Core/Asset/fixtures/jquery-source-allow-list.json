@@ -8,23 +8,7 @@
       "owner": "B",
       "references": 1
     },
-    "modules/ckeditor5/js/ckeditor5.admin.js": {
-      "owner": "M",
-      "references": 1
-    },
-    "modules/ckeditor5/js/ckeditor5.js": {
-      "owner": "M",
-      "references": 1
-    },
     "modules/contextual/js/contextual.js": {
-      "owner": "M",
-      "references": 1
-    },
-    "modules/editor/js/editor.dialog.js": {
-      "owner": "M",
-      "references": 1
-    },
-    "modules/editor/js/editor.js": {
       "owner": "M",
       "references": 1
     },

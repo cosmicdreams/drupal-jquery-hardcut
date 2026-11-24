@@ -32,7 +32,6 @@ internal.drupal.ckeditor5:
     theme:
       css/editor.css: { }
   dependencies:
-    - core/jquery
     - core/once
     - core/drupal
     - core/drupal.ajax
@@ -127,7 +126,6 @@ internal.admin:
   dependencies:
     - core/sortable
     - filter/drupal.filter.admin
-    - core/jquery
     - core/once
     - core/drupal.announce
 

@@ -15,7 +15,7 @@ use PHPUnit\Framework\Attributes\RunTestsInSeparateProcesses;
  *
  * @todo Extend the core-only matrix to installer, update and batch, Umami,
  *   node display and edit, states, machine name, uploads, Media Library,
- *   text formats and CKEditor 5 link balloons, menu editing, table weights,
+ *   CKEditor 5 link balloons, menu editing, table weights,
  *   other Field UI pages, contextual links, Layout
  *   Builder, tabbing, People, language, locale, modules, theme settings,
  *   nested modals, a generated Starterkit theme and a contrib subtheme.
@@ -209,6 +209,25 @@ class JqueryFreePagesTest extends WebDriverTestBase {
     $this->getSession()->getPage()->pressButton('Filter');
     $this->assertSession()->assertWaitOnAjaxRequest();
     $this->assertSame([], $this->observedEdges(), 'Ajax content view');
+  }
+
+  /**
+   * Checks the editor runtime and configuration form without theme libraries.
+   */
+  public function testEditorPagesWithoutJquery(): void {
+    \Drupal::service('theme_installer')->install(['stark']);
+    $this->config('system.theme')->set('default', 'stark')->set('admin', 'stark')->save();
+    $this->config('system.performance')->set('js.preprocess', FALSE)->save();
+    $this->installAssetObserver();
+    $this->drupalLogin($this->createUser([], NULL, TRUE));
+
+    $this->drupalGet('node/add/page');
+    $this->assertNotNull($this->assertSession()->waitForElementVisible('css', '.ck-editor'));
+    $this->assertSame([], $this->observedEdges(), 'CKEditor 5 runtime');
+
+    $this->drupalGet('admin/config/content/formats/manage/basic_html');
+    $this->assertSession()->elementExists('css', '#ckeditor5-toolbar-app [role="listbox"]');
+    $this->assertSame([], $this->observedEdges(), 'CKEditor 5 toolbar builder');
   }
 
   /**

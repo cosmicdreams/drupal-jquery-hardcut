@@ -13,21 +13,20 @@
    *   Attaches summary behavior to the plugin settings vertical tab.
    */
   Drupal.behaviors.ckeditor5ImageSettingsSummary = {
-    attach() {
-      Drupal.form.setSummary(
-        document.querySelectorAll(
-          '[data-ckeditor5-plugin-id="ckeditor5_image"]',
-        ),
-        () => {
-          const uploadsEnabled = document.querySelector(
-            '[data-drupal-selector="edit-editor-settings-plugins-ckeditor5-image-status"]',
-          ).checked;
-          if (uploadsEnabled) {
-            return Drupal.t('Images can only be uploaded.');
-          }
-          return Drupal.t('Images can only be added by URL.');
-        },
-      );
+    attach(context) {
+      const selector = '[data-ckeditor5-plugin-id="ckeditor5_image"]';
+      const panes = context.matches?.(selector)
+        ? context
+        : context.querySelectorAll(selector);
+      Drupal.form.setSummary(panes, (pane) => {
+        const uploadsEnabled = pane.querySelector(
+          '[data-drupal-selector="edit-editor-settings-plugins-ckeditor5-image-status"]',
+        ).checked;
+        if (uploadsEnabled) {
+          return Drupal.t('Images can only be uploaded.');
+        }
+        return Drupal.t('Images can only be added by URL.');
+      });
     },
   };
 })(Drupal);

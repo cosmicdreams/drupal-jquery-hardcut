@@ -8,6 +8,8 @@ use Behat\Mink\Element\NodeElement;
 use Drupal\ckeditor5\Plugin\Editor\CKEditor5;
 use Drupal\Core\Language\LanguageManager;
 use Drupal\editor\Entity\Editor;
+use Drupal\field\Entity\FieldConfig;
+use Drupal\field\Entity\FieldStorageConfig;
 use Drupal\file\Entity\File;
 use Drupal\filter\Entity\FilterFormat;
 use Drupal\language\Entity\ConfigurableLanguage;
@@ -71,7 +73,14 @@ class CKEditor5Test extends CKEditor5TestBase {
     $this->assertNotEmpty($description->getAttribute('id'));
     $this->assertSame($description->getAttribute('id'), $dialog->getAttribute('aria-describedby'));
     $this->assertStringContainsString('Save your changes before switching the text format to avoid losing data.', $description->getText());
-    $dialog->pressButton('Continue');
+    $dialog->pressButton('Cancel');
+    $assert_session->elementNotExists('css', 'dialog.editor-change-text-format-modal');
+    $assert_session->elementNotExists('css', '.ck-editor');
+    $this->assertSame('plain_text', $page->findField('body[0][format]')->getValue());
+    $this->assertSame('<p>This is test content</p>', $page->findField('body[0][value]')->getValue());
+
+    $page->selectFieldOption('body[0][format]', 'ckeditor5');
+    $assert_session->elementExists('css', 'dialog.editor-change-text-format-modal')->pressButton('Continue');
     // CKEditor initialization can exceed the normal wait time under CI.
     // Ensure the editor is loaded and has loaded the existing content.
     $this->assertNotEmpty($assert_session->waitForElement('css', '.ck-editor'));
@@ -82,6 +91,55 @@ class CKEditor5Test extends CKEditor5TestBase {
     // Assert that the HTML is rendered correctly.
     $assert_session->responseContains('<p>This is test content</p>');
     $assert_session->responseNotContains('&lt;p&gt;This is test content&lt;/p&gt;');
+  }
+
+  /**
+   * Tests that adding another item submits editor data before an Ajax rebuild.
+   */
+  public function testAjaxEditorSerialization(): void {
+    $this->addNewTextFormat();
+    FieldStorageConfig::create([
+      'field_name' => 'field_sections',
+      'entity_type' => 'node',
+      'type' => 'text_long',
+      'cardinality' => -1,
+    ])->save();
+    FieldConfig::create([
+      'field_name' => 'field_sections',
+      'entity_type' => 'node',
+      'bundle' => 'page',
+      'label' => 'Sections',
+      'settings' => ['allowed_formats' => ['ckeditor5']],
+    ])->save();
+    $this->container->get('entity_display.repository')->getFormDisplay('node', 'page')
+      ->setComponent('field_sections', ['type' => 'text_textarea'])
+      ->save();
+
+    $this->drupalGet('node/add/page');
+    $assert = $this->assertSession();
+    $page = $this->getSession()->getPage();
+    $this->assertJsCondition(<<<'JS'
+      Array.from(Drupal.CKEditor5Instances.values()).some(
+        (editor) => editor.sourceElement.name === 'field_sections[0][value]'
+      )
+      JS);
+    $this->getSession()->executeScript(<<<'JS'
+      Array.from(Drupal.CKEditor5Instances.values()).find(
+        (editor) => editor.sourceElement.name === 'field_sections[0][value]'
+      ).setData('<p>Kept through the Ajax rebuild.</p>');
+      JS);
+    $page->pressButton('Add another item');
+    $assert->assertWaitOnAjaxRequest();
+    $this->assertJsCondition(<<<'JS'
+      (() => {
+        const sections = Array.from(Drupal.CKEditor5Instances.values()).filter(
+          (editor) => editor.sourceElement.name.startsWith('field_sections[')
+        );
+        return sections.length === 2 &&
+          sections[0].getData() === '<p>Kept through the Ajax rebuild.</p>' &&
+          sections[1].getData() === '';
+      })()
+      JS);
   }
 
   /**

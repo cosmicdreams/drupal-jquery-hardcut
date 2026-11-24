@@ -3,7 +3,7 @@
  * AJAX commands used by Editor module.
  */
 
-(function ($, Drupal) {
+((Drupal) => {
   /**
    * Command to save the contents of an editor-provided modal.
    *
@@ -13,7 +13,7 @@
    * `editor:dialogsave` event to save the changes into the contents of their
    * interface.
    *
-   * @param {Drupal.Ajax} [ajax]
+   * @param {Drupal.Ajax} ajax
    *   The Drupal.Ajax object.
    * @param {object} response
    *   The server response from the ajax request.
@@ -29,6 +29,13 @@
     response,
     status,
   ) {
-    $(window).trigger('editor:dialogsave', [response.values]);
+    const { dialogOrigin } = ajax;
+    if (dialogOrigin && Drupal.dialog.hasOpenOrigin(dialogOrigin)) {
+      window.dispatchEvent(
+        new CustomEvent('editor:dialogsave', {
+          detail: { dialog: dialogOrigin.element, values: response.values },
+        }),
+      );
+    }
   };
-})(jQuery, Drupal);
+})(Drupal);

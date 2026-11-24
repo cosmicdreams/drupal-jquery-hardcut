@@ -155,6 +155,45 @@ JS;
   }
 
   /**
+   * Tests moving toolbar buttons with the keyboard and announcing the result.
+   */
+  public function testKeyboardToolbarMoves(): void {
+    $this->addNewTextFormat();
+    $this->drupalGet('admin/config/content/formats/manage/ckeditor5');
+    $assert = $this->assertSession();
+    $active = '[data-button-list="ckeditor5-toolbar-active-buttons"]';
+    $available = '[data-button-list="ckeditor5-toolbar-available-buttons"]';
+    $button = '[data-id="blockQuote"]';
+    $announcement = '#drupal-live-announce';
+
+    $assert->elementExists('css', "$available $button")->focus();
+    $this->triggerKeyUp("$available $button", 'ArrowDown');
+    $assert->assertWaitOnAjaxRequest();
+    $assert->elementExists('css', "$active li:last-child$button");
+    $this->assertJsCondition('document.activeElement.dataset.id === "blockQuote"');
+    $this->assertNotNull($assert->waitForElement('css', "$announcement:contains('has been moved to the active toolbar')"));
+
+    $this->triggerKeyUp("$active $button", 'ArrowLeft');
+    $assert->assertWaitOnAjaxRequest();
+    $assert->elementExists('css', "$active li:nth-last-child(2)$button");
+    $this->assertNotNull($assert->waitForElement('css', "$announcement:contains('has moved to position')"));
+    $this->assertJsCondition('document.activeElement.dataset.id === "blockQuote"');
+
+    $this->triggerKeyUp("$active $button", 'ArrowRight');
+    $assert->assertWaitOnAjaxRequest();
+    $assert->elementExists('css', "$active li:last-child$button");
+    $this->assertJsCondition('document.activeElement.dataset.id === "blockQuote"');
+    $this->triggerKeyUp("$active $button", 'ArrowRight');
+    $assert->elementExists('css', "$active li:last-child$button");
+
+    $this->triggerKeyUp("$active $button", 'ArrowUp');
+    $assert->assertWaitOnAjaxRequest();
+    $assert->elementExists('css', "$available $button");
+    $this->assertNotNull($assert->waitForElement('css', "$announcement:contains('has been removed from the active toolbar')"));
+    $this->assertJsCondition('document.activeElement.dataset.id === "blockQuote"');
+  }
+
+  /**
    * Test that filter settings are only visible when the filter is enabled.
    */
   public function testFilterCheckboxesToggleSettings(): void {
