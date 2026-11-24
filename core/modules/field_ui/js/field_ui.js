@@ -74,8 +74,11 @@
   document.addEventListener(
     'drupal:ajax-before-send',
     ({ detail: { ajax } }) => {
-      const form = ajax.element?.closest('.field-config-edit-form');
-      if (form && ajax.wrapper === '#field-combined') {
+      if (ajax.wrapper !== '#field-combined') {
+        return;
+      }
+      const form = ajax.element?.closest?.('.field-config-edit-form');
+      if (form) {
         const owner = form.closest('dialog') || document;
         pendingRequests.set(owner, (pendingRequests.get(owner) ?? 0) + 1);
         requestOwners.set(ajax, owner);
