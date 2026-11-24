@@ -1,7 +1,7 @@
 /**
  * @file media_library.ui.js
  */
-(($, Drupal, window, { tabbable }) => {
+((Drupal, once, { tabbable }) => {
   /**
    * Wrapper object for the current state of the media library.
    */
@@ -22,18 +22,36 @@
    *   The Drupal Ajax object.
    * @param {object} response
    *   Object holding the server response.
-   * @param {number} [status]
-   *   The HTTP status code.
    */
   Drupal.AjaxCommands.prototype.updateMediaLibrarySelection = function (
     ajax,
     response,
-    status,
   ) {
     Object.values(response.mediaIds).forEach((value) => {
       Drupal.MediaLibrary.currentSelection.push(value);
     });
   };
+
+  const libraryRequests = new WeakMap();
+
+  /**
+   * Keeps partial responses tied to their library and dialog session.
+   *
+   * @param {HTMLElement} library
+   *   The media library wrapper.
+   * @param {HTMLElement} link
+   *   The link initiating this request.
+   * @param {Drupal.Ajax} request
+   *   The Ajax request to track.
+   */
+  function trackLibraryRequest(library, link, request) {
+    const origin = Drupal.dialog?.requestOrigin(link);
+    libraryRequests.set(library, request);
+    request.isResponseCurrent = () =>
+      library.isConnected &&
+      libraryRequests.get(library) === request &&
+      (Drupal.dialog?.hasOpenOrigin(origin) ?? true);
+  }
 
   /**
    * Load media library content through AJAX.
@@ -54,25 +72,28 @@
    */
   Drupal.behaviors.MediaLibraryTabs = {
     attach(context) {
-      const $menu = $('.js-media-library-menu');
-      $(once('media-library-menu-item', $menu.find('a')))
-        .on('keypress', (e) => {
-          // The AJAX link has the button role, so we need to make sure the link
-          // is also triggered when pressing the space bar.
-          if (e.which === 32) {
-            e.preventDefault();
-            e.stopPropagation();
-            $(e.currentTarget).trigger('click');
+      once(
+        'media-library-menu-item',
+        '.js-media-library-menu a',
+        context,
+      ).forEach((link) => {
+        const menu = link.closest('.js-media-library-menu');
+        link.addEventListener('keypress', (event) => {
+          // Let Space activate the link, which has the button role.
+          if (event.key === ' ') {
+            event.preventDefault();
+            event.stopPropagation();
+            link.click();
           }
-        })
-        .on('click', (e) => {
-          e.preventDefault();
-          e.stopPropagation();
+        });
+        link.addEventListener('click', (event) => {
+          event.preventDefault();
+          event.stopPropagation();
 
-          // Replace the library content.
+          const library = menu.closest('#media-library-wrapper');
           const ajaxObject = Drupal.ajax({
             wrapper: 'media-library-content',
-            url: e.currentTarget.href,
+            url: link.href,
             dialogType: 'ajax',
             progress: {
               type: 'fullscreen',
@@ -80,36 +101,38 @@
             },
           });
 
-          // Move focus after the replacement and behavior attachment.
+          trackLibraryRequest(library, link, ajaxObject);
+          // Move focus after replacement and behavior attachment.
           ajaxObject.afterSuccess = () => {
-            const mediaLibraryContent = document.getElementById(
-              'media-library-content',
-            );
-            if (mediaLibraryContent) {
-              tabbable(mediaLibraryContent)[0]?.focus();
+            if (!ajaxObject.isResponseCurrent()) {
+              return;
+            }
+            const content = library.querySelector('#media-library-content');
+            if (content?.isConnected) {
+              tabbable(content)[0]?.focus();
             }
           };
           ajaxObject.execute();
 
           // Set the selected tab.
-          $menu.find('.active-tab').remove();
-          $menu.find('a').removeClass('active');
-          $(e.currentTarget)
-            .addClass('active')
-            .html(
-              Drupal.t(
-                '<span class="visually-hidden">Show </span>@title<span class="visually-hidden"> media</span><span class="active-tab visually-hidden"> (selected)</span>',
-                { '@title': $(e.currentTarget).data('title') },
-              ),
-            );
+          menu
+            .querySelectorAll('.active-tab')
+            .forEach((marker) => marker.remove());
+          menu
+            .querySelectorAll('a')
+            .forEach((tab) => tab.classList.remove('active'));
+          link.classList.add('active');
+          const { title } = link.dataset;
+          link.innerHTML = Drupal.t(
+            '<span class="visually-hidden">Show </span>@title<span class="visually-hidden"> media</span><span class="active-tab visually-hidden"> (selected)</span>',
+            { '@title': title },
+          );
 
-          // Announce the updated content.
           Drupal.announce(
-            Drupal.t('Showing @title media.', {
-              '@title': $(e.currentTarget).data('title'),
-            }),
+            Drupal.t('Showing @title media.', { '@title': title }),
           );
         });
+      });
     },
   };
 
@@ -132,268 +155,222 @@
    */
   Drupal.behaviors.MediaLibraryViewsDisplay = {
     attach(context) {
-      const $view = $(context).hasClass('.js-media-library-view')
-        ? $(context)
-        : $('.js-media-library-view', context);
-
-      // Add a class to the view to allow it to be replaced via AJAX.
-      // @todo Remove the custom ID when the AJAX system allows replacing
-      //    elements by selector.
-      //    https://www.drupal.org/project/drupal/issues/2821793
-      $view
-        .closest('.views-element-container')
-        .attr('id', 'media-library-view');
-
-      // We would ideally use a generic JavaScript specific class to detect the
-      // display links. Since we have no good way of altering display links yet,
-      // this is the best we can do for now.
-      // @todo Add media library specific classes and data attributes to the
-      //    media library display links when we can alter display links.
-      //    https://www.drupal.org/project/drupal/issues/3036694
-      $(
-        once(
-          'media-library-views-display-link',
-          '.views-display-link-widget, .views-display-link-widget_table',
-          context,
-        ),
-      ).on('click', (e) => {
-        e.preventDefault();
-        e.stopPropagation();
-
-        const $link = $(e.currentTarget);
-
-        // Add a loading and display announcement for screen reader users.
-        let loadingAnnouncement = '';
-        let displayAnnouncement = '';
-        let focusSelector = '';
-        if ($link.hasClass('views-display-link-widget')) {
-          loadingAnnouncement = Drupal.t('Loading grid view.');
-          displayAnnouncement = Drupal.t('Changed to grid view.');
-          focusSelector = '.views-display-link-widget';
-        } else if ($link.hasClass('views-display-link-widget_table')) {
-          loadingAnnouncement = Drupal.t('Loading table view.');
-          displayAnnouncement = Drupal.t('Changed to table view.');
-          focusSelector = '.views-display-link-widget_table';
-        }
-
-        // Replace the library view.
-        const ajaxObject = Drupal.ajax({
-          wrapper: 'media-library-view',
-          url: e.currentTarget.href,
-          dialogType: 'ajax',
-          progress: {
-            type: 'fullscreen',
-            message: loadingAnnouncement || Drupal.t('Processing...'),
-          },
-        });
-
-        // Announce and focus the updated display after its commands finish.
-        if (displayAnnouncement || focusSelector) {
-          ajaxObject.afterSuccess = () => {
-            // The AJAX link replaces the whole view, including the clicked
-            // link. Move the focus back to the clicked link when the view is
-            // replaced.
-            if (focusSelector) {
-              document.querySelector(focusSelector)?.focus();
-            }
-            // Announce the new view is loaded to screen readers.
-            if (displayAnnouncement) {
-              Drupal.announce(displayAnnouncement);
-            }
-          };
-        }
-
-        ajaxObject.execute();
-
-        // Announce the new view is being loaded to screen readers.
-        // @todo Replace custom announcement when
-        //   https://www.drupal.org/project/drupal/issues/2973140 is in.
-        if (loadingAnnouncement) {
-          Drupal.announce(loadingAnnouncement);
+      const views = context.matches?.('.js-media-library-view')
+        ? [context]
+        : context.querySelectorAll('.js-media-library-view');
+      views.forEach((view) => {
+        const container = view.closest('.views-element-container');
+        if (container) {
+          container.id = 'media-library-view';
         }
       });
+
+      once(
+        'media-library-views-display-link',
+        '.views-display-link-widget, .views-display-link-widget_table',
+        context,
+      ).forEach((link) =>
+        link.addEventListener('click', (event) => {
+          event.preventDefault();
+          event.stopPropagation();
+
+          const library = link.closest('#media-library-wrapper');
+          // Add a loading and display announcement for screen reader users.
+          let loadingAnnouncement = '';
+          let displayAnnouncement = '';
+          let focusSelector = '';
+          if (link.classList.contains('views-display-link-widget')) {
+            loadingAnnouncement = Drupal.t('Loading grid view.');
+            displayAnnouncement = Drupal.t('Changed to grid view.');
+            focusSelector = '.views-display-link-widget';
+          } else if (
+            link.classList.contains('views-display-link-widget_table')
+          ) {
+            loadingAnnouncement = Drupal.t('Loading table view.');
+            displayAnnouncement = Drupal.t('Changed to table view.');
+            focusSelector = '.views-display-link-widget_table';
+          }
+
+          // Replace the library view.
+          const ajaxObject = Drupal.ajax({
+            wrapper: 'media-library-view',
+            url: link.href,
+            dialogType: 'ajax',
+            progress: {
+              type: 'fullscreen',
+              message: loadingAnnouncement || Drupal.t('Processing...'),
+            },
+          });
+
+          trackLibraryRequest(library, link, ajaxObject);
+          // Announce and focus the updated display after its commands finish.
+          if (displayAnnouncement || focusSelector) {
+            ajaxObject.afterSuccess = () => {
+              if (!ajaxObject.isResponseCurrent()) {
+                return;
+              }
+              // The AJAX link replaces the whole view, including the clicked
+              // link. Move the focus back to the clicked link when the view is
+              // replaced.
+              if (focusSelector) {
+                library.querySelector(focusSelector)?.focus();
+              }
+              // Announce the new view is loaded to screen readers.
+              if (displayAnnouncement) {
+                Drupal.announce(displayAnnouncement);
+              }
+            };
+          }
+
+          ajaxObject.execute();
+
+          // Announce the new view is being loaded to screen readers.
+          // @todo Replace custom announcement when
+          //   https://www.drupal.org/project/drupal/issues/2973140 is in.
+          if (loadingAnnouncement) {
+            Drupal.announce(loadingAnnouncement);
+          }
+        }),
+      );
     },
   };
+
+  const remainingSlots = new WeakMap();
+
+  /**
+   * Updates the selected item count inside the library's button pane.
+   *
+   * @param {HTMLElement} library
+   *   The wrapper of the media library.
+   * @param {number} remaining
+   *   The number of remaining slots.
+   */
+  function updateSelectionCount(library, remaining) {
+    const count = library
+      .closest('.media-library-widget-modal')
+      ?.querySelector('.js-media-library-selected-count');
+    if (!count) {
+      return;
+    }
+    const { length } = Drupal.MediaLibrary.currentSelection;
+    // A negative value means an unlimited selection.
+    count.textContent =
+      remaining < 0
+        ? Drupal.formatPlural(
+            length,
+            '1 item selected',
+            '@count items selected',
+          )
+        : Drupal.formatPlural(
+            remaining,
+            '@selected of @count item selected',
+            '@selected of @count items selected',
+            { '@selected': length },
+          );
+  }
 
   /**
    * Update the media library selection when loaded or media items are selected.
    *
    * @type {Drupal~behavior}
-   *
-   * @prop {Drupal~behaviorAttach} attach
-   *   Attaches behavior to select media items.
    */
   Drupal.behaviors.MediaLibraryItemSelection = {
     attach(context, settings) {
-      const $form = $(
-        '.js-media-library-views-form, .js-media-library-add-form',
-        context,
-      );
+      const selector =
+        '.js-media-library-views-form, .js-media-library-add-form';
+      const forms = context.matches?.(selector)
+        ? [context]
+        : context.querySelectorAll(selector);
       const currentSelection = Drupal.MediaLibrary.currentSelection;
+      const remaining = settings.media_library?.selection_remaining;
 
-      if (!$form.length) {
-        return;
-      }
-
-      const $mediaItems = $(
-        '.js-media-library-item input[type="checkbox"]',
-        $form,
-      );
-
-      /**
-       * Disable media items.
-       *
-       * @param {jQuery} $items
-       *   A jQuery object representing the media items that should be disabled.
-       */
-      function disableItems($items) {
-        $items
-          .prop('disabled', true)
-          .closest('.js-media-library-item')
-          .addClass('media-library-item--disabled');
-      }
-
-      /**
-       * Enable media items.
-       *
-       * @param {jQuery} $items
-       *   A jQuery object representing the media items that should be enabled.
-       */
-      function enableItems($items) {
-        $items
-          .prop('disabled', false)
-          .closest('.js-media-library-item')
-          .removeClass('media-library-item--disabled');
-      }
-
-      /**
-       * Update the number of selected items in the button pane.
-       *
-       * @param {number} remaining
-       *   The number of remaining slots.
-       */
-      function updateSelectionCount(remaining) {
-        // When the remaining number of items is a negative number, we allow an
-        // unlimited number of items. In that case we don't want to show the
-        // number of remaining slots.
-        const selectItemsText =
-          remaining < 0
-            ? Drupal.formatPlural(
-                currentSelection.length,
-                '1 item selected',
-                '@count items selected',
-              )
-            : Drupal.formatPlural(
-                remaining,
-                '@selected of @count item selected',
-                '@selected of @count items selected',
-                {
-                  '@selected': currentSelection.length,
-                },
-              );
-        // The selected count div could have been created outside of the
-        // context, so we unfortunately can't use context here.
-        $('.js-media-library-selected-count').html(selectItemsText);
-      }
-
-      function checkEnabled() {
-        updateSelectionCount(settings.media_library.selection_remaining);
-        // Clear any error messages when the selection is within the allowed
-        // limit. A negative remaining value means unlimited selection.
-        if (
-          settings.media_library.selection_remaining < 0 ||
-          currentSelection.length <= settings.media_library.selection_remaining
-        ) {
-          $('#media-library-messages').empty();
+      forms.forEach((form) => {
+        const library = form.closest('#media-library-wrapper');
+        if (!library || remaining === undefined) {
+          return;
         }
-        // Use >= instead of === to also disable items when selection EXCEEDS the limit
-        // (e.g., after uploading multiple images consecutively).
-        if (
-          settings.media_library.selection_remaining > 0 &&
-          currentSelection.length >= settings.media_library.selection_remaining
-        ) {
-          disableItems($mediaItems.not(':checked'));
-          enableItems($mediaItems.filter(':checked'));
-        } else {
-          enableItems($mediaItems);
-        }
-      }
-      // Update the selection array and the hidden form field when a media item
-      // is selected.
-      $(once('media-item-change', $mediaItems)).on('change', (e) => {
-        const id = e.currentTarget.value;
-
-        // Update the selection.
-        if (e.currentTarget.checked) {
-          // Check if the ID is not already in the selection and add if needed.
-          if (!currentSelection.includes(id)) {
-            currentSelection.push(id);
-          }
-        } else if (currentSelection.includes(id)) {
-          // Remove the ID when it is in the current selection.
-          currentSelection.splice(currentSelection.indexOf(id), 1);
-        }
-
-        const mediaLibraryModalSelection = document.querySelector(
-          '#media-library-modal-selection',
+        remainingSlots.set(library, remaining);
+        const items = form.querySelectorAll(
+          '.js-media-library-item input[type="checkbox"]',
         );
+        const selection = form.querySelector('#media-library-modal-selection');
 
-        if (mediaLibraryModalSelection) {
-          // Set the selection in the hidden form element.
-          mediaLibraryModalSelection.value = currentSelection.join();
-          $(mediaLibraryModalSelection).each((index, input) =>
-            input.dispatchEvent(new Event('change', { bubbles: true })),
-          );
+        function checkEnabled() {
+          updateSelectionCount(library, remaining);
+          if (remaining < 0 || currentSelection.length <= remaining) {
+            library.querySelector('#media-library-messages')?.replaceChildren();
+          }
+          const atLimit = remaining > 0 && currentSelection.length >= remaining;
+          items.forEach((item) => {
+            const disabled = atLimit && !item.checked;
+            item.disabled = disabled;
+            item
+              .closest('.js-media-library-item')
+              .classList.toggle('media-library-item--disabled', disabled);
+          });
         }
 
-        // Set the selection in the media library add form. Since the form is
-        // not necessarily loaded within the same context, we can't use the
-        // context here.
-        document
-          .querySelectorAll('.js-media-library-add-form-current-selection')
-          .forEach((item) => {
-            item.value = currentSelection.join();
+        // Update the selection array and both forms when an item is selected.
+        once('media-item-change', items).forEach((item) => {
+          item.addEventListener('change', () => {
+            const index = currentSelection.indexOf(item.value);
+            if (item.checked && index === -1) {
+              currentSelection.push(item.value);
+            } else if (!item.checked && index !== -1) {
+              currentSelection.splice(index, 1);
+            }
+
+            const value = currentSelection.join();
+            if (selection) {
+              selection.value = value;
+              selection.dispatchEvent(new Event('change', { bubbles: true }));
+            }
+
+            library
+              .querySelectorAll('.js-media-library-add-form-current-selection')
+              .forEach((input) => {
+                input.value = value;
+              });
           });
-      });
-      checkEnabled();
-      // The hidden selection form field changes when the selection is updated.
-      $(
-        once(
-          'media-library-selection-change',
-          $form.find('#media-library-modal-selection'),
-        ),
-      ).on('change', (e) => {
+        });
         checkEnabled();
+        if (selection) {
+          once('media-library-selection-change', selection).forEach((input) => {
+            input.addEventListener('change', checkEnabled);
+          });
+        }
+
+        // Restore the selection after switching tabs or filtering the view.
+        currentSelection.forEach((id) => {
+          form
+            .querySelectorAll(
+              `input[type="checkbox"][value="${CSS.escape(id)}"]`,
+            )
+            .forEach((item) => {
+              item.checked = true;
+              item.dispatchEvent(new Event('change', { bubbles: true }));
+            });
+        });
       });
 
-      // Apply the current selection to the media library view. Changing the
-      // checkbox values triggers the change event for the media items. The
-      // change event handles updating the hidden selection field for the form.
-      currentSelection.forEach((value) => {
-        $form
-          .find(`input[type="checkbox"][value="${value}"]`)
-          .prop('checked', true)
-          .each((index, input) =>
-            input.dispatchEvent(new Event('change', { bubbles: true })),
-          );
-      });
-
-      // Add the selection count to the button pane when a media library dialog
-      // is created.
       if (!once('media-library-selection-info', 'html').length) {
         return;
       }
-      window.addEventListener('dialog:aftercreate', () => {
-        // Since the dialog HTML is not part of the context, we can't use
-        // context here.
-        const $buttonPane = $(
-          '.media-library-widget-modal .drupal-dialog-buttonpane',
-        );
-        if (!$buttonPane.length) {
-          return;
+      window.addEventListener('dialog:aftercreate', ({ target }) => {
+        const library = target.querySelector('#media-library-wrapper');
+        const pane = target
+          .closest('.media-library-widget-modal')
+          ?.querySelector('.drupal-dialog-buttonpane');
+        if (library && pane) {
+          pane.insertAdjacentHTML(
+            'beforeend',
+            Drupal.theme('mediaLibrarySelectionCount'),
+          );
+          updateSelectionCount(
+            library,
+            remainingSlots.get(library) ?? remaining,
+          );
         }
-        $buttonPane.append(Drupal.theme('mediaLibrarySelectionCount'));
-        updateSelectionCount(settings.media_library.selection_remaining);
       });
     },
   };
@@ -411,10 +388,11 @@
       if (!once('media-library-clear-selection', 'html').length) {
         return;
       }
-      window.addEventListener('dialog:afterclose', () => {
-        // This empty the array while keeping the existing array reference,
-        // to keep event listeners working.
-        Drupal.MediaLibrary.currentSelection.length = 0;
+      window.addEventListener('dialog:beforeclose', ({ target }) => {
+        if (target.closest('.media-library-widget-modal')) {
+          // Keep the array reference used by existing listeners.
+          Drupal.MediaLibrary.currentSelection.length = 0;
+        }
       });
     },
   };
@@ -428,4 +406,4 @@
   Drupal.theme.mediaLibrarySelectionCount = function () {
     return `<div class="media-library-selected-count js-media-library-selected-count" role="status" aria-live="polite" aria-atomic="true"></div>`;
   };
-})(jQuery, Drupal, window, window.tabbable);
+})(Drupal, once, window.tabbable);

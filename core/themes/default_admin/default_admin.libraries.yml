@@ -298,7 +298,6 @@ media_library:
     js/media-library.ui.js: {}
   dependencies:
     - core/drupal
-    - core/jquery
     - core/once
     - default_admin/icon-link
 

@@ -100,6 +100,40 @@ class EntityReferenceWidgetTest extends MediaLibraryTestBase {
   }
 
   /**
+   * Tests that an older tab response cannot change a reopened library.
+   */
+  public function testStaleTabResponseAfterReopen(): void {
+    $this->drupalGet('node/add/basic_page');
+    $menu = $this->openMediaLibraryForField('field_unlimited_media');
+    $session = $this->getSession();
+    $session->executeScript(<<<'JS'
+      document.addEventListener('drupal:ajax-before-send', ({ detail: { ajax } }) => {
+        const receive = ajax.receiveResponse;
+        ajax.receiveResponse = (...args) => new Promise((resolve) => {
+          window.finishMediaTab = () => resolve(receive.apply(ajax, args));
+        });
+      }, { once: true });
+      JS);
+    $menu->clickLink('Type Three');
+    $this->assertJsCondition('typeof window.finishMediaTab === "function"');
+    // Close the dialog while fullscreen progress blocks pointer input.
+    $session->executeScript('Drupal.dialog.get(document.getElementById("drupal-modal")).close();');
+    $assert = $this->assertSession();
+    $assert->assertNoElementAfterWait('css', 'dialog[open]');
+    // Open the two-slot widget. Its initial tab shows the Type One media.
+    $button = '.js-media-library-open-button[name^="field_twin_media"]';
+    $assert->elementExists('css', $button);
+    $session->executeScript("document.querySelector('$button').click();");
+    $this->assertNotNull($assert->waitForElementVisible('css', '#drupal-modal .js-media-library-item'));
+    $this->assertSelectedMediaCount('0 of 2 items selected');
+
+    $session->executeScript('window.finishMediaTab();');
+    $assert->assertWaitOnAjaxRequest();
+    $this->assertSelectedMediaCount('0 of 2 items selected');
+    $assert->elementExists('named', ['checkbox', 'Select Dog']);
+  }
+
+  /**
    * Tests that the Media library's widget works as expected.
    */
   public function testWidget(): void {
@@ -617,16 +651,7 @@ class EntityReferenceWidgetTest extends MediaLibraryTestBase {
    * {@inheritdoc}
    */
   protected function sortableUpdate($item, $from, $to = NULL): void {
-    // See core/modules/media_library/js/media_library.widget.js.
-    $script = <<<'JS'
-      document.querySelectorAll('.js-media-library-selection').forEach((widget) => {
-        Array.from(widget.children).forEach((child, index) => {
-          child.querySelector('.js-media-library-item-weight').value = index;
-        });
-      });
-      JS;
-
-    $this->getSession()->executeScript($script);
+    $this->getSession()->executeScript("Sortable.get(document.querySelector('$from')).option('onEnd')();");
   }
 
   /**

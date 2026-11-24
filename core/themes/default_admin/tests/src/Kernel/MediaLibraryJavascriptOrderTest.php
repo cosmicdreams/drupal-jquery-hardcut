@@ -119,8 +119,8 @@ class MediaLibraryJavascriptOrderTest extends KernelTestBase {
     ]);
     $this->drupalGet('entity_test/add');
     $text = $this->getSession()->getPage()->getContent();
+    $this->assertStringNotContainsString('/core/assets/vendor/jquery/', $text);
     $scripts = [
-      '<script src="/core/assets/vendor/jquery/jquery.min.js',
       '<script src="/core/assets/vendor/once/once.min.js',
       '<script src="/core/misc/drupal.js',
       '<script src="/core/misc/drupal.init.js',
