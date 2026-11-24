@@ -2161,7 +2161,8 @@
       const opacity = Number(getComputedStyle(element).opacity);
       Drupal.trackAnimation(
         element.animate(
-          // Keep visible content readable from the first animation frame.
+          // Starting at 0.01 keeps content displayed for assistive and
+          // automation visibility checks. The opacity is imperceptible.
           [{ opacity: Math.min(0.01, opacity) }, { opacity }],
           {
             duration,

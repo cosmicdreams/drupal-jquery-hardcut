@@ -336,26 +336,28 @@
               marginTop,
               marginBottom,
             } = getComputedStyle(bar);
-            bar.animate(
-              [
-                {
-                  height: '0',
-                  paddingTop: '0',
-                  paddingBottom: '0',
-                  marginTop: '0',
-                  marginBottom: '0',
-                  overflow: 'hidden',
-                },
-                {
-                  height,
-                  paddingTop,
-                  paddingBottom,
-                  marginTop,
-                  marginBottom,
-                  overflow: 'hidden',
-                },
-              ],
-              { duration: 400, easing: 'ease-in-out' },
+            Drupal.trackAnimation(
+              bar.animate(
+                [
+                  {
+                    height: '0',
+                    paddingTop: '0',
+                    paddingBottom: '0',
+                    marginTop: '0',
+                    marginBottom: '0',
+                    overflow: 'hidden',
+                  },
+                  {
+                    height,
+                    paddingTop,
+                    paddingBottom,
+                    marginTop,
+                    marginBottom,
+                    overflow: 'hidden',
+                  },
+                ],
+                { duration: 400, easing: 'ease-in-out' },
+              ),
             );
           }
         });

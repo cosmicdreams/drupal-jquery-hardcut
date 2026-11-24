@@ -147,7 +147,10 @@ class FileManagedFileElementTest extends WebDriverTestBase {
           const animate = bar.animate;
           bar.animate = (frames, options) => {
             window.managedFileProgressFrames = frames;
-            return animate.call(bar, frames, options);
+            const animation = animate.call(bar, frames, options);
+            animation.pause();
+            window.managedFileProgressAnimation = animation;
+            return animation;
           };
           observer.disconnect();
         }
@@ -158,12 +161,13 @@ class FileManagedFileElementTest extends WebDriverTestBase {
     $this->assertJsCondition(<<<'JS'
       (() => {
         const frames = window.managedFileProgressFrames;
-        return typeof window.finishProgressUpload === 'function' && frames?.[0].height === '0' &&
+        return window.drupalTestHasActiveAnimations() &&
+          typeof window.finishProgressUpload === 'function' && frames?.[0].height === '0' &&
           frames[0].paddingTop === '0' && frames[0].marginBottom === '0' &&
           frames[1].paddingTop === '8px' && frames[1].marginBottom === '10px';
       })()
       JS);
-    $session->executeScript('window.finishProgressUpload();');
+    $session->executeScript('window.managedFileProgressAnimation.finish(); window.finishProgressUpload();');
     $this->assertNotNull($this->assertSession()->waitForLink(basename($filename)));
     $this->assertSame('Processing...', $session->evaluateScript('window.managedFileProgressMessage'));
     $this->assertSession()->elementNotExists('css', '.js-form-managed-file .ajax-progress-bar');
@@ -296,40 +300,19 @@ class FileManagedFileElementTest extends WebDriverTestBase {
             widget.querySelector('.file-upload-js-error').textContent.includes('invalid.jpg');
 
           ajax.success = () => success.call(ajax, []);
-          const { addEventListener, removeEventListener } = document;
-          let uploadListener;
-          let listenerRemoved = false;
-          document.addEventListener = function (type, listener, ...options) {
-            if (type === 'drupal:ajax-complete') {
-              uploadListener = listener;
-            }
-            return addEventListener.call(this, type, listener, ...options);
-          };
-          document.removeEventListener = function (type, listener, ...options) {
-            if (type === 'drupal:ajax-complete' && listener === uploadListener) {
-              listenerRemoved = true;
-            }
-            return removeEventListener.call(this, type, listener, ...options);
-          };
-
-          let pending;
-          let afterUnload;
-          try {
-            selectFiles();
-            pending = ajax.ajaxing && Object.hasOwn(ajax.commands, 'insert');
-            Drupal.detachBehaviors(widget, drupalSettings, 'unload');
-            widget.remove();
-            afterUnload = Object.hasOwn(ajax.commands, 'insert');
-          }
-          finally {
-            delete document.addEventListener;
-            delete document.removeEventListener;
-          }
-          await new Promise((resolve) => {
+          // The replacement command is private to this request. Reading its
+          // identity confirms it was released before the response completes.
+          const unloaded = new Promise((resolve) => {
             document.addEventListener('drupal:ajax-complete', resolve, { once: true });
           });
+          selectFiles();
+          const pending = ajax.ajaxing && Object.hasOwn(ajax.commands, 'insert');
+          Drupal.detachBehaviors(widget, drupalSettings, 'unload');
+          widget.remove();
+          const afterUnload = Object.hasOwn(ajax.commands, 'insert');
+          await unloaded;
           return { afterCancellation, afterCompletion, errorVisible, pending,
-            afterUnload, listenerRemoved };
+            afterUnload };
         }
         finally {
           ajax.beforeSend = beforeSend;
@@ -343,7 +326,6 @@ class FileManagedFileElementTest extends WebDriverTestBase {
       'errorVisible' => TRUE,
       'pending' => TRUE,
       'afterUnload' => FALSE,
-      'listenerRemoved' => TRUE,
     ], $result);
   }
 
