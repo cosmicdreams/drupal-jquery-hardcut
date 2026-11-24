@@ -7,42 +7,6 @@
     "misc/jquery.no-conflict.js": {
       "owner": "B",
       "references": 1
-    },
-    "modules/contextual/js/contextual.js": {
-      "owner": "M",
-      "references": 1
-    },
-    "modules/field_ui/js/field_ui.js": {
-      "owner": "A",
-      "references": 1
-    },
-    "modules/file/js/file.js": {
-      "owner": "M",
-      "references": 1
-    },
-    "modules/layout_builder/js/layout-builder.js": {
-      "owner": "M",
-      "references": 1
-    },
-    "modules/media/js/type_form.js": {
-      "owner": "M",
-      "references": 1
-    },
-    "modules/media_library/js/media_library.ui.js": {
-      "owner": "A",
-      "references": 1
-    },
-    "modules/media_library/js/media_library.widget.js": {
-      "owner": "M",
-      "references": 1
-    },
-    "modules/system/tests/modules/css_disable_transitions_test/js/disable_transitions.theme.js": {
-      "owner": "U",
-      "references": 1
-    },
-    "themes/default_admin/js/media-library.ui.js": {
-      "owner": "M",
-      "references": 1
     }
   },
   "distribution": {

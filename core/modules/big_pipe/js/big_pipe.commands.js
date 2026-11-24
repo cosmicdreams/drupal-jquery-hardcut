@@ -49,7 +49,7 @@
      * @param {string} response.data
      *   The new HTML.
      * @param {string} [response.method]
-     *   The jQuery DOM manipulation method to be used.
+     *   The insertion operation to perform.
      * @param {string} [response.selector]
      *   An optional selector string.
      */
@@ -62,7 +62,7 @@
         return;
       }
 
-      // Map jQuery manipulation methods to the DOM equivalent.
+      // Map insertion operations to their DOM methods.
       const styleMap = {
         replaceWith: 'outerHTML',
         html: 'innerHTML',

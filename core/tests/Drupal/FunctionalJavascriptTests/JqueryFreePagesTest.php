@@ -31,56 +31,6 @@ class JqueryFreePagesTest extends WebDriverTestBase {
   use NodeCreationTrait;
 
   /**
-   * Expected jQuery-family edges, keyed by page and edge.
-   *
-   * Values name the owner and removal slice, in that order. Default Admin's
-   * styling still loads jQuery. Remove entries as each slice converts
-   * its dependencies.
-   */
-  private const EXPECTED = [
-    'block-layout' => [
-      'global:jQuery' => ['Z', 'Z'],
-      'library:jquery' => ['Z', 'Z'],
-      'library:jquery-bootstrap' => ['B', 'Z'],
-    ],
-    'field-display' => [
-      'global:jQuery' => ['Z', 'Z'],
-      'library:jquery' => ['Z', 'Z'],
-      'library:jquery-bootstrap' => ['B', 'Z'],
-    ],
-    'front' => [
-      'global:jQuery' => ['Z', 'Z'],
-      'library:jquery' => ['Z', 'Z'],
-      'library:jquery-bootstrap' => ['B', 'Z'],
-    ],
-    'modal' => [
-      'global:jQuery' => ['Z', 'Z'],
-      'library:jquery' => ['Z', 'Z'],
-      'library:jquery-bootstrap' => ['B', 'Z'],
-    ],
-    'node-add' => [
-      'global:jQuery' => ['Z', 'Z'],
-      'library:jquery' => ['Z', 'Z'],
-      'library:jquery-bootstrap' => ['B', 'Z'],
-    ],
-    'off-canvas' => [
-      'global:jQuery' => ['Z', 'Z'],
-      'library:jquery' => ['Z', 'Z'],
-      'library:jquery-bootstrap' => ['B', 'Z'],
-    ],
-    'permissions' => [
-      'global:jQuery' => ['Z', 'Z'],
-      'library:jquery' => ['Z', 'Z'],
-      'library:jquery-bootstrap' => ['B', 'Z'],
-    ],
-    'vertical-tabs' => [
-      'global:jQuery' => ['Z', 'Z'],
-      'library:jquery' => ['Z', 'Z'],
-      'library:jquery-bootstrap' => ['B', 'Z'],
-    ],
-  ];
-
-  /**
    * {@inheritdoc}
    */
   protected $profile = 'standard';
@@ -176,7 +126,9 @@ class JqueryFreePagesTest extends WebDriverTestBase {
     $assert_session->elementTextContains('css', '#drupal-off-canvas', 'Thing 1 says hello');
     $actual['off-canvas'] = $this->observedEdges();
 
-    $this->assertExpectedEdges($actual);
+    foreach ($actual as $page => $edges) {
+      $this->assertSame([], $edges, $page);
+    }
   }
 
   /**
@@ -323,26 +275,6 @@ class JqueryFreePagesTest extends WebDriverTestBase {
       JS);
     $this->assertIsArray($edges, 'The document-start asset observer ran.');
     return $edges;
-  }
-
-  /**
-   * Reports both new edges and entries that can be deleted.
-   */
-  private function assertExpectedEdges(array $actual): void {
-    $messages = [];
-    foreach ($actual as $page => $edges) {
-      $expected = self::EXPECTED[$page] ?? [];
-      foreach (array_diff($edges, array_keys($expected)) as $edge) {
-        $messages[] = "$page has a new jQuery edge: $edge.";
-      }
-      foreach (array_diff(array_keys($expected), $edges) as $edge) {
-        $messages[] = "Remove '$edge' from the '$page' expected edges.";
-      }
-    }
-    foreach (array_diff_key(self::EXPECTED, $actual) as $page => $expected) {
-      $messages[] = "Remove the unused '$page' expected edges.";
-    }
-    $this->assertSame([], $messages, implode("\n", $messages));
   }
 
 }
