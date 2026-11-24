@@ -132,6 +132,7 @@ class MediaLibraryUiBuilder {
       ],
       '#attributes' => [
         'id' => 'media-library-content',
+        'data-media-type' => $state->getSelectedTypeId(),
       ],
       'form' => $this->buildMediaTypeAddForm($state),
       'view' => $this->buildMediaLibraryView($state),

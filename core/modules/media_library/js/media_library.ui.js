@@ -128,12 +128,12 @@
           trackLibraryRequest(library, link, ajaxObject);
           // Update the tab and move focus after replacing the content.
           ajaxObject.afterSuccess = () => {
-            if (!ajaxObject.isResponseCurrent()) {
-              return;
-            }
-            selectMediaType(link);
             const content = library.querySelector('#media-library-content');
-            if (content) {
+            if (
+              ajaxObject.isResponseCurrent() &&
+              content?.dataset.mediaType === getMediaType(link)
+            ) {
+              selectMediaType(link);
               tabbable(content)[0]?.focus();
             }
           };
@@ -183,72 +183,83 @@
 
           const library = link.closest('#media-library-wrapper');
           // Add a loading and display announcement for screen reader users.
-          let loadingAnnouncement = '';
-          let displayAnnouncement = '';
-          let focusSelector = '';
-          if (link.classList.contains('views-display-link-widget')) {
-            loadingAnnouncement = Drupal.t('Loading grid view.');
-            displayAnnouncement = Drupal.t('Changed to grid view.');
-            focusSelector = '.views-display-link-widget';
-          } else if (
-            link.classList.contains('views-display-link-widget_table')
-          ) {
-            loadingAnnouncement = Drupal.t('Loading table view.');
-            displayAnnouncement = Drupal.t('Changed to table view.');
-            focusSelector = '.views-display-link-widget_table';
-          }
+          const grid = link.classList.contains('views-display-link-widget');
+          const display = grid ? 'widget' : 'widget_table';
+          const loadingAnnouncement = grid
+            ? Drupal.t('Loading grid view.')
+            : Drupal.t('Loading table view.');
+          const displayAnnouncement = grid
+            ? Drupal.t('Changed to grid view.')
+            : Drupal.t('Changed to table view.');
+          const focusSelector = `.views-display-link-${display}`;
 
-          // Replace the library view.
+          const query = new URL(link.href).searchParams;
+          const type = getMediaType(link);
+          query.set('media_library_content', '1');
+          query.set('views_display_id', display);
           const ajaxObject = Drupal.ajax({
-            wrapper: 'media-library-view',
-            url: link.href,
+            wrapper: 'media-library-content',
+            url: `${Drupal.url('media-library')}?${query}`,
             dialogType: 'ajax',
             progress: {
               type: 'fullscreen',
-              message: loadingAnnouncement || Drupal.t('Processing...'),
+              message: loadingAnnouncement,
             },
           });
 
           trackLibraryRequest(library, link, ajaxObject);
-          // Announce and focus the updated display after its commands finish.
-          if (displayAnnouncement || focusSelector) {
-            ajaxObject.afterSuccess = () => {
-              if (!ajaxObject.isResponseCurrent()) {
-                return;
+          let inserted;
+          const { insert } = ajaxObject.commands;
+          ajaxObject.commands.insert = (ajax, response, status) => {
+            if (response.selector || response.method) {
+              return insert(ajax, response, status);
+            }
+            const content = library.querySelector('#media-library-content');
+            // A display response can arrive after a different tab has loaded.
+            // Apply its form and view together when changing types, but keep
+            // the current form when only the display is changing.
+            if (content?.dataset.mediaType === type) {
+              const template = document.createElement('template');
+              template.innerHTML = response.data;
+              const view = template.content
+                .querySelector('.js-media-library-view')
+                ?.closest('.views-element-container');
+              if (view) {
+                response = {
+                  ...response,
+                  selector: '#media-library-content #media-library-view',
+                  data: view.outerHTML,
+                };
               }
-              // The AJAX link replaces the whole view, including the clicked
-              // link. Move the focus back to the clicked link when the view is
-              // replaced.
-              if (focusSelector) {
-                library
-                  .querySelector(`#media-library-view ${focusSelector}`)
-                  ?.focus();
-              }
-              // Announce the new view is loaded to screen readers.
-              if (displayAnnouncement) {
-                Drupal.announce(displayAnnouncement);
-              }
-              // The display link may have been clicked while a type change
-              // was pending. Its response shows the type from the link.
-              const type = getMediaType(link);
-              const tabs = library.querySelectorAll('.js-media-library-menu a');
-              const tab = Array.from(tabs).find(
-                (candidate) => getMediaType(candidate) === type,
-              );
-              if (tab && !tab.classList.contains('active')) {
-                selectMediaType(tab);
-              }
-            };
-          }
+            }
+            const elements = insert(ajax, response, status);
+            [inserted] = elements ?? [];
+            return elements;
+          };
 
+          ajaxObject.afterSuccess = () => {
+            if (!ajaxObject.isResponseCurrent() || !inserted?.isConnected) {
+              return;
+            }
+            // The display link was replaced with the view. Restore its focus.
+            library
+              .querySelector(`#media-library-view ${focusSelector}`)
+              ?.focus();
+            Drupal.announce(displayAnnouncement);
+            const tabs = library.querySelectorAll('.js-media-library-menu a');
+            const tab = Array.from(tabs).find(
+              (candidate) => getMediaType(candidate) === type,
+            );
+            if (tab && !tab.classList.contains('active')) {
+              selectMediaType(tab);
+            }
+          };
           ajaxObject.execute();
 
           // Announce the new view is being loaded to screen readers.
           // @todo Replace custom announcement when
           //   https://www.drupal.org/project/drupal/issues/2973140 is in.
-          if (loadingAnnouncement) {
-            Drupal.announce(loadingAnnouncement);
-          }
+          Drupal.announce(loadingAnnouncement);
         }),
       );
     },

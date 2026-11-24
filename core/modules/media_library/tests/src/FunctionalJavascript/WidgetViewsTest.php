@@ -4,6 +4,10 @@ declare(strict_types=1);
 
 namespace Drupal\Tests\media_library\FunctionalJavascript;
 
+use Drupal\field\Entity\FieldConfig;
+use Drupal\file\Entity\File;
+use Drupal\media\Entity\Media;
+use Drupal\Tests\media\Traits\MediaTypeCreationTrait;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\Attributes\Group;
 use PHPUnit\Framework\Attributes\RunTestsInSeparateProcesses;
@@ -14,6 +18,8 @@ use PHPUnit\Framework\Attributes\RunTestsInSeparateProcesses;
 #[Group('media_library')]
 #[RunTestsInSeparateProcesses]
 class WidgetViewsTest extends MediaLibraryTestBase {
+
+  use MediaTypeCreationTrait;
 
   /**
    * {@inheritdoc}
@@ -177,10 +183,38 @@ class WidgetViewsTest extends MediaLibraryTestBase {
    */
   #[DataProvider('responseOrders')]
   public function testOverlappingTypeAndDisplayRequests(bool $type_first): void {
+    $bundles = [];
+    foreach ([
+      'first_document' => ['First Document', 'First result', 'txt'],
+      'second_document' => ['Second Document', 'Second result', 'pdf'],
+    ] as $id => [$label, $name, $extension]) {
+      $media_type = $this->createMediaType('file', ['id' => $id, 'label' => $label]);
+      $source_field = $media_type->getSource()->getSourceFieldDefinition($media_type);
+      $this->assertInstanceOf(FieldConfig::class, $source_field);
+      $source_field->setSetting('file_extensions', $extension)->save();
+      $uri = "public://$id.$extension";
+      file_put_contents($uri, $name);
+      $file = File::create(['uri' => $uri]);
+      $file->setPermanent();
+      $file->save();
+      Media::create([
+        'bundle' => $id,
+        'name' => $name,
+        $source_field->getName() => $file->id(),
+      ])->save();
+      $bundles[$id] = $id;
+    }
+    FieldConfig::loadByName('node', 'basic_page', 'field_unlimited_media')
+      ->setSetting('handler_settings', ['target_bundles' => $bundles])
+      ->save();
+
     $this->drupalGet('node/add/basic_page');
-    $menu = $this->openMediaLibraryForField('field_no_add_media');
+    $menu = $this->openMediaLibraryForField('field_unlimited_media');
     $session = $this->getSession();
     $assert = $this->assertSession();
+
+    $form = '.js-media-library-add-form';
+    $assert->elementTextContains('css', $form, 'Allowed types: txt');
 
     // Hold both real responses so the test controls their delivery order.
     $session->executeScript(<<<'JS'
@@ -192,38 +226,41 @@ class WidgetViewsTest extends MediaLibraryTestBase {
         if (!type) {
           return request(options, complete);
         }
-        const key = type === 'type_two' ? 'type' : 'table';
+        const key = type === 'second_document' ? 'type' : 'table';
         return request(options, (response) => new Promise((resolve) => {
           window.pickerResponses[key] = () => resolve(complete(response));
         }));
       };
       JS);
-    $assert->elementExists('css', 'a[data-title="Type Two"]', $menu)->click();
+    $assert->elementExists('css', 'a[data-title="Second Document"]', $menu)->click();
     $this->assertJsCondition('typeof window.pickerResponses.type === "function"');
     $session->getPage()->clickLink('Table');
     $this->assertJsCondition('typeof window.pickerResponses.table === "function"');
 
     if ($type_first) {
       $session->executeScript('window.pickerResponses.type();');
-      $this->assertAnnounceContains('Showing Type Two media.');
+      $this->assertAnnounceContains('Showing Second Document media.');
+      $assert->elementTextContains('css', $form, 'Allowed types: pdf');
       $session->executeScript('window.pickerResponses.table();');
       $this->assertAnnounceContains('Changed to table view.');
-      $this->assertAnnounceContains('Showing Type One media.');
+      $this->assertAnnounceContains('Showing First Document media.');
     }
     else {
       $session->executeScript('window.pickerResponses.table();');
       $this->assertAnnounceContains('Changed to table view.');
+      $assert->elementTextContains('css', $form, 'Allowed types: txt');
       $session->executeScript('window.pickerResponses.type();');
-      $this->assertAnnounceContains('Showing Type Two media.');
+      $this->assertAnnounceContains('Showing Second Document media.');
     }
 
     $assert->assertWaitOnAjaxRequest();
-    $title = $type_first ? 'Type One' : 'Type Two';
+    $title = $type_first ? 'First Document' : 'Second Document';
     $assert->elementTextEquals('css', '.js-media-library-menu a.active', "Show $title media (selected)");
     $display = $type_first ? 'widget_table' : 'widget';
     $view = ".js-media-library-view[data-view-display-id=\"$display\"]";
-    $assert->elementTextContains('css', $view, $type_first ? 'Bear' : 'Turtle');
-    $assert->elementTextNotContains('css', $view, $type_first ? 'Turtle' : 'Bear');
+    $assert->elementTextContains('css', $view, $type_first ? 'First result' : 'Second result');
+    $assert->elementTextNotContains('css', $view, $type_first ? 'Second result' : 'First result');
+    $assert->elementTextContains('css', $form, $type_first ? 'Allowed types: txt' : 'Allowed types: pdf');
   }
 
   /**
