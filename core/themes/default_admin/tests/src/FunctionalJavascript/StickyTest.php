@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Drupal\Tests\default_admin\FunctionalJavascript;
 
 use Drupal\FunctionalJavascriptTests\WebDriverTestBase;
+use Drupal\media\Entity\Media;
 use PHPUnit\Framework\Attributes\Group;
 use PHPUnit\Framework\Attributes\RunTestsInSeparateProcesses;
 
@@ -82,6 +83,39 @@ class StickyTest extends WebDriverTestBase {
       pair.remove();
       JS);
     $this->assertJsCondition('window.stickyMarkerIsObserved && window.stickyPairMatches && window.stickyMarkerIsDisconnected');
+  }
+
+  /**
+   * Tests the live selection count appears before the picker actions.
+   */
+  public function testMediaLibrarySelectionCount(): void {
+    $this->container->get('module_installer')->install(['media_library_test']);
+    Media::create([
+      'bundle' => 'type_one',
+      'name' => 'Example media',
+      'field_media_test' => 'Example media',
+    ])->save();
+
+    $this->drupalLogin($this->drupalCreateUser([
+      'access content',
+      'create basic_page content',
+      'view media',
+    ]));
+    $this->drupalGet('node/add/basic_page');
+    $assert = $this->assertSession();
+    $widget = $assert->elementExists('css', '#field_unlimited_media-media-library-wrapper');
+    $widget->pressButton('Add media');
+
+    $pane = '.media-library-widget-modal .drupal-dialog-buttonpane';
+    $counter = "$pane > .js-media-library-selected-count:first-child";
+    $this->assertNotNull($assert->waitForElementVisible('css', $counter));
+    $assert->elementTextEquals('css', $counter, '0 items selected');
+
+    $page = $this->getSession()->getPage();
+    $page->checkField('Select Example media');
+    $assert->elementTextEquals('css', $counter, '1 item selected');
+    $assert->elementAttributeContains('css', $counter, 'aria-live', 'polite');
+    $assert->buttonExists('Insert selected', $assert->elementExists('css', $pane));
   }
 
   /**
