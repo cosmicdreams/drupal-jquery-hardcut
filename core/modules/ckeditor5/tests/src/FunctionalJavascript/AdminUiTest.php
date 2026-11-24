@@ -329,21 +329,44 @@ JS;
 
     $this->createNewTextFormat($page, $assert_session);
 
-    $media_tab = $page->find('css', '[href^="#edit-filters-media-embed-settings"]');
-    $this->assertFalse($media_tab->isVisible(), 'Media filter settings should not be present because media filter is not enabled');
+    $this->assertFilterCheckboxTogglesSettings('[href^="#edit-filters-media-embed-settings"]');
 
-    $this->assertTrue($page->hasUncheckedField('filters[media_embed][status]'));
+    $this->getSession()->resizeWindow(600, 900);
+    $this->createNewTextFormat($page, $assert_session);
+    $assert_session->elementNotExists('css', '.vertical-tabs__menu');
+    $panel_selector = 'details[data-drupal-selector="edit-filters-media-embed-settings"]';
+    $this->assertFilterCheckboxTogglesSettings($panel_selector);
+
+    // The settings panel remains usable when rendered as a details element.
     $page->checkField('filters[media_embed][status]');
     $assert_session->assertWaitOnAjaxRequest();
+    $summary = $assert_session->elementExists('css', "$panel_selector > summary");
+    $assert_session->elementExists('css', "{$panel_selector}[open]");
+    $summary->click();
+    $assert_session->elementNotExists('css', "{$panel_selector}[open]");
+    $summary->click();
+    $assert_session->elementExists('css', "{$panel_selector}[open]");
+  }
 
-    $media_tab = $assert_session->waitForElementVisible('css', '[href^="#edit-filters-media-embed-settings"]');
-    $this->assertTrue($media_tab->isVisible(), 'Media settings should appear when media filter enabled');
+  /**
+   * Checks that the filter checkbox toggles its processing row and settings.
+   */
+  private function assertFilterCheckboxTogglesSettings(string $settings_selector): void {
+    $page = $this->getSession()->getPage();
+    $assert = $this->assertSession();
+    $row_selector = '#filter-order tr:has([data-drupal-selector="edit-filters-media-embed-weight"])';
+    $this->assertFalse($assert->elementExists('css', $row_selector)->isVisible());
+    $this->assertFalse($assert->elementExists('css', $settings_selector)->isVisible());
+
+    $page->checkField('filters[media_embed][status]');
+    $assert->assertWaitOnAjaxRequest();
+    $this->assertNotNull($assert->waitForElementVisible('css', $row_selector));
+    $this->assertNotNull($assert->waitForElementVisible('css', $settings_selector));
 
     $page->uncheckField('filters[media_embed][status]');
-    $assert_session->assertWaitOnAjaxRequest();
-
-    $media_tab = $page->find('css', '[href^="#edit-filters-media-embed-settings"]');
-    $this->assertFalse($media_tab->isVisible(), 'Media settings should be removed when media filter disabled');
+    $assert->assertWaitOnAjaxRequest();
+    $this->assertFalse($assert->elementExists('css', $row_selector)->isVisible());
+    $this->assertFalse($assert->elementExists('css', $settings_selector)->isVisible());
   }
 
   /**
