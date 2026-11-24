@@ -43,7 +43,7 @@ final class ReadinessScanner {
    */
   public function cachedFindings(): ?array {
     $cached = $this->cache->get(self::CACHE_ID);
-    if ($cached && $cached->data['extensions'] === $this->extensionCacheVersions()) {
+    if ($cached && $cached->data['extensions'] === $this->extensionCacheFingerprints()) {
       return $cached->data['findings'];
     }
     return NULL;
@@ -63,7 +63,7 @@ final class ReadinessScanner {
     // Warm the extension list entries so resets can invalidate the report.
     $this->moduleList->getList();
     $this->themeList->getList();
-    $versions = $this->extensionCacheVersions();
+    $fingerprints = $this->extensionCacheFingerprints();
     $themes = $this->themeHandler->listInfo();
     ksort($themes);
     $extensions = $this->moduleHandler->getModuleList() + $themes;
@@ -110,7 +110,7 @@ final class ReadinessScanner {
 
     $this->cache->set(self::CACHE_ID, [
       'findings' => $findings,
-      'extensions' => $versions,
+      'extensions' => $fingerprints,
     ], Cache::PERMANENT, ['library_info', 'config:core.extension']);
     return $findings;
   }
@@ -123,13 +123,17 @@ final class ReadinessScanner {
   }
 
   /**
-   * Tracks the cache entries explicitly deleted by extension list resets.
+   * Identifies the cached extension lists and detects when they are reset.
    */
-  private function extensionCacheVersions(): array {
-    return [
-      'module' => $this->moduleCache->get('core.extension.list.module')->created ?? NULL,
-      'theme' => $this->themeCache->get('core.extension.list.theme')->created ?? NULL,
-    ];
+  private function extensionCacheFingerprints(): array {
+    $fingerprints = [];
+    foreach (['module' => $this->moduleCache, 'theme' => $this->themeCache] as $type => $cache) {
+      $entry = $cache->get("core.extension.list.$type");
+      // Chained cache backends can assign a new timestamp when warming the
+      // fast cache. Fingerprint the content to keep cache reads stable.
+      $fingerprints[$type] = $entry ? hash('sha256', serialize($entry->data)) : NULL;
+    }
+    return $fingerprints;
   }
 
   /**

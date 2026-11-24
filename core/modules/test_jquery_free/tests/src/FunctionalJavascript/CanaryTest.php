@@ -89,7 +89,9 @@ final class CanaryTest extends WebDriverTestBase {
     }
     $this->submitForm([], 'Rescan');
     $this->assertSession()->addressEquals('admin/reports/jquery-readiness');
-    $this->assertSession()->responseContains('No jQuery references found');
+    $this->assertSession()->pageTextContains('No jQuery references found');
+    $this->drupalGet($report);
+    $this->assertSession()->pageTextContains('No jQuery references found');
   }
 
 }
