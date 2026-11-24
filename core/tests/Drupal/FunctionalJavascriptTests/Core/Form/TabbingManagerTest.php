@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Drupal\FunctionalJavascriptTests\Core\Form;
 
+use Drupal\FunctionalJavascriptTests\DrupalSelenium2Driver;
 use Drupal\FunctionalJavascriptTests\WebDriverTestBase;
 use PHPUnit\Framework\Attributes\Group;
 use PHPUnit\Framework\Attributes\RunTestsInSeparateProcesses;
@@ -126,8 +127,9 @@ class TabbingManagerTest extends WebDriverTestBase {
       array_unshift($actions, ['type' => 'keyDown', 'value' => "\u{E008}"]);
       $actions[] = ['type' => 'keyUp', 'value' => "\u{E008}"];
     }
-    $driver = $this->getSession()->getDriver()->getWebDriverSession();
-    $driver->postActions([
+    $driver = $this->getSession()->getDriver();
+    assert($driver instanceof DrupalSelenium2Driver);
+    $driver->getWebDriverSession()->postActions([
       'actions' => [
         ['type' => 'key', 'id' => 'keyboard', 'actions' => $actions],
       ],
