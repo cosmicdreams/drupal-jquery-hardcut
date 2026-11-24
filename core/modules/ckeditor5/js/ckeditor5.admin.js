@@ -5,6 +5,7 @@
 
 ((Drupal, once, Sortable, { tabbable }) => {
   const sortables = new WeakMap();
+  const toolbarRegion = '[data-drupal-selector="ckeditor5-toolbar-region"]';
   const toolbarHelp = [
     {
       message: Drupal.t(
@@ -497,15 +498,17 @@
                     event.currentTarget,
                     announceChange,
                   );
-                  // Focus only if the button wasn't a divider because dividers
-                  // are simply removed from the active buttons instead of moving
-                  // to another list.
                   if (
-                    !dividerButtons.find(
-                      (dividerButton) =>
-                        event.currentTarget.dataset.id === dividerButton.id,
-                    )
+                    dividerButtons.some(({ id }) => id === element.dataset.id)
                   ) {
+                    const active = root.querySelector(
+                      '[data-button-list="ckeditor5-toolbar-active-buttons"]',
+                    );
+                    const fallback = root.closest(toolbarRegion);
+                    (
+                      active.children[Math.max(index - 1, 0)] ?? fallback
+                    ).focus();
+                  } else {
                     // Focus button based on the data-id attribute from the
                     // available buttons list.
                     root
@@ -752,6 +755,7 @@
 
         once('textarea-listener', selectedButtons).forEach((textarea) => {
           textarea.addEventListener('change', (e) => {
+            textarea.removeAttribute('data-refocus-blur');
             const buttonName = document.activeElement.getAttribute('data-id');
             if (!buttonName) {
               // If there is no 'data-id' attribute, then the config
@@ -772,7 +776,14 @@
                 const removedIndex = Array.from(
                   document.activeElement.parentElement.children,
                 ).indexOf(document.activeElement);
-                focusSelector = `[data-button-list="ckeditor5-toolbar-active-buttons"] li:nth-child(${Math.max(removedIndex, 1)})`;
+                if (newConfig.length) {
+                  focusSelector = `[data-button-list="ckeditor5-toolbar-active-buttons"] li:nth-child(${Math.max(removedIndex, 1)})`;
+                } else {
+                  focusSelector = toolbarRegion;
+                  // This focus target can survive the response or be rebuilt.
+                  // Let Ajax follow it without focusing the hidden textarea.
+                  textarea.setAttribute('data-refocus-blur', 'true');
+                }
               } else if (oldConfig.length < newConfig.length) {
                 // If the divider is being added, it will be the last active item.
                 focusSelector =

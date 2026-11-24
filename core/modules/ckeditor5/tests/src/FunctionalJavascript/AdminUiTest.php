@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Drupal\Tests\ckeditor5\FunctionalJavascript;
 
+use Drupal\editor\Entity\Editor;
 use Drupal\FunctionalJavascriptTests\DrupalSelenium2Driver;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\Attributes\Group;
@@ -208,6 +209,8 @@ JS;
     $this->triggerKeyUp("$active $button", 'ArrowRight');
     $assert->assertWaitOnAjaxRequest();
     $assert->elementExists('css', "$active li:last-child$button");
+    $count = count($this->getSession()->getPage()->findAll('css', "$active li"));
+    $this->assertNotNull($assert->waitForElement('css', "$announcement:contains('has moved to position $count of $count')"));
     $this->assertJsCondition('document.activeElement.dataset.id === "blockQuote"');
     $this->triggerKeyUp("$active $button", 'ArrowRight');
     $assert->elementExists('css', "$active li:last-child$button");
@@ -228,6 +231,90 @@ JS;
     $this->triggerKeyUp("$active li:last-child$divider", 'ArrowUp');
     $assert->assertWaitOnAjaxRequest();
     $this->assertJsCondition("document.activeElement.matches('$active li:last-child[data-id=\"$neighbor\"]')");
+  }
+
+  /**
+   * Tests focus when removing the only item from the active toolbar.
+   */
+  public function testRemoveLastToolbarDivider(): void {
+    $this->addNewTextFormat();
+    $editor = Editor::load('ckeditor5');
+    $settings = $editor->getSettings();
+    $settings['toolbar']['items'] = ['|'];
+    $editor->setSettings($settings)->save();
+    $this->drupalGet('admin/config/content/formats/manage/ckeditor5');
+    $assert = $this->assertSession();
+    $active = '[data-button-list="ckeditor5-toolbar-active-buttons"]';
+    $divider = $assert->elementExists('css', "$active li:only-child[data-id=divider]");
+    $divider->focus();
+
+    $this->getSession()->executeScript(<<<'JS'
+      const divider = document.activeElement;
+      divider.dispatchEvent(new KeyboardEvent('keyup', { key: 'ArrowUp', bubbles: true }));
+      window.focusAfterDividerRemoval = document.activeElement.dataset.drupalSelector;
+      JS);
+    $this->assertSame('ckeditor5-toolbar-region', $this->getSession()->evaluateScript('window.focusAfterDividerRemoval'));
+    $assert->assertWaitOnAjaxRequest();
+    $assert->elementNotExists('css', "$active li");
+    $this->assertJsCondition('document.activeElement.dataset.drupalSelector === "ckeditor5-toolbar-region"');
+  }
+
+  /**
+   * Tests pointer drops of a toolbar button and a cloned divider.
+   */
+  public function testPointerToolbarDrops(): void {
+    $this->addNewTextFormat();
+    $this->getSession()->resizeWindow(1400, 900);
+    $this->drupalGet('admin/config/content/formats/manage/ckeditor5');
+    $assert = $this->assertSession();
+    $active = '[data-button-list=ckeditor5-toolbar-active-buttons]';
+    $available = '[data-button-list=ckeditor5-toolbar-available-buttons]';
+    $dividers = '[data-button-list=ckeditor5-toolbar-divider-buttons]';
+    $button = '[data-id=blockQuote]';
+    $divider = '[data-id=divider]';
+
+    $this->dragToolbarItem("$available $button", "$active li:first-child");
+    $assert->assertWaitOnAjaxRequest();
+    $assert->elementExists('css', "$active $button");
+    $assert->elementNotExists('css', "$available $button");
+
+    $this->dragToolbarItem("$dividers $divider", "$active li:first-child");
+    $assert->assertWaitOnAjaxRequest();
+    $assert->elementExists('css', "$active $divider");
+    $assert->elementExists('css', "$dividers $divider");
+  }
+
+  /**
+   * Drags an item onto an active toolbar item with WebDriver pointer actions.
+   */
+  private function dragToolbarItem(string $source, string $target): void {
+    $session = $this->getSession();
+    $driver = $session->getDriver();
+    $this->assertInstanceOf(DrupalSelenium2Driver::class, $driver);
+    $selectors = json_encode([$source, $target], JSON_THROW_ON_ERROR);
+    [$from, $to] = $session->evaluateScript(<<<JS
+      {$selectors}.map((selector) => {
+        const { x, y, width, height } = document.querySelector(selector).getBoundingClientRect();
+        return { x: Math.round(x + width / 2), y: Math.round(y + height / 2) };
+      })
+      JS);
+    $driver->getWebDriverSession()->postActions([
+      'actions' => [
+        [
+          'type' => 'pointer',
+          'id' => 'toolbar',
+          'parameters' => ['pointerType' => 'mouse'],
+          'actions' => [
+            ['type' => 'pointerMove'] + $from,
+            ['type' => 'pointerDown', 'button' => 0],
+            ['type' => 'pointerMove', 'duration' => 100, 'x' => $from['x'] + 6, 'y' => $from['y']],
+            ['type' => 'pointerMove', 'duration' => 200] + $to,
+            ['type' => 'pause', 'duration' => 300],
+            ['type' => 'pointerUp', 'button' => 0],
+          ],
+        ],
+      ],
+    ]);
   }
 
   /**
