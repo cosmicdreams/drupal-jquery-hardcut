@@ -43,7 +43,6 @@ abstract class InlineBlockTestBase extends WebDriverTestBase {
     'block',
     'node',
     'contextual',
-    'ckeditor5',
   ];
 
   /**
@@ -52,6 +51,11 @@ abstract class InlineBlockTestBase extends WebDriverTestBase {
    * @var \Drupal\Core\Entity\EntityStorageInterface
    */
   protected $blockStorage;
+
+  /**
+   * Whether the test uses CKEditor 5 for the basic block body.
+   */
+  private bool $richText = FALSE;
 
   /**
    * {@inheritdoc}
@@ -80,6 +84,16 @@ abstract class InlineBlockTestBase extends WebDriverTestBase {
         ],
       ],
     ]);
+    $this->createBlockContentType('basic', 'Basic block');
+
+    $this->blockStorage = $this->container->get('entity_type.manager')->getStorage('block_content');
+  }
+
+  /**
+   * Enables CKEditor 5 for the basic block body in a rich-text test.
+   */
+  protected function enableRichText(): void {
+    $this->container->get('module_installer')->install(['ckeditor5']);
     FilterFormat::create([
       'format' => 'inline_block_html',
       'name' => 'Inline block HTML',
@@ -97,9 +111,10 @@ abstract class InlineBlockTestBase extends WebDriverTestBase {
       'settings' => ['toolbar' => ['items' => ['bold']]],
       'image_upload' => ['status' => FALSE],
     ])->save();
-    $this->createBlockContentType('basic', 'Basic block');
-
-    $this->blockStorage = $this->container->get('entity_type.manager')->getStorage('block_content');
+    $body = FieldConfig::loadByName('block_content', 'basic', 'body');
+    $this->assertInstanceOf(FieldConfig::class, $body);
+    $body->setSetting('allowed_formats', ['inline_block_html'])->save();
+    $this->richText = TRUE;
   }
 
   /**
@@ -180,7 +195,7 @@ abstract class InlineBlockTestBase extends WebDriverTestBase {
     $page->findField('Title')->setValue($title);
     $this->editInlineBlockBody($body);
     $page->pressButton('Add block');
-    $this->assertDialogClosedAndTextVisible($body, static::INLINE_BLOCK_LOCATOR . ' strong');
+    $this->assertDialogClosedAndTextVisible($body, static::INLINE_BLOCK_LOCATOR . ($this->richText ? ' strong' : ''));
   }
 
   /**
@@ -203,13 +218,21 @@ abstract class InlineBlockTestBase extends WebDriverTestBase {
     $page->pressButton('Update');
     $assert_session->assertNoElementAfterWait('css', '#drupal-off-canvas');
     $assert_session->assertWaitOnAjaxRequest();
-    $this->assertDialogClosedAndTextVisible($new_body, $block_css_locator . ' strong');
+    $this->assertDialogClosedAndTextVisible($new_body, $block_css_locator . ($this->richText ? ' strong' : ''));
   }
 
   /**
-   * Edits the rich-text body in the off-canvas tray.
+   * Edits the body in the off-canvas tray.
    */
   private function editInlineBlockBody(string $body, ?string $previous_body = NULL): void {
+    if (!$this->richText) {
+      $textarea = $this->assertSession()->waitForElementVisible('css', '#drupal-off-canvas textarea[name="settings[block_form][body][0][value]"]');
+      $this->assertNotNull($textarea);
+      $this->assertSame($previous_body ?? '', $textarea->getValue());
+      $textarea->setValue($body);
+      return;
+    }
+
     $this->assertJsCondition(<<<'JS'
       (window.inlineBlockEditor = Array.from(Drupal.CKEditor5Instances?.values() ?? []).find(
         (editor) => editor.sourceElement.matches('#drupal-off-canvas [name="settings[block_form][body][0][value]"]')
@@ -259,9 +282,6 @@ abstract class InlineBlockTestBase extends WebDriverTestBase {
       'label' => $label,
       'revision' => 1,
     ], TRUE);
-    $body = FieldConfig::loadByName('block_content', $id, 'body');
-    $this->assertInstanceOf(FieldConfig::class, $body);
-    $body->setSetting('allowed_formats', ['inline_block_html'])->save();
   }
 
 }
