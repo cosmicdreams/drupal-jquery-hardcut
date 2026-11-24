@@ -26,15 +26,31 @@ final class ReadinessHooks {
    */
   #[Hook('runtime_requirements')]
   public function runtimeRequirements(): array {
-    $count = count($this->scanner->scan());
+    $findings = $this->scanner->cachedFindings();
+    $count = count($findings ?? []);
     return [
       'test_jquery_free' => [
         'title' => $this->t('jQuery readiness'),
-        'value' => $this->formatPlural($count, '1 extension with possible jQuery dependencies', '@count extensions with possible jQuery dependencies'),
+        'value' => $findings === NULL ? $this->t('Scan needed') : $this->formatPlural($count, '1 extension with possible jQuery dependencies', '@count extensions with possible jQuery dependencies'),
         'description' => Link::createFromRoute($this->t('View the jQuery readiness report'), 'test_jquery_free.report')->toRenderable(),
-        'severity' => $count > 0 ? RequirementSeverity::Warning : RequirementSeverity::OK,
+        'severity' => match (TRUE) {
+          $findings === NULL => RequirementSeverity::Info,
+          $count > 0 => RequirementSeverity::Warning,
+          default => RequirementSeverity::OK,
+        },
       ],
     ];
+  }
+
+  /**
+   * Invalidates findings after extensions are installed or uninstalled.
+   */
+  #[Hook('modules_installed')]
+  #[Hook('modules_uninstalled')]
+  #[Hook('themes_installed')]
+  #[Hook('themes_uninstalled')]
+  public function invalidateReport(): void {
+    $this->scanner->invalidate();
   }
 
   /**

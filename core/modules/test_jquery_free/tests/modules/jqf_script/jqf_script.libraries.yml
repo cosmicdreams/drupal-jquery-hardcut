@@ -5,3 +5,7 @@ capture:
 script:
   js:
     js/probe.js: { preprocess: false }
+    js/late-probe.js: { preprocess: false }
+transitive:
+  dependencies:
+    - jqf_dependency/cycle

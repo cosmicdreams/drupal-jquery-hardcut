@@ -38,6 +38,7 @@ final class ReadinessReportCommand extends Command {
    * {@inheritdoc}
    */
   protected function configure(): void {
+    $this->addOption('rescan', NULL, InputOption::VALUE_NONE, 'Refresh the saved report');
     $this->addOption('format', NULL, InputOption::VALUE_REQUIRED, 'Output format (table or json)', 'table');
   }
 
@@ -50,13 +51,13 @@ final class ReadinessReportCommand extends Command {
       throw new InvalidArgumentException('The format must be table or json.');
     }
 
-    $rows = $this->scanner->rows();
+    $rows = $this->scanner->rows($input->getOption('rescan'));
     if ($format === 'json') {
       $output->writeln(json_encode($rows, JSON_THROW_ON_ERROR | JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES), OutputInterface::OUTPUT_RAW);
     }
     else {
       $table = new Table($output);
-      $table->setHeaders(['Extension', 'Library or file', 'Line', 'Reason']);
+      $table->setHeaders(['Extension', 'Library or file', 'Line', 'Theme', 'Reason']);
       foreach ($rows as $row) {
         $table->addRow(array_map(static fn (string|int|null $cell): string => OutputFormatter::escape((string) $cell), array_values($row)));
       }

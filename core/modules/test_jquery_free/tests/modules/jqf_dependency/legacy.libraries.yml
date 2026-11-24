@@ -5,3 +5,9 @@ legacy:
     - core/internal.jquery_ui
     - core/internal.jquery.form
     - core/drupal
+    - core/drupal.jquery.position
+    - core/tabbable.jquery.shim
+cycle:
+  dependencies:
+    - jqf_script/transitive
+    - jqf_dependency/legacy

@@ -4,8 +4,18 @@ services:
       - '%app.root%'
       - '@module_handler'
       - '@theme_handler'
-      - '@library.discovery'
+      - '@Drupal\test_jquery_free\ReadinessLibraryScanner'
+      - '@cache.discovery'
+      - '@cache.default'
+      - '@cache.bootstrap'
+      - '@extension.list.module'
+      - '@extension.list.theme'
       - '@logger.channel.test_jquery_free'
+  Drupal\test_jquery_free\ReadinessLibraryScanner:
+    arguments: ['@Drupal\test_jquery_free\ReadinessLibraryParser', '@theme.manager', '@theme.initialization']
+  Drupal\test_jquery_free\ReadinessLibraryParser:
+    parent: library.discovery.parser
+    class: Drupal\test_jquery_free\ReadinessLibraryParser
   logger.channel.test_jquery_free:
     parent: logger.channel_base
     arguments: ['test_jquery_free']

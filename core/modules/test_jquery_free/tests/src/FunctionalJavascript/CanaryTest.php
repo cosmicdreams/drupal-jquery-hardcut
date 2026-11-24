@@ -33,10 +33,14 @@ final class CanaryTest extends WebDriverTestBase {
     $this->drupalGet('test-jquery-free/probe');
     $this->assertSession()->elementExists('css', 'body[data-jquery="undefined"][data-alias="undefined"]');
     $warnings = $session->evaluateScript('window.jqfWarnings');
-    $this->assertCount(1, $warnings);
+    $this->assertSession()->elementExists('css', 'body[data-late-jquery="undefined"][data-late-alias="undefined"]');
+    $this->assertCount(3, $warnings);
+    $this->assertSame(['jQuery', 'jQuery', '$'], array_column($warnings, 2));
+    $this->assertMatchesRegularExpression('~/jqf_script/js/probe\.js(?:\?[^ ]*)?:7$~D', $warnings[0][1]);
+    $this->assertMatchesRegularExpression('~/jqf_script/js/late-probe\.js(?:\?[^ ]*)?:10$~D', $warnings[1][1]);
+    $this->assertMatchesRegularExpression('~/jqf_script/js/late-probe\.js(?:\?[^ ]*)?:12$~D', $warnings[2][1]);
     $this->assertSame('jQuery readiness: %s accessed window.%s', $warnings[0][0]);
-    $this->assertStringEndsWith('/jqf_script/js/probe.js', parse_url($warnings[0][1], PHP_URL_PATH));
-    $this->assertSame('jQuery', $warnings[0][2]);
+    $this->assertFalse($session->evaluateScript('Object.prototype.propertyIsEnumerable.call(window, "jQuery")'));
 
     $this->drupalGet('test-jquery-free/probe', ['query' => ['preset' => 1]]);
     $this->assertSession()->elementExists('css', 'body[data-jquery="string"][data-alias="undefined"]');
@@ -45,6 +49,19 @@ final class CanaryTest extends WebDriverTestBase {
       [['jQuery readiness: jQuery is present. Existing globals are left in place.']],
       $session->evaluateScript('window.jqfWarnings'),
     );
+  }
+
+  /**
+   * Tests a rescan from the administrative report.
+   */
+  public function testReportRescan(): void {
+    $account = $this->drupalCreateUser(['administer site configuration']);
+    $this->drupalLogin($account);
+    $this->drupalGet('admin/reports/jquery-readiness');
+    $this->assertSession()->responseContains('No jQuery references found');
+    $this->submitForm([], 'Rescan');
+    $this->assertSession()->addressEquals('admin/reports/jquery-readiness');
+    $this->assertSession()->responseContains('No jQuery references found');
   }
 
 }

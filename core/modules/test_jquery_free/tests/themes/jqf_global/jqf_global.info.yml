@@ -1,0 +1,9 @@
+name: 'jQuery readiness global libraries fixture'
+type: theme
+base theme: stark
+package: Testing
+version: VERSION
+libraries:
+  - core/tabbable.jquery.shim
+libraries-override:
+  core/once: jqf_global/missing

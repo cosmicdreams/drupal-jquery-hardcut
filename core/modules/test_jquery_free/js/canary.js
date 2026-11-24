@@ -5,7 +5,7 @@
 
 (() => {
   const canaryUrl = document.currentScript?.src;
-  const warnedScripts = new Set();
+  const warnedLocations = new Set();
   const presentWarning =
     'jQuery readiness: jQuery is present. Existing globals are left in place.';
 
@@ -27,20 +27,31 @@
     Object.defineProperty(window, name, {
       configurable: true,
       get() {
-        const urls = new Error().stack?.match(/https?:\/\/[^\s)]+/g) ?? [];
-        const source = urls
-          .map((url) => url.replace(/:\d+(?::\d+)?$/, ''))
-          .find((url) => url !== canaryUrl);
-        const script =
-          source || document.currentScript?.src || 'unknown script';
+        const frames =
+          new Error().stack?.match(/https?:\/\/[^\s)]+:\d+:\d+/g) ?? [];
+        const caller = frames.find(
+          (frame) => frame.replace(/:\d+:\d+$/, '') !== canaryUrl,
+        );
+        const location =
+          caller?.replace(/:\d+$/, '') ||
+          document.currentScript?.src ||
+          'unknown script';
 
-        if (!warnedScripts.has(script)) {
-          warnedScripts.add(script);
-          console.warn('jQuery readiness: %s accessed window.%s', script, name);
+        if (!warnedLocations.has(location)) {
+          warnedLocations.add(location);
+          console.warn(
+            'jQuery readiness: %s accessed window.%s',
+            location,
+            name,
+          );
         }
         return undefined;
       },
       set(value) {
+        // An undefined assignment leaves the diagnostic armed.
+        if (value === undefined) {
+          return;
+        }
         // A script that supplies its own global can still define it.
         Object.defineProperty(window, name, {
           configurable: true,

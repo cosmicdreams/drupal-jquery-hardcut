@@ -1,27 +1,32 @@
 # jQuery readiness canary
 
-Enable the jQuery readiness canary and open **Reports > jQuery readiness**
-or run `drush test-jquery-free:report`.
-The command requires Drush 13.7 or later. Add `--format=json` for structured
-output. The status report counts affected extensions. Every report run logs one
-warning per affected extension.
+Enable the canary and open **Reports > jQuery readiness**, or run
+`drush test-jquery-free:report` with Drush 13.7 or later. Add `--format=json`
+for structured output. The status report reads cached results. Open the
+report to scan on a cache miss. Choose **Rescan** or pass `--rescan` to refresh
+the results. Each scan logs one warning per affected extension.
 
-The report checks direct dependencies in Drupal's library discovery for the
-current theme. It recognizes historical core jQuery and jQuery UI library
-names even when the libraries have been removed. It also scans local
-JavaScript files under enabled contributed and custom modules and installed
-themes. It skips hidden directories, tests, node_modules and nested
-extensions, which are considered separately when enabled. It does not fetch
-remote assets.
+The library scan follows dependency chains for each installed theme. A blank
+Theme column means the finding applies across themes. The scan recognizes
+historical core library IDs even after removal. Theme overrides, extensions,
+and global attachments affect the graph.
 
-Each source line is checked for the `jQuery` token, `$(`, `$.` and function
-signatures such as `(function ($)`. The scan includes comments and strings,
-can flag unrelated uses of `$`, and can miss aliases and expressions that span
-multiple lines. Library findings have no source line.
+The scanner switches the active theme with Drupal's theme manager and restores
+the previous theme in a finally block. It records newly added edges after each
+module or theme alter callback and credits theme declarations to their author.
+A dependency already present before a callback keeps its existing attribution.
+The scan only observes hooks under the current request and configuration.
+One discovery failure can hide other libraries from the same extension.
 
-The canary loads early and warns once per script that reads a missing
-`window.jQuery` or `window.$`. Reads return `undefined`. It uses the caller
-URL from the stack where available. With asset aggregation, several original
-scripts may share one URL. If jQuery is already present at startup, the canary
-warns once and leaves the globals alone. A script that defines a global later
-can still assign it. The canary does not provide a replacement for jQuery.
+The script scan checks local JavaScript for `jQuery`, `$(`, `$.`, and signatures
+such as `(function ($)`. It includes comments and strings, can flag unrelated uses
+of `$`, and can miss aliases or expressions split across lines. It skips hidden
+directories, tests, node_modules, nested extensions, and remote assets.
+
+The browser canary warns once per caller URL and line, where the browser exposes
+them. A missing global reads as `undefined`, including after an assignment of
+`undefined`. The accessor must exist to intercept the read, so
+`'jQuery' in window` returns true while armed. The accessor is non-enumerable.
+Aggregated scripts share a URL. If jQuery is already present, the canary warns
+once and preserves the existing globals. A later defined value replaces the
+accessor for that global.
