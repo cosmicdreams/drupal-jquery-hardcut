@@ -14,7 +14,3 @@
   removal: Z (Drupal 13)
   literals:
     "core/jquery": 1
-- path: core/themes/default_admin/tests/src/Kernel/MediaLibraryJavascriptOrderTest.php
-  removal: M
-  literals:
-    "<script src=\"/core/assets/vendor/jquery/jquery.min.js": 1
