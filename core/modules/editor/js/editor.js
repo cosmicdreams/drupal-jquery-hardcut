@@ -94,8 +94,6 @@
       widget.destroying = null;
       if (filtered !== false) {
         field.value = filtered;
-        // Never restore the unfiltered text over a successful round-trip.
-        field.dataset.editorValueOriginal = filtered;
       }
       field.dataset.editorActiveTextFormat = newFormatID;
       Drupal.editorAttach(field, format);
@@ -249,6 +247,15 @@
         field.form?.addEventListener(
           'formdata',
           ({ formData }) => {
+            // An editor's submit listener can overwrite the textarea after
+            // Drupal restores the original during serialization.
+            if (
+              activeFormat(widget)?.editor &&
+              field.dataset.editorValueIsChanged === 'false' &&
+              formData.has(field.name)
+            ) {
+              formData.set(field.name, field.dataset.editorValueOriginal);
+            }
             const formatID = field.dataset.editorActiveTextFormat;
             if (select.value !== formatID && formData.has(select.name)) {
               formData.set(select.name, formatID);

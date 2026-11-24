@@ -210,6 +210,68 @@ class EditorSerializationTest extends CKEditor5TestBase {
   }
 
   /**
+   * Tests saving after switching to a restrictive format and back.
+   */
+  #[DataProvider('formatRoundTripCases')]
+  public function testFormatRoundTrip(bool $edit): void {
+    $this->createSectionsField();
+    $format = FilterFormat::load('ckeditor5');
+    $html_filter = $format->filters('filter_html')->getConfiguration();
+    $html_filter['settings']['allowed_html'] .= ' <object>';
+    $format->setFilterConfig('filter_html', $html_filter)->save();
+
+    $original = '<p>Original text.</p><object></object>';
+    $node = $this->drupalCreateNode([
+      'type' => 'page',
+      'uid' => $this->loggedInUser->id(),
+      'field_sections' => [['value' => $original, 'format' => 'ckeditor5']],
+    ]);
+    $this->drupalGet($node->toUrl('edit-form'));
+    $session = $this->getSession();
+    $page = $session->getPage();
+    $assert = $this->assertSession();
+    $session->executeScript(<<<'JS'
+      window.sectionsEditor = () => Array.from(Drupal.CKEditor5Instances.values()).find(
+        (editor) => editor.sourceElement.name === 'field_sections[0][value]'
+      );
+      JS);
+    $this->assertJsCondition('window.sectionsEditor()?.state === "ready"');
+
+    $page->selectFieldOption('field_sections[0][format]', 'alternate');
+    $assert->elementExists('css', 'dialog.editor-change-text-format-modal')->pressButton('Continue');
+    $this->assertJsCondition(<<<'JS'
+      window.sectionsEditor()?.state === 'ready' &&
+        window.sectionsEditor().sourceElement.dataset.editorActiveTextFormat === 'alternate'
+      JS);
+    $this->assertSame('<p>Original text.</p>', $session->evaluateScript('window.sectionsEditor().getData()'));
+    if ($edit) {
+      $session->executeScript('window.sectionsEditor().setData("<p>Edited in the alternate format.</p>");');
+    }
+
+    $page->selectFieldOption('field_sections[0][format]', 'ckeditor5');
+    $assert->elementExists('css', 'dialog.editor-change-text-format-modal')->pressButton('Continue');
+    $this->assertJsCondition(<<<'JS'
+      window.sectionsEditor()?.state === 'ready' &&
+        window.sectionsEditor().sourceElement.dataset.editorActiveTextFormat === 'ckeditor5'
+      JS);
+    $page->pressButton('Save');
+    $assert->addressEquals($node->toUrl()->toString());
+    $saved = $this->container->get('entity_type.manager')->getStorage('node')->loadUnchanged($node->id());
+    $this->assertSame('ckeditor5', $saved->field_sections->format);
+    $this->assertSame($edit ? '<p>Edited in the alternate format.</p>' : $original, $saved->field_sections->value);
+  }
+
+  /**
+   * Provides cases with and without an edit in the restrictive format.
+   */
+  public static function formatRoundTripCases(): array {
+    return [
+      'unchanged' => [FALSE],
+      'edited' => [TRUE],
+    ];
+  }
+
+  /**
    * Tests failure recovery and edits made during asynchronous editor teardown.
    */
   public function testFormatSwitchDuringTeardown(): void {
