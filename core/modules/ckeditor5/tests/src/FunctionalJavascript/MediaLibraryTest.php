@@ -228,6 +228,38 @@ class MediaLibraryTest extends WebDriverTestBase {
   }
 
   /**
+   * Tests that a save arriving after the Media Library closes is ignored.
+   */
+  public function testClosedDialogIgnoresSave(): void {
+    $this->drupalGet('/node/add/blog');
+    $this->waitForEditor();
+    $this->pressEditorButton('Insert Media');
+    $assert = $this->assertSession();
+    $this->assertNotNull($assert->waitForElementVisible('css', '#drupal-modal #media-library-content'));
+
+    $this->getSession()->executeScript(<<<'JS'
+      const save = Drupal.AjaxCommands.prototype.editorDialogSave;
+      Drupal.AjaxCommands.prototype.editorDialogSave = function (...args) {
+        return new Promise((resolve) => {
+          window.finishEditorDialogSave = () => {
+            save.apply(this, args);
+            resolve();
+          };
+        });
+      };
+      JS);
+    $assert->elementExists('css', '.js-media-library-item')->click();
+    $assert->elementExists('css', '.drupal-dialog-buttonpane')->pressButton('Insert selected');
+    $this->assertJsCondition('typeof window.finishEditorDialogSave === "function"');
+
+    $assert->elementExists('css', 'dialog[open] .drupal-dialog-titlebar-close')->click();
+    $this->getSession()->executeScript('window.finishEditorDialogSave();');
+    $assert->assertWaitOnAjaxRequest();
+    $assert->elementNotExists('css', '.ck-content .drupal-media');
+    $this->assertJsCondition('document.activeElement.textContent.trim() === "Insert Media"');
+  }
+
+  /**
    * Tests opening the Media Library modal from an editor in a tray.
    */
   public function testMediaLibraryFromOffCanvas(): void {

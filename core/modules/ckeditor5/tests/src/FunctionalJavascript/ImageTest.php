@@ -69,4 +69,48 @@ class ImageTest extends ImageTestTestBase {
     $this->assertNotEmpty($this->assertSession()->waitForElementVisible('css', '.ck-widget.image-inline > img[src$="test-svg-upload.svg"]'));
   }
 
+  /**
+   * Tests that destroying an editor aborts its pending image upload.
+   */
+  public function testDetachDuringUpload(): void {
+    $this->drupalGet($this->host->toUrl('edit-form'));
+    $this->waitForEditor();
+    $this->getSession()->executeScript(<<<'JS'
+      const editor = Drupal.CKEditor5Instances.values().next().value;
+      const uploadUrl = editor.config.get('drupalImageUpload').uploadUrl;
+      const { open, send, abort } = XMLHttpRequest.prototype;
+      XMLHttpRequest.prototype.open = function (method, url, ...args) {
+        this.testEditorUpload = url === uploadUrl;
+        return open.call(this, method, url, ...args);
+      };
+      XMLHttpRequest.prototype.send = function (...args) {
+        if (this.testEditorUpload) {
+          window.pendingEditorUpload = true;
+        } else {
+          send.apply(this, args);
+        }
+      };
+      XMLHttpRequest.prototype.abort = function () {
+        if (this.testEditorUpload) {
+          window.abortedEditorUpload = true;
+          this.dispatchEvent(new Event('abort'));
+        } else {
+          abort.call(this);
+        }
+      };
+
+      const wrapper = editor.sourceElement.closest('.js-text-format-wrapper');
+      window.removeEditorUnderTest = () => {
+        Drupal.detachBehaviors(wrapper, null, 'unload');
+        wrapper.remove();
+      };
+      const repository = editor.plugins.get('FileRepository');
+      const loader = repository.createLoader(new File(['image'], 'image.png'));
+      loader.upload().catch(() => {});
+      JS);
+    $this->assertJsCondition('window.pendingEditorUpload === true');
+    $this->getSession()->executeScript('window.removeEditorUnderTest();');
+    $this->assertJsCondition('window.abortedEditorUpload === true && Drupal.CKEditor5Instances.size === 0');
+  }
+
 }

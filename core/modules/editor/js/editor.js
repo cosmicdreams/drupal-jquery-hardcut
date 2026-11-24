@@ -3,7 +3,7 @@
  * Attaches behavior for the Editor module.
  */
 
-((Drupal, drupalSettings, once) => {
+((Drupal, once) => {
   const widgets = new WeakMap();
   const selector = '[data-editor-for]';
 
@@ -13,8 +13,8 @@
     return scope?.querySelector(field);
   }
 
-  function activeFormat({ field }) {
-    return drupalSettings.editor.formats[field.dataset.editorActiveTextFormat];
+  function activeFormat({ field, formats }) {
+    return formats[field.dataset.editorActiveTextFormat];
   }
 
   function serialize(widget) {
@@ -28,10 +28,10 @@
   }
 
   async function changeTextEditor(widget, newFormatID) {
-    const { field, select, listeners } = widget;
+    const { field, select, formats, listeners } = widget;
     const previousFormatID = field.dataset.editorActiveTextFormat;
     const previousFormat = activeFormat(widget);
-    const format = drupalSettings.editor.formats[newFormatID];
+    const format = formats[newFormatID];
     const request = new AbortController();
     widget.request?.abort();
     widget.request = request;
@@ -75,7 +75,9 @@
         } while (field.value !== value);
       }
 
-      widget.destroying ||= Drupal.editorDetach(field, previousFormat);
+      if (!widget.destroying) {
+        widget.destroying = Drupal.editorDetach(field, previousFormat);
+      }
       await widget.destroying;
       if (!isCurrent()) {
         return;
@@ -99,7 +101,6 @@
           Drupal.t('The text format could not be changed.'),
           'assertive',
         );
-        // eslint-disable-next-line no-console
         console.error(error);
       }
     } finally {
@@ -110,7 +111,7 @@
   }
 
   function onTextFormatChange(widget) {
-    const { field, select } = widget;
+    const { field, select, formats } = widget;
     const activeFormatID = field.dataset.editorActiveTextFormat;
     const newFormatID = select.value;
     widget.request?.abort();
@@ -123,7 +124,7 @@
       return;
     }
 
-    const format = drupalSettings.editor.formats[newFormatID];
+    const format = formats[newFormatID];
     // Inspect the current editor content rather than a stale textarea value.
     Drupal.editorDetach(field, activeFormat(widget), 'serialize');
     if (!field.value || !format?.editorSupportsContentFiltering) {
@@ -202,7 +203,12 @@
 
         const listeners = new AbortController();
         const { signal } = listeners;
-        const widget = { field, select, listeners };
+        const widget = {
+          field,
+          select,
+          formats: settings.editor.formats,
+          listeners,
+        };
         widgets.set(select, widget);
         field.dataset.editorActiveTextFormat = select.value;
         Drupal.editorAttach(field, settings.editor.formats[select.value]);
@@ -313,4 +319,4 @@
       return result;
     }
   };
-})(Drupal, drupalSettings, once);
+})(Drupal, once);

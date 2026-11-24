@@ -98,6 +98,9 @@ class CKEditor5Test extends CKEditor5TestBase {
    */
   public function testAjaxEditorSerialization(): void {
     $this->addNewTextFormat();
+    $alternate = FilterFormat::load('ckeditor5')->createDuplicate();
+    $alternate->set('format', 'alternate')->set('name', 'Alternate')->set('weight', 10)->save();
+    Editor::create(['format' => 'alternate', 'editor' => 'ckeditor5'])->save();
     FieldStorageConfig::create([
       'field_name' => 'field_sections',
       'entity_type' => 'node',
@@ -109,7 +112,7 @@ class CKEditor5Test extends CKEditor5TestBase {
       'entity_type' => 'node',
       'bundle' => 'page',
       'label' => 'Sections',
-      'settings' => ['allowed_formats' => ['ckeditor5']],
+      'settings' => ['allowed_formats' => ['ckeditor5', 'alternate']],
     ])->save();
     $this->container->get('entity_display.repository')->getFormDisplay('node', 'page')
       ->setComponent('field_sections', ['type' => 'text_textarea'])
@@ -127,15 +130,33 @@ class CKEditor5Test extends CKEditor5TestBase {
       Array.from(Drupal.CKEditor5Instances.values()).find(
         (editor) => editor.sourceElement.name === 'field_sections[0][value]'
       ).setData('<p>Kept through the Ajax rebuild.</p>');
+      const fetch = window.fetch;
+      window.fetch = (url, options) => {
+        if (!String(url).includes('editor/filter_xss/alternate')) {
+          return fetch(url, options);
+        }
+        return new Promise((resolve) => {
+          window.completeFormatSwitch = () => resolve({
+            ok: true,
+            json: async () => '<p>Obsolete response.</p>',
+          });
+        });
+      };
       JS);
+
+    $page->selectFieldOption('field_sections[0][format]', 'alternate');
+    $assert->elementExists('css', 'dialog.editor-change-text-format-modal')->pressButton('Continue');
+    $this->assertJsCondition('typeof window.completeFormatSwitch === "function"');
     $page->pressButton('Add another item');
     $assert->assertWaitOnAjaxRequest();
+    $this->getSession()->executeScript('window.completeFormatSwitch();');
     $this->assertJsCondition(<<<'JS'
       (() => {
         const sections = Array.from(Drupal.CKEditor5Instances.values()).filter(
           (editor) => editor.sourceElement.name.startsWith('field_sections[')
         );
         return sections.length === 2 &&
+          sections[0].sourceElement.dataset.editorActiveTextFormat === 'ckeditor5' &&
           sections[0].getData() === '<p>Kept through the Ajax rebuild.</p>' &&
           sections[1].getData() === '';
       })()

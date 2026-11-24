@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Drupal\Tests\ckeditor5\FunctionalJavascript;
 
+use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\Attributes\Group;
 use PHPUnit\Framework\Attributes\RunTestsInSeparateProcesses;
 
@@ -196,7 +197,10 @@ JS;
   /**
    * Test that filter settings are only visible when the filter is enabled.
    */
-  public function testFilterCheckboxesToggleSettings(): void {
+  #[DataProvider('filterThemes')]
+  public function testFilterCheckboxesToggleSettings(string $theme): void {
+    $this->container->get('theme_installer')->install([$theme]);
+    $this->config('system.theme')->set('default', $theme)->set('admin', $theme)->save();
     $page = $this->getSession()->getPage();
     $assert_session = $this->assertSession();
 
@@ -217,6 +221,17 @@ JS;
 
     $media_tab = $page->find('css', '[href^="#edit-filters-media-embed-settings"]');
     $this->assertFalse($media_tab->isVisible(), 'Media settings should be removed when media filter disabled');
+  }
+
+  /**
+   * Themes with different styling for filter settings.
+   */
+  public static function filterThemes(): array {
+    return [
+      'Stark' => ['stark'],
+      'Default Admin' => ['default_admin'],
+      'Starterkit' => ['starterkit_theme'],
+    ];
   }
 
   /**

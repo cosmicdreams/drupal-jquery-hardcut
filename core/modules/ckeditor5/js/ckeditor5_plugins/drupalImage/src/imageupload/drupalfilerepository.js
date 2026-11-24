@@ -40,8 +40,15 @@ export default class DrupalFileRepository extends Plugin {
       return;
     }
 
-    this.editor.plugins.get(FileRepository).createUploadAdapter = (loader) => {
-      return new DrupalImageUploadAdapter(loader, options);
-    };
+    const repository = this.editor.plugins.get(FileRepository);
+    repository.createUploadAdapter = (loader) =>
+      new DrupalImageUploadAdapter(loader, options);
+    this.listenTo(this.editor, 'destroy', () => {
+      for (const loader of repository.loaders) {
+        if (loader.status === 'uploading' || loader.status === 'reading') {
+          loader.abort();
+        }
+      }
+    });
   }
 }
