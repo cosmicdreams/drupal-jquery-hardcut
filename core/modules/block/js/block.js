@@ -80,8 +80,8 @@
   Drupal.behaviors.blockDrag = {
     attach(context) {
       const tableDrag = Drupal.tableDrag?.blocks;
-      const table = document.getElementById('blocks');
-      if (!tableDrag || !table) {
+      const table = tableDrag?.table;
+      if (!table?.isConnected) {
         return;
       }
 
@@ -97,6 +97,21 @@
           message.classList.toggle('region-empty', !populated);
           message.classList.toggle('region-populated', Boolean(populated));
         });
+      };
+
+      const updateRegionFields = (row, regionField, region) => {
+        if (!regionField.classList.contains(`block-region-${region}`)) {
+          const weightField = row.querySelector('select.block-weight');
+          const previous = weightField.className.replace(
+            /([^ ]+[ ]+)*block-weight-([^ ]+)([ ]+[^ ]+)*/,
+            '$2',
+          );
+          regionField.classList.remove(`block-region-${previous}`);
+          regionField.classList.add(`block-region-${region}`);
+          weightField.classList.remove(`block-weight-${previous}`);
+          weightField.classList.add(`block-weight-${region}`);
+          regionField.value = region;
+        }
       };
 
       const updateLastPlaced = (rowObject) => {
@@ -155,18 +170,7 @@
           window.alert(Drupal.t('The block cannot be placed in this region.'));
           regionField.dispatchEvent(new Event('change', { bubbles: true }));
         }
-        if (!regionField.classList.contains(`block-region-${region}`)) {
-          const weightField = row.querySelector('select.block-weight');
-          const previous = weightField.className.replace(
-            /([^ ]+[ ]+)*block-weight-([^ ]+)([ ]+[^ ]+)*/,
-            '$2',
-          );
-          regionField.classList.remove(`block-region-${previous}`);
-          regionField.classList.add(`block-region-${region}`);
-          weightField.classList.remove(`block-weight-${previous}`);
-          weightField.classList.add(`block-weight-${region}`);
-          regionField.value = region;
-        }
+        updateRegionFields(row, regionField, region);
         updateBlockWeights(region);
       }
       tableDrag.onDrop = onDrop;
@@ -190,6 +194,7 @@
             last = last.nextElementSibling;
           }
           last.after(row);
+          updateRegionFields(row, select, select.value);
           updateBlockWeights(select.value);
           checkEmptyRegions(tableDrag.rowObject);
           updateLastPlaced(tableDrag.rowObject);

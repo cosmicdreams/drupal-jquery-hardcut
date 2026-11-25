@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Drupal\Tests\block\FunctionalJavascript;
 
+use Drupal\block\Entity\Block;
 use Drupal\FunctionalJavascriptTests\WebDriverTestBase;
 use PHPUnit\Framework\Attributes\Group;
 use PHPUnit\Framework\Attributes\RunTestsInSeparateProcesses;
@@ -87,6 +88,42 @@ class BlockDragTest extends WebDriverTestBase {
       "Region help shouldn't be empty"
     );
 
+  }
+
+  /**
+   * Tests moving a block with its region select on a fresh page load.
+   */
+  public function testRegionSelectMovesBlock(): void {
+    $this->drupalPlaceBlock('system_powered_by_block', [
+      'id' => 'region_select_test',
+      'region' => 'content',
+      'weight' => 0,
+    ]);
+    $this->drupalPlaceBlock('system_powered_by_block', [
+      'id' => 'existing_help_block',
+      'region' => 'help',
+    ]);
+    $this->drupalGet('admin/structure/block');
+    $page = $this->getSession()->getPage();
+    $assert = $this->assertSession();
+    $row = 'tr[data-drupal-selector="edit-blocks-region-select-test"]';
+    $destination = '.region-help-message ~ tr[data-drupal-selector="edit-blocks-existing-help-block"] + ' . $row;
+    $expected_weight = -round(count($page->findAll('css', '#blocks tr.draggable')) / 2) + 2;
+
+    $assert->elementExists('css', "$row .block-region-content")->selectOption('help');
+
+    $assert->elementExists('css', "$destination + .region-title");
+    $assert->elementExists('css', '.region-help-message.region-populated');
+    $assert->elementExists('css', "$row .block-region-help");
+    $weight = $assert->elementExists('css', "$row .block-weight-help");
+    $this->assertSame((string) $expected_weight, $weight->getValue());
+    $this->assertNotNull($assert->waitForElementVisible('css', '.tabledrag-changed-warning'));
+    $assert->elementTextContains('css', '.tabledrag-changed-warning', 'You have unsaved changes.');
+
+    $page->pressButton('Save blocks');
+    $assert->elementExists('css', $destination);
+    $assert->fieldValueEquals('blocks[region_select_test][region]', 'help');
+    $this->assertSame('help', Block::load('region_select_test')->getRegion());
   }
 
   /**
