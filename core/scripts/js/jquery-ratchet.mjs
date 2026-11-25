@@ -4,7 +4,16 @@
  */
 
 const jqueryNames = new Set(['jQuery', '$']);
-const globalObjects = new Set(['window', 'globalThis', 'self', 'global']);
+const globalObjects = new Set([
+  'window',
+  'globalThis',
+  'self',
+  'global',
+  'parent',
+  'top',
+  'opener',
+  'frames',
+]);
 const documentNames = new Set(['document']);
 const moduleLoaders = new Set(['require', 'define']);
 
@@ -54,44 +63,71 @@ export const jqueryPlugin = {
           );
         }
 
-        function isGlobalObject(node) {
+        function memberKind(kind, name) {
+          if (kind === 'document' && name === 'defaultView') {
+            return 'window';
+          }
+          if (kind === 'window' || kind === 'frames') {
+            if (name === 'document' || name === 'frames') {
+              return name;
+            }
+            if (globalObjects.has(name)) {
+              return 'window';
+            }
+          }
+          return undefined;
+        }
+
+        function objectKind(node) {
           if (isGlobal(node, globalObjects)) {
-            return true;
+            return node.name === 'frames' ? 'frames' : 'window';
+          }
+          if (isGlobal(node, documentNames)) {
+            return 'document';
+          }
+          if (node?.type === 'ChainExpression') {
+            return objectKind(node.expression);
           }
           if (node?.type === 'MemberExpression') {
+            const kind = objectKind(node.object);
             const name = propertyName(node, node.property);
+            // A frame index or name can itself resolve to another window.
             return (
-              (globalObjects.has(name) && isGlobalObject(node.object)) ||
-              (name === 'defaultView' && isGlobal(node.object, documentNames))
+              memberKind(kind, name) ??
+              (kind === 'frames' && node.computed ? 'window' : undefined)
             );
           }
           if (node?.type !== 'Identifier') {
-            return false;
+            return undefined;
           }
           const variable = binding(node);
           const definition = variable?.defs[0];
-          // Follow simple local aliases of the browser global object. Requiring
-          // a single initialization keeps reassignment and cycles out of scope.
+          // Follow single-assignment aliases, including destructuring.
           if (
             definition?.type !== 'Variable' ||
             variable.references.filter((reference) => reference.isWrite())
               .length !== 1 ||
             !(definition.node.init?.end < node.start)
           ) {
-            return false;
+            return undefined;
           }
           let name = definition.name;
-          // Each destructured property on the path must still be a global
-          // object, e.g. const { window: { self: browser } } = globalThis.
+          const properties = [];
           while (name.parent.type === 'Property') {
-            if (!globalObjects.has(propertyName(name.parent))) {
-              return false;
-            }
+            properties.unshift(propertyName(name.parent));
             name = name.parent.parent;
           }
-          return (
-            name === definition.node.id && isGlobalObject(definition.node.init)
-          );
+          if (name === definition.node.id) {
+            return properties.reduce(
+              memberKind,
+              objectKind(definition.node.init),
+            );
+          }
+          return undefined;
+        }
+
+        function isGlobalObject(kind) {
+          return kind === 'window' || kind === 'frames';
         }
 
         function report(node) {
@@ -111,13 +147,17 @@ export const jqueryPlugin = {
           }
         }
 
-        function checkDestructuring(pattern) {
+        function checkDestructuring(pattern, kind) {
           if (pattern?.type === 'ObjectPattern') {
             for (const property of pattern.properties) {
-              if (jqueryNames.has(propertyName(property))) {
+              const name = propertyName(property);
+              if (isGlobalObject(kind) && jqueryNames.has(name)) {
                 report(property);
-              } else if (globalObjects.has(propertyName(property))) {
-                checkDestructuring(property.value);
+              } else {
+                const childKind = memberKind(kind, name);
+                if (childKind) {
+                  checkDestructuring(property.value, childKind);
+                }
               }
             }
           }
@@ -126,18 +166,23 @@ export const jqueryPlugin = {
         return {
           MemberExpression(node) {
             const name = propertyName(node, node.property);
-            if (jqueryNames.has(name) && isGlobalObject(node.object)) {
+            // Literal computed keys can be checked. Resolving dynamic key
+            // expressions is outside the scope of this rule.
+            if (
+              jqueryNames.has(name) &&
+              isGlobalObject(objectKind(node.object))
+            ) {
               report(node);
             }
           },
           VariableDeclarator(node) {
-            if (isGlobalObject(node.init)) {
-              checkDestructuring(node.id);
+            if (node.id.type === 'ObjectPattern') {
+              checkDestructuring(node.id, objectKind(node.init));
             }
           },
           'AssignmentExpression, AssignmentPattern'(node) {
-            if (isGlobalObject(node.right)) {
-              checkDestructuring(node.left);
+            if (node.left.type === 'ObjectPattern') {
+              checkDestructuring(node.left, objectKind(node.right));
             }
           },
           'ImportDeclaration, ExportNamedDeclaration, ExportAllDeclaration'(

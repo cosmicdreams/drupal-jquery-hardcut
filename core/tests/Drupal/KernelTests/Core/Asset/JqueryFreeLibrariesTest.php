@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Drupal\KernelTests\Core\Asset;
 
+use Drupal\Component\Serialization\Yaml;
 use Drupal\KernelTests\KernelTestBase;
 use PHPUnit\Framework\Attributes\Group;
 use PHPUnit\Framework\Attributes\IgnoreDeprecations;
@@ -19,6 +20,11 @@ use Symfony\Component\Finder\Finder;
 class JqueryFreeLibrariesTest extends KernelTestBase {
 
   use CoreLibraryDiscoveryTrait;
+
+  /**
+   * Matches jQuery-family library names.
+   */
+  private const JQUERY_LIBRARY = '~(?:^|[/.])jquery(?:[./_-]|$)~i';
 
   /**
    * Matches local jQuery and jQuery UI paths and package URLs.
@@ -79,14 +85,47 @@ class JqueryFreeLibrariesTest extends KernelTestBase {
       foreach (token_get_all($file->getContents()) as $token) {
         if (is_array($token) && $token[0] === T_CONSTANT_ENCAPSED_STRING) {
           $literal = substr($token[1], 1, -1);
-          if (preg_match('~^[a-z0-9_]+/(?:internal\.)?jquery(?:[./_-]|$)~i', $literal) === 1
-            && !isset($canary_fixture_references["$path:$literal"])) {
+          $library = preg_match('~^[a-z0-9_]+/(?:internal\.)?jquery(?:[./_-]|$)~i', $literal);
+          $asset = preg_match('~^[^\s]+\.(?:m?js|css)(?:[?#].*)?$~i', $literal)
+            && preg_match(self::JQUERY_ASSET_PATH, $literal);
+          if (($library || $asset) && !isset($canary_fixture_references["$path:$literal"])) {
             $references[] = "$path:{$token[2]} references $literal";
           }
         }
       }
     }
     $this->assertSame([], $references, implode("\n", $references));
+  }
+
+  /**
+   * Checks literal Twig library attachments.
+   */
+  public function testTwigLibraryReferences(): void {
+    foreach ($this->coreFiles('*.twig')->exclude('assets/vendor') as $file) {
+      $source = preg_replace('~\{#.*?#\}~s', '', $file->getContents());
+      preg_match_all("~\\battach_library\\s*\\(\\s*(['\"])([^'\"]+)\\1~", $source, $matches);
+      foreach ($matches[2] as $library) {
+        $this->assertLibraryName($library, $file->getRelativePathname());
+      }
+    }
+  }
+
+  /**
+   * Checks libraries attached by theme metadata.
+   */
+  public function testThemeLibraryReferences(): void {
+    foreach ($this->coreFiles('*.info.yml') as $file) {
+      $info = Yaml::decode($file->getContents());
+      if (($info['type'] ?? NULL) === 'theme') {
+        foreach ($info['libraries'] ?? [] as $library) {
+          // This canary fixture exercises direct theme library attachments.
+          if ($file->getRelativePathname() === 'modules/test_jquery_free/tests/themes/jqf_global/jqf_global.info.yml' && $library === 'core/tabbable.jquery.shim') {
+            continue;
+          }
+          $this->assertLibraryName($library, $file->getRelativePathname());
+        }
+      }
+    }
   }
 
   /**
@@ -121,7 +160,7 @@ class JqueryFreeLibrariesTest extends KernelTestBase {
    * Asserts that a library does not use a jQuery-family name.
    */
   private function assertLibraryName(string $name, string $location): void {
-    $this->assertDoesNotMatchRegularExpression('~(?:^|[/.])jquery(?:[./_-]|$)~i', $name, $location);
+    $this->assertDoesNotMatchRegularExpression(self::JQUERY_LIBRARY, $name, $location);
   }
 
   /**

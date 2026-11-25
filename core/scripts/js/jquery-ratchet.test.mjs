@@ -29,6 +29,18 @@ test('rejects jQuery references acquired from browser globals and modules', asyn
     'globalThis.window.jQuery();\n',
     'window.self.$();\n',
     'document.defaultView.jQuery();\n',
+    'parent.$();\n',
+    'window.top.self.jQuery();\n',
+    'opener.parent.$();\n',
+    'frames[0].jQuery();\n',
+    'window.frames[index].self.$();\n',
+    'self.top.$();\n',
+    'const doc = document;\ndoc.defaultView.$();\n',
+    'const { document: doc } = window;\ndoc.defaultView.$();\n',
+    'window.document.defaultView.jQuery();\n',
+    'window["jQuery"]();\n',
+    'window.parent["$"]();\n',
+    'globalThis[`$`]();\n',
     'const { window: browser } = globalThis;\nbrowser.jQuery();\n',
     'const { window: { jQuery: select } } = globalThis;\nselect();\n',
     'import "jquery-ui-dist";\n',
@@ -44,7 +56,7 @@ test('rejects jQuery references acquired from browser globals and modules', asyn
 
 test('allows local properties and bindings with the same names', async () => {
   assert.deepEqual(
-    await lint('const browser = { $() {} };\nbrowser.$();\n'),
+    await lint('const browser = { $() {} };\nbrowser["$"]();\n'),
     [],
   );
 });

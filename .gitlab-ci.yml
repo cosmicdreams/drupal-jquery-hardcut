@@ -746,6 +746,7 @@ default:
     - cd core
     - echo -e "Node version $(node --version)\nYarn version $(yarn --version)"
     - yarn run check:ckeditor5
+    - yarn run test:jquery-ratchet
     - yarn run lint:core-js-passing --cache --cache-strategy content --format gitlab
   artifacts:
     reports:
