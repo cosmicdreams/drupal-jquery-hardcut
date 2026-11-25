@@ -327,6 +327,16 @@ class FileManagedFileElementTest extends WebDriverTestBase {
       'pending' => TRUE,
       'afterUnload' => FALSE,
     ], $result);
+
+    // Upload a real file in the remaining widget after the invalid selection
+    // and widget removal. No stale validation message should be restored.
+    $file_system = $this->container->get('file_system');
+    $valid = $file_system->tempnam('temporary://', 'clean-upload') . '.txt';
+    file_put_contents($valid, 'valid');
+    $this->assertJsCondition("document.querySelector('input[name=\"files[other_file][]\"]:enabled')");
+    $session->getPage()->attachFileToField('files[other_file][]', $file_system->realpath($valid));
+    $this->assertNotNull($this->assertSession()->waitForLink(basename($valid)));
+    $this->assertSession()->elementNotExists('css', '.file-upload-js-error');
   }
 
   /**

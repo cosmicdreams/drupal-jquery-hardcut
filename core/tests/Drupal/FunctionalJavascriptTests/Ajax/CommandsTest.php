@@ -112,23 +112,80 @@ class CommandsTest extends WebDriverTestBase {
   }
 
   /**
-   * Tests that superseded responses can contain a settings command with no data.
+   * Tests that a discarded response leaves its library for the next request.
    */
-  public function testSupersededEmptySettingsCommand(): void {
+  public function testSupersededResponseSkipsLibraryAndSettings(): void {
     $this->drupalGet('ajax-test/native-request', ['query' => ['commands' => 1]]);
-    $this->assertTrue($this->getSession()->evaluateScript(<<<'JS'
-      (async () => {
-        const ajax = Drupal.ajax({ url: location.href });
-        ajax.isResponseCurrent = () => false;
-        await ajax.commandExecutionQueue([
-          { command: 'settings', merge: true },
-          { command: 'settings', merge: true, settings: {
-            ajaxPageState: { testAssetState: 'retained' },
-          } },
-        ], 'success');
-        return drupalSettings.ajaxPageState.testAssetState === 'retained';
-      })()
-      JS));
+    $session = $this->getSession();
+    $session->executeScript(<<<'JS'
+      window.widgetLibrariesBefore = drupalSettings.ajaxPageState.libraries;
+      const widget = document.createElement('div');
+      widget.id = 'settings-widget';
+      document.body.append(widget);
+      const request = Drupal.ajaxRequest;
+      Drupal.ajaxRequest = (options, complete) => {
+        Drupal.ajaxRequest = request;
+        return request(options, (response) => new Promise((resolve) => {
+          window.deliverStaleWidget = () => resolve(complete(response));
+        }));
+      };
+      const url = Drupal.url('ajax-test/settings-widget');
+      const first = Drupal.ajax({ url });
+      first.isResponseCurrent = () => false;
+      first.execute().commands.then(() => { window.staleWidgetSettled = true; });
+      JS);
+    $this->assertJsCondition('typeof window.deliverStaleWidget === "function"');
+    $session->executeScript('window.deliverStaleWidget()');
+    $this->assertJsCondition('window.staleWidgetSettled === true');
+    $this->assertJsCondition(<<<'JS'
+      drupalSettings.ajaxPageState.libraries === window.widgetLibrariesBefore &&
+        !Drupal.behaviors.ajaxTestSettingsWidget && !drupalSettings.ajaxTestWidget
+      JS);
+    $session->executeScript(<<<'JS'
+      Drupal.ajax({ url: Drupal.url('ajax-test/settings-widget') }).execute();
+      JS);
+    $this->assertNotNull($this->assertSession()->waitForText('Library default'));
+    $this->assertSession()->elementTextEquals('css', '#settings-widget', 'Library default');
+    $this->assertSame('Library default', $session->evaluateScript('drupalSettings.ajaxTestWidget.label'));
+  }
+
+  /**
+   * Tests Ajax errors and focus when two copies of the same form are present.
+   */
+  public function testDuplicateAjaxForms(): void {
+    $this->drupalGet('ajax-test/duplicate-forms');
+    $assert = $this->assertSession();
+    $session = $this->getSession();
+    $selector = 'form[data-drupal-selector="ajax-test-duplicate-form"]';
+    $assert->elementsCount('css', $selector, 2);
+    [$first, $second] = $session->getPage()->findAll('css', $selector);
+    $build_id_selector = 'input[name="form_build_id"]';
+    $this->assertNotSame(
+      $assert->elementExists('css', $build_id_selector, $first)->getValue(),
+      $assert->elementExists('css', $build_id_selector, $second)->getValue(),
+    );
+    $first->fillField('Name', 'Keep this value');
+    $session->executeScript("window.firstForm = document.querySelector('$selector')");
+    $second->pressButton('Update copy');
+    $assert->assertExpectedAjaxRequest(1);
+    $this->assertJsCondition('window.firstForm.isConnected && window.firstForm.elements.name.value === "Keep this value"');
+    $assert->elementsCount('css', $selector, 2);
+    [, $second] = $session->getPage()->findAll('css', $selector);
+    $this->assertStringNotContainsString('Enter a name.', $first->getText());
+    $this->assertStringContainsString('Enter a name.', $second->getText());
+
+    $build_id = $assert->elementExists('css', $build_id_selector, $second)->getValue();
+    $second->fillField('Name', 'Valid name');
+    $second->pressButton('Update copy');
+    $assert->assertWaitOnAjaxRequest();
+    [, $second] = $session->getPage()->findAll('css', $selector);
+    $this->assertNotSame($build_id, $assert->elementExists('css', $build_id_selector, $second)->getValue());
+    $this->assertJsCondition(<<<'JS'
+      document.activeElement.value === 'Update copy' &&
+        document.activeElement.form !== window.firstForm &&
+        document.activeElement.form.elements.name.value === 'Valid name' &&
+        window.firstForm.isConnected
+      JS);
   }
 
   /**

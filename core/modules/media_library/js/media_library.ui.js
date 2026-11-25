@@ -48,6 +48,30 @@
       library.isConnected && (Drupal.dialog?.hasOpenOrigin(origin) ?? true);
   }
 
+  const pickerAnnouncements = new WeakMap();
+
+  /**
+   * Queues an announcement for the lifetime of this picker.
+   *
+   * @param {HTMLElement} source
+   *   The element that triggered the announcement.
+   * @param {string} text
+   *   The translated announcement.
+   */
+  function announceInPicker(source, text) {
+    const cancel = Drupal.announce(text);
+    const dialog = source.closest('dialog');
+    if (dialog) {
+      if (!pickerAnnouncements.has(dialog)) {
+        pickerAnnouncements.set(dialog, new Set());
+      }
+      const cancellations = pickerAnnouncements.get(dialog);
+      cancellations.add(cancel);
+      // The live region flushes within 200 ms.
+      setTimeout(() => cancellations.delete(cancel), 200);
+    }
+  }
+
   /**
    * Marks the tab for the media type being shown and announces the change.
    * @param {HTMLElement} tab
@@ -63,7 +87,10 @@
       '<span class="visually-hidden">Show </span>@title<span class="visually-hidden"> media</span><span class="active-tab visually-hidden"> (selected)</span>',
       { '@title': title },
     );
-    Drupal.announce(Drupal.t('Showing @title media.', { '@title': title }));
+    announceInPicker(
+      tab,
+      Drupal.t('Showing @title media.', { '@title': title }),
+    );
   }
 
   /**
@@ -193,13 +220,10 @@
             : Drupal.t('Changed to table view.');
           const focusSelector = `.views-display-link-${display}`;
 
-          const query = new URL(link.href).searchParams;
-          const type = getMediaType(link);
-          query.set('media_library_content', '1');
-          query.set('views_display_id', display);
+          const content = link.closest('#media-library-content');
           const ajaxObject = Drupal.ajax({
-            wrapper: 'media-library-content',
-            url: `${Drupal.url('media-library')}?${query}`,
+            wrapper: 'media-library-view',
+            url: link.href,
             dialogType: 'ajax',
             progress: {
               type: 'fullscreen',
@@ -208,58 +232,28 @@
           });
 
           trackLibraryRequest(library, link, ajaxObject);
-          let inserted;
-          const { insert } = ajaxObject.commands;
-          ajaxObject.commands.insert = (ajax, response, status) => {
-            if (response.selector || response.method) {
-              return insert(ajax, response, status);
-            }
-            const content = library.querySelector('#media-library-content');
-            // A display response can arrive after a different tab has loaded.
-            // Apply its form and view together when changing types, but keep
-            // the current form when only the display is changing.
-            if (content?.dataset.mediaType === type) {
-              const template = document.createElement('template');
-              template.innerHTML = response.data;
-              const view = template.content
-                .querySelector('.js-media-library-view')
-                ?.closest('.views-element-container');
-              if (view) {
-                response = {
-                  ...response,
-                  selector: '#media-library-content #media-library-view',
-                  data: view.outerHTML,
-                };
-              }
-            }
-            const elements = insert(ajax, response, status);
-            [inserted] = elements ?? [];
-            return elements;
-          };
+          const { isResponseCurrent } = ajaxObject;
+          // A type switch replaces the content, including its upload form.
+          // A display response belongs only to the view of the original type.
+          ajaxObject.isResponseCurrent = () =>
+            isResponseCurrent() && content.isConnected;
 
           ajaxObject.afterSuccess = () => {
-            if (!ajaxObject.isResponseCurrent() || !inserted?.isConnected) {
+            if (!ajaxObject.isResponseCurrent()) {
               return;
             }
             // The display link was replaced with the view. Restore its focus.
-            library
+            content
               .querySelector(`#media-library-view ${focusSelector}`)
               ?.focus();
-            Drupal.announce(displayAnnouncement);
-            const tabs = library.querySelectorAll('.js-media-library-menu a');
-            const tab = Array.from(tabs).find(
-              (candidate) => getMediaType(candidate) === type,
-            );
-            if (tab && !tab.classList.contains('active')) {
-              selectMediaType(tab);
-            }
+            announceInPicker(content, displayAnnouncement);
           };
           ajaxObject.execute();
 
           // Announce the new view is being loaded to screen readers.
           // @todo Replace custom announcement when
           //   https://www.drupal.org/project/drupal/issues/2973140 is in.
-          Drupal.announce(loadingAnnouncement);
+          announceInPicker(link, loadingAnnouncement);
         }),
       );
     },
@@ -424,6 +418,9 @@
         return;
       }
       window.addEventListener('dialog:afterclose', ({ target }) => {
+        const dialog = target.closest('dialog');
+        pickerAnnouncements.get(dialog)?.forEach((cancel) => cancel());
+        pickerAnnouncements.delete(dialog);
         if (target.closest('.media-library-widget-modal')) {
           // Keep the array reference used by existing listeners.
           Drupal.MediaLibrary.currentSelection.length = 0;

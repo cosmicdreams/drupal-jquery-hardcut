@@ -263,7 +263,9 @@ class MoveBlockFormTest extends WebDriverTestBase {
         const blocks = Array.from(document.querySelectorAll($selector));
         const expected = $expected;
         return blocks.length === expected.length &&
-          blocks.every((block, index) => block.matches(expected[index]));
+          expected.every((selector, index) =>
+            blocks[index].matches(selector) &&
+            document.querySelectorAll(selector).length === 1);
       })()
       JS);
   }

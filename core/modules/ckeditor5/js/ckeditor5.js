@@ -372,6 +372,9 @@
       const creation = ClassicEditor.create(element, editorConfig)
         .then((editor) => {
           if (getElementId(element) !== id || !element.isConnected) {
+            // This instance no longer owns the textarea. Its asynchronous
+            // destruction must leave the current text untouched.
+            editor.updateSourceElement = () => {};
             return editor.destroy();
           }
 

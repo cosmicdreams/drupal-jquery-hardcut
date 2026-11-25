@@ -220,13 +220,13 @@ class WidgetViewsTest extends MediaLibraryTestBase {
     $session->executeScript(<<<'JS'
       const request = Drupal.ajaxRequest;
       window.pickerResponses = {};
+      window.firstUploadForm = document.querySelector('.js-media-library-add-form');
       Drupal.ajaxRequest = (options, complete) => {
-        const query = new URL(options.url, document.baseURI).searchParams;
-        const type = query.get('media_library_selected_type');
-        if (!type) {
+        const type = new URL(options.url, document.baseURI).searchParams.get('media_library_selected_type');
+        const key = { first_document: 'table', second_document: 'type' }[type];
+        if (!key || window.pickerResponses[key]) {
           return request(options, complete);
         }
-        const key = type === 'second_document' ? 'type' : 'table';
         return request(options, (response) => new Promise((resolve) => {
           window.pickerResponses[key] = () => resolve(complete(response));
         }));
@@ -237,30 +237,52 @@ class WidgetViewsTest extends MediaLibraryTestBase {
     $session->getPage()->clickLink('Table');
     $this->assertJsCondition('typeof window.pickerResponses.table === "function"');
 
-    if ($type_first) {
-      $session->executeScript('window.pickerResponses.type();');
-      $this->assertAnnounceContains('Showing Second Document media.');
-      $assert->elementTextContains('css', $form, 'Allowed types: pdf');
-      $session->executeScript('window.pickerResponses.table();');
-      $this->assertAnnounceContains('Changed to table view.');
-      $this->assertAnnounceContains('Showing First Document media.');
-    }
-    else {
+    if (!$type_first) {
       $session->executeScript('window.pickerResponses.table();');
       $this->assertAnnounceContains('Changed to table view.');
       $assert->elementTextContains('css', $form, 'Allowed types: txt');
-      $session->executeScript('window.pickerResponses.type();');
-      $this->assertAnnounceContains('Showing Second Document media.');
+      $this->assertJsCondition('window.firstUploadForm.isConnected');
     }
 
+    $session->executeScript('window.pickerResponses.type();');
+    $this->assertAnnounceContains('Showing Second Document media.');
+    $assert->elementTextContains('css', $form, 'Allowed types: pdf');
+    // Supply an editable field on the initial upload form, before selecting
+    // a file would replace the picker with the second step of the upload.
+    $session->executeScript(<<<'JS'
+      const name = document.createElement('input');
+      name.name = 'upload_title';
+      document.querySelector('.js-media-library-add-form').append(name);
+      JS);
+    $session->getPage()->fillField('upload_title', 'Unsaved second document');
+
+    if ($type_first) {
+      $session->executeScript('window.pickerResponses.table();');
+    }
     $assert->assertWaitOnAjaxRequest();
-    $title = $type_first ? 'First Document' : 'Second Document';
-    $assert->elementTextEquals('css', '.js-media-library-menu a.active', "Show $title media (selected)");
-    $display = $type_first ? 'widget_table' : 'widget';
-    $view = ".js-media-library-view[data-view-display-id=\"$display\"]";
-    $assert->elementTextContains('css', $view, $type_first ? 'First result' : 'Second result');
-    $assert->elementTextNotContains('css', $view, $type_first ? 'Second result' : 'First result');
-    $assert->elementTextContains('css', $form, $type_first ? 'Allowed types: txt' : 'Allowed types: pdf');
+    $assert->elementTextEquals('css', '.js-media-library-menu a.active', 'Show Second Document media (selected)');
+    $view = '.js-media-library-view[data-view-display-id="widget"]';
+    $assert->elementTextContains('css', $view, 'Second result');
+    $assert->elementTextNotContains('css', $view, 'First result');
+    $assert->elementTextContains('css', $form, 'Allowed types: pdf');
+    $assert->fieldValueEquals('upload_title', 'Unsaved second document');
+  }
+
+  /**
+   * Tests that queued picker announcements are canceled when it closes.
+   */
+  public function testDoesNotAnnounceInNextModal(): void {
+    $this->drupalGet('node/add/basic_page');
+    $this->openMediaLibraryForField('field_unlimited_media');
+    $this->getSession()->executeScript(<<<'JS'
+      const picker = document.querySelector('dialog.media-library-widget-modal');
+      picker.querySelector('.views-display-link-widget_table').click();
+      Drupal.dialog.get(picker.querySelector('.drupal-dialog-content')).close();
+      Drupal.dialog(document.createElement('div'), { title: 'Next dialog' }).showModal();
+      Drupal.announce('Next dialog announcement.');
+      JS);
+    $this->assertAnnounceContains('Next dialog announcement.');
+    $this->assertSession()->elementTextEquals('css', 'dialog #drupal-live-announce', 'Next dialog announcement.');
   }
 
   /**

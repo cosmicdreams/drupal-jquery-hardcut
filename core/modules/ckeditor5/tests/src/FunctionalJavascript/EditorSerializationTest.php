@@ -156,13 +156,62 @@ class EditorSerializationTest extends CKEditor5TestBase {
     $assert->elementExists('css', 'dialog.editor-change-text-format-modal')->pressButton('Cancel');
     $assert->fieldValueEquals('field_sections[0][format]', 'plain_text');
     $this->assertJsCondition($shown);
+
+    $session = $this->getSession();
+    $session->executeScript(<<<'JS'
+      window.bodyOverflowBeforeConfirmation = document.body.style.overflow;
+      window.confirmationCloses = 0;
+      document.addEventListener('dialog:afterclose', () => window.confirmationCloses++);
+      JS);
+    $session->getPage()->selectFieldOption('field_sections[0][format]', 'alternate');
+    $this->dismissEditorOverlay();
+    $assert->elementExists('css', 'dialog.editor-change-text-format-modal[open]');
+    $this->dismissEditorOverlay();
+    $this->assertJsCondition('window.confirmationCloses === 1');
+    $assert->elementNotExists('css', 'dialog.editor-change-text-format-modal');
+    $assert->fieldValueEquals('field_sections[0][format]', 'plain_text');
+    $this->assertJsCondition("$shown && document.body.style.overflow === window.bodyOverflowBeforeConfirmation");
+  }
+
+  /**
+   * Tests typing in the textarea before its previous editor finishes loading.
+   */
+  public function testDiscardedEditorPreservesPlainText(): void {
+    $this->openSectionsForm(allow_plain_text: TRUE);
+    $session = $this->getSession();
+    $page = $session->getPage();
+    $page->selectFieldOption('field_sections[0][format]', 'plain_text');
+    $this->assertJsCondition('window.switchingEditor.state === "destroyed"');
+
+    $session->executeScript(<<<'JS'
+      const { ClassicEditor } = CKEDITOR;
+      const create = ClassicEditor.create;
+      ClassicEditor.create = async (...args) => {
+        ClassicEditor.create = create;
+        await new Promise((resolve) => { window.resumeEditorCreation = resolve; });
+        window.pendingEditor = await create.apply(ClassicEditor, args);
+        return window.pendingEditor;
+      };
+      JS);
+    $this->confirmAlternateFormat();
+    $this->assertJsCondition('typeof window.resumeEditorCreation === "function"');
+    $page->selectFieldOption('field_sections[0][format]', 'plain_text');
+    $page->fillField('field_sections[0][value]', 'Typed while the editor was loading.');
+    $session->executeScript('window.resumeEditorCreation()');
+    $this->assertJsCondition('window.pendingEditor?.state === "destroyed"');
+    $this->assertSession()->fieldValueEquals('field_sections[0][value]', 'Typed while the editor was loading.');
   }
 
   /**
    * Opens an edit form with two existing formatted text items.
    */
-  private function openSectionsForm(string $original = '<p>First section.</p>'): NodeInterface {
+  private function openSectionsForm(string $original = '<p>First section.</p>', bool $allow_plain_text = FALSE): NodeInterface {
     $this->createSectionsField();
+    if ($allow_plain_text) {
+      $field = FieldConfig::loadByName('node', 'page', 'field_sections');
+      $this->assertInstanceOf(FieldConfig::class, $field);
+      $field->setSetting('allowed_formats', ['ckeditor5', 'alternate', 'plain_text'])->save();
+    }
     $node = $this->drupalCreateNode([
       'type' => 'page',
       'uid' => $this->loggedInUser->id(),

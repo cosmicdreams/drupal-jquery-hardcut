@@ -116,6 +116,18 @@ class StickyTest extends WebDriverTestBase {
     $assert->elementTextEquals('css', $counter, '1 item selected');
     $assert->elementAttributeContains('css', $counter, 'aria-live', 'polite');
     $assert->buttonExists('Insert selected', $assert->elementExists('css', $pane));
+
+    $this->assertTrue($this->getSession()->evaluateScript(<<<'JS'
+      (() => {
+        const pane = document.querySelector('.media-library-widget-modal .drupal-dialog-buttonpane');
+        const dialog = Drupal.dialog.get(pane.parentElement.querySelector('.drupal-dialog-content'));
+        const { buttons } = dialog.settings;
+        dialog.update({ buttons: [] });
+        const hidden = pane.hidden && getComputedStyle(pane).display === 'none';
+        dialog.update({ buttons });
+        return hidden && !pane.hidden && getComputedStyle(pane).display !== 'none';
+      })()
+      JS));
   }
 
   /**

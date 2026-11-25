@@ -193,6 +193,10 @@
     flex-direction: column;
     align-items: center;
 
+    &[hidden] {
+      display: none;
+    }
+
     .form-actions,
     .field-actions {
       flex: 1;

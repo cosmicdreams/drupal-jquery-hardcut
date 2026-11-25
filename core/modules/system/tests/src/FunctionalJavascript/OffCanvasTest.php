@@ -484,6 +484,77 @@ class OffCanvasTest extends OffCanvasTestBase {
   }
 
   /**
+   * Tests settings freshness and behavior attachment while tray assets load.
+   */
+  public function testHtmxTrayWaitsForSharedAssets(): void {
+    $this->drupalGet('/off-canvas-test-htmx-links');
+    $session = $this->getSession();
+    $session->executeScript(<<<'JS'
+      const bundle = '/tray-test-delayed.js';
+      // Register a bundle whose load stays pending until the test releases it.
+      loadjs(bundle, bundle, { before: () => false });
+      window.releaseTrayBundle = () => loadjs.done(bundle);
+      window.trayAssetRequests = 0;
+      window.trayAttachments = [];
+      const addAssets = Drupal.htmx.addAssets;
+      Drupal.htmx.addAssets = (assets) => {
+        if (assets.some(({ src }) => src === bundle)) {
+          window.trayAssetRequests++;
+        }
+        return addAssets(assets);
+      };
+      const text = Response.prototype.text;
+      Response.prototype.text = async function () {
+        const body = await text.call(this);
+        if (!this.url.includes('off-canvas-thing')) {
+          return body;
+        }
+        const doc = Document.parseHTMLUnsafe(body);
+        let settings = doc.querySelector('[data-drupal-selector="drupal-settings-json"]');
+        if (!settings) {
+          settings = doc.createElement('script');
+          settings.type = 'application/json';
+          settings.dataset.drupalSelector = 'drupal-settings-json';
+          doc.head.append(settings);
+        }
+        const values = JSON.parse(settings.textContent || '{}');
+        const first = this.url.includes('off-canvas-thing1');
+        values.trayTest = first ? { stale: true } : { current: true };
+        settings.textContent = JSON.stringify(values);
+        const script = doc.createElement('script');
+        script.setAttribute('src', bundle);
+        doc.head.append(script);
+        const probe = doc.createElement('span');
+        probe.dataset.trayProbe = '';
+        doc.body.append(probe);
+        return doc.documentElement.outerHTML;
+      };
+      Drupal.behaviors.trayAttachProbe = {
+        attach(context, settings) {
+          if (context.querySelector('[data-tray-probe]')) {
+            window.trayAttachments.push([
+              Boolean(context.closest('dialog[open]')),
+              Boolean(settings.trayTest?.current),
+            ]);
+          }
+        },
+      };
+      [...document.links].find((link) => link.textContent === 'Open panel 1').click();
+      JS);
+    $this->assertJsCondition('window.trayAssetRequests === 1');
+    $session->getPage()->clickLink('Open panel 2');
+    $this->assertJsCondition('window.trayAssetRequests === 2');
+    $this->assertSession()->elementNotExists('css', 'dialog#drupal-off-canvas-wrapper');
+    $this->assertNull($session->evaluateScript('drupalSettings.trayTest ?? null'));
+    $session->executeScript('window.releaseTrayBundle()');
+    $this->waitForOffCanvasToOpen();
+    $this->assertJsCondition('window.trayAttachments.length === 1');
+    $this->assertSame([[TRUE, TRUE]], $session->evaluateScript('window.trayAttachments'));
+    $this->assertSame(['current' => TRUE], $session->evaluateScript('drupalSettings.trayTest'));
+    $this->assertSession()->elementTextContains('css', '#drupal-off-canvas', 'Thing 2 says hello');
+  }
+
+  /**
    * Asserts that the off-canvas dialog opens and renders expected content.
    *
    * @param int $link_index

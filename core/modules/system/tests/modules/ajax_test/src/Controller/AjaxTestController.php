@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Drupal\ajax_test\Controller;
 
+use Drupal\ajax_test\Form\DuplicateAjaxForm;
 use Drupal\Component\Serialization\Json;
 use Drupal\contextual\ContextualLinksSerializer;
 use Drupal\Core\Ajax\AjaxResponse;
@@ -277,6 +278,27 @@ class AjaxTestController {
     $response->setAttachments($build['#attached']);
 
     return $response;
+  }
+
+  /**
+   * Returns an Ajax-loaded widget with library defaults.
+   */
+  public function settingsWidget(): AjaxResponse {
+    $response = new AjaxResponse();
+    $response->addCommand(new HtmlCommand('#settings-widget', '<div><span data-ajax-test-widget></span></div>'));
+    $response->addAttachments(['library' => ['ajax_test/settings-widget']]);
+    return $response;
+  }
+
+  /**
+   * Builds two copies of the same Ajax form.
+   */
+  public function duplicateForms(): array {
+    $form_builder = \Drupal::formBuilder();
+    return [
+      'first' => $form_builder->getForm(DuplicateAjaxForm::class),
+      'second' => $form_builder->getForm(DuplicateAjaxForm::class),
+    ];
   }
 
   /**

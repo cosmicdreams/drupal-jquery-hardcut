@@ -160,6 +160,9 @@
       event.preventDefault();
       const input = event.currentTarget;
       const widget = input.closest('div.js-form-managed-file');
+      if (!widget) {
+        return;
+      }
       widget.querySelector('.file-upload-js-error')?.remove();
 
       const extensions = input.dataset.fileExtensions

@@ -72,6 +72,13 @@
       if (request) {
         request.generation = Drupal.dialog.beginOpenRequest(selector);
         request.origin = Drupal.dialog.requestOrigin(request.source);
+        ctx.swapGuard = () => {
+          if (canSwap(request)) {
+            return true;
+          }
+          delete ctx.hx.trigger;
+          return false;
+        };
       }
     },
 
@@ -126,13 +133,6 @@
       if (!request) {
         return true;
       }
-      ctx.swapGuard = () => {
-        if (canSwap(request)) {
-          return true;
-        }
-        delete ctx.hx.trigger;
-        return false;
-      };
       if (!ctx.swapGuard()) {
         return false;
       }
@@ -140,6 +140,9 @@
       if (task) {
         // Keep the checked swap synchronous with respect to a new open.
         Object.assign(task.swapSpec, { transition: false, swap: 0, settle: 0 });
+        // The first response swaps into a hidden staging container. Attach
+        // behaviors once the content is inside the open dialog.
+        task.deferDrupalBehaviors = !Drupal.dialog.get(task.target)?.open;
         swaps.set(task, { request, title: ctx.title });
       }
       // The response title belongs in the tray, not in the document head.
@@ -175,7 +178,7 @@
       }
       const options = JSON.parse(request.source.dataset.dialogOptions || '{}');
       const { position } = request;
-      Drupal.dialog(content, {
+      const dialog = Drupal.dialog(content, {
         width: 300,
         height: undefined,
         ...options,
@@ -194,7 +197,15 @@
         drupalAutoButtons: false,
         drupalOffCanvasPosition: position,
         removeOnClose: true,
-      }).show(request.generation);
+      });
+      dialog.show(request.generation);
+      if (
+        task.deferDrupalBehaviors &&
+        dialog.open &&
+        Drupal.dialog.isLatestOpen(selector, request.generation)
+      ) {
+        htmx.trigger(content, 'htmx:drupal:load');
+      }
     },
   });
 })(Drupal, htmx);

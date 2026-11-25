@@ -168,6 +168,14 @@
       );
       const content = document.createElement('div');
       content.innerHTML = message;
+      let confirmed = false;
+      content.addEventListener('dialog:afterclose', () => {
+        // Cancel restores the active format, including after a native close.
+        if (!confirmed && select.isConnected) {
+          select.value = activeFormatID;
+          select.dispatchEvent(new Event('change'));
+        }
+      });
       const confirmationDialog = Drupal.dialog(content, {
         title: Drupal.t('Change text format?'),
         classes: {
@@ -179,6 +187,7 @@
             text: Drupal.t('Continue'),
             class: 'button button--primary',
             click() {
+              confirmed = true;
               if (field.isConnected && select.isConnected) {
                 changeTextEditor(field, newFormatID);
               }
@@ -189,14 +198,6 @@
             text: Drupal.t('Cancel'),
             class: 'button',
             click() {
-              // Restore the active format ID: cancel changing text format. We
-              // cannot simply call event.preventDefault() because the
-              // change event fires after the change has been accepted.
-              if (select.isConnected) {
-                select.value = activeFormatID;
-                const eventChange = new Event('change');
-                select.dispatchEvent(eventChange);
-              }
               confirmationDialog.close();
             },
           },

@@ -341,7 +341,7 @@
     }
 
     function close(value) {
-      if (!element.open || closing) {
+      if (!openSessions.has(element) || closing) {
         return;
       }
       closing = true;
@@ -352,7 +352,9 @@
       }
       resizeObserver.disconnect();
       resizeObserver = null;
-      element.close(value);
+      if (element.open) {
+        element.close(value);
+      }
       openModals.delete(element);
       if (settings.removeOnClose) {
         Drupal.detachBehaviors(content, null, 'unload');
@@ -413,6 +415,12 @@
     element.addEventListener('cancel', (event) => {
       event.preventDefault();
       if (settings.closeOnEscape !== false) {
+        close();
+      }
+    });
+    // The browser can close a dialog without a cancelable event.
+    element.addEventListener('close', () => {
+      if (!element.open) {
         close();
       }
     });

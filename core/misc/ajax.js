@@ -1807,23 +1807,25 @@
    */
   Drupal.Ajax.prototype.commandExecutionQueue = function (response, status) {
     const ajaxCommands = this.commands;
+    // Discard a response that is already stale before it publishes settings
+    // or starts loading assets. The next request can still ask for its
+    // libraries. Once accepted, finish loading its assets: later requests may
+    // already have sent the updated ajaxPageState and omitted those libraries.
+    let accepted;
     return Object.keys(response || {}).reduce(
       // Add all commands to a single execution queue.
       (executionQueue, key) =>
         executionQueue.then(() => {
           const { command } = response[key];
-          // A superseded response still updates asset state and loads assets
-          // (settings, add_css, add_js, including scripts for placeholders).
-          // Recheck freshness after each await before applying page updates:
-          // inserts, removals, changed, restripe, focus, scrollTop, history,
-          // dialog writes and other page effects.
+          const isCurrent = this.isResponseCurrent?.() ?? true;
+          accepted = accepted ?? isCurrent;
+          // Finish loading accepted assets even if this response is now
+          // stale. Recheck freshness before applying settings or page effects.
           if (
+            accepted &&
             command &&
             ajaxCommands[command] &&
-            (command === 'settings' ||
-              command === 'add_css' ||
-              command === 'add_js' ||
-              (this.isResponseCurrent?.() ?? true))
+            (isCurrent || command === 'add_css' || command === 'add_js')
           ) {
             // When a command returns a promise, the remaining commands will not
             // execute until that promise has been fulfilled. This is typically
@@ -2565,16 +2567,6 @@
      *   The XMLHttpRequest status.
      */
     settings(ajax, response, status) {
-      if (ajax.isResponseCurrent?.() === false) {
-        // Keep the library list available to subsequent requests without
-        // restoring settings for page content this response no longer owns.
-        const ajaxPageState = response.settings?.ajaxPageState;
-        if (response.merge && ajaxPageState) {
-          extendDeep(drupalSettings, { ajaxPageState });
-        }
-        return;
-      }
-
       const ajaxSettings = drupalSettings.ajax;
 
       // Clean up drupalSettings.ajax.
