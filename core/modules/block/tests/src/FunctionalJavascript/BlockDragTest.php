@@ -8,6 +8,7 @@ use Drupal\block\Entity\Block;
 use Drupal\FunctionalJavascriptTests\WebDriverTestBase;
 use PHPUnit\Framework\Attributes\Group;
 use PHPUnit\Framework\Attributes\RunTestsInSeparateProcesses;
+use PHPUnit\Framework\Attributes\TestWith;
 
 /**
  * Tests drag and drop blocks on block layout page.
@@ -93,12 +94,13 @@ class BlockDragTest extends WebDriverTestBase {
   /**
    * Tests moving a block with its region select on a fresh page load.
    */
-  public function testRegionSelectMovesBlock(): void {
-    $this->drupalPlaceBlock('system_powered_by_block', [
-      'id' => 'region_select_test',
-      'region' => 'content',
-      'weight' => 0,
-    ]);
+  #[TestWith([100, 'select'], 'select weight')]
+  #[TestWith([0, 'input[type="number"]'], 'numeric weight')]
+  public function testRegionSelectMovesBlock(int $weight_select_max, string $weight_control): void {
+    $this->config('system.site')->set('weight_select_max', $weight_select_max)->save();
+    $block_id = 'default_admin_secondary_local_tasks';
+    $initial_weight = 10;
+    Block::load($block_id)->setWeight($initial_weight)->save();
     $this->drupalPlaceBlock('system_powered_by_block', [
       'id' => 'existing_help_block',
       'region' => 'help',
@@ -106,24 +108,27 @@ class BlockDragTest extends WebDriverTestBase {
     $this->drupalGet('admin/structure/block');
     $page = $this->getSession()->getPage();
     $assert = $this->assertSession();
-    $row = 'tr[data-drupal-selector="edit-blocks-region-select-test"]';
+    $row = 'tr[data-drupal-selector="edit-blocks-default-admin-secondary-local-tasks"]';
     $destination = '.region-help-message ~ tr[data-drupal-selector="edit-blocks-existing-help-block"] + ' . $row;
-    $expected_weight = -round(count($page->findAll('css', '#blocks tr.draggable')) / 2) + 2;
+    // Numeric weights are kept as entered.
+    $expected_weight = $weight_control === 'select' ? -round(count($page->findAll('css', '#blocks tr.draggable')) / 2) + 2 : $initial_weight;
 
-    $assert->elementExists('css', "$row .block-region-content")->selectOption('help');
+    $assert->elementExists('css', '.region-pre_content-message.region-populated');
+    $assert->elementExists('css', "$row .block-region-pre_content")->selectOption('help');
 
     $assert->elementExists('css', "$destination + .region-title");
+    $assert->elementExists('css', '.region-pre_content-message.region-empty');
     $assert->elementExists('css', '.region-help-message.region-populated');
     $assert->elementExists('css', "$row .block-region-help");
-    $weight = $assert->elementExists('css', "$row .block-weight-help");
+    $weight = $assert->elementExists('css', "$row {$weight_control}.block-weight-help");
     $this->assertSame((string) $expected_weight, $weight->getValue());
     $this->assertNotNull($assert->waitForElementVisible('css', '.tabledrag-changed-warning'));
     $assert->elementTextContains('css', '.tabledrag-changed-warning', 'You have unsaved changes.');
 
     $page->pressButton('Save blocks');
     $assert->elementExists('css', $destination);
-    $assert->fieldValueEquals('blocks[region_select_test][region]', 'help');
-    $this->assertSame('help', Block::load('region_select_test')->getRegion());
+    $assert->fieldValueEquals("blocks[$block_id][region]", 'help');
+    $this->assertSame('help', Block::load($block_id)->getRegion());
   }
 
   /**

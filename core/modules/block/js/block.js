@@ -101,7 +101,7 @@
 
       const updateRegionFields = (row, regionField, region) => {
         if (!regionField.classList.contains(`block-region-${region}`)) {
-          const weightField = row.querySelector('select.block-weight');
+          const weightField = row.querySelector('.block-weight');
           const previous = weightField.className.replace(
             /([^ ]+[ ]+)*block-weight-([^ ]+)([ ]+[^ ]+)*/,
             '$2',
