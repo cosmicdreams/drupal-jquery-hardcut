@@ -90,11 +90,17 @@ class WidgetViewsTest extends MediaLibraryTestBase {
 
     $this->openMediaLibraryForField('field_unlimited_media');
     $this->getSession()->executeScript(<<<'JS'
+      const unrelatedView = document.createElement('div');
+      unrelatedView.className = 'views-element-container';
+      unrelatedView.innerHTML = '<div class="js-media-library-view"></div>';
+      document.body.prepend(unrelatedView);
+      Drupal.behaviors.MediaLibraryViewsDisplay.attach(unrelatedView);
       const container = document.getElementById('media-library-view');
       container.removeAttribute('id');
       Drupal.behaviors.MediaLibraryViewsDisplay.attach(container.querySelector('.js-media-library-view'));
       JS);
-    $assert_session->elementExists('css', '#media-library-view');
+    $assert_session->elementsCount('css', '#media-library-view', 1);
+    $assert_session->elementExists('css', '#media-library-content #media-library-view');
 
     // Assert the 'Apply filter' button is not moved to the button pane.
     $button_pane = $assert_session->elementExists('css', '.drupal-dialog-buttonpane');

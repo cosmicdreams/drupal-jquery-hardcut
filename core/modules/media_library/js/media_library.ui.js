@@ -193,7 +193,9 @@
         ? [context]
         : context.querySelectorAll('.js-media-library-view');
       views.forEach((view) => {
-        const container = view.closest('.views-element-container');
+        const container = view.closest(
+          '#media-library-content .views-element-container',
+        );
         if (container) {
           container.id = 'media-library-view';
         }
@@ -205,10 +207,14 @@
         context,
       ).forEach((link) =>
         link.addEventListener('click', (event) => {
+          const content = link.closest('#media-library-content');
+          if (!content) {
+            return;
+          }
           event.preventDefault();
           event.stopPropagation();
 
-          const library = link.closest('#media-library-wrapper');
+          const library = content.closest('#media-library-wrapper');
           // Add a loading and display announcement for screen reader users.
           const grid = link.classList.contains('views-display-link-widget');
           const display = grid ? 'widget' : 'widget_table';
@@ -220,7 +226,6 @@
             : Drupal.t('Changed to table view.');
           const focusSelector = `.views-display-link-${display}`;
 
-          const content = link.closest('#media-library-content');
           const ajaxObject = Drupal.ajax({
             wrapper: 'media-library-view',
             url: link.href,
