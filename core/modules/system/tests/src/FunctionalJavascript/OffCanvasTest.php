@@ -85,8 +85,10 @@ class OffCanvasTest extends OffCanvasTestBase {
     foreach ([1, 2] as $link_index) {
       $this->assertOffCanvasDialog($link_index, 'top');
       $this->assertJsCondition(<<<'JS'
-        document.getElementById('drupal-off-canvas-wrapper').getBoundingClientRect().width ===
-          document.documentElement.clientWidth
+        (() => {
+          const { left, width } = document.getElementById('drupal-off-canvas-wrapper').getBoundingClientRect();
+          return left === 0 && width === document.documentElement.clientWidth;
+        })()
         JS);
 
       if ($link_index === 2) {

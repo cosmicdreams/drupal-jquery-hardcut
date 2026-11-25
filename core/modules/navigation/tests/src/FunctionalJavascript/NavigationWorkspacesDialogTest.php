@@ -95,17 +95,22 @@ class NavigationWorkspacesDialogTest extends WebDriverTestBase {
     $assert->elementExists('css', 'a.toolbar-button--icon--workspaces[data-hx-get]')->click();
     $tray = $assert->waitForElementVisible('css', 'dialog#drupal-off-canvas-wrapper[open]');
     $this->assertNotNull($tray);
-    $widths = $this->getSession()->evaluateScript(<<<'JS'
+    $geometry = $this->getSession()->evaluateScript(<<<'JS'
       (() => {
         const { left, right } = Drupal.displace.offsets;
-        const tray = document.querySelector('dialog#drupal-off-canvas-wrapper');
+        const tray = document.querySelector('dialog#drupal-off-canvas-wrapper').getBoundingClientRect();
+        const sidebar = document.querySelector('.admin-toolbar__displace-placeholder').getBoundingClientRect();
         return {
-          actual: tray.getBoundingClientRect().width,
-          expected: document.documentElement.clientWidth - left - right,
+          trayLeft: tray.left,
+          sidebarRight: sidebar.right,
+          trayWidth: tray.width,
+          expectedWidth: document.documentElement.clientWidth - left - right,
         };
       })()
       JS);
-    $this->assertEqualsWithDelta($widths['expected'], $widths['actual'], 1);
+    $this->assertGreaterThan(0, $geometry['sidebarRight']);
+    $this->assertEqualsWithDelta($geometry['sidebarRight'], $geometry['trayLeft'], 1);
+    $this->assertEqualsWithDelta($geometry['expectedWidth'], $geometry['trayWidth'], 1);
     $this->assertNotNull($tray->findLink('Stage'));
     $this->assertNotNull($tray->findLink('View all workspaces'));
     $this->assertJsCondition(<<<'JS'
