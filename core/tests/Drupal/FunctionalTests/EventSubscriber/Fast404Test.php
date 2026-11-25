@@ -4,7 +4,9 @@ declare(strict_types=1);
 
 namespace Drupal\FunctionalTests\EventSubscriber;
 
+use Drupal\Core\Config\Schema\SchemaIncompleteException;
 use Drupal\file\Entity\File;
+use Drupal\image\Entity\ImageStyle;
 use Drupal\Tests\BrowserTestBase;
 use PHPUnit\Framework\Attributes\Group;
 use PHPUnit\Framework\Attributes\RunTestsInSeparateProcesses;
@@ -28,6 +30,7 @@ class Fast404Test extends BrowserTestBase {
    */
   protected static $modules = [
     'file',
+    'image',
     'page_cache',
   ];
 
@@ -59,7 +62,9 @@ class Fast404Test extends BrowserTestBase {
     $this->assertSession()->pageTextContains('Oops I did it again!');
 
     // Ensure disabling works.
-    $this->config('system.performance')->set('fast_404.enabled', FALSE)->save();
+    $config = $this->config('system.performance');
+    $values_before_disable = $config->get('fast_404');
+    $config->set('fast_404', ['enabled' => FALSE])->save();
     $this->drupalGet('does-not-exist.txt');
     $this->assertSession()->responseContains('modules/system/css/');
     $this->assertSession()->statusCodeEquals(404);
@@ -67,10 +72,11 @@ class Fast404Test extends BrowserTestBase {
     $this->assertSession()->pageTextNotContains('Oops I did it again!');
 
     // Ensure settings.php can override settings.
-    $settings['config']['system.performance']['fast_404']['enabled'] = (object) [
-      'value' => TRUE,
-      'required' => TRUE,
-    ];
+    $settings['config']['system.performance']['fast_404'] = array_map(
+      // Prepare the values for ::writeSettings().
+      fn ($value) => (object) ['value' => $value, 'required' => TRUE],
+      $values_before_disable,
+    );
     $this->writeSettings($settings);
     // Changing settings using an override means we need to rebuild everything.
     $this->rebuildAll();
@@ -80,6 +86,36 @@ class Fast404Test extends BrowserTestBase {
     // Fast 404s returned via the exception subscriber still have the
     // X-Generator header.
     $this->assertSession()->responseHeaderContains('X-Generator', 'Drupal');
+
+    // Make sure we cannot end up with invalid config
+    $config = $this->config('system.performance');
+    $config->set('fast_404', ['enabled' => FALSE])
+      ->clear('fast_404.exclude_paths')
+      ->clear('fast_404.paths')
+      ->clear('fast_404.html')
+      ->save();
+
+    // Should not be able to enable without the proper settings.
+    $this->expectException(SchemaIncompleteException::class);
+    $config->set('fast_404', ['enabled' => TRUE])
+      ->save();
+  }
+
+  /**
+   * Tests fast 404s for routes whose parameters cannot be converted.
+   */
+  public function testFast404ParamNotConverted(): void {
+    // Image style paths are excluded from fast 404s by default.
+    // @see https://www.drupal.org/project/drupal/issues/3216687
+    $this->config('system.performance')->set('fast_404.exclude_paths', '/\/imagecache\//')->save();
+
+    // An unknown image style fails parameter conversion on a path that
+    // matches fast_404.paths.
+    $style = ImageStyle::create(['name' => 'does_not_exist', 'label' => 'Does not exist']);
+    $this->drupalGet($style->buildUrl('public://fast-404-test.png'));
+    $this->assertSession()->statusCodeEquals(404);
+    $this->assertSession()->responseNotContains('modules/system/css/');
+    $this->assertSession()->pageTextContains('The requested URL');
   }
 
   /**
