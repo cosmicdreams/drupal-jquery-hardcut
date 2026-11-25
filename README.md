@@ -1,3 +1,6 @@
+> **Reference build: Drupal core without jQuery.** This repository is not Drupal core's official home. Start with
+> [REVIEW.md](REVIEW.md); the change is on the `jquery-hardcut` branch and in the open pull request.
+
 <img alt="Drupal Logo" src="https://www.drupal.org/files/Wordmark_blue_RGB.png" height="60px">
 
 Drupal is an open source content management platform supporting a variety of
