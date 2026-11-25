@@ -7,6 +7,7 @@ namespace Drupal\Tests\layout_builder\FunctionalJavascript;
 use Drupal\block_content\Entity\BlockContent;
 use Drupal\Core\Url;
 use Drupal\filter\FilterFormatRepositoryInterface;
+use Drupal\FunctionalJavascriptTests\SortableTestTrait;
 use Drupal\FunctionalJavascriptTests\WebDriverTestBase;
 use Drupal\Tests\block_content\Traits\BlockContentCreationTrait;
 use Drupal\Tests\contextual\FunctionalJavascript\ContextualLinkClickTrait;
@@ -23,8 +24,8 @@ class LayoutBuilderTest extends WebDriverTestBase {
 
   use BlockContentCreationTrait;
   use ContextualLinkClickTrait;
-  use LayoutBuilderSortTrait;
   use OffCanvasTestTrait;
+  use SortableTestTrait;
 
   /**
    * {@inheritdoc}
@@ -176,7 +177,10 @@ class LayoutBuilderTest extends WebDriverTestBase {
     $assert_session->elementTextNotContains('css', '.layout__region--second', 'Powered by Drupal');
 
     // Drag the block to a region in different section.
-    $this->sortableTo('.block-system-powered-by-block', '.layout__region--content', '.layout__region--second');
+    $this->dragSortableItem(
+      $assert_session->elementExists('css', '.layout__region--content .block-system-powered-by-block'),
+      $assert_session->elementExists('css', '.layout__region--second'),
+    );
     $assert_session->assertWaitOnAjaxRequest();
 
     // Ensure the drag succeeded.

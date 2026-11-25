@@ -1,0 +1,5 @@
+test_jquery_free.report:
+  title: 'jQuery readiness'
+  description: 'Review jQuery dependencies in enabled extensions.'
+  route_name: test_jquery_free.report
+  parent: system.admin_reports

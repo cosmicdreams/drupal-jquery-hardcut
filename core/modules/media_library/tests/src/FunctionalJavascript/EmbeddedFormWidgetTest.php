@@ -130,7 +130,7 @@ class EmbeddedFormWidgetTest extends WebDriverTestBase {
     $page->attachFileToField('Add file', $this->container->get('file_system')->realpath($jpg_image->uri));
     $this->assertNotNull($assert_session->waitForText('Alternative text'));
     $page->fillField('Alternative text', $this->randomString());
-    $assert_session->elementExists('css', '.ui-dialog-buttonpane')->pressButton('Save and insert');
+    $assert_session->elementExists('css', '.drupal-dialog-buttonpane')->pressButton('Save and insert');
     $first_item_locator = "(//div[@data-drupal-selector='edit-media-image-field-selection-0'])[1]";
     $this->assertNotNull($first_item = $assert_session->waitForElementVisible('xpath', $first_item_locator));
     $first_item->pressButton('Remove');
@@ -146,7 +146,7 @@ class EmbeddedFormWidgetTest extends WebDriverTestBase {
     $this->assertNotNull($assert_session->waitForText('Add or select media'));
     $assert_session->elementExists('xpath', "(//div[contains(@class, 'media-library-item')])[1]")->click();
     $assert_session->checkboxChecked("media_library_select_form[$added_media_id]");
-    $assert_session->elementExists('css', '.ui-dialog-buttonpane')->pressButton('Insert selected');
+    $assert_session->elementExists('css', '.drupal-dialog-buttonpane')->pressButton('Insert selected');
     $this->assertNotNull($assert_session->waitForElementVisible('xpath', $first_item_locator));
   }
 

@@ -4,11 +4,13 @@ declare(strict_types=1);
 
 namespace Drupal\Tests\contextual\FunctionalJavascript;
 
+use Behat\Mink\Driver\Selenium2Driver;
 use Drupal\Core\Url;
 use Drupal\FunctionalJavascriptTests\WebDriverTestBase;
 use Drupal\user\Entity\Role;
 use PHPUnit\Framework\Attributes\Group;
 use PHPUnit\Framework\Attributes\RunTestsInSeparateProcesses;
+use WebDriver\Key;
 
 /**
  * Tests the UI for correct contextual links.
@@ -98,7 +100,7 @@ class ContextualLinksTest extends WebDriverTestBase {
     $this->assertSession()->elementContains('css', '#drupal-modal', 'Everything is contextual!');
     $this->getSession()->executeScript('document.querySelector("#block-branding .trigger").addEventListener("focus", (e) => e.target.classList.add("i-am-focused"))');
     $this->getSession()->getPage()->pressButton('Close');
-    $this->assertSession()->assertNoElementAfterWait('css', 'ui.dialog');
+    $this->assertSession()->assertNoElementAfterWait('css', 'dialog[open]');
 
     // When the dialog is closed, the opening contextual link is now inside a
     // collapsed container, so focus should be routed to the contextual link
@@ -108,6 +110,62 @@ class ContextualLinksTest extends WebDriverTestBase {
 
     // Check to make sure that page was not reloaded.
     $this->assertSession()->pageTextContains($current_page_string);
+  }
+
+  /**
+   * Tests keyboard access to a contextual Ajax link.
+   */
+  public function testContextualLinksKeyboard(): void {
+    $this->container->get('module_installer')->install(['contextual_test']);
+    $this->drupalGet('user');
+    $assert = $this->assertSession();
+    $selector = '#block-branding .trigger';
+    $trigger = $assert->waitForElement('css', $selector);
+    $this->assertNotNull($trigger);
+    $this->assertSame('false', $trigger->getAttribute('aria-pressed'));
+    $this->getSession()->executeScript("document.querySelector('$selector').focus();");
+    $driver = $this->getSession()->getDriver();
+    assert($driver instanceof Selenium2Driver);
+    $webdriver = $driver->getWebDriverSession();
+    $webdriver->element('css selector', $selector)->postValue(['text' => Key::ENTER . Key::TAB]);
+    $this->assertSame('true', $trigger->getAttribute('aria-pressed'));
+    $assert->elementExists('css', '#block-branding.focus');
+    $this->assertJsCondition('document.activeElement.closest("#block-branding .contextual-links") !== null');
+
+    $ajax_link = '#block-branding .contextual-links .use-ajax';
+    $session = $this->getSession();
+    // The failed request is expected to report an uncaught Ajax error.
+    $this->failOnJavascriptConsoleErrors = FALSE;
+    // Hold the first request until the open menu has been checked, then fail
+    // it at the transport boundary.
+    $session->executeScript(<<<'JS'
+      const send = XMLHttpRequest.prototype.send;
+      XMLHttpRequest.prototype.send = function () {
+        XMLHttpRequest.prototype.send = send;
+        window.failContextualRequest = () => this.dispatchEvent(new Event('error'));
+      };
+      window.contextualErrors = [];
+      window.addEventListener('error', (event) => {
+        window.contextualErrors.push(event.error?.name ?? event.message);
+      });
+      JS);
+
+    $webdriver->element('css selector', $ajax_link)->postValue(['text' => Key::ENTER]);
+    $this->assertJsCondition('typeof window.failContextualRequest === "function"');
+    $this->assertSame('true', $trigger->getAttribute('aria-pressed'));
+    $this->assertTrue($assert->elementExists('css', $ajax_link)->isVisible());
+
+    $session->executeScript('window.failContextualRequest();');
+    $this->assertJsCondition('window.contextualErrors.length > 0');
+    $assert->pageTextContains('Oops, something went wrong.');
+    $this->assertSame('true', $trigger->getAttribute('aria-pressed'));
+    $this->assertTrue($assert->elementExists('css', $ajax_link)->isVisible());
+
+    // Retry without reopening the menu.
+    $webdriver->element('css selector', $ajax_link)->postValue(['text' => Key::ENTER]);
+    $this->assertNotNull($assert->waitForElementVisible('css', '#drupal-modal'));
+    $assert->elementTextContains('css', '#drupal-modal', 'Everything is contextual!');
+    $this->assertSame(['AjaxError'], $session->evaluateScript('window.contextualErrors'));
   }
 
   /**

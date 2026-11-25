@@ -36,4 +36,15 @@ class ElementsVerticalTabsWithSummaryTest extends WebDriverTestBase {
     $this->assertSession()->elementTextEquals('css', '.vertical-tabs__menu-item.last .vertical-tabs__menu-item-summary', 'Summary 2');
   }
 
+  /**
+   * Tests that the Default Admin theme provides its vertical tab markup.
+   */
+  public function testDefaultAdminVerticalTabMarkup(): void {
+    \Drupal::service('theme_installer')->install(['default_admin']);
+    $this->config('system.theme')->set('default', 'default_admin')->save();
+    $this->drupalGet('form_test/vertical-tabs-with-summary');
+    $this->assertSession()->elementTextEquals('css', '.vertical-tabs__menu-item.first .vertical-tabs__menu-link-content .vertical-tabs__menu-item-title', 'Tab 1');
+    $this->assertSession()->elementTextEquals('css', '.vertical-tabs__menu-item.last .vertical-tabs__menu-link-summary', 'Summary 2');
+  }
+
 }

@@ -26,6 +26,273 @@ class CommandsTest extends WebDriverTestBase {
   protected $defaultTheme = 'stark';
 
   /**
+   * Tests that each command waits for the previous command to finish.
+   */
+  public function testPromiseCommandOrder(): void {
+    $this->drupalGet('ajax-test/promise-form');
+    $this->getSession()->getPage()->pressButton('Execute commands button');
+    $this->assertSession()->assertExpectedAjaxRequest(1);
+    $this->assertSession()->elementTextEquals('css', '#ajax_test_form_promise_wrapper', '12345');
+  }
+
+  /**
+   * Tests striping visible rows again without changing hidden or nested rows.
+   */
+  public function testRestripeCommand(): void {
+    $this->drupalLogin($this->drupalCreateUser(['access content']));
+    $this->drupalGet('ajax_forms_test_ajax_commands_form');
+    $this->getSession()->getPage()->pressButton("AJAX 'restripe' command");
+    $this->assertSession()->assertExpectedAjaxRequest(1);
+
+    $rows = $this->getSession()->getPage()->findAll('css', '#restripe_table > tbody > tr');
+    $this->assertCount(4, $rows);
+    $this->assertSame('odd', $rows[0]->getAttribute('class'));
+    $this->assertSame('odd', $rows[1]->getAttribute('class'));
+    $this->assertSame('even', $rows[2]->getAttribute('class'));
+    $this->assertSame('odd', $rows[3]->getAttribute('class'));
+    $nested = $this->assertSession()->elementExists('css', '#table-nested');
+    $this->assertSame('odd', $nested->getAttribute('class'));
+  }
+
+  /**
+   * Tests native insertion and the typed form commands in queue order.
+   */
+  public function testNativeCommandQueue(): void {
+    $this->drupalLogin($this->drupalCreateUser(['access content']));
+    $this->drupalGet('ajax_forms_test_ajax_commands_form');
+    $session = $this->getSession();
+    $session->executeScript(<<<'JS'
+      const fixture = document.createElement('div');
+      fixture.id = 'native-commands';
+      fixture.innerHTML = '<div class="target"></div><div class="target"></div><input id="typed-command-input">';
+      document.body.append(fixture);
+
+      fixture.addEventListener('command-event', (event) => {
+        fixture.dataset.eventValue = event.target.value;
+        fixture.dataset.canceled = String(event.cancelable);
+      });
+
+      const ajax = Drupal.ajax({ url: location.href });
+      ajax.commandExecutionQueue([
+        { command: 'insert', selector: '#native-commands .target', method: 'append',
+          data: '<!-- fixture -->first <span>second</span><script>document.currentScript && (window.nativeScriptRuns = (window.nativeScriptRuns || 0) + 1);</script><script type="application/json">{"fixture":true}</script>' },
+        { command: 'css', selector: '#typed-command-input', argument: { minWidth: 42, 'opacity': 0.5, '--custom-value': 3 } },
+        { command: 'setValue', selector: '#typed-command-input', value: 'selected' },
+        { command: 'dispatchEvent', selector: '#typed-command-input', event: 'command-event' },
+        { command: 'toggleClass', selector: '#typed-command-input', className: 'error', enabled: true },
+        { command: 'setAttribute', selector: '#typed-command-input', name: 'data-error', value: 'true' },
+        { command: 'focus', selector: '#typed-command-input' },
+        { command: 'insert', selector: '#native-commands', method: 'append', effect: 'fade', speed: 500,
+          data: '<span class="animated-target">animated</span>' },
+      ], 'success').then(() => {
+        fixture.dataset.animationTracked = String(Drupal.hasActiveAnimations());
+        fixture.dataset.completed = 'yes';
+      });
+      JS);
+
+    $this->assertJsCondition("document.querySelector('#native-commands').dataset.completed === 'yes'");
+    $this->assertSame(1, $session->evaluateScript('window.nativeScriptRuns'));
+    $fixture = $this->assertSession()->elementExists('css', '#native-commands');
+    $this->assertSame('selected', $fixture->getAttribute('data-event-value'));
+    $this->assertSame('true', $fixture->getAttribute('data-canceled'));
+    $this->assertSame('true', $fixture->getAttribute('data-animation-tracked'));
+    $this->assertJsCondition('!Drupal.hasActiveAnimations()');
+    $this->assertSession()->elementsCount('css', '#native-commands .target > span', 2);
+    $this->assertSession()->elementsCount('css', '#native-commands script[type="application/json"]', 2);
+    $this->assertTrue($session->evaluateScript("Array.from(document.querySelectorAll('#native-commands .target')).every(target => target.firstChild.nodeType === Node.COMMENT_NODE && target.childNodes[1].textContent === 'first ')"));
+    $this->assertTrue($session->evaluateScript(<<<'JS'
+      (() => {
+        const input = document.querySelector('#typed-command-input');
+        return document.activeElement === input && input.value === 'selected' &&
+          input.classList.contains('error') && input.dataset.error === 'true' &&
+          input.style.minWidth === '42px' && input.style.opacity === '0.5' &&
+          input.style.getPropertyValue('--custom-value') === '3';
+      })()
+      JS));
+  }
+
+  /**
+   * Tests that a discarded response leaves its library for the next request.
+   */
+  public function testSupersededResponseSkipsLibraryAndSettings(): void {
+    $this->drupalGet('ajax-test/native-request', ['query' => ['commands' => 1]]);
+    $session = $this->getSession();
+    $session->executeScript(<<<'JS'
+      window.widgetLibrariesBefore = drupalSettings.ajaxPageState.libraries;
+      const widget = document.createElement('div');
+      widget.id = 'settings-widget';
+      document.body.append(widget);
+      const request = Drupal.ajaxRequest;
+      Drupal.ajaxRequest = (options, complete) => {
+        Drupal.ajaxRequest = request;
+        return request(options, (response) => new Promise((resolve) => {
+          window.deliverStaleWidget = () => resolve(complete(response));
+        }));
+      };
+      const url = Drupal.url('ajax-test/settings-widget');
+      const first = Drupal.ajax({ url });
+      first.isResponseCurrent = () => false;
+      first.execute().commands.then(() => { window.staleWidgetSettled = true; });
+      JS);
+    $this->assertJsCondition('typeof window.deliverStaleWidget === "function"');
+    $session->executeScript('window.deliverStaleWidget()');
+    $this->assertJsCondition('window.staleWidgetSettled === true');
+    $this->assertJsCondition(<<<'JS'
+      drupalSettings.ajaxPageState.libraries === window.widgetLibrariesBefore &&
+        !Drupal.behaviors.ajaxTestSettingsWidget && !drupalSettings.ajaxTestWidget
+      JS);
+    $session->executeScript(<<<'JS'
+      Drupal.ajax({ url: Drupal.url('ajax-test/settings-widget') }).execute();
+      JS);
+    $this->assertNotNull($this->assertSession()->waitForText('Library default'));
+    $this->assertSession()->elementTextEquals('css', '#settings-widget', 'Library default');
+    $this->assertSame('Library default', $session->evaluateScript('drupalSettings.ajaxTestWidget.label'));
+  }
+
+  /**
+   * Tests Ajax errors and focus when two copies of the same form are present.
+   */
+  public function testDuplicateAjaxForms(): void {
+    $this->drupalGet('ajax-test/duplicate-forms');
+    $assert = $this->assertSession();
+    $session = $this->getSession();
+    $selector = 'form[data-drupal-selector="ajax-test-duplicate-form"]';
+    $assert->elementsCount('css', $selector, 2);
+    [$first, $second] = $session->getPage()->findAll('css', $selector);
+    $build_id_selector = 'input[name="form_build_id"]';
+    $this->assertNotSame(
+      $assert->elementExists('css', $build_id_selector, $first)->getValue(),
+      $assert->elementExists('css', $build_id_selector, $second)->getValue(),
+    );
+    $first->fillField('Name', 'Keep this value');
+    $session->executeScript("window.firstForm = document.querySelector('$selector')");
+    $second->pressButton('Update copy');
+    $assert->assertExpectedAjaxRequest(1);
+    $this->assertJsCondition('window.firstForm.isConnected && window.firstForm.elements.name.value === "Keep this value"');
+    $assert->elementsCount('css', $selector, 2);
+    [, $second] = $session->getPage()->findAll('css', $selector);
+    $this->assertStringNotContainsString('Enter a name.', $first->getText());
+    $this->assertStringContainsString('Enter a name.', $second->getText());
+
+    $build_id = $assert->elementExists('css', $build_id_selector, $second)->getValue();
+    $second->fillField('Name', 'Valid name');
+    $second->pressButton('Update copy');
+    $assert->assertWaitOnAjaxRequest();
+    [, $second] = $session->getPage()->findAll('css', $selector);
+    $this->assertNotSame($build_id, $assert->elementExists('css', $build_id_selector, $second)->getValue());
+    $this->assertJsCondition(<<<'JS'
+      document.activeElement.value === 'Update copy' &&
+        document.activeElement.form !== window.firstForm &&
+        document.activeElement.form.elements.name.value === 'Valid name' &&
+        window.firstForm.isConnected
+      JS);
+  }
+
+  /**
+   * Tests common Ajax commands.
+   */
+  public function testCouncilNativeCommands(): void {
+    $this->drupalGet('ajax-test/native-request', ['query' => ['commands' => 1]]);
+    $result = $this->getSession()->evaluateScript(<<<'JS'
+      (async () => {
+        const target = document.createElement('div');
+        target.id = 'native-absolute';
+        target.dataset.fixture = 'alpha beta';
+        document.body.append(target);
+        const ajax = Drupal.ajax({ url: location.href });
+        await ajax.commandExecutionQueue([
+          { command: 'css', selector: "[data-fixture~='beta']", argument: { width: 42, cssFloat: 'left' } },
+          { command: 'data', selector: '#native-absolute', name: 'state', value: 7 },
+          { command: 'insert', selector: "[data-fixture ~= 'beta']", method: 'html',
+            data: '<div style="display:none"><span class="ajax-new-content">Visible</span></div>' },
+        ]);
+        return [target.style.width, target.style.cssFloat,
+          Drupal.ajax.elementData.get(target, 'state'), getComputedStyle(target.firstElementChild).display];
+      })()
+      JS);
+    $this->assertSame(['42px', 'left', 7, 'block'], $result);
+  }
+
+  /**
+   * Tests native selectors and numerical style units.
+   */
+  public function testNativeSelectorAndStyleUnits(): void {
+    $this->drupalGet('ajax-test/native-request', ['query' => ['commands' => 1]]);
+    $result = $this->getSession()->evaluateScript(<<<'JS'
+      (async () => {
+        const target = document.body.appendChild(document.createElement('div'));
+        target.id = 'native-selector';
+        target.innerHTML = '<span data-label=":has("></span><span class="skip"></span>';
+        const ajax = Drupal.ajax({ url: location.href });
+        const styles = {
+          fontSize: 21, borderRadius: 3, gap: 8, flex: 1, opacity: 0.5, lineHeight: 2,
+          minWidth: 21, paddingTop: 8, borderWidth: 3, '--size': 7,
+        };
+        await ajax.commands.css(ajax, { selector: '#native-selector', argument: styles });
+        await ajax.commands.css(ajax, { selector: '#native-selector', argument: {
+          width: -2, height: '-.5em', padding: -3, borderWidth: '-1px', marginLeft: -7,
+        } });
+        const signed = ['width', 'height', 'paddingLeft', 'borderWidth', 'marginLeft'].map((key) => target.style[key]);
+        await ajax.commands.css(ajax, { selector: '#native-selector', argument: styles });
+        let selected;
+        try {
+          await ajax.commands.data(ajax, {
+            selector: '#native-selector span:first-child:not(.skip)[data-label=":has("]',
+            name: 'marked', value: true,
+          });
+          selected = Drupal.ajax.elementData.get(target.firstElementChild, 'marked');
+        }
+        catch (error) {
+          selected = error.message;
+        }
+        ajax.commands.data(ajax, {
+          selector: '#native-selector:has(.skip)', name: 'hasChild', value: true,
+        });
+        return [selected, Drupal.ajax.elementData.get(target, 'hasChild'),
+          Object.keys(styles).filter((key) => key !== 'flex').map((key) => key.startsWith('--')
+          ? target.style.getPropertyValue(key) : target.style[key]), target.style.flexGrow, signed];
+      })()
+      JS);
+    $this->assertSame([
+      TRUE,
+      TRUE,
+      ['', '', '', '0.5', '2', '21px', '8px', '3px', '7'],
+      '1',
+      ['0px', '0em', '0px', '0px', '-7px'],
+    ], $result);
+  }
+
+  /**
+   * Tests that external scripts preserve their nonce and cross-origin settings.
+   */
+  public function testCouncilScriptNonce(): void {
+    $this->drupalGet('ajax-test/native-request', ['query' => ['commands' => 1]]);
+    $result = $this->getSession()->evaluateScript(<<<'JS'
+      (async () => {
+        const target = document.body.appendChild(document.createElement('div'));
+        target.id = 'script-target';
+        const script = new Promise((resolve) => {
+          const observer = new MutationObserver((mutations) => {
+            for (const node of mutations.flatMap(({ addedNodes }) => [...addedNodes])) {
+              if (node.localName === 'script' && node.src.startsWith('data:')) {
+                observer.disconnect();
+                resolve([node.nonce, node.getAttribute('crossorigin')]);
+              }
+            }
+          });
+          observer.observe(document.head, { childList: true });
+        });
+        await Drupal.ajax({ url: location.href }).commandExecutionQueue([
+          { command: 'insert', selector: '#script-target', method: 'html',
+            data: '<script src="data:text/javascript,void%200" nonce="sample-nonce" crossorigin></script>' },
+        ]);
+        return Promise.race([script, new Promise((resolve) => setTimeout(resolve, 1500))]);
+      })()
+      JS);
+    $this->assertSame(['sample-nonce', ''], $result);
+  }
+
+  /**
    * Tests the various Ajax Commands.
    */
   public function testAjaxCommands(): void {
@@ -104,7 +371,7 @@ class CommandsTest extends WebDriverTestBase {
     // Tests the 'data' command.
     $page->pressButton("AJAX data command: Issue command.");
     $this->assertTrue($page->waitFor(10, function () use ($session): bool {
-      return 'test_value' === $session->evaluateScript('window.jQuery("#data_div").data("test_key")');
+      return 'test_value' === $session->evaluateScript('Drupal.ajax.elementData.get(document.querySelector("#data_div"), "test_key")');
     }));
 
     // Tests the 'html' command.
@@ -115,9 +382,9 @@ class CommandsTest extends WebDriverTestBase {
     $page->pressButton("AJAX insert: Let client insert based on #ajax['method'].");
     $this->assertWaitPageContains('<div id="insert_div">insert replacement textOriginal contents</div>');
 
-    // Tests the 'invoke' command.
-    $page->pressButton("AJAX invoke command: Invoke addClass() method.");
-    $this->assertWaitPageContains('<div id="invoke_div" class="error">Original contents</div>');
+    // Tests the toggleClass command.
+    $page->pressButton("AJAX toggleClass command: Add the error class.");
+    $this->assertWaitPageContains('<div id="toggle_class_div" class="error">Original contents</div>');
 
     // Tests the 'prepend' command.
     $page->pressButton("AJAX 'prepend': Click to prepend something");
@@ -127,22 +394,20 @@ class CommandsTest extends WebDriverTestBase {
     $page->pressButton("AJAX 'remove': Click to remove text");
     $this->assertWaitPageContains('<div id="remove_div"></div>');
 
-    // Tests the 'restripe' command.
-    $page->pressButton("AJAX 'restripe' command");
-    $this->assertWaitPageContains('<tr id="table-first" class="odd"><td>first row</td></tr>');
-    $this->assertWaitPageContains('<tr class="even"><td>second row</td></tr>');
-
     // Tests the 'settings' command.
     $test_settings_command = <<<JS
 Drupal.behaviors.testSettingsCommand = {
   attach: function (context, settings) {
-    window.jQuery('body').append('<div class="test-settings-command">' + settings.ajax_forms_test.foo + '</div>');
+    const result = document.createElement('div');
+    result.className = 'test-settings-command';
+    result.textContent = settings.ajax_forms_test.foo;
+    document.body.append(result);
   }
 };
 JS;
     $session->executeScript($test_settings_command);
     // @todo Replace after https://www.drupal.org/project/drupal/issues/2616184
-    $session->executeScript('window.jQuery("#edit-settings-command-example").mousedown();');
+    $session->executeScript('document.querySelector("#edit-settings-command-example").dispatchEvent(new MouseEvent("mousedown", { bubbles: true, cancelable: true }));');
     $this->assertWaitPageContains('<div class="test-settings-command">42</div>');
   }
 

@@ -226,7 +226,6 @@ drupal.ajax:
       theme_token: null
     ajaxTrustedUrl: {}
   dependencies:
-    - core/jquery
     - core/drupal
     - core/drupalSettings
     - core/drupal.progress
@@ -234,6 +233,7 @@ drupal.ajax:
     - core/tabbable
     - core/loadjs
     - core/drupal.message
+    - core/drupal.xhr
 
 drupal.announce:
   version: VERSION
@@ -241,7 +241,6 @@ drupal.announce:
     misc/announce.js: {}
   dependencies:
     - core/drupal
-    - core/drupal.debounce
 
 loadjs:
   aggregate_target:
@@ -255,64 +254,25 @@ loadjs:
   js:
     assets/vendor/loadjs/loadjs.min.js: { minified: true }
 
-# Common files for libraries that still rely on jQuery UI components.
-# @todo Remove when no longer required by drupal.autocomplete and drupal.dialog.
-internal.jquery_ui:
-  version: VERSION
-  js:
-    # These JavaScript assets previously came from core/jquery.ui, a deprecated
-    # library.
-    # @todo replace with solution in https://drupal.org/node/3076171
-    assets/vendor/jquery.ui/ui/version-min.js: { minified: true }
-    assets/vendor/jquery.ui/ui/data-min.js: { minified: true }
-    assets/vendor/jquery.ui/ui/disable-selection-min.js: { minified: true }
-    assets/vendor/jquery.ui/ui/focusable-min.js: { minified: true }
-    assets/vendor/jquery.ui/ui/jquery-patch-min.js: { minified: true }
-    assets/vendor/jquery.ui/ui/keycode-min.js: { minified: true }
-    assets/vendor/jquery.ui/ui/plugin-min.js: { minified: true }
-    assets/vendor/jquery.ui/ui/scroll-parent-min.js: { minified: true }
-    assets/vendor/jquery.ui/ui/widget-min.js: { minified: true }
-    assets/vendor/jquery.ui/ui/unique-id-min.js: { minified: true }
-    assets/vendor/jquery.ui/ui/labels-min.js: { minified: true }
-  css:
-    component:
-      assets/vendor/jquery.ui/themes/base/core.css: {}
-    theme:
-      assets/vendor/jquery.ui/themes/base/theme.css: {}
-  dependencies:
-    - core/jquery
-
 drupal.autocomplete:
   version: VERSION
   js:
-    # The remaining JavaScript assets previously came from core/jquery.ui, a
-    # deprecated library.
-    # @todo replace with solution in https://drupal.org/node/3076171
-    assets/vendor/jquery.ui/ui/widgets/menu-min.js: { minified: true }
-    assets/vendor/jquery.ui/ui/widgets/autocomplete-min.js: { minified: true }
     misc/autocomplete.js: {}
-  # All CSS assets previously came from core/jquery.ui, a deprecated library.
-  # @todo replace with solution found in https://drupal.org/node/3076171
   css:
     component:
-      assets/vendor/jquery.ui/themes/base/menu.css: {}
-      assets/vendor/jquery.ui/themes/base/autocomplete.css: {}
+      misc/components/autocomplete.css: {}
       misc/components/autocomplete-loading.module.css: {}
   dependencies:
-    - core/jquery
-    - core/internal.jquery_ui
     - core/drupal
-    - core/drupalSettings
-    - core/drupal.ajax
-    - core/drupal.jquery.position
-    - core/tabbable
+    - core/once
+    - core/drupal.announce
+    - core/internal.floating-ui
 
 drupal.batch:
   version: VERSION
   js:
     misc/batch.js: { cache: false }
   dependencies:
-    - core/jquery
     - core/drupal
     - core/drupalSettings
     - core/drupal.ajax
@@ -333,7 +293,6 @@ drupal.collapse:
     misc/details-aria.js: {}
     misc/details.js: {}
   dependencies:
-    - core/jquery
     - core/drupal
     - core/drupal.form
     - core/once
@@ -349,38 +308,15 @@ drupal.debounce:
 drupal.dialog:
   version: VERSION
   js:
-    # The remaining JavaScript assets previously came from core/jquery.ui, a
-    # deprecated library.
     assets/vendor/tua-body-scroll-lock/tua-bsl.umd.min.js: { minified: true }
-    assets/vendor/jquery.ui/ui/widgets/controlgroup-min.js: { minified: true }
-    assets/vendor/jquery.ui/ui/form-reset-mixin-min.js: { minified: true }
-    assets/vendor/jquery.ui/ui/widgets/mouse-min.js: { minified: true }
-    assets/vendor/jquery.ui/ui/widgets/draggable-min.js: { minified: true }
-    assets/vendor/jquery.ui/ui/widgets/resizable-min.js: { minified: true }
-    assets/vendor/jquery.ui/ui/widgets/checkboxradio-min.js: { minified: true }
-    assets/vendor/jquery.ui/ui/widgets/button-min.js: { minified: true }
-    assets/vendor/jquery.ui/ui/widgets/dialog-min.js: { minified: true }
     misc/dialog/dialog.js: {}
-    misc/dialog/dialog.position.js: {}
-    misc/dialog/dialog.jquery-ui.js: {}
-  # All CSS assets previously came from core/jquery.ui, a deprecated library.
-  # @todo replace with solution found in https://drupal.org/node/2158943
   css:
     component:
-      assets/vendor/jquery.ui/themes/base/dialog.css: {}
-      assets/vendor/jquery.ui/themes/base/button.css: {}
-      assets/vendor/jquery.ui/themes/base/controlgroup.css: {}
-      assets/vendor/jquery.ui/themes/base/checkboxradio.css: {}
-      assets/vendor/jquery.ui/themes/base/resizable.css: {}
+      misc/dialog/dialog.css: {}
   dependencies:
-    - core/jquery
-    - core/internal.jquery_ui
     - core/drupal
     - core/drupalSettings
-    - core/drupal.debounce
     - core/drupal.displace
-    - core/once
-    - core/drupal.jquery.position
     - core/tabbable
 
 drupal.dialog.ajax:
@@ -388,19 +324,14 @@ drupal.dialog.ajax:
   js:
     misc/dialog/dialog.ajax.js: {}
   dependencies:
-    - core/jquery
-    - core/drupal
-    - core/drupalSettings
     - core/drupal.ajax
     - core/drupal.dialog
-    - core/tabbable
 
 drupal.displace:
   version: VERSION
   js:
     misc/displace.js: {}
   dependencies:
-    - core/jquery
     - core/drupal
     - core/drupal.debounce
 
@@ -412,10 +343,10 @@ drupal.dropbutton:
     component:
       misc/dropbutton/dropbutton.css: {}
   dependencies:
-    - core/jquery
     - core/drupal
     - core/drupalSettings
     - core/once
+    - core/drupal.form.events
 
 drupal.entity-form:
   version: VERSION
@@ -435,10 +366,17 @@ drupal.form:
   js:
     misc/form.js: {}
   dependencies:
-    - core/jquery
     - core/drupal
     - core/drupal.debounce
     - core/once
+    - core/drupal.form.events
+
+drupal.form.events:
+  version: VERSION
+  js:
+    misc/form-events.js: {}
+  dependencies:
+    - core/drupal
 
 drupal.htmx:
   aggregate_target:
@@ -472,7 +410,6 @@ drupal.machine-name:
   js:
     misc/machine-name.js: {}
   dependencies:
-    - core/jquery
     - core/once
     - core/drupal
     - core/drupalSettings
@@ -497,7 +434,7 @@ drupal.progress:
 
   dependencies:
     - core/drupal
-    - core/jquery
+    - core/drupal.xhr
     - core/drupalSettings
 
 drupal.textarea-resize:
@@ -517,9 +454,7 @@ drupal.states:
   js:
     misc/states.js: {}
   dependencies:
-    - core/jquery
     - core/drupal
-    - core/drupalSettings
     - core/once
 
 drupal.tabbingmanager:
@@ -527,9 +462,15 @@ drupal.tabbingmanager:
   js:
     misc/tabbingmanager.js: {}
   dependencies:
-    - core/jquery
     - core/drupal
     - core/tabbable
+
+drupal.table_interaction:
+  version: VERSION
+  js:
+    misc/table-interaction.js: {}
+  dependencies:
+    - core/drupal
 
 drupal.tabledrag:
   version: VERSION
@@ -540,10 +481,10 @@ drupal.tabledrag:
       misc/components/tabledrag.module.css: {}
       misc/components/tree-child.module.css: {}
   dependencies:
-    - core/jquery
     - core/drupal
     - core/drupalSettings
     - core/once
+    - core/drupal.table_interaction
     - core/drupal.touchevents-test
 
 drupal.tabledrag.ajax:
@@ -565,9 +506,9 @@ drupal.tableresponsive:
   js:
     misc/tableresponsive.js: {}
   dependencies:
-    - core/jquery
     - core/drupal
     - core/once
+    - core/drupal.table_interaction
 
 drupal.tableselect:
   version: VERSION
@@ -576,8 +517,8 @@ drupal.tableselect:
   dependencies:
     - core/drupal
     - core/drupal.checkbox
-    - core/jquery
     - core/once
+    - core/drupal.table_interaction
 
 drupal.tablesort:
   version: VERSION
@@ -598,9 +539,9 @@ drupal.timezone:
   js:
     misc/timezone.js: {}
   dependencies:
-    - core/jquery
     - core/once
     - core/drupal
+    - core/drupal.xhr
 
 drupal.touchevents-test:
   header: true
@@ -616,13 +557,19 @@ drupal.vertical-tabs:
     component:
       misc/vertical-tabs.css: {}
   dependencies:
-    - core/jquery
     - core/once
     - core/drupal
     - core/drupalSettings
     - core/drupal.form
   before:
     - core/drupal.collapse
+
+drupal.xhr:
+  version: VERSION
+  js:
+    misc/xhr.js: {}
+  dependencies:
+    - core/drupal
 
 font:
   remote: https://github.com/rsms/inter
@@ -662,43 +609,6 @@ internal.floating-ui:
   js:
     assets/vendor/floating-ui/floating-ui.core.umd.min.js: { minified: true }
     assets/vendor/floating-ui/floating-ui.dom.umd.min.js: { minified: true }
-
-jquery:
-  remote: https://github.com/jquery/jquery
-  version: "4.1.0"
-  license:
-    name: MIT
-    url: https://raw.githubusercontent.com/jquery/jquery/4.1.0/LICENSE.txt
-    gpl-compatible: true
-  js:
-    # jquery.min.js is explicitly set to preprocess: false to prevent its
-    # inclusion in JavaScript aggregates. This prevents it being duplicated
-    # across different aggregates which can include different combinations of
-    # libraries that depend on jQuery, so that it is only downloaded once per
-    # browser instead of potentially multiple times from different pages.
-    assets/vendor/jquery/jquery.min.js: { preprocess: false, minified: true }
-
-internal.jquery.form:
-  # Internal library. Do not depend on it outside core nor add new core usage.
-  version: "4.3.0"
-  license:
-    name: GPL-2.0-or-later
-    url: https://raw.githubusercontent.com/jquery-form/form/master/LICENSE
-    gpl-compatible: true
-  js:
-    misc/jquery.form.js: {}
-  dependencies:
-    - core/jquery
-
-drupal.jquery.position:
-  # This is a modified version of jQuery UI position for that does not require
-  # any jQuery UI assets, only jQuery. It is provided by core for use with
-  # pre-existing libraries that expect the jQuery UI position API.
-  version: VERSION
-  js:
-    misc/position.js: {}
-  dependencies:
-    - core/jquery
 
 normalize:
   remote: https://github.com/necolas/normalize.css
@@ -753,6 +663,21 @@ transliteration:
 
 drupal.dialog.off_canvas:
   version: VERSION
+  dependencies:
+    - core/drupal.dialog.off_canvas.base
+    - core/drupal.dialog.ajax
+
+drupal.dialog.off_canvas.htmx:
+  version: VERSION
+  js:
+    misc/dialog/off-canvas/js/off-canvas.htmx.js: {}
+  dependencies:
+    - core/drupal.dialog.off_canvas.base
+    - core/drupal.htmx
+    - core/drupal.message
+
+drupal.dialog.off_canvas.base:
+  version: VERSION
   js:
     misc/dialog/off-canvas/js/off-canvas.js: {}
   css:
@@ -773,13 +698,8 @@ drupal.dialog.off_canvas:
       misc/dialog/off-canvas/css/titlebar.css: {}
       misc/dialog/off-canvas/css/wrapper.css: {}
   dependencies:
-    - core/jquery
-    - core/once
     - core/drupal
-    - core/drupal.ajax
-    - core/drupal.announce
     - core/drupal.dialog
-    - core/drupal.dialog.ajax
     - core/drupal.touchevents-test
 
 drupal.fieldListKeyboardNavigation:

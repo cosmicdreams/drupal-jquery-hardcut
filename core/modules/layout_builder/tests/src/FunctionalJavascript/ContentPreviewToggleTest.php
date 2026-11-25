@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Drupal\Tests\layout_builder\FunctionalJavascript;
 
+use Drupal\FunctionalJavascriptTests\SortableTestTrait;
 use Drupal\FunctionalJavascriptTests\WebDriverTestBase;
 use Drupal\layout_builder\Entity\LayoutBuilderEntityViewDisplay;
 use Drupal\layout_builder\Plugin\SectionStorage\OverridesSectionStorage;
@@ -11,6 +12,7 @@ use Drupal\layout_builder\Section;
 use Drupal\layout_builder\SectionComponent;
 use Drupal\Tests\contextual\FunctionalJavascript\ContextualLinkClickTrait;
 use Drupal\Tests\system\Traits\OffCanvasTestTrait;
+use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\Attributes\Group;
 use PHPUnit\Framework\Attributes\RunTestsInSeparateProcesses;
 
@@ -23,8 +25,9 @@ use PHPUnit\Framework\Attributes\RunTestsInSeparateProcesses;
 class ContentPreviewToggleTest extends WebDriverTestBase {
 
   use ContextualLinkClickTrait;
-  use LayoutBuilderSortTrait;
   use OffCanvasTestTrait;
+  use SortableTestTrait;
+
   /**
    * {@inheritdoc}
    */
@@ -103,15 +106,29 @@ class ContentPreviewToggleTest extends WebDriverTestBase {
     // Confirm repositioning blocks works with content preview disabled.
     $this->assertOrderInPage([$links_field_placeholder_label, $body_field_placeholder_label]);
 
-    $region_content = '.layout__region--content';
     $links_block = "[data-layout-content-preview-placeholder-label='$links_field_placeholder_label']";
     $body_block = "[data-layout-content-preview-placeholder-label='$body_field_placeholder_label']";
 
     $assert_session->elementExists('css', $links_block . " div");
     $assert_session->elementExists('css', $body_block . " div");
 
-    $this->sortableAfter($links_block, $body_block, $region_content);
+    $this->getSession()->executeScript(<<<'JS'
+      window.previousLayoutRegion = document.querySelector('.layout__region--content');
+      const sortable = Sortable.get(window.previousLayoutRegion);
+      Drupal.behaviors.layoutBuilderBlockDrag.attach(document.getElementById('layout-builder'));
+      window.layoutSortableRetained = !!sortable && Sortable.get(window.previousLayoutRegion) === sortable;
+      Drupal.detachBehaviors(window.previousLayoutRegion, drupalSettings, 'unload');
+      window.layoutSortableReleased = !Sortable.get(window.previousLayoutRegion);
+      Drupal.attachBehaviors(document.getElementById('layout-builder'));
+      JS);
+    $this->assertJsCondition('window.layoutSortableRetained && window.layoutSortableReleased');
+    $this->dragSortableItem(
+      $assert_session->elementExists('css', $links_block),
+      $assert_session->elementExists('css', $body_block),
+    );
     $assert_session->assertWaitOnAjaxRequest();
+
+    $this->assertJsCondition('!window.previousLayoutRegion.isConnected && !Sortable.get(window.previousLayoutRegion)');
 
     // Check that the drag-triggered rebuild did not trigger content preview.
     $assert_session->pageTextNotContains($content_preview_body_text);
@@ -119,13 +136,74 @@ class ContentPreviewToggleTest extends WebDriverTestBase {
     // Check that drag successfully repositioned blocks.
     $this->assertOrderInPage([$body_field_placeholder_label, $links_field_placeholder_label]);
 
+    $this->getSession()->reload();
+    $this->assertOrderInPage([$body_field_placeholder_label, $links_field_placeholder_label]);
+
+    // The block itself can be the root of an Ajax behavior attachment.
+    $this->getSession()->executeScript(<<<'JS'
+      const block = document.querySelector('[data-layout-content-preview-placeholder-label]');
+      block.querySelector('.js-layout-builder-content-preview-placeholder-label').remove();
+      Drupal.attachBehaviors(block);
+      window.reattachedBlock = block;
+      const child = document.createElement('div');
+      child.id = 'preview-child';
+      child.textContent = 'Preview child';
+      const style = document.createElement('style');
+      style.textContent = '#preview-child { display: none; }';
+      document.head.append(style);
+      block.append(child);
+      JS);
+    $this->assertJsCondition('!!window.reattachedBlock.querySelector(":scope > .js-layout-builder-content-preview-placeholder-label")');
+    $this->assertFalse($assert_session->elementExists('css', '#preview-child')->isVisible());
+
     // Check if block position maintained after enabling content preview.
     $this->assertTrue($page->hasUncheckedField('layout-builder-content-preview'));
     $page->checkField('layout-builder-content-preview');
+    $this->assertTrue($assert_session->elementExists('css', '#preview-child')->isVisible());
     $this->assertNotEmpty($assert_session->waitForText($content_preview_body_text));
     $assert_session->pageTextContains($content_preview_body_text);
     $this->assertNotEmpty($assert_session->waitForText('Placeholder for the "Links" field'));
     $this->assertOrderInPage([$content_preview_body_text, 'Placeholder for the "Links" field']);
+
+    $page->pressButton('Save layout');
+    $this->assertTrue($assert_session->waitForText('The layout override has been saved.'));
+    $this->drupalGet('node/1/layout');
+    $this->assertOrderInPage([$content_preview_body_text, 'Placeholder for the "Links" field']);
+  }
+
+  /**
+   * Tests preview visibility in core themes.
+   */
+  #[DataProvider('previewThemes')]
+  public function testPreviewVisibility(string $theme): void {
+    $this->container->get('theme_installer')->install([$theme]);
+    $this->config('system.theme')->set('default', $theme)->save();
+
+    $preview_text = 'The body of the layout preview.';
+    $node = $this->createNode([
+      'type' => 'bundle_for_this_particular_test',
+      'body' => $preview_text,
+    ]);
+    $this->drupalGet('node/' . $node->id() . '/layout');
+    $page = $this->getSession()->getPage();
+    $assert = $this->assertSession();
+    $assert->elementTextContains('css', '#layout-builder', $preview_text);
+
+    $page->uncheckField('layout-builder-content-preview');
+    $assert->elementTextNotContains('css', '#layout-builder', $preview_text);
+
+    $page->checkField('layout-builder-content-preview');
+    $assert->elementTextContains('css', '#layout-builder', $preview_text);
+  }
+
+  /**
+   * Provides additional themes to test alongside Starterkit.
+   */
+  public static function previewThemes(): array {
+    return [
+      'Stark' => ['stark'],
+      'Default Admin' => ['default_admin'],
+    ];
   }
 
   /**

@@ -3,18 +3,11 @@
 namespace Drupal\Core\Ajax;
 
 /**
- * An AJAX command for calling the jQuery after() method.
+ * An Ajax command for inserting content after each match.
  *
- * The 'insert/after' command instructs the client to use jQuery's after()
- * method to insert the given render array or HTML content after each element
- * matched by the given selector.
+ * The 'insert/after' command operates on elements that match the selector.
  *
- * This command is implemented by Drupal.AjaxCommands.prototype.insert()
- * defined in misc/ajax.js.
- *
- * @see http://docs.jquery.com/Manipulation/after#content
- *
- * @ingroup ajax
+ * @see Drupal.AjaxCommands.prototype.insert
  */
 class AfterCommand extends InsertCommand {
 

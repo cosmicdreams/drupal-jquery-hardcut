@@ -116,7 +116,7 @@ abstract class Mapping extends StylePluginBase {
           '#title' => $this->t('Use a custom %field_name', ['%field_name' => strtolower($mapping[$key]['#title'])]),
           '#default_value' => $this->options['mapping']["toggle_$key"],
         ];
-        $overrides['#states']['visible'][':input[name="style_options[mapping][' . "toggle_$key" . ']"]'] = ['checked' => TRUE];
+        $overrides['#states']['visible']['[name="style_options[mapping][' . "toggle_$key" . ']"]'] = ['checked' => TRUE];
       }
 
       $form['mapping'][$key] = $overrides + $mapping[$key] + $defaults;

@@ -4,9 +4,13 @@ declare(strict_types=1);
 
 namespace Drupal\Tests\layout_builder\FunctionalJavascript;
 
+use Drupal\editor\Entity\Editor;
+use Drupal\field\Entity\FieldConfig;
+use Drupal\filter\Entity\FilterFormat;
 use Drupal\FunctionalJavascriptTests\WebDriverTestBase;
 use Drupal\Tests\block_content\Traits\BlockContentCreationTrait;
 use Drupal\Tests\contextual\FunctionalJavascript\ContextualLinkClickTrait;
+use Drupal\user\RoleInterface;
 
 // cspell:ignore blockbasic
 
@@ -49,6 +53,11 @@ abstract class InlineBlockTestBase extends WebDriverTestBase {
   protected $blockStorage;
 
   /**
+   * Whether the test uses CKEditor 5 for the basic block body.
+   */
+  private bool $richText = FALSE;
+
+  /**
    * {@inheritdoc}
    */
   protected function setUp(): void {
@@ -78,6 +87,34 @@ abstract class InlineBlockTestBase extends WebDriverTestBase {
     $this->createBlockContentType('basic', 'Basic block');
 
     $this->blockStorage = $this->container->get('entity_type.manager')->getStorage('block_content');
+  }
+
+  /**
+   * Enables CKEditor 5 for the basic block body in a rich-text test.
+   */
+  protected function enableRichText(): void {
+    $this->container->get('module_installer')->install(['ckeditor5']);
+    FilterFormat::create([
+      'format' => 'inline_block_html',
+      'name' => 'Inline block HTML',
+      'roles' => [RoleInterface::AUTHENTICATED_ID],
+      'filters' => [
+        'filter_html' => [
+          'status' => TRUE,
+          'settings' => ['allowed_html' => '<p> <br> <strong>'],
+        ],
+      ],
+    ])->save();
+    Editor::create([
+      'format' => 'inline_block_html',
+      'editor' => 'ckeditor5',
+      'settings' => ['toolbar' => ['items' => ['bold']]],
+      'image_upload' => ['status' => FALSE],
+    ])->save();
+    $body = FieldConfig::loadByName('block_content', 'basic', 'body');
+    $this->assertInstanceOf(FieldConfig::class, $body);
+    $body->setSetting('allowed_formats', ['inline_block_html'])->save();
+    $this->richText = TRUE;
   }
 
   /**
@@ -154,13 +191,11 @@ abstract class InlineBlockTestBase extends WebDriverTestBase {
     $this->assertNotEmpty($assert_session->waitForLink('Create content block'));
     $this->clickLink('Create content block');
     $assert_session->assertWaitOnAjaxRequest();
-    $textarea = $assert_session->waitForElement('css', '[name="settings[block_form][body][0][value]"]');
-    $this->assertNotEmpty($textarea);
     $assert_session->fieldValueEquals('Title', '');
     $page->findField('Title')->setValue($title);
-    $textarea->setValue($body);
+    $this->editInlineBlockBody($body);
     $page->pressButton('Add block');
-    $this->assertDialogClosedAndTextVisible($body, static::INLINE_BLOCK_LOCATOR);
+    $this->assertDialogClosedAndTextVisible($body, static::INLINE_BLOCK_LOCATOR . ($this->richText ? ' strong' : ''));
   }
 
   /**
@@ -178,14 +213,39 @@ abstract class InlineBlockTestBase extends WebDriverTestBase {
     $assert_session = $this->assertSession();
     $page = $this->getSession()->getPage();
     $this->clickContextualLink($block_css_locator, 'Configure');
-    $textarea = $assert_session->waitForElementVisible('css', '[name="settings[block_form][body][0][value]"]');
-    $this->assertNotEmpty($textarea);
-    $this->assertSame($old_body, $textarea->getValue());
-    $textarea->setValue($new_body);
+    $assert_session->assertWaitOnAjaxRequest();
+    $this->editInlineBlockBody($new_body, $old_body);
     $page->pressButton('Update');
     $assert_session->assertNoElementAfterWait('css', '#drupal-off-canvas');
     $assert_session->assertWaitOnAjaxRequest();
-    $this->assertDialogClosedAndTextVisible($new_body);
+    $this->assertDialogClosedAndTextVisible($new_body, $block_css_locator . ($this->richText ? ' strong' : ''));
+  }
+
+  /**
+   * Edits the body in the off-canvas tray.
+   */
+  private function editInlineBlockBody(string $body, ?string $previous_body = NULL): void {
+    if (!$this->richText) {
+      $textarea = $this->assertSession()->waitForElementVisible('css', '#drupal-off-canvas textarea[name="settings[block_form][body][0][value]"]');
+      $this->assertNotNull($textarea);
+      $this->assertSame($previous_body ?? '', $textarea->getValue());
+      $textarea->setValue($body);
+      return;
+    }
+
+    $this->assertJsCondition(<<<'JS'
+      (window.inlineBlockEditor = Array.from(Drupal.CKEditor5Instances?.values() ?? []).find(
+        (editor) => editor.sourceElement.matches('#drupal-off-canvas [name="settings[block_form][body][0][value]"]')
+      ))?.state === 'ready'
+      JS);
+    $session = $this->getSession();
+    if ($previous_body !== NULL) {
+      $this->assertSame("<p><strong>$previous_body</strong></p>", $session->evaluateScript('window.inlineBlockEditor.getData()'));
+    }
+    $markup = json_encode("<p><strong>$body</strong></p>", JSON_THROW_ON_ERROR);
+    $session->executeScript("window.inlineBlockEditor.setData($markup);");
+    $editable = $this->assertSession()->elementExists('css', '#drupal-off-canvas .ck-editor__editable strong');
+    $this->assertSame($body, $editable->getText());
   }
 
   /**

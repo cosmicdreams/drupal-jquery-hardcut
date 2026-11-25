@@ -1,0 +1,4 @@
+name: 'jQuery readiness alter fixture'
+type: module
+package: Testing
+version: VERSION

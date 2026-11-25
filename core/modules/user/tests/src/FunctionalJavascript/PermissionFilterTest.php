@@ -45,8 +45,7 @@ class PermissionFilterTest extends WebDriverTestBase {
     // Find the permission filter field.
     $this->drupalGet('admin/people/permissions');
     $assertSession = $this->assertSession();
-    $session = $this->getSession();
-    $page = $session->getPage();
+    $page = $this->getSession()->getPage();
 
     $filter = $page->findField('edit-text');
 
@@ -55,7 +54,7 @@ class PermissionFilterTest extends WebDriverTestBase {
 
     // Administer filter reduces the number of visible rows.
     $filter->setValue('Administer');
-    $session->wait(1000, "jQuery('tr[data-drupal-selector=\"edit-permissions-access-content\"]').length == 0");
+    $this->assertJsCondition("/^([2-9]|[1-9][0-9]+) permissions are available/.test(document.getElementById('drupal-live-announce')?.textContent)");
     $visible_rows = $this->filterVisibleElements($permission_rows);
     // Test Drupal.announce() message when multiple matches are expected.
     $expected_message = count($visible_rows) . ' permissions are available in the modified list.';
@@ -66,7 +65,7 @@ class PermissionFilterTest extends WebDriverTestBase {
     // Test Drupal.announce() message when one match is expected.
     // Using a very specific permission name, we expect only one row.
     $filter->setValue('Administer site configuration');
-    $session->wait(1000, "jQuery('tr[data-drupal-selector=\"edit-permissions-access-content\"]').length == 0");
+    $this->assertJsCondition("document.getElementById('drupal-live-announce')?.textContent.includes('1 permission is available')");
     $visible_rows = $this->filterVisibleElements($permission_rows);
     self::assertEquals(1, count($visible_rows));
     $expected_message = '1 permission is available in the modified list.';
@@ -74,7 +73,7 @@ class PermissionFilterTest extends WebDriverTestBase {
 
     // Test Drupal.announce() message when no matches are expected.
     $filter->setValue('Pan-Galactic Gargle Blaster');
-    $session->wait(1000, "jQuery('tr[data-drupal-selector=\"edit-permissions-access-content\"]').length == 0");
+    $this->assertJsCondition("document.getElementById('drupal-live-announce')?.textContent.includes('0 permissions are available')");
     $visible_rows = $this->filterVisibleElements($permission_rows);
     self::assertEquals(0, count($visible_rows));
 

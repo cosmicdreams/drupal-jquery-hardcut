@@ -540,6 +540,12 @@ class FormBuilderTest extends FormTestBase {
     $form_state = new FormState();
     $form = $this->simulateFormSubmission($form_id, $form_arg, $form_state);
     $this->assertSame('test-form-id--2', $form['#id']);
+    $this->assertSame('test-form-id', $form['#attributes']['data-drupal-selector']);
+
+    $element = ['#id' => 'standalone-element'];
+    $form_state = new FormState();
+    $element = $this->formBuilder->doBuildForm($form_id, $element, $form_state);
+    $this->assertSame('standalone-element', $element['#attributes']['data-drupal-selector']);
   }
 
   /**

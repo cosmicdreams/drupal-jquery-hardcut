@@ -36,7 +36,7 @@ trait ViewsFormHelperTrait {
     // @todo Move this to a separate function if it's needed on any forms that
     // don't have the display dropdown.
     $form['override'] = [
-      '#prefix' => '<div class="views-override clearfix form--inline views-offset-top" data-drupal-views-offset="top">',
+      '#prefix' => '<div class="views-override clearfix form--inline views-offset-top">',
       '#suffix' => '</div>',
       '#weight' => -1000,
       '#tree' => TRUE,

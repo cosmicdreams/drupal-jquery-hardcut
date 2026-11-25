@@ -106,7 +106,7 @@ class OptionsFieldUITest extends WebDriverTestBase {
     $this->assertNotNull($assert_session->waitForElement('css', '[name="default_value_input[field_test_string_list]"] option:contains("second")'));
     $assert_session->optionExists('default_value_input[field_test_string_list]', 'second');
     $page->selectFieldOption('default_value_input[field_test_string_list]', 'second');
-    $page->find('css', '.ui-dialog-buttonset button:contains("Save")')->press();
+    $page->find('css', '.drupal-dialog-buttonset button:contains("Save")')->press();
     $this->assertTrue($assert_session->waitForText('Saved Test string list configuration.'));
 
     // Create a field of type list:integer.
@@ -126,7 +126,7 @@ class OptionsFieldUITest extends WebDriverTestBase {
     // value field.
     $this->assertSession()->optionExists('default_value_input[field_test_int_list]', 'first');
     $page->selectFieldOption('default_value_input[field_test_int_list]', 'first');
-    $page->find('css', '.ui-dialog-buttonset button:contains("Save")')->press();
+    $page->find('css', '.drupal-dialog-buttonset button:contains("Save")')->press();
     $this->assertTrue($this->assertSession()->waitForText('Saved Test int list configuration.'));
   }
 

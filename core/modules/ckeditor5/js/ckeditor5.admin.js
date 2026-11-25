@@ -3,7 +3,9 @@
  * Provides the admin UI for CKEditor 5.
  */
 
-((Drupal, drupalSettings, $, JSON, once, Sortable, { tabbable }) => {
+((Drupal, once, Sortable, { tabbable }) => {
+  const sortables = new WeakMap();
+  const toolbarRegion = '[data-drupal-selector="ckeditor5-toolbar-region"]';
   const toolbarHelp = [
     {
       message: Drupal.t(
@@ -206,7 +208,18 @@
     if (condition) {
       list.splice(index + dir, 0, list.splice(index, 1)[0]);
       selection.value = list;
+      Drupal.announce(
+        Drupal.t(
+          'Button @name has moved to position @position of @count in the active toolbar.',
+          {
+            '@name': element.dataset.label,
+            '@position': index + dir + 1,
+            '@count': list.length,
+          },
+        ),
+      );
     }
+    return condition;
   };
 
   /**
@@ -253,7 +266,7 @@
       .map((helpItem) => helpItem.message);
 
     // Get the existing toolbar help message.
-    const existingToolbarHelpText = document.querySelector(
+    const existingToolbarHelpText = root.querySelector(
       '[data-drupal-selector="ckeditor5-admin-help-message"]',
     );
 
@@ -268,6 +281,7 @@
       Drupal.announce(toolbarHelpText.join(' '));
     }
 
+    sortables.get(root)?.forEach((sortable) => sortable.destroy());
     root.innerHTML = Drupal.theme.ckeditor5Admin({
       availableButtons: Drupal.theme.ckeditor5AvailableButtons({
         buttons: availableButtons.filter(
@@ -289,7 +303,7 @@
 
     // Create sortable groups for available buttons, current toolbar items,
     // and dividers.
-    new Sortable(
+    const toolbarActiveButtons = new Sortable(
       root.querySelector(
         '[data-button-list="ckeditor5-toolbar-active-buttons"]',
       ),
@@ -298,7 +312,13 @@
         sort: true,
         store: {
           set: (sortable) => {
-            selectedButtons.value = sortable.toArray();
+            const order = sortable.toArray();
+            // Rebuild after Sortable finishes handling the drop.
+            queueMicrotask(() => {
+              if (root.isConnected && sortables.get(root)?.includes(sortable)) {
+                selectedButtons.value = order;
+              }
+            });
           },
         },
       },
@@ -318,27 +338,26 @@
               (dividerButton) => dividerButton.id === event.item.dataset.id,
             )
           ) {
-            const { newIndex } = event;
-            setTimeout(() => {
-              // Remove the divider button from the available buttons
-              // list. Draggable reassesses the lists during each drag
-              // event, so the DOM removal should not be disruptive.
-              document
-                .querySelectorAll('.ckeditor5-toolbar-available__buttons li')
-                [newIndex].remove();
-            });
+            // Sortable finishes the drop before we remove the moved divider.
+            queueMicrotask(() => event.item.remove());
           }
         },
       },
     );
-    new Sortable(
+    const toolbarDividerButtons = new Sortable(
       root.querySelector(
         '[data-button-list="ckeditor5-toolbar-divider-buttons"]',
       ),
       {
-        group: { name: 'divider', put: false, pull: 'clone', sort: 'false' },
+        group: { name: 'divider', put: false, pull: 'clone', sort: false },
       },
     );
+
+    sortables.set(root, [
+      toolbarActiveButtons,
+      toolbarAvailableButtons,
+      toolbarDividerButtons,
+    ]);
 
     root
       .querySelectorAll('[data-drupal-selector="ckeditor5-toolbar-button"]')
@@ -362,6 +381,40 @@
         element.addEventListener('mouseleave', retractButton);
         element.addEventListener('blur', retractButton);
 
+        // Safari's focus outlines take into account absolute positioned elements.
+        // When a toolbar option is blurred, the portion of the focus outline
+        // surrounding the absolutely positioned tooltip does not go away. To
+        // prevent keyboard navigation users from seeing outline artifacts for
+        // every option they've tabbed through, we provide a keydown listener
+        // that can catch blur-causing events before the blur happens. If the
+        // tooltip is hidden before the blur event, the outline will disappear
+        // correctly.
+        const horizontalOffset = (key) =>
+          (key === 'ArrowLeft') === (document.documentElement.dir === 'ltr')
+            ? -1
+            : 1;
+        element.addEventListener('keydown', ({ key }) => {
+          const isActive = element.closest(
+            '[data-button-list="ckeditor5-toolbar-active-buttons"]',
+          );
+          const isHorizontal = key === 'ArrowLeft' || key === 'ArrowRight';
+          const canMoveHorizontally =
+            isHorizontal &&
+            (horizontalOffset(key) < 0
+              ? element.previousElementSibling
+              : element.nextElementSibling);
+          if (
+            key === 'Tab' ||
+            (isActive
+              ? key === 'ArrowUp' || canMoveHorizontally
+              : key === 'ArrowDown')
+          ) {
+            element
+              .querySelector('[data-expanded]')
+              ?.setAttribute('data-expanded', 'false');
+          }
+        });
+
         element.addEventListener('keyup', (event) => {
           // Keys supported by the admin UI. Depending on the element that is
           // triggering the event, the event could trigger changes in the state.
@@ -377,7 +430,6 @@
             'ArrowUp',
             'ArrowDown',
           ];
-          const dir = document.documentElement.dir;
           if (supportedKeys.includes(event.key)) {
             if (event.currentTarget.dataset.divider.toLowerCase() === 'true') {
               switch (event.key) {
@@ -414,30 +466,14 @@
                 return child === element;
               });
               switch (event.key) {
-                case 'ArrowLeft': {
-                  const leftOffset = dir === 'ltr' ? -1 : 1;
-                  moveWithinSelectedButtons(
-                    selectedButtons,
-                    event.currentTarget,
-                    leftOffset,
-                  );
-                  // Move focus to left or right from the current index depending
-                  // on current language direction. Use index instead of the
-                  // data-id because dividers don't have a unique ID.
-                  root
-                    .querySelectorAll(
-                      '[data-button-list="ckeditor5-toolbar-active-buttons"] li',
-                    )
-                    [index + leftOffset].focus();
-                  break;
-                }
+                case 'ArrowLeft':
                 case 'ArrowRight': {
-                  const rightOffset = dir === 'ltr' ? 1 : -1;
-                  moveWithinSelectedButtons(
-                    selectedButtons,
-                    event.currentTarget,
-                    rightOffset,
-                  );
+                  const offset = horizontalOffset(event.key);
+                  if (
+                    !moveWithinSelectedButtons(selectedButtons, element, offset)
+                  ) {
+                    break;
+                  }
                   // Move focus to right or left from the current index depending
                   // on current language direction. Use index instead of the
                   // data-id because dividers don't have a unique ID.
@@ -445,7 +481,7 @@
                     .querySelectorAll(
                       '[data-button-list="ckeditor5-toolbar-active-buttons"] li',
                     )
-                    [index + rightOffset].focus();
+                    [index + offset].focus();
                   break;
                 }
                 case 'ArrowUp': {
@@ -462,15 +498,17 @@
                     event.currentTarget,
                     announceChange,
                   );
-                  // Focus only if the button wasn't a divider because dividers
-                  // are simply removed from the active buttons instead of moving
-                  // to another list.
                   if (
-                    !dividerButtons.find(
-                      (dividerButton) =>
-                        event.currentTarget.dataset.id === dividerButton.id,
-                    )
+                    dividerButtons.some(({ id }) => id === element.dataset.id)
                   ) {
+                    const active = root.querySelector(
+                      '[data-button-list="ckeditor5-toolbar-active-buttons"]',
+                    );
+                    const fallback = root.closest(toolbarRegion);
+                    (
+                      active.children[Math.max(index - 1, 0)] ?? fallback
+                    ).focus();
+                  } else {
                     // Focus button based on the data-id attribute from the
                     // available buttons list.
                     root
@@ -535,12 +573,13 @@
         '#ckeditor5-toolbar-app',
         context,
       ).forEach((container) => {
-        const selectedTextarea = context.querySelector(
+        const form = container.closest('form');
+        const selectedTextarea = form.querySelector(
           '#ckeditor5-toolbar-buttons-selected',
         );
         const available = Object.entries(
           JSON.parse(
-            context.querySelector('#ckeditor5-toolbar-buttons-available')
+            form.querySelector('#ckeditor5-toolbar-buttons-available')
               .innerHTML,
           ),
         ).map(([name, attrs]) => ({ name, id: name, ...attrs }));
@@ -585,8 +624,8 @@
         });
 
         [
-          context.querySelector('#ckeditor5-toolbar-buttons-available'),
-          context.querySelector('[class*="editor-settings-toolbar-items"]'),
+          form.querySelector('#ckeditor5-toolbar-buttons-available'),
+          form.querySelector('[class*="editor-settings-toolbar-items"]'),
         ]
           .filter((el) => el)
           .forEach((el) => {
@@ -595,268 +634,230 @@
 
         render(container, selected, available, dividers);
       });
-      // Safari's focus outlines take into account absolute positioned elements.
-      // When a toolbar option is blurred, the portion of the focus outline
-      // surrounding the absolutely positioned tooltip does not go away. To
-      // prevent keyboard navigation users from seeing outline artifacts for
-      // every option they've tabbed through, we provide a keydown listener
-      // that can catch blur-causing events before the blur happens. If the
-      // tooltip is hidden before the blur event, the outline will disappear
-      // correctly.
-      once('safari-focus-fix', '.ckeditor5-toolbar-item').forEach((item) => {
-        item.addEventListener('keydown', (e) => {
-          const keyCodeDirections = {
-            9: 'tab',
-            37: 'left',
-            38: 'up',
-            39: 'right',
-            40: 'down',
-          };
-          if (
-            ['tab', 'left', 'up', 'right', 'down'].includes(
-              keyCodeDirections[e.keyCode],
-            )
-          ) {
-            let hideTip = false;
-            const isActive = e.target.closest(
-              '[data-button-list="ckeditor5-toolbar-active__buttons"]',
-            );
-            if (isActive) {
-              if (
-                ['tab', 'left', 'up', 'right'].includes(
-                  keyCodeDirections[e.keyCode],
-                )
-              ) {
-                hideTip = true;
+      const formSelector =
+        '[data-drupal-selector="filter-format-add-form"], [data-drupal-selector="filter-format-edit-form"]';
+      const parent = context.closest?.(formSelector);
+      const forms = parent ? [parent] : context.querySelectorAll(formSelector);
+      forms.forEach((form) => {
+        /**
+         * Updates the UI state info in the form's 'data-drupal-ui-state' attribute.
+         *
+         * @param {object} states
+         *   An object with one or more items with the structure { ui-property: stored-value }
+         */
+        const updateUiStateStorage = (states) => {
+          // Get the current stored UI state as an object.
+          const currentStates = form.hasAttribute('data-drupal-ui-state')
+            ? JSON.parse(form.getAttribute('data-drupal-ui-state'))
+            : {};
+
+          // Store the updated UI state object as an object literal in the parent
+          // form's 'data-drupal-ui-state' attribute.
+          form.setAttribute(
+            'data-drupal-ui-state',
+            JSON.stringify({ ...currentStates, ...states }),
+          );
+        };
+
+        /**
+         * Gets a stored UI state property.
+         *
+         * @param {string} property
+         *   The UI state property to retrieve the value of.
+         *
+         * @return {string|null}
+         *   When present, the stored value of the property.
+         */
+        const getUiStateStorage = (property) => {
+          // Parse the object literal stored in the form's 'data-drupal-ui-state'
+          // attribute and return the value of the object property that matches
+          // the 'property' argument.
+          return form.hasAttribute('data-drupal-ui-state')
+            ? JSON.parse(form.getAttribute('data-drupal-ui-state'))[property]
+            : null;
+        };
+
+        /**
+         * Maintains the active vertical tab after AJAX rebuild.
+         *
+         * @param {Element} verticalTabs
+         *   The vertical tabs element.
+         */
+        const maintainActiveVerticalTab = (verticalTabs) => {
+          const id = verticalTabs.id;
+
+          // If the UI state storage has an active tab, click that tab.
+          const activeTab = getUiStateStorage(`${id}-active-tab`);
+          if (activeTab) {
+            setTimeout(() => {
+              const activeTabLink = verticalTabs.querySelector(activeTab);
+              if (!activeTabLink || !verticalTabs.isConnected) {
+                return;
               }
-            } else if (['tab', 'down'].includes(keyCodeDirections[e.keyCode])) {
-              hideTip = true;
-            }
-            if (hideTip) {
-              e.target
-                .querySelector('[data-expanded]')
-                .setAttribute('data-expanded', 'false');
-            }
-          }
-        });
-      });
-
-      /**
-       * Updates the UI state info in the form's 'data-drupal-ui-state' attribute.
-       *
-       * @param {object} states
-       *   An object with one or more items with the structure { ui-property: stored-value }
-       */
-      const updateUiStateStorage = (states) => {
-        const form = document.querySelector(
-          '#filter-format-edit-form, #filter-format-add-form',
-        );
-
-        if (!form) {
-          return;
-        }
-
-        // Get the current stored UI state as an object.
-        const currentStates = form.hasAttribute('data-drupal-ui-state')
-          ? JSON.parse(form.getAttribute('data-drupal-ui-state'))
-          : {};
-
-        // Store the updated UI state object as an object literal in the parent
-        // form's 'data-drupal-ui-state' attribute.
-        form.setAttribute(
-          'data-drupal-ui-state',
-          JSON.stringify({ ...currentStates, ...states }),
-        );
-      };
-
-      /**
-       * Gets a stored UI state property.
-       *
-       * @param {string} property
-       *   The UI state property to retrieve the value of.
-       *
-       * @return {string|null}
-       *   When present, the stored value of the property.
-       */
-      const getUiStateStorage = (property) => {
-        const form = document.querySelector(
-          '#filter-format-edit-form, #filter-format-add-form',
-        );
-
-        if (form === null) {
-          return;
-        }
-
-        // Parse the object literal stored in the form's 'data-drupal-ui-state'
-        // attribute and return the value of the object property that matches
-        // the 'property' argument.
-        return form.hasAttribute('data-drupal-ui-state')
-          ? JSON.parse(form.getAttribute('data-drupal-ui-state'))[property]
-          : null;
-      };
-
-      // Add an attribute to the parent form for storing UI states, so this
-      // information can be retrieved after AJAX rebuilds.
-      once(
-        'ui-state-storage',
-        '#filter-format-edit-form, #filter-format-add-form',
-      ).forEach((form) => {
-        form.setAttribute('data-drupal-ui-state', JSON.stringify({}));
-      });
-
-      /**
-       * Maintains the active vertical tab after AJAX rebuild.
-       *
-       * @param {Element} verticalTabs
-       *   The vertical tabs element.
-       */
-      const maintainActiveVerticalTab = (verticalTabs) => {
-        const id = verticalTabs.id;
-
-        // If the UI state storage has an active tab, click that tab.
-        const activeTab = getUiStateStorage(`${id}-active-tab`);
-        if (activeTab) {
-          setTimeout(() => {
-            const activeTabLink = document.querySelector(activeTab);
-            if (activeTabLink) {
               activeTabLink.click();
-            }
 
-            // Only change focus on the plugin-settings-wrapper element.
-            if (id !== 'plugin-settings-wrapper') {
-              return;
-            }
-            // If the current focused element is not the body, then the user
-            // navigated away from the vertical tab area and is somewhere else
-            // within the form. Do not change the current focus.
-            if (document.activeElement !== document.body) {
-              return;
-            }
-            // If the active element is the body then we can assume that the
-            // focus was on an element that was replaced by an ajax command.
-            // If that is the case restore the focus to the active tab that
-            // was just rebuilt.
-            const targetTabPane = document.querySelector(
-              activeTabLink.getAttribute('href'),
-            );
-            if (targetTabPane) {
-              const tabbableElements = tabbable(targetTabPane);
-              if (tabbableElements.length) {
-                tabbableElements[0].focus();
+              // Only change focus on the plugin-settings-wrapper element.
+              if (id !== 'plugin-settings-wrapper') {
+                return;
               }
-            }
-          });
-        }
-
-        // Add click listener that adds any tab click into UI storage.
-        verticalTabs.querySelectorAll('.vertical-tabs__menu').forEach((tab) => {
-          tab.addEventListener('click', (e) => {
-            const state = {};
-            const href = e.target
-              .closest('[href]')
-              .getAttribute('href')
-              .split('--')[0];
-            state[`${id}-active-tab`] = `#${id} [href^='${href}']`;
-            updateUiStateStorage(state);
-          });
-        });
-      };
-
-      once(
-        'maintainActiveVerticalTab',
-        '#plugin-settings-wrapper, #filter-settings-wrapper',
-      ).forEach(maintainActiveVerticalTab);
-
-      // Add listeners to maintain focus after AJAX rebuilds.
-      const selectedButtons = document.querySelector(
-        '#ckeditor5-toolbar-buttons-selected',
-      );
-
-      once('textarea-listener', selectedButtons).forEach((textarea) => {
-        textarea.addEventListener('change', (e) => {
-          const buttonName = document.activeElement.getAttribute('data-id');
-          if (!buttonName) {
-            // If there is no 'data-id' attribute, then the config
-            // is happening via mouse.
-            return;
-          }
-          let focusSelector = '';
-
-          // Divider elements are treated differently as there can be multiple
-          // elements with the same button name.
-          if (['divider', 'wrapping'].includes(buttonName)) {
-            const oldConfig = JSON.parse(e.detail.priorValue);
-            const newConfig = JSON.parse(e.target.innerHTML);
-
-            // If the divider is being removed from active buttons, it does not
-            // 'move' anywhere. Move focus to the prior active button
-            if (oldConfig.length > newConfig.length) {
-              for (let item = 0; item < newConfig.length; item++) {
-                if (newConfig[item] !== oldConfig[item]) {
-                  focusSelector = `[data-button-list="ckeditor5-toolbar-active-buttons"] li:nth-child(${Math.min(
-                    item - 1,
-                    0,
-                  )})`;
-                  break;
+              // If the current focused element is not the body, then the user
+              // navigated away from the vertical tab area and is somewhere else
+              // within the form. Do not change the current focus.
+              if (document.activeElement !== document.body) {
+                return;
+              }
+              // If the active element is the body then we can assume that the
+              // focus was on an element that was replaced by an ajax command.
+              // If that is the case restore the focus to the active tab that
+              // was just rebuilt.
+              const targetTabPane = verticalTabs.querySelector(
+                activeTabLink.getAttribute('href'),
+              );
+              if (targetTabPane) {
+                const tabbableElements = tabbable(targetTabPane);
+                if (tabbableElements.length) {
+                  tabbableElements[0].focus();
                 }
               }
-            } else if (oldConfig.length < newConfig.length) {
-              // If the divider is being added, it will be the last active item.
-              focusSelector =
-                '[data-button-list="ckeditor5-toolbar-active-buttons"] li:last-child';
-            } else {
-              // When moving a dividers position within the active buttons.
-              document
-                .querySelectorAll(
-                  `[data-button-list="ckeditor5-toolbar-active-buttons"] [data-id='${buttonName}']`,
-                )
-                .forEach((divider, index) => {
-                  if (divider === document.activeElement) {
-                    focusSelector = `${buttonName}|${index}`;
-                  }
-                });
-            }
-          } else {
-            focusSelector = `[data-id='${buttonName}']`;
+            });
           }
 
-          // Store the focus selector in an attribute on the form itself, which
-          // will not be overwritten after the AJAX rebuild. This makes it
-          // the value available to the textarea focus listener that is
-          // triggered after the AJAX rebuild.
-          updateUiStateStorage({ focusSelector });
-        });
+          // Add click listener that adds any tab click into UI storage.
+          verticalTabs
+            .querySelectorAll('.vertical-tabs__menu')
+            .forEach((tab) => {
+              tab.addEventListener('click', (e) => {
+                const state = {};
+                const href = e.target
+                  .closest('[href]')
+                  ?.getAttribute('href')
+                  .split('--')[0];
+                if (!href) {
+                  return;
+                }
+                state[`${id}-active-tab`] =
+                  `.vertical-tabs__menu [href^='${href}']`;
+                updateUiStateStorage(state);
+              });
+            });
+        };
 
-        textarea.addEventListener('focus', () => {
-          // The selector that should receive focus is stored in the parent
-          // form element. Move focus to that selector.
-          const focusSelector = getUiStateStorage('focusSelector');
+        once(
+          'maintainActiveVerticalTab',
+          '#plugin-settings-wrapper, #filter-settings-wrapper',
+          form,
+        ).forEach(maintainActiveVerticalTab);
 
-          if (focusSelector) {
-            // If focusSelector includes '|', it is a separator that is being
-            // moved within the active button list. Different logic us used to
-            // determine focus since there can be multiple separators of the
-            // same type within the active buttons list.
-            if (focusSelector.includes('|')) {
-              const [buttonName, count] = focusSelector.split('|');
-              document
-                .querySelectorAll(
-                  `[data-button-list="ckeditor5-toolbar-active-buttons"] [data-id='${buttonName}']`,
-                )
-                .forEach((item, index) => {
-                  if (index === parseInt(count, 10)) {
-                    item.focus();
-                  }
-                });
+        // Add listeners to maintain focus after AJAX rebuilds.
+        const selectedButtons = form.querySelector(
+          '#ckeditor5-toolbar-buttons-selected',
+        );
+
+        once('textarea-listener', selectedButtons).forEach((textarea) => {
+          textarea.addEventListener('change', (e) => {
+            textarea.removeAttribute('data-refocus-blur');
+            const buttonName = document.activeElement.getAttribute('data-id');
+            if (!buttonName) {
+              // If there is no 'data-id' attribute, then the config
+              // is happening via mouse.
+              return;
+            }
+            let focusSelector = '';
+
+            // Divider elements are treated differently as there can be multiple
+            // elements with the same button name.
+            if (['divider', 'wrapping'].includes(buttonName)) {
+              const oldConfig = JSON.parse(e.detail.priorValue);
+              const newConfig = JSON.parse(e.target.innerHTML);
+
+              // If the divider is being removed from active buttons, it does not
+              // 'move' anywhere. Move focus to the prior active button
+              if (oldConfig.length > newConfig.length) {
+                const removedIndex = Array.from(
+                  document.activeElement.parentElement.children,
+                ).indexOf(document.activeElement);
+                if (newConfig.length) {
+                  focusSelector = `[data-button-list="ckeditor5-toolbar-active-buttons"] li:nth-child(${Math.max(removedIndex, 1)})`;
+                } else {
+                  focusSelector = toolbarRegion;
+                  // This focus target can survive the response or be rebuilt.
+                  // Let Ajax follow it without focusing the hidden textarea.
+                  textarea.setAttribute('data-refocus-blur', 'true');
+                }
+              } else if (oldConfig.length < newConfig.length) {
+                // If the divider is being added, it will be the last active item.
+                focusSelector =
+                  '[data-button-list="ckeditor5-toolbar-active-buttons"] li:last-child';
+              } else {
+                // When moving a dividers position within the active buttons.
+                form
+                  .querySelectorAll(
+                    `[data-button-list="ckeditor5-toolbar-active-buttons"] [data-id='${buttonName}']`,
+                  )
+                  .forEach((divider, index) => {
+                    if (divider === document.activeElement) {
+                      focusSelector = `${buttonName}|${index}`;
+                    }
+                  });
+              }
             } else {
-              const toFocus = document.querySelector(focusSelector);
-              if (toFocus) {
-                toFocus.focus();
+              focusSelector = `[data-id='${buttonName}']`;
+            }
+
+            // Store the focus selector in an attribute on the form itself, which
+            // will not be overwritten after the AJAX rebuild. This makes it
+            // the value available to the textarea focus listener that is
+            // triggered after the AJAX rebuild.
+            updateUiStateStorage({ focusSelector });
+          });
+
+          textarea.addEventListener('focus', () => {
+            // The selector that should receive focus is stored in the parent
+            // form element. Move focus to that selector.
+            const focusSelector = getUiStateStorage('focusSelector');
+
+            if (focusSelector) {
+              // If focusSelector includes '|', it is a separator that is being
+              // moved within the active button list. Different logic us used to
+              // determine focus since there can be multiple separators of the
+              // same type within the active buttons list.
+              if (focusSelector.includes('|')) {
+                const [buttonName, count] = focusSelector.split('|');
+                form
+                  .querySelectorAll(
+                    `[data-button-list="ckeditor5-toolbar-active-buttons"] [data-id='${buttonName}']`,
+                  )
+                  .forEach((item, index) => {
+                    if (index === parseInt(count, 10)) {
+                      item.focus();
+                    }
+                  });
+              } else {
+                const toFocus = form.querySelector(focusSelector);
+                if (toFocus) {
+                  toFocus.focus();
+                }
               }
             }
-          }
+          });
         });
       });
+    },
+
+    detach(context, settings, trigger) {
+      if (trigger !== 'unload') {
+        return;
+      }
+      const selector = '#ckeditor5-toolbar-app';
+      const containers = context.matches?.(selector)
+        ? context
+        : context.querySelectorAll(selector);
+      once
+        .remove('ckeditor5-admin-toolbar', containers)
+        .forEach((container) => {
+          sortables.get(container)?.forEach((sortable) => sortable.destroy());
+          sortables.delete(container);
+        });
     },
   };
 
@@ -1028,33 +1029,4 @@
     </div>
     `;
   };
-
-  // Make a copy of the default filterStatus attach behaviors so it can be
-  // called within this module's override of it.
-  const originalFilterStatusAttach = Drupal.behaviors.filterStatus.attach;
-
-  // Overrides the default filterStatus to provided functionality needs
-  // specific to CKEditor 5.
-  Drupal.behaviors.filterStatus.attach = (context, settings) => {
-    const filterStatusCheckboxes = document.querySelectorAll(
-      '#filters-status-wrapper input.form-checkbox',
-    );
-
-    // CKEditor 5 has uses cases that require updating the filter settings via
-    // AJAX. When this happens, the checkboxes that enable filters must be
-    // reprocessed by the filterStatus behavior. For this to occur:
-    // 1. 'filter-status' must be removed from the element's once registry so
-    //    the process can run again and take into account any filter settings
-    //    elements that have been added or removed from the DOM.
-    //    @see core/assets/vendor/once/once.js
-    once.remove('filter-status', filterStatusCheckboxes);
-
-    // 2. Any listeners to the 'click.filterUpdate' event should be removed so
-    //    they do not conflict with event listeners that are added as part of
-    //    the AJAX refresh.
-    $(filterStatusCheckboxes).off('click.filterUpdate');
-
-    // Call the original behavior.
-    originalFilterStatusAttach(context, settings);
-  };
-})(Drupal, drupalSettings, jQuery, JSON, once, Sortable, tabbable);
+})(Drupal, once, Sortable, tabbable);

@@ -57,7 +57,7 @@ class AdminViewsUiTest extends WebDriverTestBase {
     $assert_session->elementExists('css', '#edit-display-settings-top .views-display-setting a')->click();
     $this->assertNotNull($this->assertSession()->waitForElement('css', '.js-views-ui-dialog'));
     // Click the Apply button of the dialog.
-    $assert_session->elementExists('css', '.js-views-ui-dialog .ui-dialog-buttonpane')->findButton('Apply')->press();
+    $assert_session->elementExists('css', '.js-views-ui-dialog .drupal-dialog-buttonpane')->findButton('Apply')->press();
     // Wait for AJAX to finish.
     $assert_session->assertWaitOnAjaxRequest();
 
@@ -85,7 +85,7 @@ class AdminViewsUiTest extends WebDriverTestBase {
     $assert_session->elementExists('css', '#edit-display-settings-top .views-display-setting a')->click();
     $this->assertNotNull($this->assertSession()->waitForElement('css', '.js-views-ui-dialog'));
     // Click the Apply button of the dialog.
-    $assert_session->elementExists('css', '.js-views-ui-dialog .ui-dialog-buttonpane')->findButton('Apply')->press();
+    $assert_session->elementExists('css', '.js-views-ui-dialog .drupal-dialog-buttonpane')->findButton('Apply')->press();
     // Wait for AJAX to finish.
     $this->assertSession()->assertWaitOnAjaxRequest();
 

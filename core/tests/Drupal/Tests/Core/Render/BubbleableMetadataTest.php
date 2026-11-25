@@ -254,7 +254,7 @@ class BubbleableMetadataTest extends UnitTestCase {
       ],
       '#attached' => [
         'library' => [
-          'core/jquery',
+          'core/once',
         ],
       ],
     ];
@@ -345,7 +345,7 @@ class BubbleableMetadataTest extends UnitTestCase {
     ];
     $b['#attached'] = [
       'library' => [
-        'core/jquery',
+        'core/once',
       ],
       'drupalSettings' => [
         'bar' => ['a', 'b', 'c'],
@@ -355,7 +355,7 @@ class BubbleableMetadataTest extends UnitTestCase {
       'library' => [
         'core/drupal',
         'core/drupalSettings',
-        'core/jquery',
+        'core/once',
       ],
       'drupalSettings' => [
         'foo' => ['d'],
@@ -367,7 +367,7 @@ class BubbleableMetadataTest extends UnitTestCase {
     // Merging in the opposite direction yields the opposite library order.
     $expected['#attached'] = [
       'library' => [
-        'core/jquery',
+        'core/once',
         'core/drupal',
         'core/drupalSettings',
       ],
@@ -385,7 +385,7 @@ class BubbleableMetadataTest extends UnitTestCase {
       'library' => [
         'core/drupal',
         'core/drupalSettings',
-        'core/jquery',
+        'core/once',
         'core/drupalSettings',
       ],
       'drupalSettings' => [
@@ -401,7 +401,7 @@ class BubbleableMetadataTest extends UnitTestCase {
       'library' => [
         'core/drupal',
         'core/drupalSettings',
-        'core/jquery',
+        'core/once',
         'core/drupalSettings',
       ],
       'drupalSettings' => [
@@ -415,7 +415,7 @@ class BubbleableMetadataTest extends UnitTestCase {
     // the opposite JS setting asset order, but also opposite overriding order.
     $expected['#attached'] = [
       'library' => [
-        'core/jquery',
+        'core/once',
         'core/drupalSettings',
         'core/drupal',
         'core/drupalSettings',
@@ -509,7 +509,7 @@ class BubbleableMetadataTest extends UnitTestCase {
     ];
     $b = [
       'library' => [
-        'core/jquery',
+        'core/once',
       ],
     ];
 
@@ -527,7 +527,7 @@ class BubbleableMetadataTest extends UnitTestCase {
 
     $merged = BubbleableMetadata::mergeAttachments($a, $b);
 
-    $this->assertSame(['core/drupal', 'core/jquery'], $merged['library']);
+    $this->assertSame(['core/drupal', 'core/once'], $merged['library']);
     $this->assertSame('Preview from b', $merged['page_top']['node_preview']['#markup']);
     $this->assertSame('Preview from b', $merged['page_bottom']['node_preview']['#markup']);
   }

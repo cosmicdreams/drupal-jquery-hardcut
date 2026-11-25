@@ -4,6 +4,9 @@ declare(strict_types=1);
 
 namespace Drupal\Tests\ckeditor5\FunctionalJavascript;
 
+use Drupal\editor\Entity\Editor;
+use Drupal\filter\Entity\FilterFormat;
+use Drupal\Tests\ckeditor5\Traits\CKEditor5TestTrait;
 use PHPUnit\Framework\Attributes\Group;
 use PHPUnit\Framework\Attributes\RunTestsInSeparateProcesses;
 
@@ -15,6 +18,8 @@ use PHPUnit\Framework\Attributes\RunTestsInSeparateProcesses;
 #[Group('ckeditor5')]
 #[RunTestsInSeparateProcesses]
 class CKEditor5OffCanvasTest extends CKEditor5TestBase {
+
+  use CKEditor5TestTrait;
 
   /**
    * {@inheritdoc}
@@ -33,6 +38,14 @@ class CKEditor5OffCanvasTest extends CKEditor5TestBase {
     $page = $this->getSession()->getPage();
 
     $this->addNewTextFormat();
+    $format = FilterFormat::load('ckeditor5');
+    $filter_settings = $format->filters('filter_html')->getConfiguration();
+    $filter_settings['settings']['allowed_html'] .= ' <a href>';
+    $format->setFilterConfig('filter_html', $filter_settings)->save();
+    $editor = Editor::load('ckeditor5');
+    $settings = $editor->getSettings();
+    $settings['toolbar']['items'] = ['link', 'heading'];
+    $editor->setSettings($settings)->save();
 
     $this->drupalGet('/ckeditor5_test/off_canvas');
 
@@ -53,6 +66,18 @@ class CKEditor5OffCanvasTest extends CKEditor5TestBase {
     $assert_session->elementExists('css', '.ck .ck-content');
     $ckeditor_editable_bg_color = $this->getSession()->evaluateScript('window.getComputedStyle(document.querySelector(\'.ck.ck-content\')).backgroundColor');
     $this->assertEquals('rgb(255, 255, 255)', $ckeditor_editable_bg_color, 'Content background-color should be unaffected by off-canvas');
+
+    $this->chooseEditorHeading();
+    $assert_session->elementExists('css', '.ck-editor__editable h2')->click();
+
+    $this->pressEditorButton('Link');
+    $input = $assert_session->waitForElementVisible('css', '.ck-balloon-panel input.ck-input-text');
+    $this->assertNotNull($input);
+    $this->assertLinkBalloonPosition();
+    $input->setValue('/node');
+    $this->dismissEditorOverlay();
+    $assert_session->assertNoElementAfterWait('css', '.ck-balloon-panel_visible input.ck-input-text');
+    $assert_session->elementExists('css', 'dialog#drupal-off-canvas-wrapper[open]');
   }
 
 }

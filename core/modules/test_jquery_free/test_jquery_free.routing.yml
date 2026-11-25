@@ -1,0 +1,7 @@
+test_jquery_free.report:
+  path: '/admin/reports/jquery-readiness'
+  defaults:
+    _controller: '\Drupal\test_jquery_free\Controller\ReadinessReportController::report'
+    _title: 'jQuery readiness'
+  requirements:
+    _permission: 'administer site configuration'

@@ -102,7 +102,7 @@ abstract class WebDriverTestBase extends BrowserTestBase {
     if (isset($this->mink)) {
       // Wait for all requests to finish. It is possible that an AJAX request is
       // still on-going.
-      $result = $this->getSession()->wait(5000, 'window.drupalActiveXhrCount === 0 || typeof window.drupalActiveXhrCount === "undefined"');
+      $result = $this->getSession()->wait(5000, JSWebAssert::ajaxIdleCondition());
       if (!$result) {
         // If the wait is unsuccessful, there may still be an AJAX request in
         // progress. If we tear down now, then this AJAX request may fail with
@@ -204,8 +204,8 @@ abstract class WebDriverTestBase extends BrowserTestBase {
   protected function drupalGet($path, array $options = [], array $headers = []): string {
     $result = parent::drupalGet($path, $options, $headers);
 
-    // Wait for all requests to finish.
-    $this->getSession()->wait(5000, 'window.drupalActiveXhrCount === 0 || typeof window.drupalActiveXhrCount === "undefined"');
+    // Allow requests and their commands to finish before processing log entries.
+    $this->getSession()->wait(5000, JSWebAssert::ajaxIdleCondition());
 
     // Process Javascript deprecations.
     $driver = $this->getSession()->getDriver();

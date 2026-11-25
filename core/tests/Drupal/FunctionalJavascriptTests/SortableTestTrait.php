@@ -4,95 +4,60 @@ declare(strict_types=1);
 
 namespace Drupal\FunctionalJavascriptTests;
 
+use Behat\Mink\Driver\Selenium2Driver;
+use Behat\Mink\Element\NodeElement;
+use WebDriver\Element;
+
 /**
- * Provides functions for simulating sort changes.
- *
- * Selenium uses ChromeDriver for FunctionalJavascript tests, but it does not
- * currently support HTML5 drag and drop. These methods manipulate the DOM.
- * This trait should be deprecated when the Chromium bug is fixed.
- *
- * @see https://www.drupal.org/project/drupal/issues/3078152
+ * Drags Sortable items with WebDriver pointer actions.
  */
 trait SortableTestTrait {
 
   /**
-   * Define to provide any necessary callback following layout change.
+   * Drags an item from its handle to another item or region.
    *
-   * @param string $item
-   *   The HTML selector for the element to be moved.
-   * @param string $from
-   *   The HTML selector for the previous container element.
-   * @param null|string $to
-   *   The HTML selector for the target container.
+   * @param \Behat\Mink\Element\NodeElement $source
+   *   The draggable handle or item.
+   * @param \Behat\Mink\Element\NodeElement $target
+   *   The destination item or region.
    */
-  abstract protected function sortableUpdate($item, $from, $to = NULL);
+  protected function dragSortableItem(NodeElement $source, NodeElement $target): void {
+    $driver = $this->getSession()->getDriver();
+    assert($driver instanceof Selenium2Driver);
+    $webdriver = $driver->getWebDriverSession();
+    $from = $webdriver->element('xpath', $source->getXpath());
+    $to = $webdriver->element('xpath', $target->getXpath());
+    $webdriver->execute([
+      'script' => 'arguments[0].scrollIntoView({block: "center", inline: "nearest"})',
+      'args' => [$from],
+    ]);
 
-  /**
-   * Simulates a drag on an element from one container to another.
-   *
-   * @param string $item
-   *   The HTML selector for the element to be moved.
-   * @param string $from
-   *   The HTML selector for the previous container element.
-   * @param null|string $to
-   *   The HTML selector for the target container.
-   */
-  protected function sortableTo($item, $from, $to) {
-    $item = addslashes($item);
-    $from = addslashes($from);
-    $to   = addslashes($to);
-
-    $script = <<<JS
-(function (src, to) {
-  var sourceElement = document.querySelector(src);
-  var toElement = document.querySelector(to);
-
-  toElement.insertBefore(sourceElement, toElement.firstChild);
-})('{$item}', '{$to}')
-
-JS;
-
-    $options = [
-      'script' => $script,
-      'args'   => [],
-    ];
-
-    $this->getSession()->getDriver()->getWebDriverSession()->execute($options);
-    $this->sortableUpdate($item, $from, $to);
-  }
-
-  /**
-   * Simulates a drag moving an element after its sibling in the same container.
-   *
-   * @param string $item
-   *   The HTML selector for the element to be moved.
-   * @param string $target
-   *   The HTML selector for the sibling element.
-   * @param string $from
-   *   The HTML selector for the element container.
-   */
-  protected function sortableAfter($item, $target, $from) {
-    $item   = addslashes($item);
-    $target = addslashes($target);
-    $from   = addslashes($from);
-
-    $script = <<<JS
-(function (src, to) {
-  var sourceElement = document.querySelector(src);
-  var toElement = document.querySelector(to);
-
-  toElement.insertAdjacentElement('afterend', sourceElement);
-})('{$item}', '{$target}')
-
-JS;
-
-    $options = [
-      'script' => $script,
-      'args'   => [],
-    ];
-
-    $this->getSession()->getDriver()->getWebDriverSession()->execute($options);
-    $this->sortableUpdate($item, $from);
+    // Start the drag with a short move, then allow the browser to deliver
+    // dragover events at the destination before releasing the pointer.
+    $webdriver->postActions([
+      'actions' => [
+        [
+          'type' => 'pointer',
+          'id' => 'mouse',
+          'parameters' => ['pointerType' => 'mouse'],
+          'actions' => [
+            ['type' => 'pointerMove', 'origin' => [Element::WEB_ELEMENT_ID => $from->getID()], 'x' => 0, 'y' => 0],
+            ['type' => 'pointerDown', 'button' => 0],
+            ['type' => 'pointerMove', 'origin' => 'pointer', 'x' => 0, 'y' => 8, 'duration' => 100],
+            [
+              'type' => 'pointerMove',
+              'origin' => [Element::WEB_ELEMENT_ID => $to->getID()],
+              'x' => 0,
+              'y' => 0,
+              'duration' => 400,
+            ],
+            ['type' => 'pause', 'duration' => 250],
+            ['type' => 'pointerUp', 'button' => 0],
+          ],
+        ],
+      ],
+    ]);
+    $webdriver->deleteActions();
   }
 
 }

@@ -6,7 +6,7 @@ drupal.language.admin:
     theme:
       css/language.admin.css: {}
   dependencies:
-    - core/jquery
+    - core/drupal.form.events
     - core/drupal
     - core/once
 
@@ -14,3 +14,6 @@ moved_to:
   version: VERSION
   js:
     js/language.admin.js: {}
+  dependencies:
+    - core/drupal.form.events
+    - core/once

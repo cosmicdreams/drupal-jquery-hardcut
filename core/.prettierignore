@@ -6,7 +6,6 @@ node_modules/**/*
 modules/locale/tests/js/locale_test.js
 *.yml
 themes/default_admin/migration/js/scroll_sync.js
-misc/jquery.form.js
 
 # Temporary until they are brought up to standards
 scripts/**/*

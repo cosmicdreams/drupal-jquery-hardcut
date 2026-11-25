@@ -3,12 +3,12 @@
  * Styles for modal windows.
  */
 
-.ui-dialog--narrow {
+.drupal-dialog--narrow {
   max-width: 500px;
 }
 
 @media screen and (max-width: 600px) {
-  .ui-dialog--narrow {
+  .drupal-dialog--narrow {
     min-width: 95%;
     max-width: 95%;
   }

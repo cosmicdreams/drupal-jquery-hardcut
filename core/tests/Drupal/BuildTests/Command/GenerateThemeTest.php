@@ -707,7 +707,7 @@ EDITED, file_get_contents($theme_path_absolute . '/src/TestCustomThemePreRender.
     $this->writeStarterkitConfig([
       'info' => [
         'libraries' => [
-          'core/jquery',
+          'core/once',
         ],
       ],
     ]);
@@ -725,7 +725,7 @@ EDITED, file_get_contents($theme_path_absolute . '/src/TestCustomThemePreRender.
     self::assertArrayHasKey('base theme', $info);
     self::assertFalse($info['base theme']);
     self::assertArrayHasKey('libraries', $info);
-    self::assertEquals(['core/jquery'], $info['libraries']);
+    self::assertEquals(['core/once'], $info['libraries']);
   }
 
   public function testIncludeDotFiles(): void {

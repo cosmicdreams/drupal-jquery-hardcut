@@ -453,7 +453,7 @@ class FormHooks {
         '#states' => [
           // Show if met.
           'visible' => [
-            ':input[name="enable_user_settings"]' => ['checked' => TRUE],
+            'input[name="enable_user_settings"]' => ['checked' => TRUE],
           ],
         ],
       ] + Settings::getInstance()->getSettingsForm($account);

@@ -8,6 +8,7 @@ drupal.layout_builder:
     js/layout-builder.js: {}
   dependencies:
     - core/sortable
+    - core/once
     - core/drupal.dialog.off_canvas
     - core/drupal.announce
     - core/drupal.debounce

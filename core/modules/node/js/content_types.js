@@ -3,7 +3,7 @@
  * JavaScript for the node content editing form.
  */
 
-(function ($, Drupal) {
+(function (Drupal) {
   /**
    * Behaviors for setting summaries on content type form.
    *
@@ -14,61 +14,65 @@
    */
   Drupal.behaviors.contentTypes = {
     attach(context) {
-      const $context = $(context);
       // Provide the vertical tab summaries.
-      $context.find('#edit-submission').drupalSetSummary((context) => {
-        const values = [];
-        values.push(
-          Drupal.checkPlain($(context).find('#edit-title-label')[0].value) ||
-            Drupal.t('Requires a title'),
-        );
-        return values.join(', ');
-      });
-      $context.find('#edit-workflow').drupalSetSummary((context) => {
-        const values = [];
-        $(context)
-          .find('input[name^="options"]:checked')
-          .next('label')
-          .each(function () {
-            values.push(Drupal.checkPlain(this.textContent));
-          });
-        if ($(context).find('#edit-options-status:checked').length === 0) {
-          values.unshift(Drupal.t('Not published'));
-        }
-        return values.join(', ');
-      });
-      $('#edit-language', context).drupalSetSummary((context) => {
-        const values = [];
+      Drupal.form.setSummary(
+        context.querySelectorAll('#edit-submission'),
+        (context) => {
+          const values = [];
+          values.push(
+            Drupal.checkPlain(
+              context.querySelector('#edit-title-label').value,
+            ) || Drupal.t('Requires a title'),
+          );
+          return values.join(', ');
+        },
+      );
+      Drupal.form.setSummary(
+        context.querySelectorAll('#edit-workflow'),
+        (context) => {
+          const values = [];
+          context
+            .querySelectorAll('input[name^="options"]:checked + label')
+            .forEach((label) => {
+              values.push(Drupal.checkPlain(label.textContent));
+            });
+          if (!context.querySelector('#edit-options-status:checked')) {
+            values.unshift(Drupal.t('Not published'));
+          }
+          return values.join(', ');
+        },
+      );
+      Drupal.form.setSummary(
+        context.querySelectorAll('#edit-language'),
+        (context) => {
+          const values = [];
 
-        values.push(
-          $(
-            '.js-form-item-language-configuration-langcode select option:selected',
-            context,
-          )[0].textContent,
-        );
+          values.push(
+            context.querySelector(
+              '.js-form-item-language-configuration-langcode select option:checked',
+            ).textContent,
+          );
 
-        $('input:checked', context)
-          .next('label')
-          .each(function () {
-            values.push(Drupal.checkPlain(this.textContent));
+          context.querySelectorAll('input:checked + label').forEach((label) => {
+            values.push(Drupal.checkPlain(label.textContent));
           });
 
-        return values.join(', ');
-      });
-      $context.find('#edit-display').drupalSetSummary((context) => {
-        const values = [];
-        const $editContext = $(context);
-        $editContext
-          .find('input:checked')
-          .next('label')
-          .each(function () {
-            values.push(Drupal.checkPlain(this.textContent));
+          return values.join(', ');
+        },
+      );
+      Drupal.form.setSummary(
+        context.querySelectorAll('#edit-display'),
+        (context) => {
+          const values = [];
+          context.querySelectorAll('input:checked + label').forEach((label) => {
+            values.push(Drupal.checkPlain(label.textContent));
           });
-        if ($editContext.find('#edit-display-submitted:checked').length === 0) {
-          values.unshift(Drupal.t("Don't display post information"));
-        }
-        return values.join(', ');
-      });
+          if (!context.querySelector('#edit-display-submitted:checked')) {
+            values.unshift(Drupal.t("Don't display post information"));
+          }
+          return values.join(', ');
+        },
+      );
     },
   };
-})(jQuery, Drupal);
+})(Drupal);

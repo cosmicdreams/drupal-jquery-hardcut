@@ -14,7 +14,6 @@ drupal.node.preview:
   js:
     js/node.preview.js: {}
   dependencies:
-    - core/jquery
     - core/once
     - core/drupal
     - core/drupal.dialog
@@ -25,7 +24,6 @@ drupal.content_types:
   js:
     js/content_types.js: {}
   dependencies:
-    - core/jquery
     - core/drupal
     - core/drupal.form
 

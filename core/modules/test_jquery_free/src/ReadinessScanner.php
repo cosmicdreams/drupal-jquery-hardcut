@@ -1,0 +1,202 @@
+<?php
+
+declare(strict_types=1);
+
+namespace Drupal\test_jquery_free;
+
+use Drupal\Core\Cache\Cache;
+use Drupal\Core\Cache\CacheBackendInterface;
+use Drupal\Core\Extension\ModuleExtensionList;
+use Drupal\Core\Extension\ModuleHandlerInterface;
+use Drupal\Core\Extension\ThemeExtensionList;
+use Drupal\Core\Extension\ThemeHandlerInterface;
+use Psr\Log\LoggerInterface;
+use Symfony\Component\Finder\Finder;
+
+// cspell:ignore rescan
+
+/**
+ * Finds jQuery references in enabled contributed and custom extensions.
+ */
+final class ReadinessScanner {
+
+  private const WARNING = '@extension depends on jQuery (@reason). jQuery is removed from Drupal core; test this module with test_jquery_free enabled. See https://www.drupal.org/node/CHANGE_RECORD.';
+
+  private const DEFINITION_WARNING = '@extension has library definition errors (@reason).';
+
+  private const CACHE_ID = 'test_jquery_free.readiness';
+
+  public function __construct(
+    private readonly string $root,
+    private readonly ModuleHandlerInterface $moduleHandler,
+    private readonly ThemeHandlerInterface $themeHandler,
+    private readonly ReadinessLibraryScanner $libraryScanner,
+    private readonly CacheBackendInterface $cache,
+    private readonly CacheBackendInterface $moduleCache,
+    private readonly CacheBackendInterface $themeCache,
+    private readonly ModuleExtensionList $moduleList,
+    private readonly ThemeExtensionList $themeList,
+    private readonly LoggerInterface $logger,
+  ) {}
+
+  /**
+   * Reads the last scan without running discovery.
+   *
+   * @return array<string, list<array{source: string, line: ?int, theme: ?string, reason: string}>>|null
+   *   Cached findings, or NULL when a new scan is needed.
+   */
+  public function cachedFindings(): ?array {
+    $cached = $this->cache->get(self::CACHE_ID);
+    if ($cached && $cached->data['extensions'] === $this->extensionCacheFingerprints()) {
+      return $cached->data['findings'];
+    }
+    return NULL;
+  }
+
+  /**
+   * Reads or refreshes the report and logs only when performing discovery.
+   *
+   * @return array<string, list<array{source: string, line: ?int, theme: ?string, reason: string}>>
+   *   Findings grouped by extension machine name.
+   */
+  public function scan(bool $rescan = FALSE): array {
+    if (!$rescan && ($findings = $this->cachedFindings()) !== NULL) {
+      return $findings;
+    }
+
+    // Warm the extension list entries so resets can invalidate the report.
+    $this->moduleList->getList();
+    $this->themeList->getList();
+    $fingerprints = $this->extensionCacheFingerprints();
+    $themes = $this->themeHandler->listInfo();
+    ksort($themes);
+    $extensions = $this->moduleHandler->getModuleList() + $themes;
+    ksort($extensions);
+    $findings = $this->libraryScanner->scan($extensions, array_keys($themes));
+
+    foreach ($extensions as $name => $extension) {
+      $path = $extension->getPath();
+      if (str_starts_with($path . '/', 'core/')) {
+        continue;
+      }
+
+      $directory = $this->root . '/' . $path;
+      $files = Finder::create()
+        ->in($directory)
+        ->exclude(['tests', 'node_modules'])
+        ->filter(static fn (\SplFileInfo $file): bool => !$file->isDir() || !glob($file->getPathname() . '/*.info.yml'), TRUE)
+        ->files()
+        ->name('/\.(?:js|mjs|cjs)$/i')
+        ->sortByName();
+      foreach ($files as $file) {
+        if (!$file->isReadable()) {
+          continue;
+        }
+        foreach (new \SplFileObject($file->getPathname()) as $index => $line) {
+          if (self::referencesJquery($line)) {
+            $findings[$name][] = [
+              'source' => $path . '/' . $file->getRelativePathname(),
+              'line' => $index + 1,
+              'theme' => NULL,
+              'reason' => 'Possible jQuery reference',
+            ];
+          }
+        }
+      }
+    }
+    ksort($findings);
+    foreach ($findings as $name => $rows) {
+      $reasons = [];
+      foreach (array_unique(array_column($rows, 'reason')) as $reason) {
+        if (self::isDefinitionError($reason)) {
+          $reasons[self::DEFINITION_WARNING][] = substr($reason, strlen(ReadinessLibraryScanner::ERROR_PREFIX));
+        }
+        else {
+          $reasons[self::WARNING][] = $reason;
+        }
+      }
+      foreach ($reasons as $message => $messages) {
+        $this->logger->warning($message, [
+          '@extension' => $name,
+          '@reason' => implode(', ', $messages),
+        ]);
+      }
+    }
+
+    $this->cache->set(self::CACHE_ID, [
+      'findings' => $findings,
+      'extensions' => $fingerprints,
+    ], Cache::PERMANENT, ['library_info', 'config:core.extension']);
+    return $findings;
+  }
+
+  /**
+   * Distinguishes definition errors from possible jQuery dependencies.
+   */
+  public static function isDefinitionError(string $reason): bool {
+    return str_starts_with($reason, ReadinessLibraryScanner::ERROR_PREFIX);
+  }
+
+  /**
+   * Drops the saved report after an extension change.
+   */
+  public function invalidate(): void {
+    $this->cache->delete(self::CACHE_ID);
+  }
+
+  /**
+   * Identifies the cached extension lists and detects when they are reset.
+   */
+  private function extensionCacheFingerprints(): array {
+    $fingerprints = [];
+    foreach (['module' => $this->moduleCache, 'theme' => $this->themeCache] as $type => $cache) {
+      $entry = $cache->get("core.extension.list.$type");
+      // Chained cache backends can assign a new timestamp when warming the
+      // fast cache. Fingerprint the content to keep cache reads stable.
+      $fingerprints[$type] = $entry ? hash('sha256', serialize($entry->data)) : NULL;
+    }
+    return $fingerprints;
+  }
+
+  /**
+   * Returns one report row per finding, ordered by extension.
+   *
+   * @return list<array{extension: string, source: string, line: ?int, theme: ?string, reason: string}>
+   *   Findings with extension names included in each row.
+   */
+  public function rows(bool $rescan = FALSE): array {
+    return self::flattenFindings($this->scan($rescan));
+  }
+
+  /**
+   * Returns saved report rows, or NULL if there is no current scan.
+   */
+  public function cachedRows(): ?array {
+    $findings = $this->cachedFindings();
+    return $findings === NULL ? NULL : self::flattenFindings($findings);
+  }
+
+  /**
+   * Flattens extension findings for display.
+   */
+  private static function flattenFindings(array $grouped_findings): array {
+    $rows = [];
+    foreach ($grouped_findings as $extension => $findings) {
+      foreach ($findings as $finding) {
+        $rows[] = ['extension' => $extension] + $finding;
+      }
+    }
+    return $rows;
+  }
+
+  /**
+   * Checks a source line for common jQuery spellings.
+   *
+   * This heuristic matches tokens in comments and strings. It can mistake
+   * other uses of $ for jQuery and miss aliases or split-line expressions.
+   */
+  public static function referencesJquery(string $line): bool {
+    return (bool) preg_match('/(?<![\w$])(?:jQuery(?![\w$])|\$\h*[.(])|\bfunction\h*\(\h*\$(?![\w$])/', $line);
+  }
+
+}

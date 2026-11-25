@@ -7,11 +7,12 @@ use Drupal\ckeditor5\LanguageMapper;
 use Drupal\ckeditor5\Plugin\Editor\CKEditor5;
 use Drupal\Component\Utility\UrlHelper;
 use Drupal\Core\Ajax\AjaxResponse;
-use Drupal\Core\Ajax\InvokeCommand;
 use Drupal\Core\Ajax\MessageCommand;
 use Drupal\Core\Ajax\PrependCommand;
 use Drupal\Core\Ajax\RemoveCommand;
 use Drupal\Core\Ajax\ReplaceCommand;
+use Drupal\Core\Ajax\SetAttributeCommand;
+use Drupal\Core\Ajax\ToggleClassCommand;
 use Drupal\Core\Asset\AttachedAssetsInterface;
 use Drupal\Core\Asset\LibraryDependencyResolverInterface;
 use Drupal\Core\Config\ConfigFactoryInterface;
@@ -249,15 +250,6 @@ class Ckeditor5Hooks {
           'theme' => array_fill_keys(array_values($this->themeCss()), []),
         ],
       ];
-    }
-    if ($extension === 'core') {
-      // CSS rule to resolve the conflict with z-index between CKEditor 5 and
-      // jQuery UI.
-      $libraries['drupal.dialog']['css']['component']['modules/ckeditor5/css/ckeditor5.dialog.fix.css'] = [];
-      // Fix the CKEditor 5 focus management in dialogs. Modify the library
-      // declaration to ensure this file is always loaded after
-      // drupal.dialog.jquery-ui.js.
-      $libraries['drupal.dialog']['js']['modules/ckeditor5/js/ckeditor5.dialog.fix.js'] = [];
     }
     // Only add translation processing if the locale module is enabled.
     if (!$this->moduleHandler->moduleExists('locale')) {
@@ -581,15 +573,15 @@ class Ckeditor5Hooks {
     // that switch, add an error class and attribute to the editor select,
     // otherwise remove.
     $ckeditor5_selected_but_errors = !$form_state->get('ckeditor5_is_active') && $form_state->get('ckeditor5_is_selected') && !empty($form_state->getErrors());
-    $response->addCommand(new InvokeCommand(
+    $response->addCommand(new ToggleClassCommand(
       '[data-drupal-selector="edit-editor-editor"]',
-      $ckeditor5_selected_but_errors ? 'addClass' : 'removeClass',
-      ['error'],
+      'error',
+      $ckeditor5_selected_but_errors,
     ));
-    $response->addCommand(new InvokeCommand(
+    $response->addCommand(new SetAttributeCommand(
       '[data-drupal-selector="edit-editor-editor"]',
-      $ckeditor5_selected_but_errors ? 'attr' : 'removeAttr',
-      ['data-error-switching-to-ckeditor5', TRUE],
+      'data-error-switching-to-ckeditor5',
+      $ckeditor5_selected_but_errors ? 'true' : NULL,
     ));
 
     /*

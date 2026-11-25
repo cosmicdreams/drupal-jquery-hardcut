@@ -7,7 +7,9 @@ namespace Drupal\FunctionalJavascriptTests\Core\Form;
 use Drupal\filter\Entity\FilterFormat;
 use Drupal\FunctionalJavascriptTests\WebDriverTestBase;
 use PHPUnit\Framework\Attributes\Group;
+use PHPUnit\Framework\Attributes\IgnoreDeprecations;
 use PHPUnit\Framework\Attributes\RunTestsInSeparateProcesses;
+use WebDriver\Key;
 
 /**
  * Tests the state of elements based on another elements.
@@ -19,6 +21,7 @@ use PHPUnit\Framework\Attributes\RunTestsInSeparateProcesses;
  */
 #[Group('javascript')]
 #[Group('#slow')]
+#[IgnoreDeprecations]
 #[RunTestsInSeparateProcesses]
 class JavascriptStatesTest extends WebDriverTestBase {
 
@@ -76,6 +79,43 @@ class JavascriptStatesTest extends WebDriverTestBase {
     $this->doMultipleTriggerTests();
     $this->doNestedTriggerTests();
     $this->doElementsDisabledStateTests();
+  }
+
+  /**
+   * Tests native number changes and dependent textfield visibility.
+   */
+  public function testNumberTrigger(): void {
+    $this->drupalGet('form-test/javascript-states-form');
+    $assert = $this->assertSession();
+    $page = $this->getSession()->getPage();
+
+    $session = $this->getSession();
+    // The textfield starts hidden. Either the select or the number control can
+    // make it visible.
+    $textfield = $assert->elementExists('css', 'input[name="textfield"]');
+    $this->assertFalse($textfield->isVisible());
+    $page->findField('select')->setValue('1');
+    $this->assertTrue($textfield->isVisible());
+    $page->findField('select')->setValue('0');
+    $this->assertFalse($textfield->isVisible());
+    $page->findField('number')->setValue('1');
+    $this->assertTrue($textfield->isVisible());
+
+    $dependent = $assert->elementExists('css', '#edit-item-visible-when-number-trigger-filled-by-spinner');
+    $this->assertFalse($dependent->isVisible());
+
+    $session->executeScript(<<<'JS'
+      const number = document.querySelector('input[name="number_trigger"]');
+      number.addEventListener('keyup', (event) => event.stopImmediatePropagation(), { capture: true });
+      number.addEventListener('change', (event) => {
+        window.statesSpinnerChange = event.isTrusted;
+      });
+      JS);
+    $session->getDriver()->getWebDriverSession()
+      ->element('css selector', 'input[name="number_trigger"]')
+      ->postValue(['text' => Key::UP_ARROW . Key::TAB]);
+    $this->assertTrue($session->evaluateScript('window.statesSpinnerChange'));
+    $this->assertTrue($dependent->isVisible());
   }
 
   /**

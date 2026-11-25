@@ -162,6 +162,139 @@ class ExposedFilterAJAXTest extends WebDriverTestBase {
   }
 
   /**
+   * Tests that an exposed filter keeps focus across a view replacement.
+   */
+  public function testExposedFilterKeepsFocus(): void {
+    $this->drupalGet('admin/content');
+    $session = $this->getSession();
+    $title = $this->assertSession()->fieldExists('title');
+    $title->setValue('Page One');
+
+    // The filter retains focus when it is the active control at request time.
+    $title->focus();
+    $session->executeScript('document.querySelector("form.views-exposed-form").querySelector("[type=submit]").click()');
+    $this->assertSession()->assertWaitOnAjaxRequest();
+    $this->assertJsCondition('document.activeElement.name === "title"');
+    $this->assertSession()->pageTextContains('Page One');
+    $this->assertSession()->pageTextNotContains('Page Two');
+  }
+
+  /**
+   * Tests that a delayed refresh cannot overwrite newer filter results.
+   */
+  public function testOverlappingRefresh(): void {
+    \Drupal::state()->set('views_test_modal.attach_refresh_widget', TRUE);
+    $this->drupalGet('admin/content');
+    $session = $this->getSession();
+    $session->executeScript(<<<'JS'
+      const prototype = Drupal.Ajax.prototype;
+      const queue = prototype.commandExecutionQueue;
+      const addCss = Drupal.AjaxCommands.prototype.add_css;
+      prototype.commandExecutionQueue = function (response, status) {
+        const commands = Object.values(response);
+        if (!window.finishLoadingRefreshAssets) {
+          const originalLibraries = drupalSettings.ajaxPageState.libraries;
+          this.commands.add_css = (...args) => new Promise((resolve) => {
+            window.refreshSettingsMerged = drupalSettings.ajaxPageState.libraries !== originalLibraries;
+            window.finishLoadingRefreshAssets = () => resolve(addCss(...args));
+          });
+          window.oldRefreshHasWidget = commands.some(({ command, data }) =>
+            command === 'add_js' && data.some(({ src }) => src.includes('refresh-widget.js')));
+        }
+        else {
+          prototype.commandExecutionQueue = queue;
+          window.newRefreshHasWidget = commands.some(({ command, data }) =>
+            command === 'add_js' && data.some(({ src }) => src.includes('refresh-widget.js')));
+        }
+        return queue.call(this, response, status);
+      };
+      document.querySelector('.js-view-dom-id-' + Object.values(drupalSettings.views.ajaxViews)[0].view_dom_id)
+        .dispatchEvent(new Event('RefreshView'));
+      JS);
+    $this->assertJsCondition('window.refreshSettingsMerged && window.oldRefreshHasWidget');
+    $this->submitForm(['title' => 'Page Two'], 'Filter');
+    $this->assertJsCondition('new URL(location.href).searchParams.get("title") === "Page Two"');
+    $this->assertJsCondition(<<<'JS'
+      (() => {
+        const results = document.querySelector('table tbody')?.textContent ?? '';
+        return results.includes('Page Two') && !results.includes('Page One');
+      })()
+      JS);
+    $this->assertJsCondition('window.newRefreshHasWidget === false');
+    $session->executeScript('window.finishLoadingRefreshAssets()');
+    $this->assertSession()->assertWaitOnAjaxRequest();
+    $this->assertJsCondition('typeof Drupal.behaviors.viewsRefreshWidget === "object"');
+    $this->assertSession()->elementTextContains('css', 'tbody[data-refresh-widget]', 'Page Two');
+    $this->assertSession()->pageTextNotContains('Page One');
+    $this->assertSession()->pageTextContains('Page Two');
+    $this->assertSession()->addressEquals('admin/content?title=Page%20Two&type=All&status=All');
+    $this->assertSession()->elementNotExists('css', '.ajax-progress');
+  }
+
+  /**
+   * Tests that a superseded refresh cannot change the next filter request.
+   */
+  public function testSupersededContextualRefresh(): void {
+    $this->config('views.view.content')
+      ->set('display.default.display_options.arguments.type', [
+        'id' => 'type',
+        'table' => 'node_field_data',
+        'field' => 'type',
+        'plugin_id' => 'node_type',
+      ])
+      ->save();
+
+    $this->drupalGet('admin/content');
+    $session = $this->getSession();
+    $session->executeScript(<<<'JS'
+      const prototype = Drupal.Ajax.prototype;
+      const queue = prototype.commandExecutionQueue;
+      const [key, settings] = Object.entries(drupalSettings.views.ajaxViews)[0];
+      // Give the first refresh an older context so the server returns
+      // different settings for the same view DOM ID.
+      const open = XMLHttpRequest.prototype.open;
+      XMLHttpRequest.prototype.open = function (method, href, ...args) {
+        XMLHttpRequest.prototype.open = open;
+        const url = new URL(href, document.baseURI);
+        url.searchParams.set('view_args', 'article');
+        url.searchParams.set('view_path', '/node');
+        return open.call(this, method, url.href, ...args);
+      };
+      prototype.commandExecutionQueue = function (response, status) {
+        prototype.commandExecutionQueue = queue;
+        window.staleViewSettings = Object.values(response).find(({ command }) =>
+          command === 'settings')?.settings.views.ajaxViews[key];
+        return new Promise((resolve) => {
+          window.finishOldContext = () => resolve(queue.call(this, response, status));
+        });
+      };
+      document.querySelector('.js-view-dom-id-' + settings.view_dom_id)
+        .dispatchEvent(new Event('RefreshView'));
+      JS);
+    $this->assertJsCondition('window.staleViewSettings?.view_args === "article" && window.staleViewSettings.view_path === "/node"');
+    $this->submitForm(['title' => 'Page Two'], 'Filter');
+    $this->assertJsCondition('[...Drupal.ajax.pendingRequests()].length === 1');
+    $this->assertSession()->elementTextContains('css', 'table tbody', 'Page Two');
+    $this->assertSession()->pageTextNotContains('Page One');
+
+    $session->executeScript('window.finishOldContext()');
+    $this->assertSession()->assertWaitOnAjaxRequest();
+    $session->executeScript(<<<'JS'
+      const open = XMLHttpRequest.prototype.open;
+      XMLHttpRequest.prototype.open = function (method, href, ...args) {
+        XMLHttpRequest.prototype.open = open;
+        window.nextFilterQuery = new URL(href, document.baseURI).searchParams;
+        return open.call(this, method, href, ...args);
+      };
+      JS);
+    $this->submitForm(['title' => 'Page One'], 'Filter');
+    $this->assertSession()->assertWaitOnAjaxRequest();
+    $this->assertJsCondition('window.nextFilterQuery.get("view_args") === "" && window.nextFilterQuery.get("view_path") === "/admin/content"');
+    $this->assertSession()->elementTextContains('css', 'table tbody', 'Page One');
+    $this->assertSession()->addressEquals('admin/content?title=Page%20One&type=All&status=All');
+  }
+
+  /**
    * Tests if exposed filtering via AJAX works in a modal.
    */
   public function testExposedFiltersInModal(): void {
@@ -169,8 +302,10 @@ class ExposedFilterAJAXTest extends WebDriverTestBase {
 
     $assert = $this->assertSession();
 
+    $this->assertJsCondition('Object.keys(drupalSettings.views?.ajaxViews ?? {}).length === 0');
     $assert->elementExists('named', ['link', 'Administer content'])->click();
     $dialog = $assert->waitForElementVisible('css', '.views-test-modal');
+    $this->assertJsCondition('Object.keys(drupalSettings.views.ajaxViews).length === 1');
 
     $session = $this->getSession();
     // Ensure that the Content we're testing for is present.
@@ -180,7 +315,7 @@ class ExposedFilterAJAXTest extends WebDriverTestBase {
 
     // Search for "Page One".
     $session->getPage()->fillField('title', 'Page One');
-    $assert->elementExists('css', '.ui-dialog-buttonpane')->pressButton('Filter');
+    $assert->elementExists('css', '.drupal-dialog-buttonpane')->pressButton('Filter');
     $this->assertSession()->assertWaitOnAjaxRequest();
 
     // Verify that only the "Page One" Node is present.
@@ -190,8 +325,10 @@ class ExposedFilterAJAXTest extends WebDriverTestBase {
 
     // Close and re-open the modal.
     $assert->buttonExists('Close', $dialog)->press();
+    $this->assertJsCondition('Object.keys(drupalSettings.views.ajaxViews).length === 0');
     $assert->elementExists('named', ['link', 'Administer content'])->click();
-    $assert->waitForElementVisible('css', '.views-test-modal');
+    $dialog = $assert->waitForElementVisible('css', '.views-test-modal');
+    $this->assertJsCondition('Object.keys(drupalSettings.views.ajaxViews).length === 1');
 
     // Ensure that the Content we're testing for is present.
     $html = $session->getPage()->getHtml();
@@ -200,13 +337,37 @@ class ExposedFilterAJAXTest extends WebDriverTestBase {
 
     // Search for "Page One".
     $session->getPage()->fillField('title', 'Page One');
-    $assert->elementExists('css', '.ui-dialog-buttonpane')->pressButton('Filter');
+    $assert->elementExists('css', '.drupal-dialog-buttonpane')->pressButton('Filter');
     $this->assertSession()->assertWaitOnAjaxRequest();
 
     // Verify that only the "Page One" Node is present.
     $html = $session->getPage()->getHtml();
     $this->assertStringContainsString('Page One', $html);
     $this->assertStringNotContainsString('Page Two', $html);
+
+    // Close the dialog after a new refresh's response has arrived, before
+    // its settings and DOM commands run.
+    $session->executeScript(<<<'JS'
+      const prototype = Drupal.Ajax.prototype;
+      const queue = prototype.commandExecutionQueue;
+      const [key, settings] = Object.entries(drupalSettings.views.ajaxViews)[0];
+      prototype.commandExecutionQueue = function (response, status) {
+        prototype.commandExecutionQueue = queue;
+        window.modalResponseHasViewSettings = Object.values(response).some(({ command, settings }) =>
+          command === 'settings' && settings.views?.ajaxViews?.[key]);
+        return new Promise((resolve) => {
+          window.finishModalRefresh = () => resolve(queue.call(this, response, status));
+        });
+      };
+      document.querySelector('.js-view-dom-id-' + settings.view_dom_id)
+        .dispatchEvent(new Event('RefreshView'));
+      JS);
+    $this->assertJsCondition('window.modalResponseHasViewSettings');
+    $assert->buttonExists('Close', $dialog)->press();
+    $this->assertJsCondition('Object.keys(drupalSettings.views.ajaxViews).length === 0');
+    $session->executeScript('window.finishModalRefresh()');
+    $assert->assertWaitOnAjaxRequest();
+    $this->assertJsCondition('Object.keys(drupalSettings.views.ajaxViews).length === 0');
   }
 
   /**

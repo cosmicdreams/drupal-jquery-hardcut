@@ -186,7 +186,7 @@ class CommentForm extends ContentEntityForm {
       // is empty.
       $form['author']['name']['#states'] = [
         'visible' => [
-          ':input[name="uid"]' => ['empty' => TRUE],
+          'input[name="uid"]' => ['empty' => TRUE],
         ],
       ];
     }

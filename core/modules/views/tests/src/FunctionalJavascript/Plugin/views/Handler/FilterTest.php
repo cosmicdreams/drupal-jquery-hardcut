@@ -86,13 +86,13 @@ class FilterTest extends WebDriverTestBase {
 
     // Select the body field and apply the choice.
     $page->checkField('name[node__body.body_value]');
-    $page->find('css', '.ui-dialog .ui-dialog-buttonpane')->pressButton('Add and configure filter criteria');
+    $page->find('css', '.drupal-dialog .drupal-dialog-buttonpane')->pressButton('Add and configure filter criteria');
     $web_assert->waitForField('options[expose_button][checkbox][checkbox]');
 
     // Expose the filter.
     $page->findField('options[expose_button][checkbox][checkbox]')->click();
     $web_assert->waitForField('options[expose][label]');
-    $page->find('css', '.ui-dialog .ui-dialog-buttonpane')->pressButton('Apply');
+    $page->find('css', '.drupal-dialog .drupal-dialog-buttonpane')->pressButton('Apply');
     $web_assert->waitForText('Content: body (exposed)');
     $web_assert->responseContains('Content: body (exposed)');
   }

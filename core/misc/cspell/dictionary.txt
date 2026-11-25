@@ -197,7 +197,6 @@ htmx
 httponly
 icann
 idekey
-iframeupload
 imageavif
 imagecache
 inglés
@@ -210,7 +209,6 @@ invokable
 isam
 javascripts
 jessebeach
-jqueryui
 justinrainbow
 keypresses
 kinberg
@@ -271,7 +269,6 @@ ndocs
 newcol
 newwin
 nids
-nightwatch
 nntp
 nocase
 nodir

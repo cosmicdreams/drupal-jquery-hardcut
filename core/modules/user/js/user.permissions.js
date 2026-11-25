@@ -3,7 +3,7 @@
  * User permission page behaviors.
  */
 
-(function ($, Drupal, debounce) {
+(function (Drupal, debounce) {
   /**
    * Shows checked and disabled checkboxes for inherited permissions.
    *
@@ -24,18 +24,16 @@
       // submitted form. If we'd automatically check existing checkboxes, the
       // permission table would be polluted with redundant entries. This is
       // deliberate, but desirable when we automatically check them.
-      const $fakeCheckbox = $(Drupal.theme('checkbox'))
-        .removeClass('form-checkbox')
-        .addClass('fake-checkbox js-fake-checkbox')
-        .attr({
-          disabled: 'disabled',
-          checked: 'checked',
-          title: Drupal.t(
-            'This permission is inherited from the authenticated user role.',
-          ),
-        });
-      const $wrapper = $('<div></div>').append($fakeCheckbox);
-      const fakeCheckboxHtml = $wrapper.html();
+      const template = document.createElement('template');
+      template.innerHTML = Drupal.theme('checkbox');
+      const fakeCheckbox = template.content.firstElementChild;
+      fakeCheckbox.classList.remove('form-checkbox');
+      fakeCheckbox.classList.add('fake-checkbox', 'js-fake-checkbox');
+      fakeCheckbox.setAttribute('disabled', 'disabled');
+      fakeCheckbox.setAttribute('checked', 'checked');
+      fakeCheckbox.title = Drupal.t(
+        'This permission is inherited from the authenticated user role.',
+      );
 
       /**
        * Process each table row to create fake checkboxes.
@@ -52,7 +50,7 @@
             )
             .forEach((check) => {
               check.classList.add('real-checkbox', 'js-real-checkbox');
-              check.insertAdjacentHTML('beforebegin', fakeCheckboxHtml);
+              check.before(fakeCheckbox.cloneNode(true));
             });
         });
       }
@@ -83,10 +81,11 @@
         .forEach((checkbox) => checkedCheckboxObserver.observe(checkbox));
 
       // Create checkboxes only when necessary on click.
-      $(table).on(
-        'click.permissions',
-        'input[type="checkbox"].js-rid-authenticated',
+      Drupal.formEvents.listen(
+        table,
+        'click',
         tableRowProcessing,
+        'input[type="checkbox"].js-rid-authenticated',
       );
     },
   };
@@ -106,100 +105,72 @@
       if (!input) {
         return;
       }
-      const tableSelector = input.getAttribute('data-table');
-      const $table = $(tableSelector);
-      const $rows = $table.find('tbody tr');
-
-      function hideEmptyPermissionHeader(index, row) {
-        const tdsWithModuleClass = row.querySelectorAll('td.module');
-        // Function to check if an element is visible (`display: block`).
-        function isVisible(element) {
-          return getComputedStyle(element).display !== 'none';
-        }
-        if (tdsWithModuleClass.length > 0) {
-          // Find the next visible sibling `<tr>`.
-          let nextVisibleSibling = row.nextElementSibling;
-          while (nextVisibleSibling && !isVisible(nextVisibleSibling)) {
-            nextVisibleSibling = nextVisibleSibling.nextElementSibling;
-          }
-
-          // Check if the next visible sibling has the "module" class in any of
-          // its `<td>` elements.
-          let nextVisibleSiblingHasModuleClass = false;
-          if (nextVisibleSibling) {
-            const nextSiblingTdsWithModuleClass =
-              nextVisibleSibling.querySelectorAll('td.module');
-            nextVisibleSiblingHasModuleClass =
-              nextSiblingTdsWithModuleClass.length > 0;
-          }
-
-          // Check if this is the last visible row with class "module".
-          const isLastVisibleModuleRow =
-            !nextVisibleSibling || !isVisible(nextVisibleSibling);
-
-          // Hide the current row with class "module" if it meets the
-          // conditions.
-          $(row).toggle(
-            !nextVisibleSiblingHasModuleClass && !isLastVisibleModuleRow,
-          );
-        }
+      const tables = document.querySelectorAll(input.dataset.table);
+      if (!tables.length) {
+        return;
       }
-
-      function filterPermissionList(e) {
-        const query = e.target.value;
-        if (query.length === 0) {
-          // Reset table when the textbox is cleared.
-          $rows.show();
+      const rows = Array.from(tables).flatMap((table) =>
+        Array.from(table.querySelectorAll('tbody tr')),
+      );
+      const visible = (row) => row.getClientRects().length > 0;
+      const filterPermissionList = ({ target }) => {
+        const query = target.value;
+        // Match at the start of a word, ignoring case.
+        const pattern = new RegExp('\\b' + query, 'i');
+        rows.forEach((row) => {
+          row.style.display = '';
+        });
+        if (query.length < 2) {
+          return;
         }
-        // Case insensitive expression to find query at the beginning of a word.
-        const re = new RegExp(`\\b${query}`, 'i');
-
-        function showPermissionRow(index, row) {
-          const sources = row.querySelectorAll('.table-filter-text-source');
-          if (sources.length > 0) {
-            const textMatch = sources[0].textContent.search(re) !== -1;
-            $(row).closest('tr').toggle(textMatch);
+        rows.forEach((row) => {
+          const source = row.querySelector('.table-filter-text-source');
+          if (source && !pattern.test(source.textContent)) {
+            row.style.display = 'none';
           }
-        }
-        // Search over all rows.
-        $rows.show();
-
-        // Filter if the length of the query is at least 2 characters.
-        if (query.length >= 2) {
-          $rows.each(showPermissionRow);
-
-          // Hide the empty header if they don't have any visible rows.
-          const visibleRows = $table.find('tbody tr:visible');
-          visibleRows.each(hideEmptyPermissionHeader);
-          const rowsWithoutEmptyModuleName = $table.find('tbody tr:visible');
-          // Find elements with class "permission" within visible rows.
-          const tdsWithModuleOrPermissionClass =
-            rowsWithoutEmptyModuleName.find('.permission');
-
-          Drupal.announce(
-            Drupal.formatPlural(
-              tdsWithModuleOrPermissionClass.length,
-              '1 permission is available in the modified list.',
-              '@count permissions are available in the modified list.',
-            ),
+        });
+        rows.filter(visible).forEach((row) => {
+          if (row.querySelector('td.module')) {
+            let next = row.nextElementSibling;
+            while (next && getComputedStyle(next).display === 'none') {
+              next = next.nextElementSibling;
+            }
+            if (!next || next.querySelector('td.module')) {
+              row.style.display = 'none';
+            }
+          }
+        });
+        const count = rows
+          .filter(visible)
+          .reduce(
+            (total, row) => total + row.querySelectorAll('.permission').length,
+            0,
           );
-        }
-      }
-
-      function preventEnterKey(event) {
-        if (event.which === 13) {
+        Drupal.announce(
+          Drupal.formatPlural(
+            count,
+            '1 permission is available in the modified list.',
+            '@count permissions are available in the modified list.',
+          ),
+        );
+      };
+      ['keyup', 'click'].forEach((type) => {
+        Drupal.formEvents.listen(
+          input,
+          type,
+          debounce(filterPermissionList, 200),
+        );
+      });
+      Drupal.formEvents.listen(input, 'keydown', (event) => {
+        if (
+          event.key === 'Enter' ||
+          event.which === 13 ||
+          event.keyCode === 13
+        ) {
           event.preventDefault();
           event.stopPropagation();
         }
-      }
-
-      if ($table.length) {
-        $(input).on({
-          keyup: debounce(filterPermissionList, 200),
-          click: debounce(filterPermissionList, 200),
-          keydown: preventEnterKey,
-        });
-      }
+      });
     },
   };
-})(jQuery, Drupal, Drupal.debounce);
+})(Drupal, Drupal.debounce);

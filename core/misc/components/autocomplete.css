@@ -1,0 +1,45 @@
+/**
+ * @file
+ * Autocomplete suggestions.
+ */
+
+.autocomplete-list {
+  position: fixed;
+  z-index: 1270;
+  overflow: auto;
+  box-sizing: border-box;
+  width: max-content;
+  max-width: var(--autocomplete-available-width, 100vw);
+  max-height: var(--autocomplete-available-height, 100vh);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  overscroll-behavior: contain;
+  color: #222;
+  border: 1px solid #c5c5c5;
+  background: #fff;
+  inset: auto;
+}
+
+.autocomplete-list[hidden] {
+  display: none;
+}
+
+.autocomplete-list ul {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.autocomplete-list [role="option"] {
+  padding: 3px 1em 3px 0.4em;
+  cursor: pointer;
+  overflow-wrap: anywhere;
+}
+
+.autocomplete-list [aria-selected="true"] {
+  color: #fff;
+  outline: 2px solid transparent;
+  outline-offset: -2px;
+  background-color: #0075ba;
+}

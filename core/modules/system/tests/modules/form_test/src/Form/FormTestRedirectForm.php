@@ -35,7 +35,7 @@ class FormTestRedirectForm extends FormBase {
       '#title' => $this->t('Redirect destination'),
       '#states' => [
         'visible' => [
-          ':input[name="redirection"]' => ['checked' => TRUE],
+          'input[name="redirection"]' => ['checked' => TRUE],
         ],
       ],
     ];
@@ -44,7 +44,7 @@ class FormTestRedirectForm extends FormBase {
       '#title' => $this->t('Ignore destination query parameter'),
       '#states' => [
         'visible' => [
-          ':input[name="redirection"]' => ['checked' => TRUE],
+          'input[name="redirection"]' => ['checked' => TRUE],
         ],
       ],
     ];

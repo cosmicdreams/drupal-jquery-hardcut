@@ -3,7 +3,7 @@
  * Default Admin's polyfill enhancements for HTML5 details.
  */
 
-(($, Drupal) => {
+((Drupal) => {
   /**
    * Workaround for Firefox.
    *
@@ -17,12 +17,13 @@
     attach(context) {
       // The second argument of once() needs to be an instance of Element, but
       // document is an instance of Document, replace it with the html Element.
-      $(once('adminDetails', context === document ? 'html' : context)).on(
-        'click',
-        (event) => {
-          if (event.target.nodeName === 'SUMMARY') {
-            $(event.target).trigger('focus');
-          }
+      once('adminDetails', context === document ? 'html' : context).forEach(
+        (element) => {
+          Drupal.form.listen(element, 'click', (event) => {
+            if (event.target.nodeName === 'SUMMARY') {
+              event.target.focus();
+            }
+          });
         },
       );
     },
@@ -46,4 +47,4 @@
    *   The formatted summarized content text.
    */
   Drupal.theme.detailsSummarizedContentText = (text) => text || '';
-})(jQuery, Drupal);
+})(Drupal);

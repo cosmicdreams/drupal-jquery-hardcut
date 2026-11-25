@@ -221,7 +221,7 @@ class TestController {
           'data-dialog-type' => 'modal',
           'data-dialog-options' => Json::encode([
             'classes' => [
-              'ui-dialog' => 'no-close',
+              'drupal-dialog' => 'no-close',
             ],
           ]),
         ],

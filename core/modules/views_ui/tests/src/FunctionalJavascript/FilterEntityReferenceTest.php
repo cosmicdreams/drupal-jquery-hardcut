@@ -78,9 +78,9 @@ class FilterEntityReferenceTest extends WebDriverTestBase {
       ->isVisible());
     $page->findField('name[node__field_test.field_test_target_id]')
       ->click();
-    $this->assertTrue($page->find('css', 'button.button.button--primary.form-submit.ui-button')
+    $this->assertTrue($page->find('css', '.drupal-dialog-buttonset .button--primary.form-submit')
       ->isVisible());
-    $page->find('css', 'button.button.button--primary.form-submit.ui-button')
+    $page->find('css', '.drupal-dialog-buttonset .button--primary.form-submit')
       ->click();
 
     // Wait for the selection handler to show up.
@@ -120,8 +120,8 @@ class FilterEntityReferenceTest extends WebDriverTestBase {
     $assert->waitForField('options[expose][multiple]');
     $page->findField('options[expose][multiple]')->click();
     $this->assertTrue($page->hasCheckedField('options[expose][multiple]'));
-    $page->find('css', '.ui-dialog .ui-dialog-buttonpane')->pressButton('Apply');
-    $assert->waitForElementRemoved('css', '.ui-dialog');
+    $page->find('css', '.drupal-dialog .drupal-dialog-buttonpane')->pressButton('Apply');
+    $assert->waitForElementRemoved('css', '.drupal-dialog');
 
     // Wait for the Views Preview to show up with the new reference field.
     $assert->waitForField('field_test_config_target_id[]');
@@ -148,7 +148,7 @@ class FilterEntityReferenceTest extends WebDriverTestBase {
 
     // The Views Reference filter has a title Filter to a single result, so
     // ensure only that result is available as an option.
-    $assert->waitForElementRemoved('css', '.ui-dialog');
+    $assert->waitForElementRemoved('css', '.drupal-dialog');
 
     $this->assertCount(1, $page->findAll('css', 'select[name="field_test_target_id[]"] option'));
 
@@ -196,7 +196,7 @@ class FilterEntityReferenceTest extends WebDriverTestBase {
     // Test that the entity_reference option is visible.
     $this->assertTrue($page->findField('name[node__field_test_config.field_test_config_target_id]')->isVisible());
     $page->findField('name[node__field_test_config.field_test_config_target_id]')->click();
-    $submitButton = $page->find('css', 'button.button.button--primary.form-submit.ui-button');
+    $submitButton = $page->find('css', '.drupal-dialog-buttonset .button--primary.form-submit');
     $this->assertTrue($submitButton->isVisible());
     $submitButton->click();
 
@@ -221,8 +221,8 @@ class FilterEntityReferenceTest extends WebDriverTestBase {
     $assert->waitForField('options[expose][multiple]');
     $page->findField('options[expose][multiple]')->click();
     $this->assertTrue($page->hasCheckedField('options[expose][multiple]'));
-    $page->find('css', '.ui-dialog .ui-dialog-buttonpane')->pressButton('Apply');
-    $assert->waitForElementRemoved('css', '.ui-dialog');
+    $page->find('css', '.drupal-dialog .drupal-dialog-buttonpane')->pressButton('Apply');
+    $assert->waitForElementRemoved('css', '.drupal-dialog');
 
     // Wait for the Views Preview to show up with the reference field.
     $assert->waitForField('field_test_config_target_id[]');
@@ -244,7 +244,7 @@ class FilterEntityReferenceTest extends WebDriverTestBase {
     $assert->waitForField('options[widget]');
     $page->selectFieldOption('options[widget]', 'autocomplete');
     $this->assertSame('autocomplete', $page->findField('options[widget]')->getValue());
-    $page->find('css', '.ui-dialog .ui-dialog-buttonpane')->pressButton('Apply');
+    $page->find('css', '.drupal-dialog .drupal-dialog-buttonpane')->pressButton('Apply');
     $this->assertSession()->assertWaitOnAjaxRequest();
 
     // Check that it is now an autocomplete input.

@@ -6,6 +6,13 @@ ajax_test.dialog_contents:
   requirements:
     _access: 'TRUE'
 
+ajax_test.dialog_widgets:
+  path: '/ajax-test/dialog-widgets'
+  defaults:
+    _controller: '\Drupal\ajax_test\Controller\AjaxTestController::dialogWidgets'
+  requirements:
+    _permission: 'access autocomplete test'
+
 ajax_test.ajax_render_types:
   path: '/ajax-test/dialog-contents-types/{type}'
   defaults:
@@ -109,17 +116,38 @@ ajax_test.promise:
   requirements:
     _access: 'TRUE'
 
-ajax_test.global_events:
-  path: '/ajax-test/global-events'
+ajax_test.native_transport:
+  path: '/ajax-test/native-transport'
   defaults:
-    _controller: '\Drupal\ajax_test\Controller\AjaxTestController::globalEvents'
+    _controller: '\Drupal\ajax_test\Controller\AjaxTestController::nativeTransport'
   requirements:
     _access: 'TRUE'
 
-ajax_test.global_events_clear_log:
-  path: '/ajax-test/global-events/clear-log'
+ajax_test.echo_header:
+  path: '/ajax-test/echo-header'
   defaults:
-    _controller: '\Drupal\ajax_test\Controller\AjaxTestController::globalEventsClearLog'
+    _controller: '\Drupal\ajax_test\Controller\AjaxTestController::echoHeader'
+  requirements:
+    _access: 'TRUE'
+
+ajax_test.echo_request:
+  path: '/ajax-test/echo-request'
+  defaults:
+    _controller: '\Drupal\ajax_test\Controller\AjaxTestController::echoRequest'
+  requirements:
+    _access: 'TRUE'
+
+ajax_test.native_request:
+  path: '/ajax-test/native-request'
+  defaults:
+    _controller: '\Drupal\ajax_test\Controller\AjaxTestController::nativeRequest'
+  requirements:
+    _access: 'TRUE'
+
+ajax_test.echo_native_request:
+  path: '/ajax-test/echo-native-request'
+  defaults:
+    _controller: '\Drupal\ajax_test\Controller\AjaxTestController::echoNativeRequest'
   requirements:
     _access: 'TRUE'
 
@@ -180,5 +208,19 @@ ajax_test.property_link:
   path: '/ajax-test/property-link'
   defaults:
     _controller: '\Drupal\ajax_test\Controller\AjaxTestController::propertyLink'
+  requirements:
+    _access: 'TRUE'
+
+ajax_test.settings_widget:
+  path: '/ajax-test/settings-widget'
+  defaults:
+    _controller: '\Drupal\ajax_test\Controller\AjaxTestController::settingsWidget'
+  requirements:
+    _access: 'TRUE'
+
+ajax_test.duplicate_forms:
+  path: '/ajax-test/duplicate-forms'
+  defaults:
+    _controller: '\Drupal\ajax_test\Controller\AjaxTestController::duplicateForms'
   requirements:
     _access: 'TRUE'

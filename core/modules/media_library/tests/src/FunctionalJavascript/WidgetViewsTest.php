@@ -4,6 +4,11 @@ declare(strict_types=1);
 
 namespace Drupal\Tests\media_library\FunctionalJavascript;
 
+use Drupal\field\Entity\FieldConfig;
+use Drupal\file\Entity\File;
+use Drupal\media\Entity\Media;
+use Drupal\Tests\media\Traits\MediaTypeCreationTrait;
+use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\Attributes\Group;
 use PHPUnit\Framework\Attributes\RunTestsInSeparateProcesses;
 
@@ -13,6 +18,8 @@ use PHPUnit\Framework\Attributes\RunTestsInSeparateProcesses;
 #[Group('media_library')]
 #[RunTestsInSeparateProcesses]
 class WidgetViewsTest extends MediaLibraryTestBase {
+
+  use MediaTypeCreationTrait;
 
   /**
    * {@inheritdoc}
@@ -82,9 +89,21 @@ class WidgetViewsTest extends MediaLibraryTestBase {
     $this->drupalGet('node/add/basic_page');
 
     $this->openMediaLibraryForField('field_unlimited_media');
+    $this->getSession()->executeScript(<<<'JS'
+      const unrelatedView = document.createElement('div');
+      unrelatedView.className = 'views-element-container';
+      unrelatedView.innerHTML = '<div class="js-media-library-view"></div>';
+      document.body.prepend(unrelatedView);
+      Drupal.behaviors.MediaLibraryViewsDisplay.attach(unrelatedView);
+      const container = document.getElementById('media-library-view');
+      container.removeAttribute('id');
+      Drupal.behaviors.MediaLibraryViewsDisplay.attach(container.querySelector('.js-media-library-view'));
+      JS);
+    $assert_session->elementsCount('css', '#media-library-view', 1);
+    $assert_session->elementExists('css', '#media-library-content #media-library-view');
 
     // Assert the 'Apply filter' button is not moved to the button pane.
-    $button_pane = $assert_session->elementExists('css', '.ui-dialog-buttonpane');
+    $button_pane = $assert_session->elementExists('css', '.drupal-dialog-buttonpane');
     $assert_session->buttonExists('Insert selected', $button_pane);
     $assert_session->buttonNotExists('Apply filters', $button_pane);
 
@@ -147,6 +166,7 @@ class WidgetViewsTest extends MediaLibraryTestBase {
     $page->checkField('Select Dog');
     $assert_session->linkExists('Table');
     $this->switchToMediaLibraryGrid();
+    $this->assertJsCondition('document.activeElement.matches("#media-library-view .views-display-link-widget")');
 
     $this->assertSame('Dog', $page->findField('Name')->getValue());
     $assert_session->pageTextContains('Dog');
@@ -154,6 +174,7 @@ class WidgetViewsTest extends MediaLibraryTestBase {
     $assert_session->pageTextNotContains('Turtle');
     $assert_session->linkExists('Grid');
     $this->switchToMediaLibraryTable();
+    $this->assertJsCondition('document.activeElement.matches("#media-library-view .views-display-link-widget_table")');
 
     // Select the item.
     $this->pressInsertSelected('Added one media item.');
@@ -161,6 +182,123 @@ class WidgetViewsTest extends MediaLibraryTestBase {
     $assert_session->pageTextContains('Dog');
     $assert_session->pageTextContains('Bear');
     $assert_session->pageTextNotContains('Turtle');
+  }
+
+  /**
+   * Tests switching displays while a media type response is pending.
+   */
+  #[DataProvider('responseOrders')]
+  public function testOverlappingTypeAndDisplayRequests(bool $type_first): void {
+    $bundles = [];
+    foreach ([
+      'first_document' => ['First Document', 'First result', 'txt'],
+      'second_document' => ['Second Document', 'Second result', 'pdf'],
+    ] as $id => [$label, $name, $extension]) {
+      $media_type = $this->createMediaType('file', ['id' => $id, 'label' => $label]);
+      $source_field = $media_type->getSource()->getSourceFieldDefinition($media_type);
+      $this->assertInstanceOf(FieldConfig::class, $source_field);
+      $source_field->setSetting('file_extensions', $extension)->save();
+      $uri = "public://$id.$extension";
+      file_put_contents($uri, $name);
+      $file = File::create(['uri' => $uri]);
+      $file->setPermanent();
+      $file->save();
+      Media::create([
+        'bundle' => $id,
+        'name' => $name,
+        $source_field->getName() => $file->id(),
+      ])->save();
+      $bundles[$id] = $id;
+    }
+    $field = FieldConfig::loadByName('node', 'basic_page', 'field_unlimited_media');
+    $this->assertInstanceOf(FieldConfig::class, $field);
+    $field->setSetting('handler_settings', ['target_bundles' => $bundles])->save();
+
+    $this->drupalGet('node/add/basic_page');
+    $menu = $this->openMediaLibraryForField('field_unlimited_media');
+    $session = $this->getSession();
+    $assert = $this->assertSession();
+
+    $form = '.js-media-library-add-form';
+    $assert->elementTextContains('css', $form, 'Allowed types: txt');
+
+    // Hold both real responses so the test controls their delivery order.
+    $session->executeScript(<<<'JS'
+      const request = Drupal.ajaxRequest;
+      window.pickerResponses = {};
+      window.firstUploadForm = document.querySelector('.js-media-library-add-form');
+      Drupal.ajaxRequest = (options, complete) => {
+        const type = new URL(options.url, document.baseURI).searchParams.get('media_library_selected_type');
+        const key = { first_document: 'table', second_document: 'type' }[type];
+        if (!key || window.pickerResponses[key]) {
+          return request(options, complete);
+        }
+        return request(options, (response) => new Promise((resolve) => {
+          window.pickerResponses[key] = () => resolve(complete(response));
+        }));
+      };
+      JS);
+    $assert->elementExists('css', 'a[data-title="Second Document"]', $menu)->click();
+    $this->assertJsCondition('typeof window.pickerResponses.type === "function"');
+    $session->getPage()->clickLink('Table');
+    $this->assertJsCondition('typeof window.pickerResponses.table === "function"');
+
+    if (!$type_first) {
+      $session->executeScript('window.pickerResponses.table();');
+      $this->assertAnnounceContains('Changed to table view.');
+      $assert->elementTextContains('css', $form, 'Allowed types: txt');
+      $this->assertJsCondition('window.firstUploadForm.isConnected');
+    }
+
+    $session->executeScript('window.pickerResponses.type();');
+    $this->assertAnnounceContains('Showing Second Document media.');
+    $assert->elementTextContains('css', $form, 'Allowed types: pdf');
+    // Supply an editable field on the initial upload form, before selecting
+    // a file would replace the picker with the second step of the upload.
+    $session->executeScript(<<<'JS'
+      const name = document.createElement('input');
+      name.name = 'upload_title';
+      document.querySelector('.js-media-library-add-form').append(name);
+      JS);
+    $session->getPage()->fillField('upload_title', 'Unsaved second document');
+
+    if ($type_first) {
+      $session->executeScript('window.pickerResponses.table();');
+    }
+    $assert->assertWaitOnAjaxRequest();
+    $assert->elementTextEquals('css', '.js-media-library-menu a.active', 'Show Second Document media (selected)');
+    $view = '.js-media-library-view[data-view-display-id="widget"]';
+    $assert->elementTextContains('css', $view, 'Second result');
+    $assert->elementTextNotContains('css', $view, 'First result');
+    $assert->elementTextContains('css', $form, 'Allowed types: pdf');
+    $assert->fieldValueEquals('upload_title', 'Unsaved second document');
+  }
+
+  /**
+   * Tests that queued picker announcements are canceled when it closes.
+   */
+  public function testDoesNotAnnounceInNextModal(): void {
+    $this->drupalGet('node/add/basic_page');
+    $this->openMediaLibraryForField('field_unlimited_media');
+    $this->getSession()->executeScript(<<<'JS'
+      const picker = document.querySelector('dialog.media-library-widget-modal');
+      picker.querySelector('.views-display-link-widget_table').click();
+      Drupal.dialog.get(picker.querySelector('.drupal-dialog-content')).close();
+      Drupal.dialog(document.createElement('div'), { title: 'Next dialog' }).showModal();
+      Drupal.announce('Next dialog announcement.');
+      JS);
+    $this->assertAnnounceContains('Next dialog announcement.');
+    $this->assertSession()->elementTextEquals('css', 'dialog #drupal-live-announce', 'Next dialog announcement.');
+  }
+
+  /**
+   * Provides both response orders for overlapping picker requests.
+   */
+  public static function responseOrders(): array {
+    return [
+      'type response first' => [TRUE],
+      'table response first' => [FALSE],
+    ];
   }
 
 }

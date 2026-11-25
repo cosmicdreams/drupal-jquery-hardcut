@@ -88,7 +88,7 @@ class DialogRenderer implements MainContentRendererInterface {
       if (!str_starts_with($target, '#')) {
         $target = '#' . $target;
       }
-      // This shouldn't be passed on to jQuery.ui.dialog.
+      // The native dialog receives the selector separately.
       unset($options['target']);
     }
     else {

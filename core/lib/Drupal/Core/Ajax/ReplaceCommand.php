@@ -3,19 +3,11 @@
 namespace Drupal\Core\Ajax;
 
 /**
- * AJAX command for calling the jQuery replace() method.
+ * An Ajax command for replacing each match with new content.
  *
- * The 'insert/replaceWith' command instructs the client to use jQuery's
- * replaceWith() method to replace each element matched by the given selector
- * with the given render array or HTML.
+ * The 'insert/replaceWith' command replaces the elements matching the selector.
  *
- * This command is implemented by Drupal.AjaxCommands.prototype.insert()
- * defined in misc/ajax.js.
- *
- * See
- * @link http://docs.jquery.com/Manipulation/replaceWith#content jQuery replaceWith command @endlink
- *
- * @ingroup ajax
+ * @see Drupal.AjaxCommands.prototype.insert
  */
 class ReplaceCommand extends InsertCommand {
 

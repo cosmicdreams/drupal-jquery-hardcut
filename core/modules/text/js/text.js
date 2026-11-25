@@ -1,76 +1,67 @@
 /**
  * @file
- * Text behaviors.
+ * Shows or hides the optional text summary.
  */
 
-(function ($, Drupal) {
-  /**
-   * Auto-hide summary textarea if empty and show hide and unhide links.
-   *
-   * @type {Drupal~behavior}
-   *
-   * @prop {Drupal~behaviorAttach} attach
-   *   Attaches auto-hide behavior on `text-summary` events.
-   */
+((Drupal) => {
   Drupal.behaviors.textSummary = {
-    attach(context, settings) {
+    attach(context) {
       once('text-summary', '.js-text-summary', context).forEach((summary) => {
-        const $widget = $(summary).closest('.js-text-format-wrapper');
-
-        const $summary = $widget.find('.js-text-summary-wrapper');
-        const $summaryLabel = $summary.find('label').eq(0);
-        const $full = $widget.children('.js-form-type-textarea');
-        let $fullLabel = $full.find('label').eq(0);
-
-        // Create a placeholder label when the field cardinality is greater
-        // than 1.
-        if ($fullLabel.length === 0) {
-          $fullLabel = $('<label></label>').prependTo($full);
-        }
-
-        // To ensure the summary toggle is shown in case the label is hidden
-        // (in multivalue fields in particular), show the label but hide
-        // the original text of the label.
-        if ($fullLabel.hasClass('visually-hidden')) {
-          $fullLabel.html(
-            (index, oldHtml) =>
-              `<span class="visually-hidden">${oldHtml}</span>`,
-          );
-          $fullLabel.removeClass('visually-hidden');
-        }
-
-        // Set up the edit/hide summary link.
-        const $link = $(
-          Drupal.theme('textEditSummaryButton', Drupal.t('Hide summary')),
+        const widget = summary.closest('.js-text-format-wrapper');
+        const summaryWrapper = widget?.querySelector(
+          '.js-text-summary-wrapper',
         );
-        const $button = $link.find('button');
-        let toggleClick = true;
-        $link
-          .on('click', (e) => {
-            if (toggleClick) {
-              $summary.hide();
-              $button.html(Drupal.t('Edit summary'));
-              $link.appendTo($fullLabel);
-            } else {
-              $summary.show();
-              $button.html(Drupal.t('Hide summary'));
-              $link.appendTo($summaryLabel);
-            }
-            e.preventDefault();
-            toggleClick = !toggleClick;
-          })
-          .appendTo($summaryLabel);
+        const summaryLabel = summaryWrapper?.querySelector('label');
+        const full = widget?.querySelector(':scope > .js-form-type-textarea');
+        if (!summaryLabel || !full) {
+          return;
+        }
+        let fullLabel = full.querySelector('label');
 
-        // If no summary is set, hide the summary field.
+        // Multi-value fields can omit the label for the full text field.
+        if (!fullLabel) {
+          fullLabel = document.createElement('label');
+          full.prepend(fullLabel);
+        }
+
+        // Keep the original label visually hidden without hiding the toggle.
+        if (fullLabel.classList.contains('visually-hidden')) {
+          const content = document.createElement('span');
+          content.className = 'visually-hidden';
+          content.append(...fullLabel.childNodes);
+          fullLabel.append(content);
+          fullLabel.classList.remove('visually-hidden');
+        }
+
+        const template = document.createElement('template');
+        template.innerHTML = Drupal.theme(
+          'textEditSummaryButton',
+          Drupal.t('Hide summary'),
+        );
+        const link = template.content.firstElementChild;
+        const button = link.querySelector('button');
+        const display = summaryWrapper.style.display;
+        let visible = true;
+        const toggle = () => {
+          visible = !visible;
+          summaryWrapper.style.display = visible ? display : 'none';
+          button.innerHTML = visible
+            ? Drupal.t('Hide summary')
+            : Drupal.t('Edit summary');
+          (visible ? summaryLabel : fullLabel).append(link);
+        };
+        Drupal.formEvents.listen(link, 'click', (event) => {
+          event.preventDefault();
+          toggle();
+        });
+        summaryLabel.append(link);
         if (summary.value === '') {
-          $link.trigger('click');
+          toggle();
         }
       });
     },
   };
-  $.extend(Drupal.theme, {
-    textEditSummaryButton(title) {
-      return `<span class="field-edit-link"> (<button type="button" class="link link-edit-summary">${title}</button>)</span>`;
-    },
-  });
-})(jQuery, Drupal);
+
+  Drupal.theme.textEditSummaryButton = (title) =>
+    `<span class="field-edit-link"> (<button type="button" class="link link-edit-summary">${title}</button>)</span>`;
+})(Drupal);

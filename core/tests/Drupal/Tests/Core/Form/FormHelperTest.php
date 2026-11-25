@@ -39,12 +39,12 @@ class FormHelperTest extends UnitTestCase {
     $form['bar']['#states'] = [
       'visible' => [
         [
-          ':input[name="menu[type]"]' => ['value' => 'normal'],
+          'select[name="menu[type]"]' => ['value' => 'normal'],
         ],
         [
-          ':input[name="menu[type]"]' => ['value' => 'tab'],
+          'select[name="menu[type]"]' => ['value' => 'tab'],
         ],
-        ':input[name="menu[type]"]' => ['value' => 'default tab'],
+        'select[name="menu[type]"]' => ['value' => 'default tab'],
       ],
       // Example from https://www.drupal.org/node/1464758
       'disabled' => [
@@ -63,12 +63,12 @@ class FormHelperTest extends UnitTestCase {
     $expected['bar']['#states'] = [
       'visible' => [
         [
-          ':input[name="options[type]"]' => ['value' => 'normal'],
+          'select[name="options[type]"]' => ['value' => 'normal'],
         ],
         [
-          ':input[name="options[type]"]' => ['value' => 'tab'],
+          'select[name="options[type]"]' => ['value' => 'tab'],
         ],
-        ':input[name="options[type]"]' => ['value' => 'default tab'],
+        'select[name="options[type]"]' => ['value' => 'default tab'],
       ],
       'disabled' => [
         '[name="options[options][dependee_1]"]' => ['value' => 'ON'],
@@ -108,7 +108,7 @@ class FormHelperTest extends UnitTestCase {
           '#type' => 'date',
           '#states' => [
             'visible' => [
-              ':input[name="toggle_me"]' => ['checked' => TRUE],
+              'input[name="toggle_me"]' => ['checked' => TRUE],
             ],
           ],
         ],
@@ -119,7 +119,7 @@ class FormHelperTest extends UnitTestCase {
           '#type' => 'item',
           '#states' => [
             'visible' => [
-              ':input[name="foo"]' => ['value' => 'bar'],
+              'input[name="foo"]' => ['value' => 'bar'],
             ],
           ],
           '#markup' => '',

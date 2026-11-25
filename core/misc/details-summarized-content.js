@@ -2,7 +2,7 @@
  * @file
  * Adds a summary of a details element's contents to its summary element.
  */
-(($, Drupal) => {
+((Drupal) => {
   /**
    * The DetailsSummarizedContent object represents a single details element.
    *
@@ -13,11 +13,11 @@
    *   The supplemental text summarizes the details element's contents.
    */
   function DetailsSummarizedContent(node) {
-    this.$node = $(node);
+    this.node = node;
     this.setupSummary();
   }
 
-  $.extend(
+  Object.assign(
     DetailsSummarizedContent,
     /** @lends Drupal.DetailsSummarizedContent */ {
       /**
@@ -29,7 +29,7 @@
     },
   );
 
-  $.extend(
+  Object.assign(
     DetailsSummarizedContent.prototype,
     /** @lends Drupal.DetailsSummarizedContent# */ {
       /**
@@ -40,24 +40,36 @@
        * @listens event:summaryUpdated
        */
       setupSummary() {
-        this.$detailsSummarizedContentWrapper = $(
-          Drupal.theme('detailsSummarizedContentWrapper'),
+        const template = document.createElement('template');
+        template.innerHTML = Drupal.theme('detailsSummarizedContentWrapper');
+        this.summaryWrapper = template.content.firstElementChild;
+        Drupal.form.listen(
+          this.node,
+          'summaryUpdated',
+          this.onSummaryUpdatedNative.bind(this),
         );
-        this.$node
-          .on('summaryUpdated', this.onSummaryUpdated.bind(this))
-          .trigger('summaryUpdated')
-          .find('> summary')
-          .append(this.$detailsSummarizedContentWrapper);
+        Drupal.form.publish(this.node, 'summaryUpdated');
+        if (this.summaryWrapper) {
+          this.node
+            .querySelector(':scope > summary')
+            ?.append(this.summaryWrapper);
+        }
       },
 
       /**
-       * Update summary.
+       * Updates the summary from a native summaryUpdated event.
+       *
+       * Assign a replacement to this method to register a native override.
+       * Each instance binds the method when it is constructed.
        */
-      onSummaryUpdated() {
-        const text = this.$node.drupalGetSummary();
-        this.$detailsSummarizedContentWrapper.html(
-          Drupal.theme('detailsSummarizedContentText', text),
-        );
+      onSummaryUpdatedNative() {
+        const text = Drupal.form.getSummary(this.node);
+        if (this.summaryWrapper) {
+          this.summaryWrapper.innerHTML = Drupal.theme(
+            'detailsSummarizedContentText',
+            text,
+          );
+        }
       },
     },
   );
@@ -102,4 +114,4 @@
    */
   Drupal.theme.detailsSummarizedContentText = (text) =>
     text ? ` (${text})` : '';
-})(jQuery, Drupal);
+})(Drupal);

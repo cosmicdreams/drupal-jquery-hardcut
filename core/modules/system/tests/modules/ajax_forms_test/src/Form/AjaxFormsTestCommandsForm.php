@@ -142,14 +142,14 @@ class AjaxFormsTestCommandsForm extends FormBase {
       '#suffix' => '<div id="data_div">Data attached to this div.</div>',
     ];
 
-    // Shows the Ajax 'invoke' command.
-    $form['invoke_command_example'] = [
-      '#value' => $this->t("AJAX invoke command: Invoke addClass() method."),
+    // Shows the Ajax 'toggleClass' command.
+    $form['toggle_class_command_example'] = [
+      '#value' => $this->t("AJAX toggleClass command: Add the error class."),
       '#type' => 'submit',
       '#ajax' => [
-        'callback' => [Callbacks::class, 'advancedCommandsInvokeCallback'],
+        'callback' => [Callbacks::class, 'advancedCommandsToggleClassCallback'],
       ],
-      '#suffix' => '<div id="invoke_div">Original contents</div>',
+      '#suffix' => '<div id="toggle_class_div">Original contents</div>',
     ];
 
     // Shows the Ajax 'html' command.
@@ -203,7 +203,9 @@ class AjaxFormsTestCommandsForm extends FormBase {
       '#suffix' => '<div id="restripe_div">
                     <table id="restripe_table" style="border: 1px solid black" >
                     <tr id="table-first"><td>first row</td></tr>
+                    <tr id="table-hidden" class="odd" hidden><td>hidden row</td></tr>
                     <tr ><td>second row</td></tr>
+                    <tr><td><table><tbody><tr id="table-nested" class="odd"><td>nested row</td></tr></tbody></table></td></tr>
                     </table>
                     </div>',
     ];

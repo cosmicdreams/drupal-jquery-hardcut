@@ -115,13 +115,16 @@ class AssetResolverTest extends UnitTestCase {
           ],
         'license' => '',
       ],
-      'core/jquery' => [
+      'core/once' => [
         'version' => '1.0.0',
         'aggregate_target' => ['css' => FALSE, 'js' => FALSE],
         'css' => [],
         'js' =>
           [
-            'core/misc/jquery.js' => ['data' => 'core/misc/jquery.js', 'minified' => TRUE],
+            'core/assets/vendor/once/once.min.js' => [
+              'data' => 'core/assets/vendor/once/once.min.js',
+              'minified' => TRUE,
+            ],
           ],
         'license' => '',
       ],
@@ -266,7 +269,7 @@ class AssetResolverTest extends UnitTestCase {
       ],
       'different libraries, same timestamps' => [
         (new AttachedAssets())->setAlreadyLoadedLibraries([])->setLibraries(['core/drupal'])->setSettings(['currentTime' => $time]),
-        (new AttachedAssets())->setAlreadyLoadedLibraries([])->setLibraries(['core/drupal', 'core/jquery'])->setSettings(['currentTime' => $time]),
+        (new AttachedAssets())->setAlreadyLoadedLibraries([])->setLibraries(['core/drupal', 'core/once'])->setSettings(['currentTime' => $time]),
         2,
         4,
       ],
@@ -308,11 +311,11 @@ class AssetResolverTest extends UnitTestCase {
     $time = time();
     $assets_a = (new AttachedAssets())
       ->setAlreadyLoadedLibraries([])
-      ->setLibraries(['core/drupal', 'core/ckeditor5', 'core/jquery', 'piggy/ckeditor'])
+      ->setLibraries(['core/drupal', 'core/ckeditor5', 'core/once', 'piggy/ckeditor'])
       ->setSettings(['currentTime' => $time]);
     $assets_b = (new AttachedAssets())
       ->setAlreadyLoadedLibraries([])
-      ->setLibraries(['piggy/ckeditor', 'core/drupal', 'core/ckeditor5', 'core/jquery'])
+      ->setLibraries(['piggy/ckeditor', 'core/drupal', 'core/ckeditor5', 'core/once'])
       ->setSettings(['currentTime' => $time]);
     $js_assets_a = $this->assetResolver->getJsAssets($assets_a, FALSE, $this->english);
     $js_assets_b = $this->assetResolver->getJsAssets($assets_b, FALSE, $this->english);

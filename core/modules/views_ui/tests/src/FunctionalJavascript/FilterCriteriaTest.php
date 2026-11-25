@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Drupal\Tests\views_ui\FunctionalJavascript;
 
 use Drupal\FunctionalJavascriptTests\WebDriverTestBase;
+use PHPUnit\Framework\Attributes\DataProviderExternal;
 use PHPUnit\Framework\Attributes\Group;
 use PHPUnit\Framework\Attributes\RunTestsInSeparateProcesses;
 
@@ -117,26 +118,47 @@ class FilterCriteriaTest extends WebDriverTestBase {
     $this->assertNotEquals($status_extra_original_value, $status_extra_group_field->getValue(), 'Status extra group should be changed');
     $this->assertNotEquals($langcode_original_value, $langcode_group_field->getValue(), 'Langcode group should be changed');
 
+    $operator = $page->findById('views-group-title-2')->findField('Operator');
+    $operator->selectOption('Or');
+    $assert_session->elementTextContains('css', '#views-row-status_extra .views-operator-label, #views-row-langcode .views-operator-label', 'Or');
+
     $this->assertSession()->waitForLink('Create new filter group', 20000);
     $create_new_filter_group = $page->findLink('Create new filter group');
     $this->assertTrue($create_new_filter_group->isVisible(), 'Add group link found.');
     $create_new_filter_group->click();
     $assert_session->assertWaitOnAjaxRequest();
 
-    // Validate dragging works correctly and the new group will contain the new
-    // filter.
-    $dragged = $page->find('css', ".tabledrag-handle");
-    $target = $page->find('css', '.filter-group-operator-row');
-    $dragged->dragTo($target);
+    $operators = $page->findAll('css', '.filter-group-operator-row select');
+    $this->assertCount(2, $operators);
+    $operators[1]->selectOption('Or');
+    $this->assertSame('OR', $operators[0]->getValue());
 
-    $remove_link = $page->findLink('Remove group');
-    $this->assertFalse($remove_link->isVisible(), 'Remove group should be invisible after drag.');
+    $assert_session->fieldValueEquals('filters[changed][group]', '1');
+    $assert_session->fieldValueEquals('filters[status_extra][group]', '2');
+    $assert_session->fieldValueEquals('filters[langcode][group]', '2');
+
+    $assert_session->elementExists('css', '.drupal-dialog-buttonpane')->pressButton('Apply');
+    $assert_session->assertWaitOnAjaxRequest();
+    $page->pressButton('Save');
+    $assert_session->statusMessageContains('The view Test Recent content has been saved.', 'status');
+    $this->openFilterDialog();
+
+    $assert_session->fieldValueEquals('filters[changed][group]', 1);
+    $assert_session->fieldValueEquals('filters[status_extra][group]', 2);
+    $assert_session->fieldValueEquals('filters[langcode][group]', 2);
+    $assert_session->fieldValueEquals('filter_groups[groups][1]', 'AND');
+    $assert_session->fieldValueEquals('filter_groups[groups][2]', 'OR');
+    $assert_session->fieldValueEquals('filter_groups[operator]', 'OR');
+    $assert_session->fieldNotExists('filter_groups[groups][3]');
   }
 
   /**
    * Tests operator labels.
    */
-  public function testOperatorLabels(): void {
+  #[DataProviderExternal(AdminAjaxTest::class, 'viewsThemes')]
+  public function testOperatorLabels(string $theme): void {
+    $this->container->get('theme_installer')->install([$theme]);
+    $this->config('system.theme')->set('default', $theme)->save();
     // Open the "Promoted Content" view.
     $this->drupalGet('admin/structure/views/view/promoted_content');
     $session = $this->getSession();
@@ -154,6 +176,9 @@ class FilterCriteriaTest extends WebDriverTestBase {
     // Drag the last row before the penultimate row.
     $drag_handle = $last_row->find('css', '.tabledrag-handle');
     $drag_handle->dragTo($penultimate_row);
+
+    $warning = $this->assertSession()->elementExists('css', '.views-ui-dialog .tabledrag-changed-warning');
+    $this->assertFalse($warning->isVisible());
 
     // Assert there are valid number of visible operator labels.
     $operator_label = $page->findAll('css', '.views-operator-label');
