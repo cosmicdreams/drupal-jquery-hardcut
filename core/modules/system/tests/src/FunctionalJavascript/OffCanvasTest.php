@@ -81,13 +81,21 @@ class OffCanvasTest extends OffCanvasTestBase {
       }
     }
 
-    // Test the off_canvas_top tray.
+    // A page without Navigation can still have horizontal displacement.
+    $web_assert->elementNotExists('css', 'html[data-admin-toolbar]');
+    $this->getSession()->executeScript(<<<'JS'
+      document.body.dataset.offsetLeft = '120';
+      Drupal.displace();
+      JS);
+
+    // Check that the top tray uses the full viewport even with displacement.
     foreach ([1, 2] as $link_index) {
       $this->assertOffCanvasDialog($link_index, 'top');
       $this->assertJsCondition(<<<'JS'
         (() => {
           const { left, width } = document.getElementById('drupal-off-canvas-wrapper').getBoundingClientRect();
-          return left === 0 && width === document.documentElement.clientWidth;
+          return Drupal.displace.offsets.left === 120 &&
+            left === 0 && width === document.documentElement.clientWidth;
         })()
         JS);
 

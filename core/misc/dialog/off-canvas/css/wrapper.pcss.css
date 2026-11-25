@@ -29,11 +29,23 @@
   }
 
   &.drupal-dialog-position-top {
-    inset: 0 var(--drupal-displace-offset-right, 0) auto var(--drupal-displace-offset-left, 0);
-    /* Override the dialog's inline width and leave room for a sidebar. */
-    width: calc(100% - var(--drupal-displace-offset-left, 0px) - var(--drupal-displace-offset-right, 0px)) !important;
+    inset: 0 0 auto;
+    /* Override the dialog's inline width. */
+    width: 100% !important;
     min-height: 30px;
     max-height: 100dvh;
+
+    /* Leave room for the Navigation sidebar. */
+    [data-admin-toolbar] & {
+      --off-canvas-navigation-offset: var(--drupal-displace-offset-left, 0px);
+
+      inset-inline-start: var(--off-canvas-navigation-offset);
+      width: calc(100% - var(--off-canvas-navigation-offset)) !important;
+
+      &:dir(rtl) {
+        --off-canvas-navigation-offset: var(--drupal-displace-offset-right, 0px);
+      }
+    }
   }
 
   & > .drupal-dialog-content {
