@@ -86,7 +86,7 @@ class JqueryFreeLibrariesTest extends KernelTestBase {
         if (is_array($token) && $token[0] === T_CONSTANT_ENCAPSED_STRING) {
           $literal = substr($token[1], 1, -1);
           $library = preg_match('~^[a-z0-9_]+/(?:internal\.)?jquery(?:[./_-]|$)~i', $literal);
-          $asset = preg_match('~^[^\s]+\.(?:m?js|css)(?:[?#].*)?$~i', $literal)
+          $asset = preg_match('~^(?:\S+\.(?:[cm]?js|css)(?:[?#].*)?|(?:https?:)?//\S+)$~i', $literal)
             && preg_match(self::JQUERY_ASSET_PATH, $literal);
           if (($library || $asset) && !isset($canary_fixture_references["$path:$literal"])) {
             $references[] = "$path:{$token[2]} references $literal";

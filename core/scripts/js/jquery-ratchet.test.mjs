@@ -56,7 +56,7 @@ test('rejects jQuery references acquired from browser globals and modules', asyn
 
 test('allows local properties and bindings with the same names', async () => {
   assert.deepEqual(
-    await lint('const browser = { $() {} };\nbrowser["$"]();\n'),
+    await lint("const browser = { $() {} };\nbrowser['$']();\n"),
     [],
   );
 });
