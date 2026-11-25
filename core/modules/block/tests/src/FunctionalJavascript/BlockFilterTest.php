@@ -57,7 +57,7 @@ class BlockFilterTest extends WebDriverTestBase {
 
     // Test block filter reduces the number of visible rows.
     $filter->setValue('ad');
-    $session->wait(10000, 'jQuery("#drupal-live-announce").html().indexOf("blocks are available") > -1');
+    $this->assertJsCondition("document.getElementById('drupal-live-announce')?.textContent.includes('blocks are available')");
     $visible_rows = $this->filterVisibleElements($block_rows);
     if (count($block_rows) > 0) {
       $this->assertNotSameSize($block_rows, $visible_rows);
@@ -69,7 +69,7 @@ class BlockFilterTest extends WebDriverTestBase {
 
     // Test Drupal.announce() message when only one match is expected.
     $filter->setValue('Powered by');
-    $session->wait(10000, 'jQuery("#drupal-live-announce").html().indexOf("block is available") > -1');
+    $this->assertJsCondition("document.getElementById('drupal-live-announce')?.textContent.includes('block is available')");
     $visible_rows = $this->filterVisibleElements($block_rows);
     $this->assertCount(1, $visible_rows);
     $expected_message = '1 block is available in the modified list.';
@@ -77,11 +77,47 @@ class BlockFilterTest extends WebDriverTestBase {
 
     // Test Drupal.announce() message when no matches are expected.
     $filter->setValue('Pan-Galactic Gargle Blaster');
-    $session->wait(10000, 'jQuery("#drupal-live-announce").html().indexOf("0 blocks are available") > -1');
+    $this->assertJsCondition("document.getElementById('drupal-live-announce')?.textContent.includes('0 blocks are available')");
     $visible_rows = $this->filterVisibleElements($block_rows);
     $this->assertCount(0, $visible_rows);
     $expected_message = '0 blocks are available in the modified list.';
     $this->assertAnnounceContains($expected_message);
+
+    $session->executeScript(<<<'JS'
+      const input = document.querySelector('input.block-filter-text');
+      const table = document.querySelector(input.dataset.element);
+      const copy = table.cloneNode(true);
+      table.after(copy);
+      once.remove('block-filter-text', input);
+      // Reattach using a new input so both matches are present at setup time.
+      const firstInput = input.cloneNode(true);
+      const secondInput = input.cloneNode(true);
+      secondInput.id = 'second-block-filter';
+      input.replaceWith(firstInput, secondInput);
+      Drupal.attachBehaviors();
+      JS);
+    $assertSession->elementExists('css', '.block-filter-text')->setValue('Powered by');
+    $this->assertJsCondition(<<<'JS'
+      (() => {
+        const input = document.querySelector('input.block-filter-text');
+        const tables = [...document.querySelectorAll(input.dataset.element)];
+        return tables.length === 2 && tables.every((table) => {
+          const rows = [...table.tBodies[0].rows].filter((row) => row.getClientRects().length);
+          return rows.length === 1 && rows[0].textContent.includes('Powered by');
+        });
+      })()
+      JS);
+
+    $assertSession->elementExists('css', '#second-block-filter')->setValue('Pan-Galactic Gargle Blaster');
+    $this->assertJsCondition(<<<'JS'
+      (() => {
+        const input = document.getElementById('second-block-filter');
+        const tables = [...document.querySelectorAll(input.dataset.element)];
+        return tables.length === 2 && tables.every((table) =>
+          [...table.tBodies[0].rows].every((row) => !row.getClientRects().length)
+        );
+      })()
+      JS);
 
     $this->placeBlock('test_xss');
     $this->failOnJavascriptConsoleErrors = FALSE;

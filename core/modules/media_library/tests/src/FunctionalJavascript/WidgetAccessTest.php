@@ -49,8 +49,12 @@ class WidgetAccessTest extends MediaLibraryTestBase {
     $this->drupalGet('node/add/basic_page');
     // Set the hidden value and trigger the mousedown event on the button via
     // JavaScript since the field and button are hidden.
-    $session->executeScript("jQuery('[data-media-library-widget-value=\"field_unlimited_media\"]').val('1,2,{$unpublished_media->id()}')");
-    $session->executeScript("jQuery('[data-media-library-widget-update=\"field_unlimited_media\"]').trigger('mousedown')");
+    $session->executeScript(<<<JS
+      document.querySelector('[data-media-library-widget-value="field_unlimited_media"]').value = '1,2,{$unpublished_media->id()}';
+      document.querySelector('[data-media-library-widget-update="field_unlimited_media"]').dispatchEvent(
+        new MouseEvent('mousedown', { bubbles: true, cancelable: true }),
+      );
+      JS);
     $this->assertElementExistsAfterWait('css', '.js-media-library-item');
     // Assert the published items are selected and the unpublished item is not
     // selected.

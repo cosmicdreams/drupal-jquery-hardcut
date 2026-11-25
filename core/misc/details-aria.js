@@ -3,29 +3,28 @@
  * Add aria attribute handling for details and summary elements.
  */
 
-(function ($, Drupal) {
+(function (Drupal) {
   /**
-   * Handles `aria-expanded` and `aria-pressed` attributes on details elements.
+   * Handles `aria-expanded` on details summaries.
    *
    * @type {Drupal~behavior}
    */
   Drupal.behaviors.detailsAria = {
     attach() {
-      $(once('detailsAria', 'body')).on(
-        'click.detailsAria',
-        'summary',
-        (event) => {
-          const $summary = $(event.currentTarget);
-          const open =
-            $(event.currentTarget.parentNode).attr('open') === 'open'
-              ? 'false'
-              : 'true';
-
-          $summary.attr({
-            'aria-expanded': open,
-          });
-        },
-      );
+      once('detailsAria', 'body').forEach((target) => {
+        target.addEventListener('click', (event) => {
+          if (event.defaultPrevented || event.button >= 1) {
+            return;
+          }
+          const summary = event.target.closest?.('summary');
+          if (summary) {
+            summary.setAttribute(
+              'aria-expanded',
+              String(!summary.parentElement.open),
+            );
+          }
+        });
+      });
     },
   };
-})(jQuery, Drupal);
+})(Drupal);

@@ -110,7 +110,7 @@ class Entity extends ArgumentValidatorPluginBase {
       '#default_value' => $this->options['operation'],
       '#states' => [
         'visible' => [
-          ':input[name="options[validate][options][' . $sanitized_id . '][access]"]' => ['checked' => TRUE],
+          '[name="options[validate][options][' . $sanitized_id . '][access]"]' => ['checked' => TRUE],
         ],
       ],
     ];

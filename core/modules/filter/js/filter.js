@@ -1,39 +1,38 @@
 /**
  * @file
- * Attaches behavior for the Filter module.
+ * Displays guidelines for the selected text format.
  */
 
-(function ($, Drupal) {
-  /**
-   * Displays the guidelines of the selected text format automatically.
-   *
-   * @type {Drupal~behavior}
-   *
-   * @prop {Drupal~behaviorAttach} attach
-   *   Attaches behavior for updating filter guidelines.
-   */
+((Drupal) => {
   Drupal.behaviors.filterGuidelines = {
     attach(context) {
-      function updateFilterGuidelines(event) {
-        const $this = $(event.target);
-        const { value } = event.target;
-        $this
-          .closest('.js-filter-wrapper')
-          .find('[data-drupal-format-id]')
-          .hide()
-          .filter(`[data-drupal-format-id="${value}"]`)
-          .show();
-      }
-
-      $(once('filter-guidelines', '.js-filter-guidelines', context))
-        .find(':header')
-        .hide()
-        .closest('.js-filter-wrapper')
-        .find('select.js-filter-list')
-        .on('change.filterGuidelines', updateFilterGuidelines)
-        // Need to trigger the namespaced event to avoid triggering formUpdated
-        // when initializing the select.
-        .trigger('change.filterGuidelines');
+      const wrappers = new Set();
+      once('filter-guidelines', '.js-filter-guidelines', context).forEach(
+        (guidelines) => {
+          guidelines
+            .querySelectorAll('h1, h2, h3, h4, h5, h6')
+            .forEach((heading) => {
+              heading.style.display = 'none';
+              wrappers.add(heading.closest('.js-filter-wrapper'));
+            });
+        },
+      );
+      wrappers.forEach((wrapper) => {
+        wrapper?.querySelectorAll('select.js-filter-list').forEach((select) => {
+          const update = () => {
+            wrapper
+              .querySelectorAll('[data-drupal-format-id]')
+              .forEach((guideline) => {
+                guideline.style.display =
+                  guideline.dataset.drupalFormatId === select.value
+                    ? ''
+                    : 'none';
+              });
+          };
+          Drupal.formEvents.listen(select, 'change', update);
+          update();
+        });
+      });
     },
   };
-})(jQuery, Drupal);
+})(Drupal);

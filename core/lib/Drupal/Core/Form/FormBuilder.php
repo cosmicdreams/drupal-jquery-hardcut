@@ -966,8 +966,12 @@ class FormBuilder implements FormBuilderInterface, FormValidatorInterface, FormS
     else {
       // Provide a selector usable by JavaScript. As the ID is unique, it's not
       // possible to rely on it in JavaScript.
-      $element['#attributes']['data-drupal-selector'] = Html::getId($element['#id']);
-      $element['#wrapper_attributes']['data-drupal-wrapper-selector'] = Html::getId($element['#id']);
+      $selector = Html::getId($element['#id']);
+      // Keep the root form's stable selector from prepareForm().
+      if (($element['#array_parents'] ?? NULL) !== [] || !isset($element['#attributes']['data-drupal-selector'])) {
+        $element['#attributes']['data-drupal-selector'] = $selector;
+      }
+      $element['#wrapper_attributes']['data-drupal-wrapper-selector'] = $selector;
     }
 
     // Add the aria-describedby attribute to associate the form control with its

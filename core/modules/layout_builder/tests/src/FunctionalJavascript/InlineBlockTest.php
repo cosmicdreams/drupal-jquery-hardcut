@@ -115,6 +115,33 @@ class InlineBlockTest extends InlineBlockTestBase {
   }
 
   /**
+   * Tests creating and updating an inline block with CKEditor 5 in the tray.
+   */
+  public function testRichTextInlineBlock(): void {
+    $this->enableRichText();
+    LayoutBuilderEntityViewDisplay::load('node.bundle_with_section_field.default')
+      ->enableLayoutBuilder()
+      ->setOverridable()
+      ->save();
+
+    $this->drupalLogin($this->drupalCreateUser([
+      'access contextual links',
+      'configure any layout',
+      'create and edit custom blocks',
+    ]));
+    $this->drupalGet('node/1/layout');
+    $this->addInlineBlockToLayout('Rich text block', 'Original rich text');
+    $this->assertSaveLayout();
+    $this->drupalGet('node/1/layout');
+    $this->configureInlineBlock('Original rich text', 'Updated rich text');
+    $this->assertSaveLayout();
+
+    $this->drupalGet('node/1');
+    $body = $this->assertSession()->elementExists('css', static::INLINE_BLOCK_LOCATOR . ' strong');
+    $this->assertSame('Updated rich text', $body->getText());
+  }
+
+  /**
    * Tests adding a new entity block and then not saving the layout.
    */
   #[DataProvider('layoutNoSaveProvider')]

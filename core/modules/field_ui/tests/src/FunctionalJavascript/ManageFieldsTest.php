@@ -6,10 +6,12 @@ namespace Drupal\Tests\field_ui\FunctionalJavascript;
 
 use Drupal\field\Entity\FieldConfig;
 use Drupal\field\Entity\FieldStorageConfig;
+use Drupal\FunctionalJavascriptTests\DrupalSelenium2Driver;
 use Drupal\FunctionalJavascriptTests\WebDriverTestBase;
 use Drupal\Tests\field_ui\Traits\FieldUiJSTestTrait;
 use PHPUnit\Framework\Attributes\Group;
 use PHPUnit\Framework\Attributes\RunTestsInSeparateProcesses;
+use WebDriver\Key;
 
 // cspell:ignore horserad
 /**
@@ -109,30 +111,34 @@ class ManageFieldsTest extends WebDriverTestBase {
     $this->assertTrue($horse_field_row->isVisible());
     $this->assertTrue($horseradish_field_row->isVisible());
     $this->assertTrue($carrot_field_row->isVisible());
-    // Filter by 'horse' field name.
-    $filter->setValue('horse');
-    $session->wait(1000, "jQuery('[data-field-id=\"field_carrot\"]:visible').length == 0");
+    // Isolate the space added by the filter from whitespace in the markup.
+    $session->executeScript(<<<'JS'
+      document.querySelectorAll('.js-reuse-table tbody tr').forEach((row) => {
+        const source = row.querySelector('.form-item');
+        source.textContent = source.textContent.trim();
+      });
+      JS);
+    $filter->setValue(' field_horse');
+    $page->waitFor(1, static fn () => !$carrot_field_row->isVisible());
     $this->assertTrue($horse_field_row->isVisible());
     $this->assertTrue($horseradish_field_row->isVisible());
     $this->assertFalse($carrot_field_row->isVisible());
     // Filter even more so only 'horseradish' is visible.
     $filter->setValue('horserad');
-    $session->wait(1000, "jQuery('[data-field-id=\"field_horse\"]:visible').length == 0");
+    $page->waitFor(1, static fn () => !$horse_field_row->isVisible());
     $this->assertFalse($horse_field_row->isVisible());
     $this->assertTrue($horseradish_field_row->isVisible());
     $this->assertFalse($carrot_field_row->isVisible());
     // Filter by field type but search with 'ext' instead of 'text' to
     // confirm that contains-based search works.
     $filter->setValue('ext');
-    $session->wait(1000, "jQuery('[data-field-id=\"field_horse\"]:visible').length == 0");
-    $session->wait(1000, "jQuery('[data-field-id=\"field_carrot\"]:visible').length == 1");
+    $page->waitFor(1, static fn () => !$horse_field_row->isVisible());
+    $this->assertNotNull($this->assertSession()->waitForElementVisible('css', '.js-reuse-table tr[data-field-id="field_carrot"]'));
     $this->assertFalse($horse_field_row->isVisible());
     $this->assertTrue($horseradish_field_row->isVisible());
-    $this->assertTrue($carrot_field_row->isVisible());
     // Ensure clearing brings all the results back.
     $filter->setValue('');
-    $session->wait(1000, "jQuery('[data-field-id=\"field_horse\"]:visible').length == 1");
-    $this->assertTrue($horse_field_row->isVisible());
+    $this->assertNotNull($this->assertSession()->waitForElementVisible('css', '.js-reuse-table tr[data-field-id="field_horse"]'));
     $this->assertTrue($horseradish_field_row->isVisible());
     $this->assertTrue($carrot_field_row->isVisible());
   }
@@ -150,9 +156,9 @@ class ManageFieldsTest extends WebDriverTestBase {
     $page->clickLink('Delete');
 
     // Asserts a dialog opens with the expected text.
-    $this->assertEquals('Are you sure you want to delete the field Body?', $assert_session->waitForElement('css', '.ui-dialog-title')->getText());
+    $this->assertEquals('Are you sure you want to delete the field Body?', $assert_session->waitForElement('css', '.drupal-dialog-title')->getText());
 
-    $page->find('css', '.ui-dialog-buttonset')->pressButton('Delete');
+    $page->find('css', '.drupal-dialog-buttonset')->pressButton('Delete');
     $assert_session->waitForText('The field Body has been deleted from the Article content type.');
   }
 
@@ -172,7 +178,18 @@ class ManageFieldsTest extends WebDriverTestBase {
     $this->clickLink('Number');
     $assert_session->assertWaitOnAjaxRequest();
     $assert_session->waitForText('Add field: Number');
-    $buttons = $this->assertSession()->elementExists('css', '.ui-dialog-buttonpane');
+
+    $this->getSession()->executeScript(<<<'JS'
+      const region = document.createElement('div');
+      const form = '<form data-drupal-selector="field-ui-field-storage-add-form"><div class="js-form-item-label"><label>Label</label></div></form>';
+      region.innerHTML = form.repeat(2);
+      document.body.append(region);
+      Drupal.behaviors.fieldUIFieldStorageAddForm.attach(region);
+      window.requiredFieldLabels = region.querySelectorAll('label.js-form-required.form-required').length;
+      region.remove();
+      JS);
+    $this->assertJsCondition('window.requiredFieldLabels === 2');
+    $buttons = $this->assertSession()->elementExists('css', '.drupal-dialog-buttonpane');
     // Test validation.
     $buttons->pressButton('Continue');
     $assert_session->assertWaitOnAjaxRequest();
@@ -181,7 +198,7 @@ class ManageFieldsTest extends WebDriverTestBase {
     $assert_session->elementExists('css', '[name="label"].error');
     $assert_session->elementExists('css', '[name="field_options_wrapper"].error');
     $page->fillField('label', $field_name);
-    $buttons = $this->assertSession()->elementExists('css', '.ui-dialog-buttonpane');
+    $buttons = $this->assertSession()->elementExists('css', '.drupal-dialog-buttonpane');
     $buttons->pressButton('Continue');
     $assert_session->assertWaitOnAjaxRequest();
 
@@ -189,7 +206,7 @@ class ManageFieldsTest extends WebDriverTestBase {
 
     $assert_session->elementNotExists('css', '[name="label"].error');
     $assert_session->elementExists('css', '[name="field_options_wrapper"].error');
-    $buttons = $this->assertSession()->elementExists('css', '.ui-dialog-buttonpane');
+    $buttons = $this->assertSession()->elementExists('css', '.drupal-dialog-buttonpane');
     $buttons->pressButton('Change field type');
     $this->assertSession()->assertWaitOnAjaxRequest();
 
@@ -198,7 +215,7 @@ class ManageFieldsTest extends WebDriverTestBase {
     $assert_session->assertWaitOnAjaxRequest();
     $assert_session->pageTextNotContains('Choose a field type');
     $assert_session->elementExists('css', '[name="label"]');
-    $buttons = $this->assertSession()->elementExists('css', '.ui-dialog-buttonpane');
+    $buttons = $this->assertSession()->elementExists('css', '.drupal-dialog-buttonpane');
     $buttons->pressButton('Change field type');
     $this->assertSession()->assertWaitOnAjaxRequest();
 
@@ -209,9 +226,20 @@ class ManageFieldsTest extends WebDriverTestBase {
 
     $page->fillField('label', $field_name);
     $this->assertNotEmpty($text_plain = $page->find('xpath', '//*[text() = "Short text"]')->getParent());
+    $this->getSession()->executeScript(<<<'JS'
+      const input = document.querySelector('.js-click-to-select input[value="string"]');
+      input.dispatchEvent(new FocusEvent('focus'));
+      window.unselectedFieldCardIsUnstyled = !input.closest('.js-click-to-select').classList.contains('focus');
+      const selected = document.createElement('div');
+      selected.id = 'other-selected-card';
+      selected.className = 'js-click-to-select selected';
+      document.body.append(selected);
+      JS);
+    $this->assertJsCondition('window.unselectedFieldCardIsUnstyled');
     $text_plain->click();
+    $this->assertJsCondition('!document.getElementById("other-selected-card").classList.contains("selected")');
     $this->assertTrue($assert_session->elementExists('css', '[name="field_options_wrapper"][value="string"]')->isSelected());
-    $buttons = $this->assertSession()->elementExists('css', '.ui-dialog-buttonpane');
+    $buttons = $this->assertSession()->elementExists('css', '.drupal-dialog-buttonpane');
     $buttons->pressButton('Continue');
     $this->assertSession()->assertWaitOnAjaxRequest();
 
@@ -255,7 +283,7 @@ class ManageFieldsTest extends WebDriverTestBase {
     // Set a default value that is under the new limit.
     $default_input_1->setValue('Five!');
 
-    $buttons = $this->assertSession()->elementExists('css', '.ui-dialog-buttonpane');
+    $buttons = $this->assertSession()->elementExists('css', '.drupal-dialog-buttonpane');
     $buttons->pressButton('Save');
     $this->assertTrue($assert_session->waitForText('Saved ' . $field_name . ' configuration.'));
     $this->assertNotNull($field_storage = FieldStorageConfig::loadByName('node', "field_$field_name"));
@@ -274,7 +302,7 @@ class ManageFieldsTest extends WebDriverTestBase {
     $number_integer->click();
     $this->assertTrue($assert_session->elementExists('css', '[name="field_options_wrapper"][value="integer"]')->isSelected());
 
-    $buttons = $this->assertSession()->elementExists('css', '.ui-dialog-buttonpane');
+    $buttons = $this->assertSession()->elementExists('css', '.drupal-dialog-buttonpane');
     $buttons->pressButton('Change field type');
     $this->assertSession()->assertWaitOnAjaxRequest();
     $this->assertNotEmpty($test_field = $page->find('xpath', '//*[text() = "Test field"]')->getParent());
@@ -284,14 +312,42 @@ class ManageFieldsTest extends WebDriverTestBase {
     $page->fillField('label', $field_name);
     $assert_session->pageTextNotContains('Choose a field type');
 
-    $buttons = $this->assertSession()->elementExists('css', '.ui-dialog-buttonpane');
+    $buttons = $this->assertSession()->elementExists('css', '.drupal-dialog-buttonpane');
     $buttons->pressButton('Continue');
     $this->assertSession()->assertWaitOnAjaxRequest();
-    $buttons = $this->assertSession()->elementExists('css', '.ui-dialog-buttonpane');
+    $buttons = $this->assertSession()->elementExists('css', '.drupal-dialog-buttonpane');
     $buttons->pressButton('Save');
     $this->assertTrue($assert_session->waitForText('Saved ' . $field_name . ' configuration.'));
     $this->assertNotNull($field_storage = FieldStorageConfig::loadByName('node', "field_$field_name"));
     $this->assertEquals('test_field', $field_storage->getType());
+  }
+
+  /**
+   * Tests keyboard focus when a storage setting rebuilds the field edit form.
+   */
+  public function testFocusAfterCardinalityChange(): void {
+    $this->drupalGet('admin/structure/types/manage/article/fields/node.article.body');
+    $session = $this->getSession();
+    $assert = $this->assertSession();
+    $selector = 'input[name="field_storage[subform][cardinality_number]"]';
+    $assert->elementExists('css', $selector)->focus();
+    $form_selector = '#field-combined form';
+    $form = $assert->elementExists('css', $form_selector);
+    $form_id = $form->getAttribute('id');
+    $form_data_selector = $form->getAttribute('data-drupal-selector');
+
+    // Type the new limit, then commit it by tabbing to Help text.
+    $driver = $session->getDriver();
+    assert($driver instanceof DrupalSelenium2Driver);
+    $driver->getWebDriverSession()
+      ->element('css selector', $selector)
+      ->postValue(['text' => Key::END . Key::BACKSPACE . '2' . Key::TAB]);
+    $assert->assertExpectedAjaxRequest(1);
+    $assert->fieldValueEquals('field_storage[subform][cardinality_number]', '2');
+    $form = $assert->elementExists('css', $form_selector);
+    $this->assertNotSame($form_id, $form->getAttribute('id'));
+    $this->assertSame($form_data_selector, $form->getAttribute('data-drupal-selector'));
+    $this->assertSame('description', $session->evaluateScript('document.activeElement.name'));
   }
 
   /**
@@ -364,7 +420,7 @@ class ManageFieldsTest extends WebDriverTestBase {
     $this->assertSession()->assertWaitOnAjaxRequest();
     $this->clickLink('Plain text');
     $this->assertSession()->assertWaitOnAjaxRequest();
-    $buttons = $this->assertSession()->elementExists('css', '.ui-dialog-buttonpane');
+    $buttons = $this->assertSession()->elementExists('css', '.drupal-dialog-buttonpane');
     $buttons->pressButton('Continue');
     $this->assertSession()->assertWaitOnAjaxRequest();
     $this->assertSession()->pageTextContains('Label field is required.');

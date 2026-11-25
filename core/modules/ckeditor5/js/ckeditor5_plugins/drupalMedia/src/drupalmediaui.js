@@ -41,6 +41,7 @@ export default class DrupalMediaUI extends Plugin {
             editor.execute('insertDrupalMedia', attributes);
           },
           dialogSettings,
+          () => editor.state === 'ready' && editor.sourceElement.isConnected,
         );
       });
 

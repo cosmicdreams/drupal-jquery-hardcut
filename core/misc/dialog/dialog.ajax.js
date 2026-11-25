@@ -1,337 +1,174 @@
 /**
  * @file
- * Extends the Drupal AJAX functionality to integrate the dialog API.
+ * Integrates Drupal Ajax commands with native dialogs.
  */
 
-(function ($, Drupal, { focusable }) {
-  /**
-   * Initialize dialogs for Ajax purposes.
-   *
-   * @type {Drupal~behavior}
-   *
-   * @prop {Drupal~behaviorAttach} attach
-   *   Attaches the behaviors for dialog ajax functionality.
-   */
-  Drupal.behaviors.dialog = {
-    attach(context, settings) {
-      // Provide a known 'drupal-modal' DOM element for Drupal-based modal
-      // dialogs. Non-modal dialogs are responsible for creating their own
-      // elements, since there can be multiple non-modal dialogs at a time.
-      if (!document.querySelector('#drupal-modal')) {
-        // Add 'ui-front' jQuery UI class so jQuery UI widgets like autocomplete
-        // sit on top of dialogs. For more information see
-        // http://api.jqueryui.com/theming/stacking-elements/.
-        document.body.insertAdjacentHTML(
-          'beforeend',
-          '<div id="drupal-modal" class="ui-front" style="display:none"></div>',
-        );
-      }
+(function (Drupal) {
+  function acceptsCommand(ajax, selector) {
+    return (
+      Drupal.dialog.hasOpenOrigin(ajax.dialogOrigin) &&
+      (!selector || Drupal.dialog.isLatestOpen(selector, ajax.dialogGeneration))
+    );
+  }
 
-      // Special behaviors specific when attaching content within a dialog.
-      // These behaviors usually fire after a validation error inside a dialog.
-      if (context !== document) {
-        const dialog = context.closest('.ui-dialog-content');
-        if (dialog) {
-          // Remove and replace the dialog buttons with those from the new form.
-          if ($(dialog).dialog('option', 'drupalAutoButtons')) {
-            // Trigger an event to detect/sync changes to buttons.
-            dialog.dispatchEvent(new CustomEvent('dialogButtonsChange'));
-          }
+  function closeFromResponse(ajax, dialog) {
+    if (ajax.dialogOrigin?.element === dialog.element) {
+      // Commands later in this same response may open another dialog.
+      ajax.dialogOrigin = null;
+    }
+    dialog.close();
+  }
 
-          setTimeout(function () {
-            // Account for pre-existing focus handling that may have already moved
-            // the focus inside the dialog.
-            if (!dialog.contains(document.activeElement)) {
-              // Move focus to the first focusable element in the next event loop
-              // to allow dialog buttons to be changed first.
-
-              // Replicate the autofocus behavior of jQuery UI Dialog.
-
-              const autoFocusElement = dialog?.querySelector('[autofocus]');
-
-              if (autoFocusElement) {
-                autoFocusElement.focus();
-                return;
-              }
-
-              const focusableElements = focusable(dialog);
-              if (focusableElements.length > 0) {
-                focusableElements[0].focus();
-                return;
-              }
-
-              const dialogWrapper = dialog.closest('.ui-dialog');
-
-              const buttonPane = dialogWrapper?.querySelector(
-                '.ui-dialog-buttonpane',
-              );
-              const focusableButtons = focusable(buttonPane);
-              if (focusableButtons.length > 0) {
-                focusableButtons[0].focus();
-                return;
-              }
-
-              const closeButton = dialogWrapper?.querySelector(
-                '.ui-dialog-titlebar-close',
-              );
-              if (closeButton) {
-                closeButton.focus();
-                return;
-              }
-
-              dialog.focus();
-            }
-          }, 0);
-        }
-      }
-
-      const originalClose = settings.dialog.close;
-      // Overwrite the close method to remove the dialog on closing.
-      settings.dialog.close = function (event, ...args) {
-        originalClose.apply(settings.dialog, [event, ...args]);
-        // Check if the opener element is inside an AJAX container.
-        const $element = $(event.target);
-        const ajaxContainer = $element.data('uiDialog')
-          ? $element
-              .data('uiDialog')
-              .opener.closest('[data-drupal-ajax-container]')
-          : [];
-
-        // If the opener element was in an ajax container, and focus is on the
-        // body element, we can assume focus was lost. To recover, focus is
-        // moved to the first focusable element in the container.
-        if (
-          ajaxContainer.length &&
-          (document.activeElement === document.body ||
-            $(document.activeElement).not(':visible'))
-        ) {
-          const focusableChildren = focusable(ajaxContainer[0]);
-          if (focusableChildren.length > 0) {
-            setTimeout(() => {
-              focusableChildren[0].focus();
-            }, 0);
-          }
-        }
-        $(event.target).remove();
-      };
-    },
-
-    /**
-     * Scan a dialog for any primary buttons and move them to the button area.
-     *
-     * @param {jQuery} $dialog
-     *   A jQuery object containing the element that is the dialog target.
-     *
-     * @return {Array}
-     *   An array of buttons that need to be added to the button area.
-     */
-    prepareDialogButtons($dialog) {
-      const buttons = [];
-      const buttonSelectors =
-        '.form-actions input[type=submit], .form-actions a.button, .form-actions a.action-link';
-      const buttonElements = $dialog[0].querySelectorAll(buttonSelectors);
-
-      buttonElements.forEach((button) => {
+  function syncButtons(content, dialog) {
+    const originals = content.querySelectorAll(
+      '.form-actions input[type=submit], .form-actions a.button, .form-actions a.action-link',
+    );
+    dialog.update({
+      buttons: Array.from(originals, (button) => {
         button.style.display = 'none';
-        buttons.push({
-          text: button.innerHTML || button.getAttribute('value'),
-          class: button.getAttribute('class'),
+        return {
+          text: button.value || button.textContent,
+          class: button.className,
           'data-once': button.dataset.once,
-          click(e) {
-            if (button.tagName === 'A') {
-              button.click();
-            } else {
-              ['mousedown', 'mouseup', 'click'].forEach((event) =>
-                button.dispatchEvent(new MouseEvent(event)),
+          'data-dialog-button-for': button.id,
+          disabled: button.disabled,
+          click() {
+            if (button instanceof HTMLInputElement) {
+              // Drupal Ajax submit controls can listen for mousedown.
+              ['mousedown', 'mouseup'].forEach((type) =>
+                button.dispatchEvent(new MouseEvent(type)),
               );
             }
-            e.preventDefault();
+            button.click();
           },
-        });
-      });
-      return buttons;
+        };
+      }),
+    });
+  }
+
+  Drupal.behaviors.dialog = {
+    attach(context) {
+      const content = context.closest?.('.drupal-dialog-content');
+      const dialog = content && Drupal.dialog.get(content);
+      if (!dialog?.open) {
+        return;
+      }
+      if (
+        dialog.settings.drupalAutoButtons &&
+        !dialog.settings.explicitButtons
+      ) {
+        syncButtons(content, dialog);
+      }
+      if (!dialog.element.contains(document.activeElement)) {
+        dialog.focusInitial();
+      }
     },
   };
 
-  /**
-   * Command to open a dialog.
-   *
-   * @param {Drupal.Ajax} ajax
-   *   The Drupal Ajax object.
-   * @param {object} response
-   *   Object holding the server response.
-   * @param {number} [status]
-   *   The HTTP status code.
-   *
-   * @return {boolean|undefined}
-   *   Returns false if there was no selector property in the response object.
-   */
   Drupal.AjaxCommands.prototype.openDialog = function (ajax, response, status) {
     if (!response.selector) {
       return false;
     }
-    let dialog = document.querySelector(response.selector);
-    if (!dialog) {
-      // Create the element if needed.
-      dialog = document.createElement('div');
-      dialog.id = response.selector.replace(/^#/, '');
-      dialog.classList.add('ui-front');
-      document.body.appendChild(dialog);
-    }
-    // Set up the wrapper, if there isn't one.
-    if (!ajax.wrapper) {
-      ajax.wrapper = dialog.id;
-    }
-
-    // Use the ajax.js insert command to populate the dialog contents.
-    response.command = 'insert';
-    response.method = 'html';
-    ajax.commands.insert(ajax, response, status);
-
-    // Move the buttons to the jQuery UI dialog buttons area.
-    response.dialogOptions = response.dialogOptions || {};
-    if (typeof response.dialogOptions.drupalAutoButtons === 'undefined') {
-      response.dialogOptions.drupalAutoButtons = true;
-    } else if (response.dialogOptions.drupalAutoButtons === 'false') {
-      response.dialogOptions.drupalAutoButtons = false;
-    } else {
-      response.dialogOptions.drupalAutoButtons =
-        !!response.dialogOptions.drupalAutoButtons;
-    }
     if (
-      !response.dialogOptions.buttons &&
-      response.dialogOptions.drupalAutoButtons
+      !Drupal.dialog.hasOpenOrigin(ajax.dialogOrigin) ||
+      !Drupal.dialog.claimOpen(response.selector, ajax.dialogGeneration)
     ) {
-      response.dialogOptions.buttons =
-        Drupal.behaviors.dialog.prepareDialogButtons($(dialog));
+      return;
+    }
+    let content = document.querySelector(response.selector);
+    const previous = content && Drupal.dialog.get(content);
+    if (previous?.open) {
+      closeFromResponse(ajax, previous);
+      content = document.querySelector(response.selector);
+    }
+    if (!content) {
+      content = document.createElement('div');
+      content.id = response.selector.replace(/^#/, '');
     }
 
-    const dialogButtonsChange = () => {
-      const buttons = Drupal.behaviors.dialog.prepareDialogButtons($(dialog));
-      $(dialog).dialog('option', 'buttons', buttons);
+    if (!Drupal.dialog.isLatestOpen(response.selector, ajax.dialogGeneration)) {
+      return;
+    }
+    const options = {
+      ...response.dialogOptions,
+      opener: ajax.dialogOpener || ajax.element || document.activeElement,
+      removeOnClose: true,
     };
+    options.explicitButtons = Boolean(options.buttons);
+    options.drupalAutoButtons =
+      options.drupalAutoButtons !== false &&
+      options.drupalAutoButtons !== 'false';
+    const dialog = Drupal.dialog(content, options);
+    ajax.wrapper = ajax.wrapper || content.id;
+    const isCurrent = () =>
+      acceptsCommand(ajax, response.selector) && content.isConnected;
+    ajax.commands.insert(
+      ajax,
+      { ...response, command: 'insert', method: 'html' },
+      status,
+      isCurrent,
+    );
+    if (!isCurrent()) {
+      return;
+    }
 
-    // Bind dialogButtonsChange.
-    dialog.addEventListener('dialogButtonsChange', dialogButtonsChange);
-    dialog.addEventListener('dialog:beforeclose', (event) => {
-      dialog.removeEventListener('dialogButtonsChange', dialogButtonsChange);
-    });
-
-    // Open the dialog itself.
-    const createdDialog = Drupal.dialog(dialog, response.dialogOptions);
-    if (response.dialogOptions.modal) {
-      createdDialog.showModal();
+    if (options.drupalAutoButtons && !options.explicitButtons) {
+      syncButtons(content, dialog);
+      const events = new AbortController();
+      const { signal } = events;
+      content.addEventListener(
+        'dialogButtonsChange',
+        () => syncButtons(content, dialog),
+        { signal },
+      );
+      content.addEventListener('dialog:beforeclose', () => events.abort(), {
+        signal,
+      });
+    }
+    if (options.modal) {
+      dialog.showModal(ajax.dialogGeneration);
     } else {
-      createdDialog.show();
+      dialog.show(ajax.dialogGeneration);
     }
-
-    // Add the standard Drupal class for buttons for style consistency.
-    dialog.parentElement
-      ?.querySelector('.ui-dialog-buttonset')
-      ?.classList.add('form-actions');
   };
 
-  /**
-   * Command to close a dialog.
-   *
-   * If no selector is given, it defaults to trying to close the modal.
-   *
-   * @param {Drupal.Ajax} [ajax]
-   *   The ajax object.
-   * @param {object} response
-   *   Object holding the server response.
-   * @param {string} response.selector
-   *   The selector of the dialog.
-   * @param {boolean} response.persist
-   *   Whether to persist the dialog element or not.
-   * @param {number} [status]
-   *   The HTTP status code.
-   */
-  Drupal.AjaxCommands.prototype.closeDialog = function (
-    ajax,
-    response,
-    status,
-  ) {
-    const dialog = document.querySelector(response.selector);
+  Drupal.AjaxCommands.prototype.closeDialog = function (ajax, response) {
+    if (!acceptsCommand(ajax, response.selector)) {
+      return;
+    }
+    const content = document.querySelector(response.selector);
+    const dialog = content && Drupal.dialog.get(content);
     if (dialog) {
-      Drupal.dialog(dialog).close();
-      if (!response.persist) {
-        dialog.remove();
-      }
+      dialog.settings.removeOnClose = !response.persist;
+      closeFromResponse(ajax, dialog);
     }
   };
 
-  /**
-   * Command to set a dialog property.
-   *
-   * JQuery UI specific way of setting dialog options.
-   *
-   * @param {Drupal.Ajax} [ajax]
-   *   The Drupal Ajax object.
-   * @param {object} response
-   *   Object holding the server response.
-   * @param {string} response.selector
-   *   Selector for the dialog element.
-   * @param {string} response.optionsName
-   *   Name of a key to set.
-   * @param {string} response.optionValue
-   *   Value to set.
-   * @param {number} [status]
-   *   The HTTP status code.
-   */
-  Drupal.AjaxCommands.prototype.setDialogOption = function (
-    ajax,
-    response,
-    status,
-  ) {
-    const dialog = document.querySelector(response.selector);
-    if (dialog) {
-      $(dialog).dialog('option', response.optionName, response.optionValue);
+  Drupal.AjaxCommands.prototype.setDialogOption = function (ajax, response) {
+    if (!acceptsCommand(ajax, response.selector)) {
+      return;
+    }
+    const content = document.querySelector(response.selector);
+    if (content) {
+      Drupal.dialog.get(content)?.update({
+        [response.optionName]: response.optionValue,
+      });
     }
   };
 
-  /**
-   * Binds a listener on dialog creation to handle the cancel link.
-   *
-   * @param {DrupalDialogEvent} e
-   *   The event triggered.
-   * @param {Drupal.dialog~dialogDefinition} dialog
-   *   The dialog instance.
-   * @param {object} [settings]
-   *   Dialog settings.
-   */
-  window.addEventListener('dialog:aftercreate', (event) => {
-    const dialog = event.dialog;
-    const cancelButton = event.target.querySelector('.dialog-cancel');
-    const cancelClick = (e) => {
-      dialog.close('cancel');
-      e.preventDefault();
-      e.stopPropagation();
-    };
-    cancelButton?.removeEventListener('click', cancelClick);
-    cancelButton?.addEventListener('click', cancelClick);
-  });
-
-  /**
-   * Ajax command to open URL in a modal dialog.
-   *
-   * @param {Drupal.Ajax} [ajax]
-   *   An Ajax object.
-   * @param {object} response
-   *   The Ajax response.
-   */
   Drupal.AjaxCommands.prototype.openModalDialogWithUrl = function (
     ajax,
     response,
   ) {
-    const dialogOptions = response.dialogOptions || {};
-    const elementSettings = {
+    if (!acceptsCommand(ajax, '#drupal-modal')) {
+      return;
+    }
+    Drupal.ajax({
       progress: { type: 'throbber' },
       dialogType: 'modal',
-      dialog: dialogOptions,
+      dialog: response.dialogOptions || {},
       url: response.url,
       httpMethod: 'GET',
-    };
-    Drupal.ajax(elementSettings).execute();
+    }).execute();
   };
-})(jQuery, Drupal, window.tabbable);
+})(Drupal);

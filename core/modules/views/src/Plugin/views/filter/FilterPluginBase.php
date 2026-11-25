@@ -696,7 +696,7 @@ abstract class FilterPluginBase extends HandlerBase implements CacheableDependen
           '#default_value' => !empty($this->options['expose']['operator_limit_selection']),
           '#states' => [
             'visible' => [
-              ':input[name="options[expose][use_operator]"]' => ['checked' => TRUE],
+              '[name="options[expose][use_operator]"]' => ['checked' => TRUE],
             ],
           ],
         ];
@@ -709,8 +709,8 @@ abstract class FilterPluginBase extends HandlerBase implements CacheableDependen
           '#description' => $this->t('Selecting none will make all of them available.'),
           '#states' => [
             'visible' => [
-              ':input[name="options[expose][operator_limit_selection]"]' => ['checked' => TRUE],
-              ':input[name="options[expose][use_operator]"]' => ['checked' => TRUE],
+              '[name="options[expose][operator_limit_selection]"]' => ['checked' => TRUE],
+              '[name="options[expose][use_operator]"]' => ['checked' => TRUE],
             ],
           ],
         ];
@@ -724,7 +724,7 @@ abstract class FilterPluginBase extends HandlerBase implements CacheableDependen
         '#description' => $this->t('This will appear in the URL after the ? to identify this operator.'),
         '#states' => [
           'visible' => [
-            ':input[name="options[expose][use_operator]"]' => ['checked' => TRUE],
+            '[name="options[expose][use_operator]"]' => ['checked' => TRUE],
           ],
         ],
       ];
@@ -760,7 +760,7 @@ abstract class FilterPluginBase extends HandlerBase implements CacheableDependen
       '#options' => $role_options,
       '#states' => [
         'invisible' => [
-          ':input[name="options[expose][remember]"]' => ['checked' => FALSE],
+          '[name="options[expose][remember]"]' => ['checked' => FALSE],
         ],
       ],
     ];
@@ -1248,7 +1248,8 @@ abstract class FilterPluginBase extends HandlerBase implements CacheableDependen
       // is needed because forms are inside a new form and their IDs changes.
       // Dependencies are used when operator changes from to 'Between',
       // 'Not Between', etc, and two or more widgets are displayed.
-      FormHelper::rewriteStatesSelector($row['value'], ':input[name="options[operator]"]', ':input[name="options[group_info][group_items][' . $item_id . '][operator]"]');
+      $operator_selector = '[name="options[group_info][group_items][' . $item_id . '][operator]"]';
+      FormHelper::rewriteStatesSelector($row['value'], '[name="options[operator]"]', $operator_selector);
 
       // Set default values.
       $children = Element::children($row['value']);
@@ -1256,7 +1257,7 @@ abstract class FilterPluginBase extends HandlerBase implements CacheableDependen
         foreach ($children as $child) {
           if (!empty($row['value'][$child]['#states']['visible'])) {
             foreach ($row['value'][$child]['#states']['visible'] as $state) {
-              if (isset($state[':input[name="options[group_info][group_items][' . $item_id . '][operator]"]'])) {
+              if (isset($state[$operator_selector])) {
                 $row['value'][$child]['#title'] = '';
 
                 // Exit this loop and process the next child element.

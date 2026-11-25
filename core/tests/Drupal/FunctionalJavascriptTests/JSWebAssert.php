@@ -23,6 +23,36 @@ use WebDriver\Exception;
 class JSWebAssert extends WebAssert {
 
   /**
+   * Returns a browser wait condition for requests and their commands.
+   *
+   * @param bool $expect_request
+   *   Whether to require a completed request and wait for animations.
+   */
+  public static function ajaxIdleCondition(bool $expect_request = FALSE): string {
+    $expect_request = $expect_request ? 'true' : 'false';
+    return <<<JS
+      (() => {
+        const activeRequests = window.drupalActiveXhrCount;
+        // Some pages lack the monitor, and tests may disable it explicitly.
+        if (activeRequests === undefined) {
+          return !$expect_request;
+        }
+        const pendingCommands = window.Drupal?.ajax?.instances?.some(
+          (instance) => instance?.ajaxing === true,
+        );
+        if (pendingCommands || activeRequests !== 0) {
+          return false;
+        }
+        if (!$expect_request) {
+          return true;
+        }
+        return window.drupalCumulativeXhrCount >= 1 &&
+          (typeof window.drupalTestHasActiveAnimations !== 'function' || !window.drupalTestHasActiveAnimations());
+      })()
+      JS;
+  }
+
+  /**
    * Waits for AJAX request to be completed.
    *
    * @param int $timeout
@@ -55,25 +85,7 @@ class JSWebAssert extends WebAssert {
   public function assertExpectedAjaxRequest(?int $count = NULL, int $timeout = 10000, $message = 'Unable to complete AJAX request.'): void {
     // Wait for a very short time to allow page state to update after clicking.
     usleep(5000);
-    $condition = <<<JS
-      (function() {
-        function isAjaxing(instance) {
-          return instance && instance.ajaxing === true;
-        }
-        return (
-          // Assert at least one AJAX request was started and completed.
-          // For example, the machine name UI component does not use the Drupal
-          // AJAX system, which means the other two checks below are inadequate.
-          // @see Drupal.behaviors.machineName
-          window.drupalActiveXhrCount === 0 && window.drupalCumulativeXhrCount >= 1 &&
-          // Assert no AJAX request is running (via jQuery or Drupal) and no
-          // animation is running.
-          (typeof jQuery === 'undefined' || (jQuery.active === 0 && jQuery(':animated').length === 0)) &&
-          (typeof Drupal === 'undefined' || typeof Drupal.ajax === 'undefined' || !Drupal.ajax.instances.some(isAjaxing))
-        );
-      }())
-JS;
-    $completed = $this->session->wait($timeout, $condition);
+    $completed = $this->session->wait($timeout, self::ajaxIdleCondition(TRUE));
 
     // Now that there definitely is no more AJAX request in progress, count the
     // number of AJAX responses.
@@ -109,7 +121,7 @@ JS);
     // failing to provide an accurate count of requests.
     // @see core/modules/system/tests/modules/js_testing_ajax_request_test/js/js_testing_ajax_request_test.js
     if (!is_null($count) && $drupal_ajax_request_count !== $browser_xhr_request_count) {
-      throw new \RuntimeException(sprintf('%d XHR requests through jQuery, but %d observed in the browser — this requires js_testing_ajax_request_test.js to be updated.', $drupal_ajax_request_count, $browser_xhr_request_count));
+      throw new \RuntimeException(sprintf('%d tracked AJAX requests, but %d observed in the browser — this requires js_testing_ajax_request_test.js to be updated.', $drupal_ajax_request_count, $browser_xhr_request_count));
     }
 
     // Detect incomplete AJAX request.
@@ -291,13 +303,13 @@ JS);
   }
 
   /**
-   * Waits for the jQuery autocomplete delay duration.
+   * Waits for an autocomplete suggestion to become visible.
    *
-   * @see https://api.jqueryui.com/autocomplete/#option-delay
+   * @see core/misc/autocomplete.js
    */
   public function waitOnAutocomplete(): ?NodeElement {
     // Wait for the autocomplete to be visible.
-    return $this->waitForElementVisible('css', '.ui-autocomplete li');
+    return $this->waitForElementVisible('css', '.autocomplete-list [role=option]');
   }
 
   /**

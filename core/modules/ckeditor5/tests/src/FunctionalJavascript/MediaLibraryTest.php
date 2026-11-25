@@ -7,6 +7,7 @@ namespace Drupal\Tests\ckeditor5\FunctionalJavascript;
 use Drupal\ckeditor5\Plugin\CKEditor5Plugin\MediaLibrary;
 use Drupal\ckeditor5\Plugin\Editor\CKEditor5;
 use Drupal\editor\Entity\Editor;
+use Drupal\field\Entity\FieldStorageConfig;
 use Drupal\file\Entity\File;
 use Drupal\filter\Entity\FilterFormat;
 use Drupal\FunctionalJavascriptTests\WebDriverTestBase;
@@ -165,11 +166,12 @@ class MediaLibraryTest extends WebDriverTestBase {
     $media_preview_selector = '.ck-content .ck-widget.drupal-media .media';
     $this->drupalGet('/node/add/blog');
     $this->waitForEditor();
+    $this->getEditorButton('Insert Media')->focus();
     $this->pressEditorButton('Insert Media');
     $assert_session = $this->assertSession();
     $page = $this->getSession()->getPage();
     $this->assertNotEmpty($assert_session->waitForElementVisible('css', '#drupal-modal #media-library-content'));
-    $this->assertSession()->elementAttributeContains('css', '.ui-dialog', 'class', 'media-library-widget-modal');
+    $this->assertSession()->elementAttributeContains('css', '.drupal-dialog', 'class', 'media-library-widget-modal');
 
     // Ensure that the tab order is correct.
     $tabs = $page->findAll('css', '.media-library-menu__link');
@@ -182,8 +184,9 @@ class MediaLibraryTest extends WebDriverTestBase {
     }
 
     $assert_session->elementExists('css', '.js-media-library-item')->click();
-    $assert_session->elementExists('css', '.ui-dialog-buttonpane')->pressButton('Insert selected');
+    $assert_session->elementExists('css', '.drupal-dialog-buttonpane')->pressButton('Insert selected');
     $this->assertNotEmpty($assert_session->waitForElementVisible('css', $media_preview_selector));
+    $this->assertJsCondition('document.activeElement.textContent.trim() === "Insert Media"');
     $xpath = new \DOMXPath($this->getEditorDataAsDom());
     $drupal_media = $xpath->query('//drupal-media')[0];
     $expected_attributes = [
@@ -210,7 +213,7 @@ class MediaLibraryTest extends WebDriverTestBase {
     $this->pressEditorButton('Insert Media');
     $this->assertNotEmpty($assert_session->waitForElementVisible('css', '#drupal-modal #media-library-content'));
     $assert_session->elementExists('css', '.js-media-library-item')->click();
-    $assert_session->elementExists('css', '.ui-dialog-buttonpane')->pressButton('Insert selected');
+    $assert_session->elementExists('css', '.drupal-dialog-buttonpane')->pressButton('Insert selected');
     $this->assertNotEmpty($assert_session->waitForElementVisible('css', $media_preview_selector));
     $xpath = new \DOMXPath($this->getEditorDataAsDom());
     $drupal_media = $xpath->query('//drupal-media')[0];
@@ -223,6 +226,128 @@ class MediaLibraryTest extends WebDriverTestBase {
     }
     // Ensure that by default, data-align attribute is not set.
     $this->assertFalse($drupal_media->hasAttribute('data-align'));
+  }
+
+  /**
+   * Tests that a late dialog response cannot open for a destroyed editor.
+   */
+  public function testDestroyedEditorIgnoresOpenDialogResponse(): void {
+    $this->drupalGet('/node/add/blog');
+    $this->waitForEditor();
+    $session = $this->getSession();
+    $session->executeScript(<<<'JS'
+      const request = Drupal.ajaxRequest;
+      Drupal.ajaxRequest = (options, complete) => {
+        if (!options.url.includes('media-library')) {
+          return request(options, complete);
+        }
+        Drupal.ajaxRequest = request;
+        return request(options, (response) => {
+          window.completeEditorDialogRequest = () => complete(response);
+        });
+      };
+      JS);
+    $this->pressEditorButton('Insert Media');
+    $this->assertJsCondition('typeof window.completeEditorDialogRequest === "function"');
+    $session->executeScript(<<<'JS'
+      const editor = Array.from(Drupal.CKEditor5Instances.values())[0];
+      Drupal.detachBehaviors(editor.sourceElement.closest('.js-text-format-wrapper'));
+      window.completeEditorDialogRequest();
+      JS);
+    $assert = $this->assertSession();
+    $assert->assertWaitOnAjaxRequest();
+    $assert->elementNotExists('css', 'dialog[open] #media-library-content');
+  }
+
+  /**
+   * Tests that a late Media Library save cannot reach another editor.
+   */
+  public function testClosedDialogIgnoresSave(): void {
+    FieldStorageConfig::loadByName('node', 'body')->setCardinality(2)->save();
+    $this->drupalGet('/node/add/blog');
+    $assert = $this->assertSession();
+    $first_editor = '.js-text-format-wrapper:has(textarea[name="body[0][value]"])';
+    $second_editor = '.js-text-format-wrapper:has(textarea[name="body[1][value]"])';
+    $insert_media = '//button[span[text()="Insert Media"]]';
+    $library = '#drupal-modal #media-library-content';
+    $this->waitForEditor();
+    $first = $assert->elementExists('css', $first_editor);
+    $assert->elementExists('xpath', ".$insert_media", $first)->click();
+    $this->assertNotNull($assert->waitForElementVisible('css', $library));
+
+    $this->getSession()->executeScript(<<<'JS'
+      const save = Drupal.AjaxCommands.prototype.editorDialogSave;
+      Drupal.AjaxCommands.prototype.editorDialogSave = function (...args) {
+        Drupal.AjaxCommands.prototype.editorDialogSave = save;
+        return new Promise((resolve) => {
+          window.finishEditorDialogSave = () => {
+            save.apply(this, args);
+            resolve();
+          };
+        });
+      };
+      JS);
+    $assert->elementExists('css', "$library .js-media-library-item")->click();
+    $assert->elementExists('css', 'dialog[open] .drupal-dialog-buttonpane')->pressButton('Insert selected');
+    $this->assertJsCondition('typeof window.finishEditorDialogSave === "function"');
+
+    $assert->elementExists('css', 'dialog[open] .drupal-dialog-titlebar-close')->click();
+    $this->assertJsCondition('document.activeElement.textContent.trim() === "Insert Media"');
+    $second = $assert->elementExists('css', $second_editor);
+    $assert->elementExists('xpath', ".$insert_media", $second)->click();
+    $this->assertNotNull($assert->waitForElementVisible('css', $library));
+
+    $this->getSession()->executeScript('window.finishEditorDialogSave();');
+    $assert->assertWaitOnAjaxRequest();
+    $assert->elementNotExists('css', '.ck-content .drupal-media');
+    $assert->elementExists('css', "dialog[open] $library .js-media-library-item")->click();
+    $assert->elementExists('css', 'dialog[open] .drupal-dialog-buttonpane')->pressButton('Insert selected');
+    $this->assertNotNull($assert->waitForElementVisible('css', "$second_editor .ck-content .ck-widget.drupal-media .media"));
+    $assert->elementNotExists('css', "$first_editor .ck-content .drupal-media");
+  }
+
+  /**
+   * Tests opening the Media Library modal from an editor in a tray.
+   */
+  public function testMediaLibraryFromOffCanvas(): void {
+    $this->container->get('module_installer')->install(['ckeditor5_test']);
+    $this->drupalGet('/ckeditor5_test/off_canvas');
+    $this->getSession()->executeScript(<<<'JS'
+      Drupal.ajax({
+        url: Drupal.url('node/add/blog'),
+        dialogType: 'dialog',
+        dialogRenderer: 'off_canvas',
+      }).execute();
+      JS);
+    $assert = $this->assertSession();
+    $editable = $assert->waitForElementVisible('css', '#drupal-off-canvas .ck-editor__editable');
+    $this->assertNotNull($editable);
+    $this->getSession()->executeScript(<<<'JS'
+      const resize = document.querySelector('#drupal-off-canvas-wrapper [role="separator"]');
+      resize.focus();
+      resize.dispatchEvent(new KeyboardEvent('keydown', { key: 'End', bubbles: true }));
+      JS);
+    $this->assertJsCondition('Drupal.displace.offsets.right >= document.documentElement.clientWidth - 1');
+    $editable->click();
+    $insert_media = $assert->waitForElementVisible('xpath', '//div[@id="drupal-off-canvas"]//button[span[text()="Insert Media"]]');
+    $this->assertNotNull($insert_media);
+    $insert_media->click();
+    $this->assertNotNull($assert->waitForElementVisible('css', '#drupal-modal #media-library-wrapper'));
+    $this->assertJsCondition('document.querySelector("#drupal-modal").parentElement.matches(":modal")');
+    $this->assertJsCondition(<<<'JS'
+      (() => {
+        const modal = document.querySelector('dialog:modal');
+        const rect = modal.getBoundingClientRect();
+        return getComputedStyle(modal).inset === '0px' &&
+          rect.width >= 300 &&
+          Math.abs(rect.left + rect.width / 2 - window.innerWidth / 2) < 2;
+      })()
+      JS);
+    $assert->elementExists('css', '#drupal-modal .js-media-library-item')->click();
+    $modal = $assert->elementExists('css', '#drupal-modal')->getParent();
+    $assert->elementExists('css', '.drupal-dialog-buttonpane', $modal)->pressButton('Insert selected');
+    $assert->assertNoElementAfterWait('css', '#drupal-modal');
+    $this->assertNotNull($assert->waitForElementVisible('css', '#drupal-off-canvas .ck-content .ck-widget.drupal-media .media'));
   }
 
   /**
@@ -289,7 +414,7 @@ class MediaLibraryTest extends WebDriverTestBase {
     $this->pressEditorButton('Insert Media');
     $this->assertNotEmpty($assert_session->waitForElementVisible('css', '#drupal-modal #media-library-content'));
     $assert_session->elementExists('css', '.js-media-library-item')->click();
-    $assert_session->elementExists('css', '.ui-dialog-buttonpane')->pressButton('Insert selected');
+    $assert_session->elementExists('css', '.drupal-dialog-buttonpane')->pressButton('Insert selected');
     $this->assertNotEmpty($assert_session->waitForElementVisible('css', '.ck-widget.drupal-media img'));
 
     // Test that clicking the media widget triggers a CKEditor balloon panel

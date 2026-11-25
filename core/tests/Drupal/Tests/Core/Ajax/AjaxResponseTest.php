@@ -6,15 +6,9 @@ namespace Drupal\Tests\Core\Ajax;
 
 use Drupal\Core\Ajax\AjaxResponse;
 use Drupal\Core\Ajax\CommandInterface;
-use Drupal\Core\EventSubscriber\AjaxResponseSubscriber;
-use Drupal\Core\Render\AttachmentsResponseProcessorInterface;
 use Drupal\Tests\UnitTestCase;
 use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\Attributes\Group;
-use PHPUnit\Framework\MockObject\Stub;
-use Symfony\Component\HttpFoundation\Request;
-use Symfony\Component\HttpKernel\Event\ResponseEvent;
-use Symfony\Component\HttpKernel\HttpKernelInterface;
 
 /**
  * Tests Drupal\Core\Ajax\AjaxResponse.
@@ -81,30 +75,6 @@ class AjaxResponseTest extends UnitTestCase {
   }
 
   /**
-   * Tests the support for IE specific headers in file uploads.
-   *
-   * @cover ::prepareResponse
-   */
-  public function testPrepareResponseForIeFormRequestsWithFileUpload(): void {
-    $request = Request::create('/example', 'POST');
-    $request->headers->set('Accept', 'text/html');
-    $response = new AjaxResponse([]);
-    $response->headers->set('Content-Type', 'application/json; charset=utf-8');
-
-    $ajax_response_attachments_processor = $this->createStub(AttachmentsResponseProcessorInterface::class);
-    $subscriber = new AjaxResponseSubscriber(fn(): AttachmentsResponseProcessorInterface&Stub => $ajax_response_attachments_processor);
-    $event = new ResponseEvent(
-      $this->createStub(HttpKernelInterface::class),
-      $request,
-      HttpKernelInterface::MAIN_REQUEST,
-      $response
-    );
-    $subscriber->onResponse($event);
-    $this->assertEquals('text/html; charset=utf-8', $response->headers->get('Content-Type'));
-    $this->assertEquals('<textarea>[]</textarea>', $response->getContent());
-  }
-
-  /**
    * Tests the mergeWith() method.
    *
    * @see \Drupal\Core\Ajax\AjaxResponse::mergeWith()
@@ -120,12 +90,12 @@ class AjaxResponseTest extends UnitTestCase {
       'Drupal\Core\Ajax\HtmlCommand', [
         'setting1' => 'value1',
         'setting2' => 'value2',
-      ], ['jquery', 'drupal'], 'two');
+      ], ['once', 'drupal'], 'two');
     $command_three = $this->createCommandMockWithSettingsAndLibrariesAttachments(
       'Drupal\Core\Ajax\InsertCommand', [
         'setting1' => 'overridden',
         'setting3' => 'value3',
-      ], ['jquery', 'ajax'], 'three');
+      ], ['once', 'ajax'], 'three');
 
     $response->addCommand($command_one);
     $response->addCommand($command_two);
@@ -135,7 +105,7 @@ class AjaxResponseTest extends UnitTestCase {
 
     $response->mergeWith($response2);
     self::assertEquals([
-      'library' => ['jquery', 'drupal', 'jquery', 'ajax'],
+      'library' => ['once', 'drupal', 'once', 'ajax'],
       'drupalSettings' => [
         'setting1' => 'overridden',
         'setting2' => 'value2',

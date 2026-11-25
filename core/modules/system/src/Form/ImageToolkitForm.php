@@ -89,7 +89,7 @@ class ImageToolkitForm extends ConfigFormBase {
         '#tree' => TRUE,
         '#states' => [
           'visible' => [
-            ':radio[name="image_toolkit"]' => ['value' => $id],
+            'input[type="radio"][name="image_toolkit"]' => ['value' => $id],
           ],
         ],
       ];

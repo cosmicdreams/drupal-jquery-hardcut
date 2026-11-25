@@ -4,6 +4,9 @@ declare(strict_types=1);
 
 namespace Drupal\Tests\ckeditor5\FunctionalJavascript;
 
+use Drupal\editor\Entity\Editor;
+use Drupal\FunctionalJavascriptTests\DrupalSelenium2Driver;
+use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\Attributes\Group;
 use PHPUnit\Framework\Attributes\RunTestsInSeparateProcesses;
 
@@ -155,29 +158,226 @@ JS;
   }
 
   /**
+   * Tests moving toolbar buttons with the keyboard and announcing the result.
+   */
+  public function testKeyboardToolbarMoves(): void {
+    $this->addNewTextFormat();
+    $this->drupalGet('admin/config/content/formats/manage/ckeditor5');
+    $assert = $this->assertSession();
+    $active = '[data-button-list="ckeditor5-toolbar-active-buttons"]';
+    $available = '[data-button-list="ckeditor5-toolbar-available-buttons"]';
+    $button = '[data-id="blockQuote"]';
+    $announcement = '#drupal-live-announce';
+
+    // Pressing the outward arrow at either end leaves focus and the tooltip
+    // in place.
+    $driver = $this->getSession()->getDriver();
+    $this->assertInstanceOf(DrupalSelenium2Driver::class, $driver);
+    foreach (['first' => "\u{E012}", 'last' => "\u{E014}"] as $edge => $key) {
+      $item = "$active li:$edge-child";
+      $assert->elementExists('css', $item)->focus();
+      $driver->getWebDriverSession()->postActions([
+        'actions' => [
+          [
+            'type' => 'key',
+            'id' => 'keyboard',
+            'actions' => [
+              ['type' => 'keyDown', 'value' => $key],
+              ['type' => 'keyUp', 'value' => $key],
+            ],
+          ],
+        ],
+      ]);
+      $this->assertJsCondition("document.activeElement.matches('$item')");
+      $tooltip = $assert->elementExists('css', "$item .ckeditor5-toolbar-tooltip");
+      $this->assertTrue($tooltip->isVisible());
+    }
+
+    $assert->elementExists('css', "$available $button")->focus();
+    $this->triggerKeyUp("$available $button", 'ArrowDown');
+    $assert->assertWaitOnAjaxRequest();
+    $assert->elementExists('css', "$active li:last-child$button");
+    $this->assertJsCondition('document.activeElement.dataset.id === "blockQuote"');
+    $this->assertNotNull($assert->waitForElement('css', "$announcement:contains('has been moved to the active toolbar')"));
+
+    $this->triggerKeyUp("$active $button", 'ArrowLeft');
+    $assert->assertWaitOnAjaxRequest();
+    $assert->elementExists('css', "$active li:nth-last-child(2)$button");
+    $this->assertNotNull($assert->waitForElement('css', "$announcement:contains('has moved to position')"));
+    $this->assertJsCondition('document.activeElement.dataset.id === "blockQuote"');
+
+    $this->triggerKeyUp("$active $button", 'ArrowRight');
+    $assert->assertWaitOnAjaxRequest();
+    $assert->elementExists('css', "$active li:last-child$button");
+    $count = count($this->getSession()->getPage()->findAll('css', "$active li"));
+    $this->assertNotNull($assert->waitForElement('css', "$announcement:contains('has moved to position $count of $count')"));
+    $this->assertJsCondition('document.activeElement.dataset.id === "blockQuote"');
+    $this->triggerKeyUp("$active $button", 'ArrowRight');
+    $assert->elementExists('css', "$active li:last-child$button");
+
+    $this->triggerKeyUp("$active $button", 'ArrowUp');
+    $assert->assertWaitOnAjaxRequest();
+    $assert->elementExists('css', "$available $button");
+    $this->assertNotNull($assert->waitForElement('css', "$announcement:contains('has been removed from the active toolbar')"));
+    $this->assertJsCondition('document.activeElement.dataset.id === "blockQuote"');
+
+    $divider = '[data-id="divider"]';
+    $divider_template = '[data-button-list="ckeditor5-toolbar-divider-buttons"] ' . $divider;
+    $neighbor = $assert->elementExists('css', "$active li:last-child")->getAttribute('data-id');
+    $assert->elementExists('css', $divider_template)->focus();
+    $this->triggerKeyUp($divider_template, 'ArrowDown');
+    $assert->assertWaitOnAjaxRequest();
+    $this->assertJsCondition("document.activeElement.matches('$active li:last-child$divider')");
+    $this->triggerKeyUp("$active li:last-child$divider", 'ArrowUp');
+    $assert->assertWaitOnAjaxRequest();
+    $this->assertJsCondition("document.activeElement.matches('$active li:last-child[data-id=\"$neighbor\"]')");
+  }
+
+  /**
+   * Tests focus when removing the only item from the active toolbar.
+   */
+  public function testRemoveLastToolbarDivider(): void {
+    $this->addNewTextFormat();
+    $editor = Editor::load('ckeditor5');
+    $settings = $editor->getSettings();
+    $settings['toolbar']['items'] = ['|'];
+    $editor->setSettings($settings)->save();
+    $this->drupalGet('admin/config/content/formats/manage/ckeditor5');
+    $assert = $this->assertSession();
+    $active = '[data-button-list="ckeditor5-toolbar-active-buttons"]';
+    $divider = $assert->elementExists('css', "$active li:only-child[data-id=divider]");
+    $divider->focus();
+
+    $this->getSession()->executeScript(<<<'JS'
+      const divider = document.activeElement;
+      divider.dispatchEvent(new KeyboardEvent('keyup', { key: 'ArrowUp', bubbles: true }));
+      window.focusAfterDividerRemoval = document.activeElement.dataset.drupalSelector;
+      JS);
+    $this->assertSame('ckeditor5-toolbar-region', $this->getSession()->evaluateScript('window.focusAfterDividerRemoval'));
+    $assert->assertWaitOnAjaxRequest();
+    $assert->elementNotExists('css', "$active li");
+    $this->assertJsCondition('document.activeElement.dataset.drupalSelector === "ckeditor5-toolbar-region"');
+  }
+
+  /**
+   * Tests pointer drops of a toolbar button and a cloned divider.
+   */
+  public function testPointerToolbarDrops(): void {
+    $this->addNewTextFormat();
+    $this->getSession()->resizeWindow(1400, 900);
+    $this->drupalGet('admin/config/content/formats/manage/ckeditor5');
+    $assert = $this->assertSession();
+    $active = '[data-button-list=ckeditor5-toolbar-active-buttons]';
+    $available = '[data-button-list=ckeditor5-toolbar-available-buttons]';
+    $dividers = '[data-button-list=ckeditor5-toolbar-divider-buttons]';
+    $button = '[data-id=blockQuote]';
+    $divider = '[data-id=divider]';
+
+    $this->dragToolbarItem("$available $button", "$active li:first-child");
+    $assert->assertWaitOnAjaxRequest();
+    $assert->elementExists('css', "$active $button");
+    $assert->elementNotExists('css', "$available $button");
+
+    $this->dragToolbarItem("$dividers $divider", "$active li:first-child");
+    $assert->assertWaitOnAjaxRequest();
+    $assert->elementExists('css', "$active $divider");
+    $assert->elementExists('css', "$dividers $divider");
+  }
+
+  /**
+   * Drags an item onto an active toolbar item with WebDriver pointer actions.
+   */
+  private function dragToolbarItem(string $source, string $target): void {
+    $session = $this->getSession();
+    $driver = $session->getDriver();
+    $this->assertInstanceOf(DrupalSelenium2Driver::class, $driver);
+    $selectors = json_encode([$source, $target], JSON_THROW_ON_ERROR);
+    [$from, $to] = $session->evaluateScript(<<<JS
+      {$selectors}.map((selector) => {
+        const { x, y, width, height } = document.querySelector(selector).getBoundingClientRect();
+        return { x: Math.round(x + width / 2), y: Math.round(y + height / 2) };
+      })
+      JS);
+    $driver->getWebDriverSession()->postActions([
+      'actions' => [
+        [
+          'type' => 'pointer',
+          'id' => 'toolbar',
+          'parameters' => ['pointerType' => 'mouse'],
+          'actions' => [
+            ['type' => 'pointerMove'] + $from,
+            ['type' => 'pointerDown', 'button' => 0],
+            ['type' => 'pointerMove', 'duration' => 100, 'x' => $from['x'] + 6, 'y' => $from['y']],
+            ['type' => 'pointerMove', 'duration' => 200] + $to,
+            ['type' => 'pause', 'duration' => 300],
+            ['type' => 'pointerUp', 'button' => 0],
+          ],
+        ],
+      ],
+    ]);
+  }
+
+  /**
    * Test that filter settings are only visible when the filter is enabled.
    */
-  public function testFilterCheckboxesToggleSettings(): void {
+  #[DataProvider('filterThemes')]
+  public function testFilterCheckboxesToggleSettings(string $theme): void {
+    $this->container->get('theme_installer')->install([$theme]);
+    $this->config('system.theme')->set('default', $theme)->set('admin', $theme)->save();
     $page = $this->getSession()->getPage();
     $assert_session = $this->assertSession();
 
     $this->createNewTextFormat($page, $assert_session);
 
-    $media_tab = $page->find('css', '[href^="#edit-filters-media-embed-settings"]');
-    $this->assertFalse($media_tab->isVisible(), 'Media filter settings should not be present because media filter is not enabled');
+    $this->assertFilterCheckboxTogglesSettings('[href^="#edit-filters-media-embed-settings"]');
 
-    $this->assertTrue($page->hasUncheckedField('filters[media_embed][status]'));
+    $this->getSession()->resizeWindow(600, 900);
+    $this->createNewTextFormat($page, $assert_session);
+    $assert_session->elementNotExists('css', '.vertical-tabs__menu');
+    $panel_selector = 'details[data-drupal-selector="edit-filters-media-embed-settings"]';
+    $this->assertFilterCheckboxTogglesSettings($panel_selector);
+
+    // The settings panel remains usable when rendered as a details element.
     $page->checkField('filters[media_embed][status]');
     $assert_session->assertWaitOnAjaxRequest();
+    $summary = $assert_session->elementExists('css', "$panel_selector > summary");
+    $assert_session->elementExists('css', "{$panel_selector}[open]");
+    $summary->click();
+    $assert_session->elementNotExists('css', "{$panel_selector}[open]");
+    $summary->click();
+    $assert_session->elementExists('css', "{$panel_selector}[open]");
+  }
 
-    $media_tab = $assert_session->waitForElementVisible('css', '[href^="#edit-filters-media-embed-settings"]');
-    $this->assertTrue($media_tab->isVisible(), 'Media settings should appear when media filter enabled');
+  /**
+   * Checks that the filter checkbox toggles its processing row and settings.
+   */
+  private function assertFilterCheckboxTogglesSettings(string $settings_selector): void {
+    $page = $this->getSession()->getPage();
+    $assert = $this->assertSession();
+    $row_selector = '#filter-order tr:has([data-drupal-selector="edit-filters-media-embed-weight"])';
+    $this->assertFalse($assert->elementExists('css', $row_selector)->isVisible());
+    $this->assertFalse($assert->elementExists('css', $settings_selector)->isVisible());
+
+    $page->checkField('filters[media_embed][status]');
+    $assert->assertWaitOnAjaxRequest();
+    $this->assertNotNull($assert->waitForElementVisible('css', $row_selector));
+    $this->assertNotNull($assert->waitForElementVisible('css', $settings_selector));
 
     $page->uncheckField('filters[media_embed][status]');
-    $assert_session->assertWaitOnAjaxRequest();
+    $assert->assertWaitOnAjaxRequest();
+    $this->assertFalse($assert->elementExists('css', $row_selector)->isVisible());
+    $this->assertFalse($assert->elementExists('css', $settings_selector)->isVisible());
+  }
 
-    $media_tab = $page->find('css', '[href^="#edit-filters-media-embed-settings"]');
-    $this->assertFalse($media_tab->isVisible(), 'Media settings should be removed when media filter disabled');
+  /**
+   * Themes with different styling for filter settings.
+   */
+  public static function filterThemes(): array {
+    return [
+      'Stark' => ['stark'],
+      'Default Admin' => ['default_admin'],
+      'Starterkit' => ['starterkit_theme'],
+    ];
   }
 
   /**

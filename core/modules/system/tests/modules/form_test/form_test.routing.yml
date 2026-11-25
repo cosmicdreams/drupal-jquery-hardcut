@@ -604,3 +604,18 @@ form_test.button_attribute:
     _controller: '\Drupal\form_test\Controller\FormTestController::buttonWithFormAttribute'
   requirements:
     _access: 'TRUE'
+
+form_test.dropbutton:
+  path: '/form-test/dropbutton'
+  defaults:
+    _controller: '\Drupal\form_test\Controller\FormTestController::dropbutton'
+    _title: 'Dropbutton test'
+  requirements:
+    _access: 'TRUE'
+
+form_test.admin_behaviors:
+  path: '/form-test/admin-behaviors'
+  defaults:
+    _controller: '\Drupal\form_test\Controller\FormTestController::adminBehaviors'
+  requirements:
+    _access: 'TRUE'

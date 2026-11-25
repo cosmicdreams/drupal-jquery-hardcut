@@ -25,6 +25,12 @@ class FormTestGroupDetailsForm extends FormBase {
    * {@inheritdoc}
    */
   public function buildForm(array $form, FormStateInterface $form_state, $required = FALSE) {
+    if ($this->getRequest()->query->getBoolean('timezone')) {
+      $form['#attached']['library'][] = 'core/drupal.timezone';
+    }
+    if ($this->getRequest()->query->getBoolean('states')) {
+      $form['#attached']['library'][] = 'core/drupal.states';
+    }
     $form['details'] = [
       '#type' => 'details',
       '#title' => 'Root element',

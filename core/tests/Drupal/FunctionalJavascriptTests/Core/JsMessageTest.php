@@ -106,6 +106,30 @@ class JsMessageTest extends WebDriverTestBase {
   }
 
   /**
+   * Tests the default and explicitly selected message areas in Default Admin.
+   */
+  public function testDefaultAdminMessageAreas(): void {
+    \Drupal::service('theme_installer')->install(['default_admin']);
+    $this->config('system.theme')->set('default', 'default_admin')->save();
+    $this->drupalGet('js_message_test_link');
+    $assert = $this->assertSession();
+    $default_message = '[data-drupal-messages] .messages-list__item';
+    $other_message = '[data-drupal-messages-other] .messages-list__item';
+
+    $this->click('[id="add--status"]');
+    $assert->elementTextContains('css', "$default_message.messages--status[role=status]", 'This is a message of the type, status.');
+    $assert->elementNotExists('css', $other_message);
+
+    $this->click('[id="add-[data-drupal-messages-other]-error"]');
+    $assert->elementTextContains('css', "$other_message.messages--error[role=alert]", 'This is a message of the type, error.');
+    $assert->elementsCount('css', $default_message, 1);
+
+    $this->click('[id="remove-[data-drupal-messages-other]-error"]');
+    $assert->elementNotExists('css', $other_message);
+    $assert->elementsCount('css', $default_message, 1);
+  }
+
+  /**
    * Asserts that currently shown messages match expected messages.
    *
    * @param array $expected_messages

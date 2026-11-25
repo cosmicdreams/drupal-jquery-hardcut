@@ -64,7 +64,6 @@ global-styling:
   dependencies:
     - system/admin
     - core/font
-    - core/jquery
     - core/drupal
     # Admin has small and extra small variation for most control elements
     # such as inputs, action links, buttons, dropbuttons. For usability and
@@ -109,16 +108,9 @@ drupal.nav-tabs:
   js:
     js/nav-tabs.js: {}
   dependencies:
-    - core/jquery
     - core/drupal
     - core/once
     - core/drupal.debounce
-
-admin.jquery.ui:
-  version: VERSION
-  css:
-    component:
-      css/components/jquery.ui/theme.css: { weight: -1 }
 
 admin.drupal.dialog:
   version: VERSION
@@ -127,7 +119,6 @@ admin.drupal.dialog:
       css/components/dialog.css: {}
   dependencies:
     - default_admin/accent
-    - default_admin/admin.jquery.ui
 
 admin.tabledrag:
   version: VERSION
@@ -138,10 +129,10 @@ admin.tabledrag:
     migration/js/tabledrag.js: {}
     js/tabledrag.js: {}
   dependencies:
-    - core/jquery
     - core/drupal
     - core/drupalSettings
     - core/once
+    - core/drupal.table_interaction
     - core/drupal.touchevents-test
 
 drupal.dblog:
@@ -228,11 +219,6 @@ autocomplete:
   css:
     theme:
       css/components/autocomplete-loading.module.css: { }
-  js:
-    js/autocomplete.js: {}
-  dependencies:
-    - core/once
-    - default_admin/admin.jquery.ui
 
 details-focus:
   js:
@@ -312,7 +298,6 @@ media_library:
     js/media-library.ui.js: {}
   dependencies:
     - core/drupal
-    - core/jquery
     - core/once
     - default_admin/icon-link
 
@@ -325,7 +310,7 @@ progress:
 tabbingmanager:
   version: VERSION
   dependencies:
-    - default_admin/admin.jquery.ui
+    - default_admin/global-styling
 
 filter:
   version: VERSION
@@ -338,12 +323,12 @@ tableselect:
   js:
     js/tableselect.js: {}
   dependencies:
-    - core/jquery
     - core/drupal
     - core/drupal.announce
     - core/drupal.debounce
     - core/tabbable
     - core/once
+    - core/drupal.table_interaction
 
 # Init
 

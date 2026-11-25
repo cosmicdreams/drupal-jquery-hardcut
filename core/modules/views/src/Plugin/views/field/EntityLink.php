@@ -91,7 +91,7 @@ class EntityLink extends LinkBase {
     ];
     parent::buildOptionsForm($form, $form_state);
     // Only show the 'text' field if we don't want to output the raw URL.
-    $form['text']['#states']['visible'][':input[name="options[output_url_as_text]"]'] = ['checked' => FALSE];
+    $form['text']['#states']['visible']['[name="options[output_url_as_text]"]'] = ['checked' => FALSE];
   }
 
 }

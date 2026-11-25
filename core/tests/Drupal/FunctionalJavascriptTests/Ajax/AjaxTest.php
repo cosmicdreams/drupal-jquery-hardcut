@@ -9,6 +9,7 @@ use Drupal\FunctionalJavascriptTests\WebDriverTestBase;
 use PHPUnit\Framework\Attributes\Group;
 use PHPUnit\Framework\Attributes\RunTestsInSeparateProcesses;
 
+// cspell:ignore nocontent
 /**
  * Tests AJAX responses.
  */
@@ -124,7 +125,7 @@ class AjaxTest extends WebDriverTestBase {
       'top-level-only-middle-whitespace-div' => '<div>element #1</div> <div>element #2</div>',
     ];
 
-    // This is temporary behavior for BC reason.
+    // An animated response with multiple roots gets a wrapper.
     $render_multiple_root_wrapper = [];
     foreach ($render_multiple_root_unwrap as $key => $render) {
       $render_multiple_root_wrapper["$key--effect"] = '<div>' . $render . '</div>';
@@ -141,27 +142,16 @@ class AjaxTest extends WebDriverTestBase {
       $this->assertInsert($render_type, $expected);
     }
 
-    // Checking custom ajaxWrapperMultipleRootElements wrapping.
-    $custom_wrapper_multiple_root = <<<JS
-    (function($, Drupal){
-      Drupal.theme.ajaxWrapperMultipleRootElements = function (elements) {
-        return $('<div class="my-favorite-div"></div>').append(elements);
-      };
-    }(jQuery, Drupal));
-JS;
-    $expected = '<div class="my-favorite-div"><span>element #1</span> <span>element #2</span></div>';
-    $this->assertInsert('top-level-only-middle-whitespace-span--effect', $expected, $custom_wrapper_multiple_root);
-
-    // Checking custom ajaxWrapperNewContent wrapping.
-    $custom_wrapper_new_content = <<<JS
-    (function($, Drupal){
+    // Check that the theme hook can supply a wrapper for an empty response.
+    $custom_wrapper = <<<'JS'
       Drupal.theme.ajaxWrapperNewContent = function (elements) {
-        return $('<div class="div-wrapper-forever"></div>').append(elements);
+        const wrapper = document.createElement('div');
+        wrapper.className = 'div-wrapper-forever';
+        wrapper.append(...elements);
+        return [wrapper];
       };
-    }(jQuery, Drupal));
-JS;
-    $expected = '<div class="div-wrapper-forever"></div>';
-    $this->assertInsert('empty', $expected, $custom_wrapper_new_content);
+      JS;
+    $this->assertInsert('empty', '<div class="div-wrapper-forever"></div>', $custom_wrapper);
 
     // Checking inserting table elements.
     $expected = '<tr><td>table-row</td></tr>';
@@ -171,48 +161,783 @@ JS;
   }
 
   /**
-   * Tests that jQuery's global Ajax events are triggered at the correct time.
+   * Tests Ajax request entry points and their callback arguments.
    */
-  public function testGlobalEvents(): void {
+  public function testNativeRequestEntryLanes(): void {
+    $this->drupalLogin($this->drupalCreateUser(['access content']));
+    $this->drupalGet('ajax_forms_test_ajax_commands_form');
     $session = $this->getSession();
-    $assert = $this->assertSession();
-    $expected_event_order = implode('', ['ajaxSuccess', 'ajaxComplete', 'ajaxStop']);
+    $session->executeScript(<<<'JS'
+      window.runNativeLane = (lane) => {
+        document.getElementById('request-lane')?.remove();
+        const fixture = document.createElement('div');
+        fixture.id = 'request-lane';
+        fixture.innerHTML = `
+          <div id="request-lane-echo"></div>
+          <button type="button">Outside the form</button>
+          <form>
+            <input name="tags[]" value="a b">
+            <input name="tags[]" value="+&amp;">
+            <input name="disabled" value="omit" disabled>
+            <button name="op" value="clicked">Inside the form</button>
+          </form>
+        `;
+        document.body.append(fixture);
+        const form = fixture.querySelector('form');
+        if (lane === 'multipart') {
+          form.enctype = 'multipart/form-data';
+          const input = form.appendChild(document.createElement('input'));
+          input.type = 'file';
+          input.name = 'upload';
+          const transfer = new DataTransfer();
+          transfer.items.add(new File(['test\0upload'], 'payload.txt', { type: 'text/plain' }));
+          input.files = transfer.files;
+        }
+        const button = fixture.querySelector(lane === 'outside' ? 'button' : 'form button');
+        const ajax = Drupal.ajax({
+          element: button,
+          url: Drupal.url('ajax-test/echo-request'),
+          httpMethod: lane === 'outside' ? 'GET' : 'POST',
+          event: 'request-lane',
+          setClick: true,
+          progress: false,
+          submit: { extra: ['a b', '+&'] },
+        });
+        const describe = (element) => {
+          if (element === form) {
+            return 'form';
+          }
+          return element === button ? 'button' : typeof element;
+        };
+        const trace = window.requestLaneTrace = [];
+        const { beforeSerialize, beforeSend, beforeSubmit } = ajax;
+        ajax.beforeSerialize = function (element, options) {
+          trace.push(['serialize', describe(element), options === ajax.options]);
+          return beforeSerialize.call(this, element, options);
+        };
+        ajax.beforeSubmit = function (values, element, options) {
+          trace.push(['submit', describe(element)]);
+          return beforeSubmit.call(this, values, element, options);
+        };
+        ajax.beforeSend = function (xhr, options) {
+          trace.push(['send', xhr instanceof XMLHttpRequest]);
+          return beforeSend.call(this, xhr, options);
+        };
+        ajax.options.context = button;
+        const { success, complete } = ajax.options;
+        ajax.options.success = function (data, status, xhr, element) {
+          trace.push(['success', this === button, xhr instanceof XMLHttpRequest, describe(element)]);
+          return success.apply(this, arguments);
+        };
+        ajax.options.complete = function (xhr, status, element) {
+          trace.push(['complete', this === button, status, describe(element)]);
+          return complete.apply(this, arguments);
+        };
+          const result = lane === 'execute'
+          ? ajax.execute()
+          : button.dispatchEvent(new Event('request-lane', { bubbles: true, cancelable: true }));
+        window.requestLaneResult = lane === 'execute'
+          ? [typeof result.network.then, typeof result.commands.then, typeof result.abort]
+          : result;
+        if (lane === 'execute') {
+          result.commands.then(() => {
+            window.requestLaneCommands = ajax.ajaxing;
+          });
+        }
+      };
+      JS);
 
-    $this->drupalGet('ajax-test/global-events');
+    $direct_trace = [
+      ['serialize', 'button', TRUE],
+      ['send', TRUE],
+      ['success', TRUE, TRUE, 'undefined'],
+      ['complete', TRUE, 'success', 'undefined'],
+    ];
+    $form_trace = [
+      ['serialize', 'form', FALSE],
+      ['submit', 'form'],
+      ['send', TRUE],
+      ['success', TRUE, TRUE, 'undefined'],
+      ['complete', TRUE, 'success', 'undefined'],
+    ];
+    foreach (['execute', 'outside', 'form', 'multipart'] as $lane) {
+      $session->executeScript("window.runNativeLane('$lane')");
+      $expected_result = $lane === 'execute' ? ['function', 'function', 'function'] : FALSE;
+      $this->assertSame($expected_result, $session->evaluateScript('window.requestLaneResult'));
+      $this->assertTrue($session->wait(10000, "document.getElementById('request-lane-echo').textContent.length > 0"));
+      $request = json_decode($session->evaluateScript("document.getElementById('request-lane-echo').textContent"), TRUE, flags: JSON_THROW_ON_ERROR);
+      $this->assertSame('XMLHttpRequest', $request['requestedWith']);
+      $this->assertSame($lane === 'outside' ? 'GET' : 'POST', $request['method']);
+      $expected_trace = in_array($lane, ['form', 'multipart'], TRUE) ? $form_trace : $direct_trace;
+      $this->assertTrue($session->wait(10000, 'window.requestLaneTrace.length === ' . count($expected_trace)));
+      $this->assertSame($expected_trace, $session->evaluateScript('window.requestLaneTrace'));
+      if ($lane === 'execute') {
+        $this->assertTrue($session->wait(10000, 'window.requestLaneCommands === false'));
+      }
+      if ($lane === 'outside') {
+        $this->assertSame('', $request['body']);
+        $this->assertStringContainsString('extra%5B%5D=a%20b&extra%5B%5D=%2B%26', $request['query']);
+        $this->assertStringContainsString('_drupal_ajax=1', $request['query']);
+      }
+      elseif ($lane === 'multipart') {
+        $this->assertStringStartsWith('multipart/form-data; boundary=', $request['contentType']);
+        $this->assertSame(['a b', '+&'], $request['fields']['tags']);
+        $this->assertSame(['a b', '+&'], $request['fields']['extra']);
+        $this->assertSame('clicked', $request['fields']['op']);
+        $this->assertArrayNotHasKey('disabled', $request['fields']);
+        $this->assertSame(['payload.txt', 11, hash('sha256', "test\0upload")], $request['upload']);
+      }
+      else {
+        $this->assertStringContainsString('extra%5B%5D=a+b&extra%5B%5D=%2B%26', $request['body']);
+        $this->assertStringContainsString('_drupal_ajax=1', $request['body']);
+        $this->assertStringNotContainsString('disabled=', $request['body']);
+        if ($lane === 'form') {
+          $this->assertStringStartsWith('tags%5B%5D=a+b&tags%5B%5D=%2B%26&op=clicked&', $request['body']);
+        }
+      }
+    }
+  }
 
-    // Ensure that a non-Drupal Ajax request triggers the expected events, in
-    // the correct order, a single time.
-    $session->executeScript('jQuery.get(Drupal.url("core/COPYRIGHT.txt"))');
-    $assert->assertWaitOnAjaxRequest();
-    $assert->elementTextEquals('css', '#test_global_events_log', $expected_event_order);
-    $assert->elementTextEquals('css', '#test_global_events_log2', $expected_event_order);
+  /**
+   * Tests that native request failures surface as uncaught Ajax errors.
+   */
+  public function testNativeRequestError(): void {
+    // The Ajax errors are the subject of this test.
+    $this->failOnJavascriptConsoleErrors = FALSE;
+    $this->drupalLogin($this->drupalCreateUser(['access content']));
+    $this->drupalGet('ajax_forms_test_ajax_commands_form');
+    $session = $this->getSession();
+    $session->executeScript(<<<'JS'
+      window.nativeErrors = [];
+      window.addEventListener('error', (event) => {
+        window.nativeErrors.push(event.error?.name ?? event.message);
+      });
+      window.runNativeFailure = (url) => {
+        window.nativeFailure = null;
+        const ajax = Drupal.ajax({ url, progress: false });
+        const handle = ajax.execute();
+        handle.commands.then(
+          () => ['resolved'],
+          (error) => ['rejected', error.name, ajax.ajaxing],
+        ).then((result) => {
+          window.nativeFailure = result;
+        });
+      };
+      JS);
+    foreach (['ajax-test/native-error-does-not-exist', 'core/COPYRIGHT.txt'] as $index => $path) {
+      $session->executeScript("window.runNativeFailure(Drupal.url('$path'))");
+      $this->assertTrue($session->wait(10000, 'Boolean(window.nativeFailure)'));
+      $this->assertSame(['rejected', 'AjaxError', FALSE], $session->evaluateScript('window.nativeFailure'));
+      $this->assertSame(array_fill(0, $index + 1, 'AjaxError'), $session->evaluateScript('window.nativeErrors'));
+    }
+  }
 
-    // Ensure that an Ajax request to a Drupal Ajax response, but that was not
-    // initiated with Drupal.Ajax(), triggers the expected events, in the
-    // correct order, a single time. We expect $expected_event_order to appear
-    // twice in each log element, because Drupal Ajax response commands (such
-    // as the one to clear the log element) are only executed for requests
-    // initiated with Drupal.Ajax(), and these elements already contain the
-    // text that was added above.
-    $session->executeScript('jQuery.get(Drupal.url("ajax-test/global-events/clear-log"))');
-    $assert->assertWaitOnAjaxRequest();
-    $assert->elementTextEquals('css', '#test_global_events_log', str_repeat($expected_event_order, 2));
-    $assert->elementTextEquals('css', '#test_global_events_log2', str_repeat($expected_event_order, 2));
+  /**
+   * Tests the shared transport.
+   */
+  public function testNativeRequestTransport(): void {
+    $this->drupalGet('ajax-test/native-request');
+    $session = $this->getSession();
 
-    // Ensure that a Drupal Ajax request triggers the expected events, in the
-    // correct order, a single time.
-    // - We expect the first log element to list the events exactly once,
-    //   because the Ajax response clears it, and we expect the events to be
-    //   triggered after the commands are executed.
-    // - We expect the second log element to list the events exactly three
-    //   times, because it already contains the two from the code that was
-    //   already executed above. This additional log element that isn't cleared
-    //   by the response's command ensures that the events weren't triggered
-    //   additional times before the response commands were executed.
-    $this->click('#test_global_events_drupal_ajax_link');
-    $assert->assertWaitOnAjaxRequest();
-    $assert->elementTextEquals('css', '#test_global_events_log', $expected_event_order);
-    $assert->elementTextEquals('css', '#test_global_events_log2', str_repeat($expected_event_order, 3));
+    // The response and the load callback are available before control returns.
+    $this->assertSame([
+      200,
+      'GET',
+      'tag=a%20b',
+      'XMLHttpRequest',
+      TRUE,
+    ], $session->evaluateScript(<<<'JS'
+      (() => {
+        let loaded = false;
+        const request = Drupal.xhr({
+          url: 'echo-native-request?tag=a%20b',
+          async: false,
+          beforeSend(xhr) {
+            xhr.addEventListener('load', () => { loaded = true; });
+          },
+        });
+        const response = JSON.parse(request.responseText);
+        return [
+          request.status, response.method, response.query,
+          response.requestedWith, loaded,
+        ];
+      })()
+      JS));
+
+    $session->executeScript(<<<'JS'
+      const body = new FormData();
+      body.append('tags[]', 'a b');
+      body.append('tags[]', '+&');
+      body.append('upload', new File(['hello'], 'payload.txt'));
+      Drupal.xhr({
+        url: Drupal.url('ajax-test/echo-native-request'),
+        method: 'POST',
+        headers: { 'x-requested-with': 'explicit' },
+        body,
+        beforeSend(xhr, headers) {
+          const originalHeader = headers.get('X-Requested-With');
+          headers.set('X-Requested-With', 'changed');
+          xhr.responseType = 'json';
+          xhr.addEventListener('load', () => {
+            window.nativeRequestResult = [originalHeader, xhr.status, xhr.response];
+          });
+        },
+      });
+      JS);
+    $this->assertTrue($session->wait(10000, 'Boolean(window.nativeRequestResult)'));
+    [$header, $status, $response] = $session->evaluateScript('window.nativeRequestResult');
+    $this->assertSame('explicit', $header);
+    $this->assertSame(200, $status);
+    $this->assertSame('POST', $response['method']);
+    $this->assertSame('changed', $response['requestedWith']);
+    $this->assertStringStartsWith('multipart/form-data; boundary=', $response['contentType']);
+    $this->assertSame(['a b', '+&'], $response['fields']['tags']);
+    $this->assertSame(['payload.txt', 5, hash('sha256', 'hello')], $response['upload']);
+
+    $this->assertSame([TRUE, 0, NULL], $session->evaluateScript(<<<'JS'
+      (() => {
+        const url = Drupal.url('ajax-test/echo-native-request');
+        const send = XMLHttpRequest.prototype.send;
+        let sends = 0;
+        XMLHttpRequest.prototype.send = function (...args) {
+          sends++;
+          return send.apply(this, args);
+        };
+        try {
+          const vetoed = Drupal.xhr({ url, beforeSend: () => false });
+          const otherOrigin = new URL(url, document.baseURI);
+          otherOrigin.port = otherOrigin.port === '1234' ? '1235' : '1234';
+          let crossOriginHeader;
+          Drupal.xhr({
+            url: otherOrigin.href,
+            beforeSend(xhr, headers) {
+              crossOriginHeader = headers.get('X-Requested-With');
+              return false;
+            },
+          });
+          return [vetoed.readyState === XMLHttpRequest.OPENED, sends, crossOriginHeader];
+        }
+        finally {
+          XMLHttpRequest.prototype.send = send;
+        }
+      })()
+      JS));
+
+    $this->assertTrue($session->evaluateScript(<<<'JS'
+      (() => {
+        let aborted = false;
+        const request = Drupal.xhr({
+          url: Drupal.url('ajax-test/echo-native-request'),
+          beforeSend(xhr) {
+            xhr.addEventListener('abort', () => { aborted = true; });
+          },
+        });
+        request.abort();
+        return aborted;
+      })()
+      JS));
+  }
+
+  /**
+   * Tests that the Ajax behavior runs the command queue.
+   */
+  public function testAjaxBehaviorRunsCommands(): void {
+    $this->drupalGet('ajax-test/native-request', ['query' => ['commands' => 1]]);
+    $this->clickLink('Send native Ajax request');
+    $this->assertSession()->assertExpectedAjaxRequest(1);
+    $result = json_decode($this->assertSession()->elementExists('css', '#request-lane-echo')->getText(), TRUE, flags: JSON_THROW_ON_ERROR);
+    $this->assertSame('XMLHttpRequest', $result['requestedWith']);
+    $this->assertSame('POST', $result['method']);
+  }
+
+  /**
+   * Tests native progress polling and stopping from the update callback.
+   */
+  public function testNativeProgressBar(): void {
+    $this->drupalGet('ajax-test/native-request', ['query' => ['commands' => 1]]);
+    $this->getSession()->executeScript(<<<'JS'
+      const progress = new Drupal.ProgressBar('native-progress', (percentage, message, bar) => {
+        if (percentage === 100) {
+          bar.stopMonitoring();
+        }
+      }, 'POST');
+      document.body.append(progress.elementNode);
+      progress.startMonitoring(Drupal.url('ajax-test/echo-native-request?progress=1'), 10);
+      JS);
+    $this->assertSession()->assertExpectedAjaxRequest(1);
+    $this->assertSession()->elementTextEquals('css', '#native-progress .progress__label', 'Finished');
+    $this->assertSession()->elementTextEquals('css', '#native-progress .progress__description', 'POST XMLHttpRequest');
+    $this->assertSession()->elementTextEquals('css', '#native-progress .progress__percentage', '100%');
+  }
+
+  /**
+   * Tests the native default action of keyboard activation.
+   */
+  public function testKeyboardActivation(): void {
+    $this->drupalGet('ajax-test/native-transport');
+    $result = $this->getSession()->evaluateScript(<<<'JS'
+      (() => {
+        const checkbox = document.body.appendChild(document.createElement('input'));
+        checkbox.type = 'checkbox';
+        const trace = [];
+        const ajax = Drupal.ajax({ element: checkbox, event: 'click', keypress: true, url: location.href });
+        ajax.eventResponse = (element, event) => trace.push([element.checked, event instanceof MouseEvent]);
+        checkbox.dispatchEvent(new KeyboardEvent('keypress', { key: 'Enter', bubbles: true, cancelable: true }));
+        const custom = document.body.appendChild(document.createElement('button'));
+        const customAjax = Drupal.ajax({
+          element: custom, event: 'fileUpload', keypress: true, url: location.href,
+        });
+        customAjax.eventResponse = (element, event) => trace.push([
+          event.type, event.constructor === Event, event.bubbles, event.cancelable,
+        ]);
+        custom.dispatchEvent(new KeyboardEvent('keypress', { key: 'Enter', bubbles: true, cancelable: true }));
+        return [checkbox.checked, trace];
+      })()
+      JS);
+    $this->assertSame([TRUE, [[TRUE, TRUE], ['fileUpload', TRUE, TRUE, TRUE]]], $result);
+  }
+
+  /**
+   * Tests preserving the submitter during an Ajax submission.
+   */
+  public function testNativeSubmitter(): void {
+    $this->drupalGet('ajax-test/native-transport');
+    $session = $this->getSession();
+    $session->executeScript(<<<'JS'
+      const result = document.body.appendChild(document.createElement('div'));
+      result.id = 'request-lane-echo';
+      const form = document.body.appendChild(document.createElement('form'));
+      form.innerHTML = '<button name="op" value="second">Submit</button>';
+      const ajax = Drupal.ajax({
+        element: form, event: 'submit', url: Drupal.url('ajax-test/echo-request'),
+      });
+      ajax.form = form;
+      const original = ajax.eventResponse;
+      ajax.eventResponse = function (element, event) {
+        return original.call(this, element, event);
+      };
+      form.requestSubmit(form.firstElementChild);
+      JS);
+    $this->assertSession()->assertExpectedAjaxRequest(1);
+    $result = json_decode($this->assertSession()->elementExists('css', '#request-lane-echo')->getText(), TRUE, flags: JSON_THROW_ON_ERROR);
+    $this->assertSame('second', $result['fields']['op'] ?? NULL);
+  }
+
+  /**
+   * Tests error completion when a synchronous native send throws.
+   */
+  public function testSynchronousNativeSendFailure(): void {
+    $this->drupalGet('ajax-test/native-request', ['query' => ['commands' => 1]]);
+    $result = $this->getSession()->evaluateScript(<<<'JS'
+      (() => {
+        const trace = [];
+        window.alert = () => trace.push('alert');
+        const form = document.body.appendChild(document.createElement('form'));
+        const button = form.appendChild(document.createElement('button'));
+        Drupal.behaviors.syncFailureProbe = {
+          attach(context) { if (context === form) trace.push('attach'); },
+          detach(context) { if (context === form) trace.push('detach'); },
+        };
+        const ajax = Drupal.ajax({ element: button, url: location.href, event: 'click' });
+        const { beforeSend, error, complete } = ajax.options;
+        ajax.options.async = false;
+        ajax.options.beforeSend = function (...args) {
+          const [xhr] = args;
+          beforeSend.apply(this, args);
+          xhr.send = () => {
+            trace.push(['send', button.disabled, Boolean(form.querySelector('.ajax-progress'))]);
+            throw new Error('Synchronous send failed');
+          };
+        };
+        ajax.options.error = function (xhr, status, reason) {
+          trace.push([status, reason.message]);
+          error.call(this, xhr, status, reason);
+        };
+        ajax.options.complete = function (xhr, status) {
+          try { complete.call(this, xhr, status); }
+          catch (error) {
+            if (!(error instanceof Drupal.AjaxError)) throw error;
+          }
+          trace.push('complete');
+        };
+        button.dispatchEvent(new MouseEvent('click', { cancelable: true }));
+        return [ajax.ajaxing, button.disabled, Boolean(form.querySelector('.ajax-progress')), trace];
+      })()
+      JS);
+    $this->assertSame([
+      FALSE,
+      FALSE,
+      FALSE,
+      ['detach', ['send', TRUE, TRUE], ['error', 'Synchronous send failed'], 'attach', 'complete'],
+    ], $result);
+  }
+
+  /**
+   * Tests native request completion separately from the Ajax command queue.
+   */
+  public function testNativeCommandRequest(): void {
+    $this->drupalGet('ajax-test/native-transport');
+    $session = $this->getSession();
+    $session->executeScript(<<<'JS'
+      const url = Drupal.url('ajax-test/echo-header');
+      const ajax = Drupal.ajax({ url });
+      const gate = new Promise((resolve) => {
+        window.releaseNativeCommand = resolve;
+      });
+      const insert = ajax.commands.insert;
+      ajax.commands.insert = function (...args) {
+        return gate.then(() => insert.apply(this, args));
+      };
+
+      const request = Drupal.ajaxRequest({
+        url,
+        headers: { 'X-Test-Ajax-Send': 'native command' },
+        beforeSend() {
+          ajax.ajaxing = true;
+        },
+      }, ({ status, response, xhr }) => ajax.receiveResponse(response, status, xhr));
+      window.nativeNetwork = request.network.then(({ status, xhr }) => [
+        status, xhr.status, ajax.ajaxing,
+      ]);
+      request.commands.then(() => {
+        window.nativeCommands = [ajax.ajaxing, document.getElementById('native-transport-result').textContent];
+      });
+      JS);
+    $this->assertSame(['success', 200, TRUE], $session->evaluateScript('window.nativeNetwork'));
+    $this->assertNull($session->evaluateScript('window.nativeCommands'));
+    $session->executeScript('window.releaseNativeCommand();');
+    $this->assertTrue($session->wait(10000, 'Boolean(window.nativeCommands)'));
+    $this->assertSame([FALSE, 'native command'], $session->evaluateScript('window.nativeCommands'));
+
+    $session->executeScript(<<<'JS'
+      const url = Drupal.url('ajax-test/native-request');
+      const aborted = Drupal.ajaxRequest({ url }, ({ status }) => status);
+      aborted.abort();
+      Promise.all([
+        aborted.commands,
+        Drupal.ajaxRequest({ url, beforeSend: () => false }, ({ status }) => status).commands,
+        Drupal.ajaxRequest({ url }, ({ status }) => status).commands,
+      ]).then((statuses) => {
+        window.nativeFailureStatuses = statuses;
+      });
+      JS);
+    $this->assertTrue($session->wait(10000, 'Boolean(window.nativeFailureStatuses)'));
+    $this->assertSame(['abort', 'canceled', 'parsererror'], $session->evaluateScript('window.nativeFailureStatuses'));
+  }
+
+  /**
+   * Tests that a vetoed or aborted request leaves its element usable.
+   */
+  public function testVetoAndAbortCleanup(): void {
+    $this->drupalLogin($this->drupalCreateUser(['access content']));
+    $this->drupalGet('ajax_forms_test_ajax_commands_form');
+    $session = $this->getSession();
+    $session->executeScript(<<<'JS'
+      const fixture = document.createElement('div');
+      fixture.id = 'request-lane';
+      fixture.innerHTML = `
+        <div id="request-lane-echo"></div>
+        <button type="button">Outside the form</button>
+        <form><button name="op" value="clicked">Inside the form</button></form>
+      `;
+      document.body.append(fixture);
+      const form = fixture.querySelector('form');
+      const button = form.querySelector('button');
+      const ajax = Drupal.ajax({
+        element: button,
+        url: Drupal.url('ajax-test/echo-request'),
+        event: 'cleanup-lane',
+        setClick: true,
+      });
+      let vetoes = 1;
+      const { beforeSubmit } = ajax;
+      ajax.beforeSubmit = function (...args) {
+        if (vetoes-- > 0) {
+          return false;
+        }
+        return beforeSubmit.apply(this, args);
+      };
+      const trigger = (element) => element.dispatchEvent(new Event('cleanup-lane', { bubbles: true, cancelable: true }));
+      trigger(button);
+      window.vetoState = [ajax.ajaxing, button.disabled, form.clk ?? null, fixture.querySelectorAll('.ajax-progress').length];
+      // The vetoed attempt can be retried.
+      trigger(button);
+
+      // An abort from a global send handler restores the element.
+      const outside = fixture.querySelector('button');
+      const aborted = Drupal.ajax({
+        element: outside,
+        url: Drupal.url('ajax-test/echo-request'),
+        event: 'cleanup-lane',
+      });
+      const hasProgress = () => Boolean(outside.nextElementSibling?.classList.contains('ajax-progress'));
+      const { beforeSend } = aborted;
+      aborted.beforeSend = function (xhr, settings) {
+        beforeSend.call(this, xhr, settings);
+        window.abortProgress = [hasProgress(), outside.disabled];
+        xhr.abort();
+      };
+      trigger(outside);
+      window.abortState = [window.abortProgress, aborted.ajaxing, outside.disabled, hasProgress()];
+      JS);
+    $this->assertSame([FALSE, FALSE, NULL, 0], $session->evaluateScript('window.vetoState'));
+    $this->assertSame([[TRUE, TRUE], FALSE, FALSE, FALSE], $session->evaluateScript('window.abortState'));
+    $this->assertTrue($session->wait(10000, "document.getElementById('request-lane-echo').textContent.length > 0"));
+    $request = json_decode($session->evaluateScript("document.getElementById('request-lane-echo').textContent"), TRUE, flags: JSON_THROW_ON_ERROR);
+    $this->assertStringContainsString('op=clicked', $request['body']);
+  }
+
+  /**
+   * Tests command completion and synchronous requests.
+   */
+  public function testNativeRequestCompletion(): void {
+    $this->drupalGet('ajax-test/native-transport');
+    $session = $this->getSession();
+    $session->executeScript(<<<'JS'
+      const url = Drupal.url('ajax-test/echo-header');
+
+      // Extra success callbacks do not settle the commands early.
+      const ajax = Drupal.ajax({ url });
+      const insert = ajax.commands.insert;
+      const gate = new Promise((resolve) => {
+        window.releaseNativeCommands = resolve;
+      });
+      ajax.commands.insert = function (...args) {
+        return gate.then(() => insert.apply(this, args));
+      };
+      ajax.options.success = [ajax.options.success, () => undefined];
+      const handle = ajax.execute();
+      handle.network.then(() => {
+        window.nativeNetworkDone = true;
+      });
+      handle.commands.then(() => {
+        window.nativeArrayCommands = [ajax.ajaxing, document.getElementById('native-transport-result').textContent];
+      });
+
+      // A synchronous request runs its callbacks before it returns.
+      const sync = Drupal.ajax({ url, progress: false });
+      sync.options.async = false;
+      const { success } = sync.options;
+      let ran = false;
+      sync.options.success = function (...args) {
+        ran = true;
+        return success.apply(this, args);
+      };
+      sync.execute();
+      window.syncRan = ran;
+      JS);
+    $this->assertTrue($session->evaluateScript('window.syncRan'));
+    $this->assertTrue($session->wait(10000, 'window.nativeNetworkDone === true'));
+    $this->assertNull($session->evaluateScript('window.nativeArrayCommands ?? null'));
+    $session->executeScript('window.releaseNativeCommands();');
+    $this->assertTrue($session->wait(10000, 'Boolean(window.nativeArrayCommands)'));
+    $this->assertFalse($session->evaluateScript('window.nativeArrayCommands[0]'));
+  }
+
+  /**
+   * Tests request options and cancellation on the native request path.
+   */
+  public function testNativeRequestOptions(): void {
+    $this->drupalLogin($this->drupalCreateUser(['access content']));
+    $this->drupalGet('ajax_forms_test_ajax_commands_form');
+    $session = $this->getSession();
+    $session->executeScript(<<<'JS'
+      document.body.insertAdjacentHTML('beforeend', '<div id="request-lane-echo"></div>');
+      window.nativeResults = {};
+      window.runNativeCase = (name, configure) => {
+        const echo = document.getElementById('request-lane-echo');
+        echo.textContent = '';
+        const ajax = Drupal.ajax({ url: Drupal.url('ajax-test/echo-request'), progress: false, submit: { a: [1, 2] } });
+        configure(ajax);
+        ajax.execute().commands.then(() => {
+          window.nativeResults[name] = JSON.parse(echo.textContent);
+        });
+      };
+      JS);
+    $request = function (string $name, string $configure) use ($session): array {
+      $session->executeScript("window.runNativeCase('$name', $configure)");
+      $this->assertTrue($session->wait(10000, "Boolean(window.nativeResults['$name'])"));
+      return $session->evaluateScript("window.nativeResults['$name']");
+    };
+
+    $result = $request('traditional', '(ajax) => { ajax.options.traditional = true; }');
+    $this->assertStringContainsString('a=1&a=2', $result['body']);
+
+    // Header writes in beforeSend replace the prepared value, and the request
+    // honors a changed URL and the XHR fields.
+    $result = $request('beforeSend', <<<'JS'
+      (ajax) => {
+        const { beforeSend } = ajax.options;
+        ajax.options.xhrFields = { withCredentials: true };
+        ajax.options.beforeSend = function (xhr, settings) {
+          xhr.setRequestHeader('X-Requested-With', 'Custom');
+          settings.url += '&moved=1';
+          const { complete } = settings;
+          settings.complete = function (request, ...args) {
+            window.nativeWithCredentials = request.withCredentials;
+            return complete.call(this, request, ...args);
+          };
+          return beforeSend.call(this, xhr, settings);
+        };
+      }
+      JS);
+    $this->assertSame('Custom', $result['requestedWith']);
+    $this->assertStringContainsString('moved=1', $result['query']);
+    $this->assertTrue($session->evaluateScript('window.nativeWithCredentials'));
+
+    // Uncached requests sent together get distinct cache-busting values.
+    $this->assertTrue($session->evaluateScript(<<<'JS'
+      (() => {
+        const open = XMLHttpRequest.prototype.open;
+        const urls = [];
+        XMLHttpRequest.prototype.open = function (method, url, ...args) {
+          urls.push(url);
+          return open.call(this, method, url, ...args);
+        };
+        try {
+          [1, 2].forEach(() => {
+            const ajax = Drupal.ajax({ url: Drupal.url('ajax-test/echo-request'), progress: false, httpMethod: 'GET' });
+            ajax.options.cache = false;
+            ajax.execute();
+          });
+        }
+        finally {
+          XMLHttpRequest.prototype.open = open;
+        }
+        const values = urls.map((url) => new URL(url).searchParams.get('_'));
+        return values.length === 2 && Boolean(values[0]) && values[0] !== values[1];
+      })()
+      JS));
+    $this->assertTrue($session->wait(10000, 'Drupal.ajax.instances.every((instance) => !instance?.ajaxing)'));
+
+    // An aborted request and a request aborted in beforeSend both restore the
+    // element.
+    $session->executeScript(<<<'JS'
+      const button = document.body.appendChild(document.createElement('button'));
+      button.id = 'native-abort';
+      const ajax = Drupal.ajax({ element: button, url: Drupal.url('ajax-test/echo-request'), event: 'native-abort' });
+      const handle = ajax.execute();
+      window.nativeAbortSent = [button.disabled, Boolean(button.nextElementSibling?.classList.contains('ajax-progress'))];
+      handle.abort();
+      handle.network.then(({ status }) => {
+        window.nativeAbort = [status, ajax.ajaxing, button.disabled, Boolean(button.nextElementSibling?.classList.contains('ajax-progress'))];
+      });
+      const cancelled = Drupal.ajax({ element: button, url: Drupal.url('ajax-test/echo-request'), event: 'native-cancel' });
+      cancelled.beforeSend = (xhr) => xhr.abort();
+      cancelled.execute().network.then(({ status }) => {
+        window.nativeCancel = [status, cancelled.ajaxing, button.disabled];
+      });
+      JS);
+    $this->assertSame([TRUE, TRUE], $session->evaluateScript('window.nativeAbortSent'));
+    $this->assertTrue($session->wait(10000, 'Boolean(window.nativeAbort && window.nativeCancel)'));
+    $this->assertSame(['abort', FALSE, FALSE, FALSE], $session->evaluateScript('window.nativeAbort'));
+    $this->assertSame(['canceled', FALSE, FALSE], $session->evaluateScript('window.nativeCancel'));
+
+    // A request made synchronous in beforeSend runs its callbacks before
+    // returning, and a throwing beforeSend restores the element.
+    $this->assertSame([TRUE, FALSE, FALSE, FALSE], $session->evaluateScript(<<<'JS'
+      (() => {
+        window.alert = () => {};
+        const sync = Drupal.ajax({ url: Drupal.url('ajax-test/echo-request'), progress: false });
+        const { beforeSend, success } = sync.options;
+        let ran = false;
+        sync.options.beforeSend = function (xhr, settings) {
+          settings.async = false;
+          return beforeSend.call(this, xhr, settings);
+        };
+        sync.options.success = function (...args) {
+          ran = true;
+          return success.apply(this, args);
+        };
+        sync.execute();
+
+        const button = document.body.appendChild(document.createElement('button'));
+        const throwing = Drupal.ajax({ element: button, url: Drupal.url('ajax-test/echo-request'), event: 'native-throw' });
+        const prototypeBeforeSend = throwing.beforeSend;
+        throwing.beforeSend = function (...args) {
+          prototypeBeforeSend.apply(this, args);
+          throw new Error('before send');
+        };
+        throwing.execute();
+        return [ran, throwing.ajaxing, button.disabled, Boolean(button.nextElementSibling?.classList.contains('ajax-progress'))];
+      })()
+      JS));
+
+    // The response is classified by the method beforeSend chose.
+    $session->executeScript(<<<'JS'
+      const ajax = Drupal.ajax({ url: Drupal.url('ajax-test/echo-request'), progress: false, httpMethod: 'GET' });
+      const { beforeSend } = ajax.options;
+      ajax.options.beforeSend = function (xhr, settings) {
+        settings.type = 'HEAD';
+        return beforeSend.call(this, xhr, settings);
+      };
+      ajax.execute().network.then(({ status }) => {
+        window.nativeHead = status;
+      });
+      JS);
+    $this->assertTrue($session->wait(10000, 'Boolean(window.nativeHead)'));
+    $this->assertSame('nocontent', $session->evaluateScript('window.nativeHead'));
+
+    // A beforeSend veto on a multipart form does not send, and can be retried
+    // at once.
+    $this->assertSame([0, FALSE, FALSE, NULL], $session->evaluateScript(<<<'JS'
+      (() => {
+        document.body.insertAdjacentHTML('beforeend', '<form id="native-veto"><button name="op" value="clicked">Go</button><input type="file" name="upload"></form>');
+        const form = document.getElementById('native-veto');
+        const transfer = new DataTransfer();
+        transfer.items.add(new File(['veto'], 'veto.txt', { type: 'text/plain' }));
+        form.querySelector('input').files = transfer.files;
+        const button = form.querySelector('button');
+        const ajax = Drupal.ajax({ element: button, url: Drupal.url('ajax-test/echo-request'), event: 'native-veto', setClick: true });
+        const { beforeSend } = ajax;
+        let vetoes = 1;
+        ajax.beforeSend = function (...args) {
+          beforeSend.apply(this, args);
+          return vetoes-- > 0 ? false : undefined;
+        };
+        const send = XMLHttpRequest.prototype.send;
+        let sends = 0;
+        XMLHttpRequest.prototype.send = function (...args) {
+          sends++;
+          return send.apply(this, args);
+        };
+        try {
+          button.dispatchEvent(new Event('native-veto', { bubbles: true, cancelable: true }));
+          const state = [sends, ajax.ajaxing, button.disabled, form.clk ?? null];
+          document.getElementById('request-lane-echo').textContent = '';
+          button.dispatchEvent(new Event('native-veto', { bubbles: true, cancelable: true }));
+          return state;
+        }
+        finally {
+          XMLHttpRequest.prototype.send = send;
+        }
+      })()
+      JS));
+    $this->assertTrue($session->wait(10000, "document.getElementById('request-lane-echo').textContent.length > 0"));
+    $result = json_decode($session->evaluateScript("document.getElementById('request-lane-echo').textContent"), TRUE, flags: JSON_THROW_ON_ERROR);
+    $this->assertSame('veto.txt', $result['upload'][0]);
+
+    // A file input associated from outside the form is uploaded.
+    $session->executeScript(<<<'JS'
+      const echo = document.getElementById('request-lane-echo');
+      echo.textContent = '';
+      document.body.insertAdjacentHTML('beforeend', `
+        <form id="external-file-form"><button name="op" value="clicked">Upload</button></form>
+        <input type="file" name="upload" form="external-file-form">
+      `);
+      const form = document.getElementById('external-file-form');
+      const input = document.querySelector('input[form="external-file-form"]');
+      const transfer = new DataTransfer();
+      transfer.items.add(new File(['external'], 'external.txt', { type: 'text/plain' }));
+      input.files = transfer.files;
+      const button = form.querySelector('button');
+      Drupal.ajax({ element: button, url: Drupal.url('ajax-test/echo-request'), event: 'external-file', setClick: true, progress: false });
+      button.dispatchEvent(new Event('external-file', { bubbles: true, cancelable: true }));
+      JS);
+    $this->assertTrue($session->wait(10000, "document.getElementById('request-lane-echo').textContent.length > 0"));
+    $result = json_decode($session->evaluateScript("document.getElementById('request-lane-echo').textContent"), TRUE, flags: JSON_THROW_ON_ERROR);
+    $this->assertStringStartsWith('multipart/form-data; boundary=', $result['contentType']);
+    $this->assertSame(['external.txt', 8, hash('sha256', 'external')], $result['upload']);
   }
 
   /**
@@ -336,6 +1061,26 @@ JS;
     $has_focus_id = $this->getSession()->evaluateScript('document.activeElement.id');
     $this->assertEquals('edit-textfield-2', $has_focus_id);
 
+    // Moving focus elsewhere in the form leaves it outside the replaced group.
+    $textfield1->focus();
+    $textfield1->setValue('Owls hoot');
+    $select->focus();
+    $this->assertSession()->assertWaitOnAjaxRequest();
+    $this->assertSame('edit-select', $this->getSession()->evaluateScript('document.activeElement.id'));
+
+    // Moving focus to a control outside the form leaves it there as well.
+    $textfield1->focus();
+    $textfield1->setValue('Frogs croak');
+    $this->getSession()->executeScript(<<<'JS'
+      const outside = document.createElement('button');
+      outside.id = 'outside-ajax-form';
+      outside.textContent = 'Outside the form';
+      document.querySelector('#edit-textfield').form.after(outside);
+      outside.focus();
+      JS);
+    $this->assertSession()->assertWaitOnAjaxRequest();
+    $this->assertSame('outside-ajax-form', $this->getSession()->evaluateScript('document.activeElement.id'));
+
     // Test textfield with 'change' event listener with refocus-blur set to
     // FALSE.
     $textfield3->focus();
@@ -346,7 +1091,10 @@ const textfield2 = document.querySelector('#edit-textfield-2');
 textfield2.value = 'Llamas say hi';
 textfield2.dispatchEvent(new Event('change', { bubbles: true }));
 JS);
-    $this->assertTrue($this->getSession()->wait(10000, "document.activeElement.id === 'edit-textfield-2'"));
+    // Wait for the replaced form group to finish attaching its behaviors
+    // before trying to change another field in that group.
+    $this->assertSession()->assertWaitOnAjaxRequest();
+    $this->assertSame('edit-textfield-2', $this->getSession()->evaluateScript('document.activeElement.id'));
 
     // Test textfield with 'change' event.
     $textfield3->focus();
@@ -364,6 +1112,59 @@ JS);
     $this->assertSession()->assertWaitOnAjaxRequest();
     $has_focus_id = $this->getSession()->evaluateScript('document.activeElement.id');
     $this->assertEquals('edit-email-field-1', $has_focus_id);
+  }
+
+  /**
+   * Tests restoring focus when an Ajax insert replaces two forms at once.
+   */
+  public function testFocusInSharedReplacement(): void {
+    $this->drupalGet('/ajax_forms_test_get_form');
+    $session = $this->getSession();
+    $session->executeScript(<<<'JS'
+      const region = document.createElement('div');
+      region.id = 'shared-replacement';
+      region.innerHTML = `
+        <form id="first-form" data-drupal-selector="first-form">
+          <input id="shared-field--first" data-drupal-selector="shared-field">
+        </form>
+        <form id="second-form" data-drupal-selector="second-form">
+          <input name="form_build_id" type="hidden" value="second-build">
+          <input id="shared-field--old" data-drupal-selector="shared-field">
+        </form>`;
+      document.body.append(region);
+      const replace = (formId, buildId, fieldId, replacement) => {
+        const field = document.getElementById(fieldId);
+        field.dataset.refocusBlur = 'true';
+        field.focus();
+        const ajax = Drupal.ajax({ element: field, url: location.href, event: 'test-focus' });
+        return ajax.success([{
+          command: 'insert',
+          selector: '#shared-replacement',
+          method: 'html',
+          data: `
+            <form id="first-form" data-drupal-selector="first-form">
+              <input id="shared-field--first" data-drupal-selector="shared-field">
+            </form>
+            <form id="${formId}" data-drupal-selector="second-form">
+              <input name="form_build_id" type="hidden" value="${buildId}">
+              <div id="shared-field--description">Field description</div>
+              ${replacement}
+            </form>`,
+        }], 'success');
+      };
+      window.replaceSharedForms = replace;
+      replace('second-form', 'second-build--1', 'shared-field--old',
+        '<input id="shared-field--exact" data-drupal-selector="shared-field">');
+      JS);
+    $this->assertJsCondition('document.activeElement.id === "shared-field--exact"');
+
+    // Both form IDs change on rebuild. Match the stable form selector, then
+    // fall back to the generated field ID without matching its description.
+    $session->executeScript(<<<'JS'
+      window.replaceSharedForms('second-form--1', 'second-build--2', 'shared-field--exact',
+        '<input id="shared-field--rebuilt" data-drupal-selector="shared-field--rebuilt">');
+      JS);
+    $this->assertJsCondition('document.activeElement.id === "shared-field--rebuilt"');
   }
 
   /**

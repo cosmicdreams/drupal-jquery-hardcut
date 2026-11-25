@@ -32,11 +32,11 @@ internal.drupal.ckeditor5:
     theme:
       css/editor.css: { }
   dependencies:
-    - core/jquery
     - core/once
     - core/drupal
     - core/drupal.ajax
     - core/drupal.debounce
+    - core/drupal.displace
     - core/ckeditor5
     - editor/drupal.editor
     - ckeditor5/internal.drupal.ckeditor5.stylesheets
@@ -126,7 +126,6 @@ internal.admin:
   dependencies:
     - core/sortable
     - filter/drupal.filter.admin
-    - core/jquery
     - core/once
     - core/drupal.announce
 
@@ -214,7 +213,6 @@ internal.admin.style:
     theme:
       css/style.admin.css: { }
   dependencies:
-    - core/jquery
     - core/drupal
     - core/drupal.vertical-tabs
 
@@ -235,8 +233,8 @@ internal.admin.image:
   js:
     js/ckeditor5.image.admin.js: { }
   dependencies:
-    - core/jquery
     - core/drupal
+    - core/drupal.form
 
 internal.admin.fullscreen:
   css:

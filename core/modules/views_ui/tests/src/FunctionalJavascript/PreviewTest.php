@@ -8,6 +8,7 @@ use Behat\Mink\Element\NodeElement;
 use Drupal\Core\Database\Database;
 use Drupal\FunctionalJavascriptTests\WebDriverTestBase;
 use Drupal\views\Tests\ViewTestData;
+use PHPUnit\Framework\Attributes\DataProviderExternal;
 use PHPUnit\Framework\Attributes\Group;
 use PHPUnit\Framework\Attributes\RunTestsInSeparateProcesses;
 
@@ -122,6 +123,130 @@ class PreviewTest extends WebDriverTestBase {
   public function testTaxonomyAJAX(): void {
     \Drupal::service('module_installer')->install(['taxonomy']);
     $this->getPreviewAJAX('taxonomy_term', 'page_1', 0);
+  }
+
+  /**
+   * Tests previewing a view with contextual arguments while editing it.
+   */
+  public function testPreviewArgumentsWhileEditing(): void {
+    $this->drupalGet('admin/structure/views/view/test_preview/edit/default');
+    $assert = $this->assertSession();
+    $page = $this->getSession()->getPage();
+    $args = $assert->fieldExists('preview-args');
+    $this->assertTrue($args->isVisible());
+    $args->setValue('2');
+    $page->pressButton('Update preview');
+    $assert->assertWaitOnAjaxRequest();
+    $this->assertPreviewAJAX(1);
+    $assert->elementTextContains('css', '#views-live-preview .views-row', 'George');
+
+    // Start the next preview before opening the dialog and release it when
+    // the search field has focus.
+    $session = $this->getSession();
+    $session->executeScript(<<<'JS'
+      const send = XMLHttpRequest.prototype.send;
+      XMLHttpRequest.prototype.send = function (...args) {
+        XMLHttpRequest.prototype.send = send;
+        window.sendPreview = () => send.apply(this, args);
+      };
+      JS);
+    $assert->fieldExists('preview-args')->setValue('3');
+    $page->pressButton('Update preview');
+    $this->assertJsCondition('typeof window.sendPreview === "function"');
+    $assert->elementExists('css', '#views-add-field')->click();
+    $search = $assert->waitForElementVisible('css', 'dialog[open] [data-drupal-selector="edit-override-controls-options-search"]');
+    $this->assertNotNull($search);
+    $search->focus();
+    $session->executeScript('window.sendPreview()');
+    $assert->assertWaitOnAjaxRequest();
+    $this->assertPreviewAJAX(1);
+    $this->assertJsCondition('document.querySelector("#views-live-preview .views-row").textContent.includes("Ringo")');
+    $assert->elementExists('css', 'dialog.views-ui-dialog[open]');
+    $this->assertJsCondition('document.activeElement.dataset.drupalSelector === "edit-override-controls-options-search"');
+  }
+
+  /**
+   * Tests that a preview anchor follows its fragment without an Ajax request.
+   */
+  public function testPreviewFragmentLink(): void {
+    $this->drupalGet('admin/structure/views/view/test_preview/edit/default');
+    $this->getSession()->getPage()->pressButton('Update preview');
+    $this->assertSession()->assertExpectedAjaxRequest(1);
+    $session = $this->getSession();
+    $session->executeScript(<<<'JS'
+      const preview = document.querySelector('#views-live-preview');
+      preview.insertAdjacentHTML('beforeend', `
+        <a href="#preview-target">Jump within preview</a>
+        <div id="preview-target">Target</div>
+        <a href="http://[">Malformed link</a>
+      `);
+      Drupal.attachBehaviors();
+      JS);
+
+    $this->assertJsCondition('Drupal.Views.getPath("http://[") === ""');
+    $this->clickLink('Jump within preview');
+    $this->assertJsCondition('location.hash === "#preview-target" && document.querySelector("#views-live-preview #preview-target:target") !== null');
+    $this->assertSame(1, $session->evaluateScript('window.drupalCumulativeXhrCount'));
+  }
+
+  /**
+   * Tests that the arguments field follows the presence of contextual filters.
+   */
+  #[DataProviderExternal(AdminAjaxTest::class, 'viewsThemes')]
+  public function testPreviewArgumentsVisibility(string $theme): void {
+    $this->container->get('theme_installer')->install([$theme]);
+    $this->config('system.theme')->set('default', $theme)->save();
+    $this->drupalGet('admin/structure/views/view/test_preview/edit/default');
+    $this->assertTrue($this->assertSession()->fieldExists('preview-args')->isVisible());
+
+    $this->drupalGet('admin/structure/views/view/test_click_sort_ajax/edit/page_1');
+    $this->assertFalse($this->assertSession()->fieldExists('preview-args')->isVisible());
+  }
+
+  /**
+   * Tests that an edit queues a fresh preview while one is pending.
+   */
+  public function testEditWhilePreviewPending(): void {
+    $this->drupalGet('admin/structure/views/view/test_preview/edit/default');
+    $assert = $this->assertSession();
+    $session = $this->getSession();
+    $session->executeScript(<<<'JS'
+      const prototype = Drupal.Ajax.prototype;
+      const queue = prototype.commandExecutionQueue;
+      window.previewRequests = 0;
+      document.addEventListener('drupal:ajax-before-send', ({ detail: { ajax } }) => {
+        if (ajax.wrapper === '#views-preview-wrapper') {
+          window.previewRequests += 1;
+        }
+      });
+      prototype.commandExecutionQueue = function (response, status) {
+        if (this.wrapper !== '#views-preview-wrapper') {
+          return queue.call(this, response, status);
+        }
+        prototype.commandExecutionQueue = queue;
+        return new Promise((resolve) => {
+          window.finishPendingPreview = () => resolve(queue.call(this, response, status));
+        });
+      };
+      JS);
+    $assert->fieldExists('preview-args')->setValue('2');
+    $assert->fieldExists('edit-displays-live-preview')->check();
+    $this->assertJsCondition('typeof window.finishPendingPreview === "function"');
+
+    $assert->elementExists('css', 'a[href$="/field/name"]')->click();
+    $dialog = $assert->waitForElementVisible('css', 'dialog.views-ui-dialog[open]');
+    $this->assertNotNull($dialog);
+    $assert->fieldExists('Label', $dialog)->setValue('Queued preview label');
+    $assert->elementExists('css', '.drupal-dialog-buttonset', $dialog)->pressButton('Apply');
+    $assert->waitForElementRemoved('css', 'dialog.views-ui-dialog[open]');
+    $this->assertJsCondition('![...Drupal.ajax.pendingRequests()].some(({ wrapper }) => wrapper !== "#views-preview-wrapper")');
+    $this->assertJsCondition('window.previewRequests === 1');
+
+    $session->executeScript('window.finishPendingPreview()');
+    $assert->assertWaitOnAjaxRequest();
+    $this->assertJsCondition('window.previewRequests === 2');
+    $assert->elementTextContains('css', '#views-live-preview .views-row', 'Queued preview label');
+    $assert->elementTextContains('css', '#views-live-preview .views-row', 'George');
   }
 
   /**

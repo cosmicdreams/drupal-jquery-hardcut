@@ -3,8 +3,7 @@
  * Presentational styles for Drupal dialogs.
  */
 
-.ui-dialog {
-  position: absolute;
+.drupal-dialog {
   z-index: 1260;
   overflow: visible;
   padding: 0;
@@ -15,11 +14,11 @@
 
 @media all and (max-width: 48em) {
   /* 768px */
-  .ui-dialog {
+  .drupal-dialog {
     width: 92% !important;
   }
 }
-.ui-dialog .ui-dialog-titlebar {
+.drupal-dialog .drupal-dialog-titlebar {
   border-width: 0 0 1px 0;
   border-style: solid;
   border-color: #ccc;
@@ -27,31 +26,28 @@
   background: #f3f4ee;
   font-weight: bold;
 }
-.ui-dialog .ui-dialog-titlebar-close {
+.drupal-dialog .drupal-dialog-titlebar-close {
   border: 0;
   background: none;
 }
-.ui-dialog .ui-dialog-buttonpane {
+.drupal-dialog .drupal-dialog-buttonpane {
   margin-top: 0;
   padding: 0.3em 1em;
   border-width: 1px 0 0 0;
   border-color: #ccc;
   background: #f3f4ee;
 }
-.ui-dialog .ui-dialog-buttonpane .ui-dialog-buttonset {
+.drupal-dialog .drupal-dialog-buttonpane .drupal-dialog-buttonset {
   margin: 0;
-  padding: 0;
-}
-.ui-dialog .ui-dialog-buttonpane .ui-button-text-only .ui-button-text {
   padding: 0;
 }
 
 /* Form action buttons are moved in dialogs. Remove empty space. */
-.ui-dialog .ui-dialog-content .form-actions {
+.drupal-dialog .drupal-dialog-content .form-actions {
   margin: 0;
   padding: 0;
 }
-.ui-dialog .ajax-progress-throbber {
+.drupal-dialog .ajax-progress-throbber {
   position: fixed;
   z-index: 1000;
   top: 48.5%;
@@ -67,7 +63,7 @@
   background-repeat: no-repeat;
   background-position: center center;
 }
-.ui-dialog .ajax-progress-throbber .throbber,
-.ui-dialog .ajax-progress-throbber .message {
+.drupal-dialog .ajax-progress-throbber .throbber,
+.drupal-dialog .ajax-progress-throbber .message {
   display: none;
 }

@@ -111,6 +111,10 @@
 }
 
 /* Label when "content preview" is disabled. */
+.layout-builder--content-preview-disabled [data-layout-content-preview-placeholder-label] > :not([data-contextual-id], .js-layout-builder-content-preview-placeholder-label) {
+  display: none !important;
+}
+
 .layout-builder-block__content-preview-placeholder-label {
   margin: 0;
   text-align: center;

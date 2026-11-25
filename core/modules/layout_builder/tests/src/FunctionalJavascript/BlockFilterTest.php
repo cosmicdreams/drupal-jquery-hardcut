@@ -5,6 +5,8 @@ declare(strict_types=1);
 namespace Drupal\Tests\layout_builder\FunctionalJavascript;
 
 use Behat\Mink\Element\NodeElement;
+use Drupal\field\Entity\FieldConfig;
+use Drupal\field\Entity\FieldStorageConfig;
 use Drupal\FunctionalJavascriptTests\WebDriverTestBase;
 use Drupal\layout_builder\Entity\LayoutBuilderEntityViewDisplay;
 use PHPUnit\Framework\Attributes\Group;
@@ -45,6 +47,18 @@ class BlockFilterTest extends WebDriverTestBase {
       'configure any layout',
     ]));
     $this->createContentType(['type' => 'bundle_with_section_field']);
+    // Provide a match in content fields alongside the menu and system blocks.
+    $field_storage = FieldStorageConfig::create([
+      'field_name' => 'field_admin_notes',
+      'entity_type' => 'node',
+      'type' => 'string',
+    ]);
+    $field_storage->save();
+    FieldConfig::create([
+      'field_storage' => $field_storage,
+      'bundle' => 'bundle_with_section_field',
+      'label' => 'Administration notes',
+    ])->save();
     LayoutBuilderEntityViewDisplay::load('node.bundle_with_section_field.default')
       ->enableLayoutBuilder()
       ->setOverridable()
@@ -56,8 +70,6 @@ class BlockFilterTest extends WebDriverTestBase {
    * Tests block filter.
    */
   public function testBlockFilter(): void {
-    // @todo skipped due to random test failures, re-enable in https://www.drupal.org/project/drupal/issues/3028968.
-    $this->markTestSkipped();
     $assert_session = $this->assertSession();
     $session = $this->getSession();
     $page = $session->getPage();
@@ -92,62 +104,51 @@ class BlockFilterTest extends WebDriverTestBase {
     $contentFieldsCategory->click();
     $this->assertFalse($promotedLink->isVisible());
 
-    // Test block filter reduces the number of visible rows.
+    foreach (['ad' => 3, 'adm' => 2] as $query => $count) {
+      $filter->setValue($query);
+      $this->assertAnnounceContains("$count blocks are available in the modified list.");
+      $this->assertCount($count, $this->filterVisibleElements($blocks));
+      $this->assertCount($count, $this->filterVisibleElements($categories));
+    }
     $filter->setValue('ad');
-    $fewer_blocks_message = ' blocks are available in the modified list';
-    $this->assertAnnounceContains($fewer_blocks_message);
-    $visible_rows = $this->filterVisibleElements($blocks);
-    $this->assertCount(3, $visible_rows);
-    $visible_categories = $this->filterVisibleElements($categories);
-    $this->assertCount(3, $visible_categories);
+    $this->assertAnnounceContains('3 blocks are available in the modified list.');
+    $this->assertCount(3, $this->filterVisibleElements($blocks));
+    $this->assertCount(3, $this->filterVisibleElements($categories));
 
-    // Test Drupal.announce() message when multiple matches are present.
-    $expected_message = count($visible_rows) . $fewer_blocks_message;
-    $this->assertAnnounceContains($expected_message);
-
-    // Test 3 letter search.
-    $filter->setValue('adm');
-    $visible_rows = $this->filterVisibleElements($blocks);
-    $this->assertCount(2, $visible_rows);
-    $visible_categories = $this->filterVisibleElements($categories);
-    $this->assertCount(2, $visible_categories);
-
-    // Retest that blocks appear when reducing letters.
-    $filter->setValue('ad');
-    $visible_rows = $this->filterVisibleElements($blocks);
-    $this->assertCount(3, $visible_rows);
-    $visible_categories = $this->filterVisibleElements($categories);
-    $this->assertCount(3, $visible_categories);
-
-    // Test blocks reappear after being filtered by repeating search for "a".
-    $filter->setValue('a');
-    $this->assertAnnounceContains('All available blocks are listed.');
-
-    // Test Drupal.announce() message when only one match is present.
-    $filter->setValue('Powered by');
-    $this->assertAnnounceContains(' block is available');
-    $visible_rows = $this->filterVisibleElements($blocks);
-    $this->assertCount(1, $visible_rows);
-    $visible_categories = $this->filterVisibleElements($categories);
-    $this->assertCount(1, $visible_categories);
+    // Filtering searches even a category the user closed.
+    $filter->setValue('Promoted');
     $this->assertAnnounceContains('1 block is available in the modified list.');
+    $this->assertTrue($promotedLink->isVisible());
+    $this->assertCount(1, $this->filterVisibleElements($blocks));
+    $this->assertCount(1, $this->filterVisibleElements($categories));
 
-    // Test Drupal.announce() message when no matches are present.
+    // A new query replaces the previous result.
+    $filter->setValue('Powered by');
+    $this->assertNotNull($assert_session->waitForElementVisible('named', ['link', 'Powered by Drupal']));
+    $this->assertFalse($promotedLink->isVisible());
+    $this->assertCount(1, $this->filterVisibleElements($blocks));
+    $this->assertCount(1, $this->filterVisibleElements($categories));
+
     $filter->setValue('Pan-Galactic Gargle Blaster');
-    $visible_rows = $this->filterVisibleElements($blocks);
-    $this->assertCount(0, $visible_rows);
-    $visible_categories = $this->filterVisibleElements($categories);
-    $this->assertCount(0, $visible_categories);
-    $announce_element = $page->find('css', '#drupal-live-announce');
-    $page->waitFor(2, function () use ($announce_element): bool {
-      return str_starts_with($announce_element->getText(), '0 blocks are available');
-    });
+    $this->assertAnnounceContains('0 blocks are available in the modified list.');
+    $this->assertCount(0, $this->filterVisibleElements($blocks));
+    $this->assertCount(0, $this->filterVisibleElements($categories));
 
     // Test Drupal.announce() message when all blocks are listed.
     $filter->setValue('');
     $this->assertAnnounceContains('All available blocks are listed.');
     // Confirm the Content Fields category remains collapsed after filtering.
     $this->assertFalse($promotedLink->isVisible());
+
+    // A new chooser starts unfiltered even if the previous one was filtered.
+    $filter->setValue('Powered by');
+    $this->assertAnnounceContains('1 block is available in the modified list.');
+    $session->executeScript('Drupal.dialog.get(document.getElementById("drupal-off-canvas")).close();');
+    $this->clickLink('Add block');
+    $assert_session->assertWaitOnAjaxRequest();
+    $assert_session->elementExists('css', '.js-layout-builder-filter')->setValue('a');
+    $session->executeScript('setTimeout(() => { window.shortBlockQuerySettled = true; }, 500);');
+    $this->assertJsCondition('window.shortBlockQuerySettled && !document.getElementById("drupal-live-announce")?.textContent.includes("All available blocks are listed.")');
   }
 
   /**

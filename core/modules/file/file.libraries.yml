@@ -3,10 +3,8 @@ drupal.file:
   js:
     js/file.js: {}
   dependencies:
-    - core/jquery
     - core/once
     - core/drupal
-    - core/drupalSettings
 
 drupal.file-icon:
   version: VERSION

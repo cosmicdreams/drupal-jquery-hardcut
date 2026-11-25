@@ -620,7 +620,7 @@ td.group-title {
 .views-filterable-options-controls select {
   width: 100%;
 }
-.views-ui-dialog .ui-dialog-content {
+.views-ui-dialog .drupal-dialog-content {
   padding: 0;
 }
 .views-ui-dialog .views-filterable-options {
@@ -640,7 +640,7 @@ td.group-title {
   padding: 8px 13px;
   background-color: #f3f4ee;
 }
-.views-ui-dialog.views-ui-dialog-scroll .ui-dialog-titlebar {
+.views-ui-dialog.views-ui-dialog-scroll .drupal-dialog-titlebar {
   border: none;
 }
 .views-ui-dialog .views-offset-top {

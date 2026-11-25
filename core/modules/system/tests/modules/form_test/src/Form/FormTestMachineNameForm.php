@@ -26,6 +26,9 @@ class FormTestMachineNameForm extends FormBase {
    * {@inheritdoc}
    */
   public function buildForm(array $form, FormStateInterface $form_state) {
+    if ($this->getRequest()->query->getBoolean('ajax')) {
+      $form['#attached']['library'][] = 'core/drupal.ajax';
+    }
     $form['machine_name_1_label'] = [
       '#type' => 'textfield',
       '#title' => 'Machine name 1 label',
@@ -47,9 +50,12 @@ class FormTestMachineNameForm extends FormBase {
       '#type' => 'machine_name',
       '#title' => 'Machine name 2',
       '#description' => 'Another machine name.',
+      '#maxlength' => 12,
       '#machine_name' => [
         'exists' => [$this, 'load'],
         'source' => ['machine_name_2_label'],
+        'replace_pattern' => '[^a-z0-9-]+',
+        'replace' => '-',
       ],
     ];
     $form['machine_name_3_label'] = [

@@ -6,8 +6,8 @@ namespace Drupal\Core\Ajax;
  * Generic AJAX command for inserting content.
  *
  * This command instructs the client to insert the given render array or HTML
- * using whichever jQuery DOM manipulation method has been specified in the
- * #ajax['method'] variable of the element that triggered the request.
+ * using the method specified by the triggering element's #ajax['method'].
+ * The supported #ajax['effect'] values are 'none' (default) and 'fade'.
  *
  * This command is implemented by Drupal.AjaxCommands.prototype.insert()
  * defined in misc/ajax.js.

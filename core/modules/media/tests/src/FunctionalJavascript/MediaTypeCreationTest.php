@@ -86,7 +86,7 @@ class MediaTypeCreationTest extends MediaJavascriptTestBase {
     $page->fillField('label', $label);
     // Wait for machine name generation. Default: waitUntilVisible(), does not
     // work properly.
-    $session->wait(5000, "jQuery('.machine-name-value').text() === '{$mediaTypeMachineName}'");
+    $session->wait(5000, "document.querySelector('.machine-name-value')?.textContent === '{$mediaTypeMachineName}'");
 
     $page->pressButton('Save');
 
@@ -143,7 +143,7 @@ class MediaTypeCreationTest extends MediaJavascriptTestBase {
     // Check that a new type with the same machine name cannot be created.
     $this->drupalGet('admin/structure/media/add');
     $page->fillField('label', $label);
-    $session->wait(5000, "jQuery('.machine-name-value').text() === '{$mediaTypeMachineName}'");
+    $session->wait(5000, "document.querySelector('.machine-name-value')?.textContent === '{$mediaTypeMachineName}'");
     $page->selectFieldOption('Media source', 'test');
     $assert_session->assertWaitOnAjaxRequest();
     $page->pressButton('Save');
@@ -165,7 +165,7 @@ class MediaTypeCreationTest extends MediaJavascriptTestBase {
     $result = $assert_session->waitForElementVisible('css', 'fieldset[data-drupal-selector="edit-source-configuration"]');
     $this->assertNotEmpty($result);
     $page->fillField('label', 'Pastafazoul');
-    $session->wait(5000, "jQuery('.machine-name-value').text() === 'pastafazoul'");
+    $session->wait(5000, "document.querySelector('.machine-name-value')?.textContent === 'pastafazoul'");
     $page->pressButton('Save');
 
     $label = 'Type reusing Default Field';
@@ -188,7 +188,7 @@ class MediaTypeCreationTest extends MediaJavascriptTestBase {
 
     // Wait for machine name generation. Default: waitUntilVisible(), does not
     // work properly.
-    $session->wait(5000, "jQuery('.machine-name-value').text() === '{$mediaTypeMachineName}'");
+    $session->wait(5000, "document.querySelector('.machine-name-value')?.textContent === '{$mediaTypeMachineName}'");
 
     $page->pressButton('Save');
 

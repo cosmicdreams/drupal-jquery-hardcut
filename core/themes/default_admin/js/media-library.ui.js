@@ -2,7 +2,7 @@
  * @file
  * Media Library overrides for Default Admin
  */
-(($, Drupal, window) => {
+((Drupal, once) => {
   /**
    * Update the media library selection when loaded or media items are selected.
    *
@@ -20,51 +20,34 @@
       if (!once('media-library-selection-info-admin-event', 'html').length) {
         return;
       }
-      window.addEventListener('dialog:aftercreate', (e) => {
-        const $element = $(e.target);
-        // Since the dialog HTML is not part of the context, we can't use
-        // context here.
-        const moveCounter = ($selectedCount, $buttonPane) => {
-          const $moveSelectedCount = $selectedCount.detach();
-          $buttonPane.prepend($moveSelectedCount);
-        };
-
-        const $buttonPane = $element
+      window.addEventListener('dialog:aftercreate', ({ target }) => {
+        const pane = target
           .closest('.media-library-widget-modal')
-          .find('.ui-dialog-buttonpane');
-        if (!$buttonPane.length) {
+          ?.querySelector('.drupal-dialog-buttonpane');
+        if (!pane) {
           return;
         }
-        const $selectedCount = $buttonPane.find(
-          '.js-media-library-selected-count',
-        );
-
-        // If the `selected` counter is already present, it can be moved from
-        // the end of the button pane to the beginning.
-        if ($selectedCount.length) {
-          moveCounter($selectedCount, $buttonPane);
+        const selector = '.js-media-library-selected-count';
+        const count = pane.querySelector(selector);
+        if (count) {
+          pane.prepend(count);
         } else {
-          // If the `selected` counter is not yet present, create a mutation
-          // observer that checks for items added to the button pane. As soon
-          // as the counter is added, move it from the end of the button pane
-          // to the beginning.
-          const selectedCountObserver = new MutationObserver(() => {
-            const $selectedCountFind = $buttonPane.find(
-              '.js-media-library-selected-count',
-            );
-            if ($selectedCountFind.length) {
-              moveCounter($selectedCountFind, $buttonPane);
-              selectedCountObserver.disconnect();
+          // The counter can be added by a later dialog listener.
+          const observer = new MutationObserver(() => {
+            const counter = pane.querySelector(selector);
+            if (counter) {
+              observer.disconnect();
+              pane.prepend(counter);
             }
           });
-          selectedCountObserver.observe($buttonPane[0], {
-            attributes: false,
-            childList: true,
-            characterData: false,
-            subtree: true,
-          });
+          observer.observe(pane, { childList: true, subtree: true });
+          target.addEventListener(
+            'dialog:beforeclose',
+            () => observer.disconnect(),
+            { once: true },
+          );
         }
       });
     },
   };
-})(jQuery, Drupal, window);
+})(Drupal, once);

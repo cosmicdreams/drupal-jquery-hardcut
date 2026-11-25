@@ -2,7 +2,7 @@
  * @file
  * Attaches behaviors for the Path module.
  */
-(function ($, Drupal) {
+(function (Drupal) {
   /**
    * Behaviors for settings summaries on path edit forms.
    *
@@ -13,9 +13,9 @@
    */
   Drupal.behaviors.pathDetailsSummaries = {
     attach(context) {
-      $(context)
-        .find('.path-form')
-        .drupalSetSummary((context) => {
+      Drupal.form.setSummary(
+        context.querySelectorAll('.path-form'),
+        (context) => {
           const pathElement = document.querySelector(
             '.js-form-item-path-0-alias input',
           );
@@ -23,7 +23,8 @@
           return path
             ? Drupal.t('Alias: @alias', { '@alias': path })
             : Drupal.t('No alias');
-        });
+        },
+      );
     },
   };
-})(jQuery, Drupal);
+})(Drupal);

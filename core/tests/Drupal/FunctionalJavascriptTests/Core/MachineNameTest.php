@@ -44,6 +44,23 @@ class MachineNameTest extends WebDriverTestBase {
   }
 
   /**
+   * Tests configured replacements and truncation in the machine name preview.
+   */
+  public function testReplacementAndTruncation(): void {
+    $this->drupalGet('form-test/machine-name');
+    $assert = $this->assertSession();
+    $label = $assert->fieldExists('machine_name_2_label');
+    $preview = '#edit-machine-name-2-label-machine-name-suffix .machine-name-value';
+
+    $label->setValue('!Hi! There & 7?');
+    $assert->elementTextEquals('css', $preview, 'hi-there-7');
+
+    $label->setValue('ABCDEFGHIJKLMN');
+    $assert->elementTextEquals('css', $preview, 'abcdefghijkl');
+    $assert->fieldValueEquals('machine_name_2', 'abcdefghijkl');
+  }
+
+  /**
    * Tests that machine name field functions.
    *
    * Makes sure that the machine name field automatically provides a valid
@@ -107,7 +124,7 @@ class MachineNameTest extends WebDriverTestBase {
     $this->assertNotEmpty($machine_name_3_value, 'Machine name field 3 must be initialized');
 
     // Assert that a machine name based on a default value is initialized.
-    $this->assertJsCondition('jQuery("#edit-machine-name-3-label-machine-name-suffix .machine-name-value").html() == "yet_another_machine_name"');
+    $this->assertJsCondition('document.querySelector("#edit-machine-name-3-label-machine-name-suffix .machine-name-value").innerHTML === "yet_another_machine_name"');
 
     // Test each value for conversion to a machine name.
     foreach ($test_values as $test_info) {
@@ -115,7 +132,7 @@ class MachineNameTest extends WebDriverTestBase {
       $title_1->setValue($test_info['input']);
 
       // Wait the set timeout for fetching the machine name.
-      $this->assertJsCondition('jQuery("#edit-machine-name-1-label-machine-name-suffix .machine-name-value").html() == "' . $test_info['expected'] . '"');
+      $this->assertJsCondition('document.querySelector("#edit-machine-name-1-label-machine-name-suffix .machine-name-value").innerHTML === "' . $test_info['expected'] . '"');
 
       // Validate the generated machine name.
       $this->assertEquals($test_info['expected'], $machine_name_1_value->getHtml(), $test_info['message']);
@@ -151,7 +168,7 @@ class MachineNameTest extends WebDriverTestBase {
     $this->assertNotEmpty($machine_name_3_value, 'Machine name field 3 must be initialized');
 
     // Assert that a machine name based on a default value is initialized.
-    $this->assertJsCondition('jQuery("#edit-machine-name-3-label-machine-name-suffix .machine-name-value").html() == "yet_another_machine_name"');
+    $this->assertJsCondition('document.querySelector("#edit-machine-name-3-label-machine-name-suffix .machine-name-value").innerHTML === "yet_another_machine_name"');
 
     // Test each value for conversion to a machine name.
     foreach ($test_values as $test_info) {
@@ -159,7 +176,7 @@ class MachineNameTest extends WebDriverTestBase {
       $title_1->setValue($test_info['input']);
 
       // Wait the set timeout for fetching the machine name.
-      $this->assertJsCondition('jQuery("#edit-machine-name-1-label-machine-name-suffix .machine-name-value").html() == "' . $test_info['expected'] . '"');
+      $this->assertJsCondition('document.querySelector("#edit-machine-name-1-label-machine-name-suffix .machine-name-value").innerHTML === "' . $test_info['expected'] . '"');
 
       // Validate the generated machine name.
       $this->assertEquals($test_info['expected'], $machine_name_1_value->getHtml(), $test_info['message']);
@@ -199,7 +216,7 @@ class MachineNameTest extends WebDriverTestBase {
     $assert->fieldExists('Name')->setValue('test 1');
     $machine_name_value = $page->find('css', '#edit-name-machine-name-suffix .machine-name-value');
     $this->assertNotEmpty($machine_name_value, 'Machine name field must be initialized');
-    $this->assertJsCondition('jQuery("#edit-name-machine-name-suffix .machine-name-value").html() == "test_1"');
+    $this->assertJsCondition('document.querySelector("#edit-name-machine-name-suffix .machine-name-value").innerHTML === "test_1"');
 
     // Ensure that machine name generation still occurs after a non-HTML 5
     // validation failure.

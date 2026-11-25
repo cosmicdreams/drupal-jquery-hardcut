@@ -2,7 +2,7 @@
  * @file
  * Attaches behaviors for the form_test module.
  */
-(function ($, Drupal) {
+(function (Drupal) {
   /**
    * Behavior for setting dynamic summaries.
    *
@@ -13,16 +13,14 @@
    */
   Drupal.behaviors.formTestVerticalTabsSummary = {
     attach(context) {
-      $(context)
-        .find('[data-drupal-selector="edit-tab1"]')
-        .drupalSetSummary((context) => {
-          return 'Summary 1';
-        });
-      $(context)
-        .find('[data-drupal-selector="edit-tab2"]')
-        .drupalSetSummary((context) => {
-          return 'Summary 2';
-        });
+      Drupal.form.setSummary(
+        context.querySelectorAll('[data-drupal-selector="edit-tab1"]'),
+        'Summary 1',
+      );
+      Drupal.form.setSummary(
+        context.querySelectorAll('[data-drupal-selector="edit-tab2"]'),
+        'Summary 2',
+      );
     },
   };
-})(jQuery, Drupal);
+})(Drupal);

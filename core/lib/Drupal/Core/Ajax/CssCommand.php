@@ -3,15 +3,7 @@
 namespace Drupal\Core\Ajax;
 
 /**
- * An AJAX command for calling the jQuery css() method.
- *
- * The 'css' command will instruct the client to use the jQuery css() method to
- * apply the CSS arguments to elements matched by the given selector.
- *
- * This command is implemented by Drupal.AjaxCommands.prototype.css() defined
- * in misc/ajax.js.
- *
- * @see http://docs.jquery.com/CSS/css#properties
+ * Applies absolute CSS property values to elements matching a CSS selector.
  *
  * @ingroup ajax
  */
@@ -50,7 +42,6 @@ class CssCommand implements CommandInterface {
    * Implements Drupal\Core\Ajax\CommandInterface:render().
    */
   public function render() {
-
     return [
       'command' => 'css',
       'selector' => $this->selector,

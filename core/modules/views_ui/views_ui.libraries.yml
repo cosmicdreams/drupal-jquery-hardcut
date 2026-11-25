@@ -5,11 +5,9 @@ views_ui.admin:
     js/dialog.views.js: {}
     js/views-admin.js: {}
   dependencies:
-    - core/jquery
     - core/drupal
     - core/drupalSettings
     - core/once
-    - core/internal.jquery.form
     - core/drupal.form
     - core/drupal.ajax
     - core/drupal.dropbutton
@@ -22,7 +20,6 @@ views_ui.listing:
   js:
     js/views_ui.listing.js: {}
   dependencies:
-    - core/jquery
     - core/drupal
     - core/once
     - views_ui/admin.styling
@@ -32,6 +29,7 @@ admin.styling:
   css:
     component:
       css/views_ui.admin.css: {}
+      css/views_ui.behaviors.css: {}
     theme:
       css/views_ui.admin.theme.css: {}
       css/views_ui.contextual.css: {}

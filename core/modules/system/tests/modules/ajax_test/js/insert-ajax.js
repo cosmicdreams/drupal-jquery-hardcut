@@ -1,41 +1,28 @@
 /**
  * @file
- * Drupal behavior to attach click event handlers to ajax-insert and
- * ajax-insert-inline links for testing ajax requests.
+ * Attaches Ajax insertion behavior to the test links.
  */
 
-(function ($, window, Drupal) {
+((Drupal) => {
   Drupal.behaviors.insertTest = {
     attach(context) {
-      $(once('ajax-insert', '.ajax-insert')).on('click', (event) => {
-        event.preventDefault();
-        const ajaxSettings = {
-          url: event.currentTarget.getAttribute('href'),
-          wrapper: 'ajax-target',
-          base: false,
-          element: false,
-          method: event.currentTarget.getAttribute('data-method'),
-          effect: event.currentTarget.getAttribute('data-effect'),
-        };
-        const myAjaxObject = Drupal.ajax(ajaxSettings);
-        myAjaxObject.execute();
+      const selector = '.ajax-insert, .ajax-insert-inline';
+      once('ajax-insert', selector, context).forEach((link) => {
+        link.addEventListener('click', (event) => {
+          event.preventDefault();
+          Drupal.ajax({
+            url: link.getAttribute('href'),
+            wrapper: link.classList.contains('ajax-insert-inline')
+              ? 'ajax-target-inline'
+              : 'ajax-target',
+            base: false,
+            element: false,
+            method: link.dataset.method,
+            effect: link.dataset.effect,
+          }).execute();
+        });
       });
-
-      $(once('ajax-insert', '.ajax-insert-inline')).on('click', (event) => {
-        event.preventDefault();
-        const ajaxSettings = {
-          url: event.currentTarget.getAttribute('href'),
-          wrapper: 'ajax-target-inline',
-          base: false,
-          element: false,
-          method: event.currentTarget.getAttribute('data-method'),
-          effect: event.currentTarget.getAttribute('data-effect'),
-        };
-        const myAjaxObject = Drupal.ajax(ajaxSettings);
-        myAjaxObject.execute();
-      });
-
-      $(context).addClass('processed');
+      context.classList?.add('processed');
     },
   };
-})(jQuery, window, Drupal);
+})(Drupal);

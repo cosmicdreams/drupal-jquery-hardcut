@@ -1,0 +1,14 @@
+name: 'jQuery readiness extends fixture'
+type: theme
+base theme: jqf_global
+package: Testing
+version: VERSION
+libraries-extend:
+  core/drupalSettings:
+    - jqf_dependency/legacy
+    - 42
+libraries-override:
+  jqf_script/transitive: false
+  jqf_script/script:
+    js:
+      js/probe.js: false

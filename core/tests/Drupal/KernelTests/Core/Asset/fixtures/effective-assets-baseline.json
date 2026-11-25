@@ -1,0 +1,181 @@
+{
+  "profiles": {
+    "minimal:stark": {
+      "libraries": [
+        "core/drupalSettings",
+        "system/base",
+        "core/drupal",
+        "core/drupal.announce",
+        "core/once",
+        "core/drupal.form.events",
+        "core/drupal.dropbutton"
+      ],
+      "css": [
+        {"weight": -200, "category": "base", "group": 0, "type": "file", "data": "core/modules/system/css/components/align.module.css", "version": "VERSION", "media": "all", "preprocess": true, "library": "system/base"},
+        {"weight": -200, "category": "base", "group": 0, "type": "file", "data": "core/modules/system/css/components/container-inline.module.css", "version": "VERSION", "media": "all", "preprocess": true, "library": "system/base"},
+        {"weight": -200, "category": "base", "group": 0, "type": "file", "data": "core/modules/system/css/components/clearfix.module.css", "version": "VERSION", "media": "all", "preprocess": true, "library": "system/base"},
+        {"weight": -200, "category": "base", "group": 0, "type": "file", "data": "core/modules/system/css/components/hidden.module.css", "version": "VERSION", "media": "all", "preprocess": true, "library": "system/base"},
+        {"weight": -200, "category": "base", "group": 0, "type": "file", "data": "core/modules/system/css/components/js.module.css", "version": "VERSION", "media": "all", "preprocess": true, "library": "system/base"},
+        {"weight": 0, "category": "component", "group": 0, "type": "file", "data": "core/misc/dropbutton/dropbutton.css", "version": "VERSION", "media": "all", "preprocess": true, "library": "core/drupal.dropbutton"}
+      ],
+      "js": [
+        {"group": -100, "type": "file", "data": "core/misc/drupalSettingsLoader.js", "version": "VERSION", "minified": false, "weight": 0, "preprocess": true, "attributes": [], "scope": "footer", "library": "core/drupalSettings"},
+        {"group": -100, "type": "file", "data": "core/misc/drupal.js", "version": "VERSION", "minified": false, "weight": 0, "preprocess": true, "attributes": [], "scope": "footer", "library": "core/drupal"},
+        {"group": -100, "type": "file", "data": "core/misc/drupal.init.js", "version": "VERSION", "minified": false, "weight": 0, "preprocess": true, "attributes": [], "scope": "footer", "library": "core/drupal"},
+        {"group": -100, "type": "file", "data": "core/misc/announce.js", "version": "VERSION", "minified": false, "weight": 0, "preprocess": true, "attributes": [], "scope": "footer", "library": "core/drupal.announce"},
+        {"minified": true, "preprocess": false, "group": -100, "type": "file", "data": "core/assets/vendor/once/once.min.js", "version": "1.0.1", "weight": 0, "attributes": [], "scope": "footer", "library": "core/once"},
+        {"group": -100, "type": "file", "data": "core/misc/form-events.js", "version": "VERSION", "minified": false, "weight": 0, "preprocess": true, "attributes": [], "scope": "footer", "library": "core/drupal.form.events"},
+        {"group": -100, "type": "file", "data": "core/misc/dropbutton/dropbutton.js", "version": "VERSION", "minified": false, "weight": 0, "preprocess": true, "attributes": [], "scope": "footer", "library": "core/drupal.dropbutton"}
+      ]
+    },
+    "minimal:starterkit_theme": {
+      "libraries": [
+        "core/drupalSettings",
+        "system/base",
+        "core/drupal",
+        "core/drupal.announce",
+        "core/once",
+        "core/drupal.form.events",
+        "core/drupal.dropbutton"
+      ],
+      "css": [
+        {"weight": -200, "category": "base", "group": 0, "type": "file", "data": "core/modules/system/css/components/align.module.css", "version": "VERSION", "media": "all", "preprocess": true, "library": "system/base"},
+        {"weight": -200, "category": "base", "group": 0, "type": "file", "data": "core/modules/system/css/components/container-inline.module.css", "version": "VERSION", "media": "all", "preprocess": true, "library": "system/base"},
+        {"weight": -200, "category": "base", "group": 0, "type": "file", "data": "core/modules/system/css/components/clearfix.module.css", "version": "VERSION", "media": "all", "preprocess": true, "library": "system/base"},
+        {"weight": -200, "category": "base", "group": 0, "type": "file", "data": "core/modules/system/css/components/hidden.module.css", "version": "VERSION", "media": "all", "preprocess": true, "library": "system/base"},
+        {"weight": -200, "category": "base", "group": 0, "type": "file", "data": "core/modules/system/css/components/js.module.css", "version": "VERSION", "media": "all", "preprocess": true, "library": "system/base"},
+        {"weight": 0, "category": "component", "group": 0, "type": "file", "data": "core/misc/dropbutton/dropbutton.css", "version": "VERSION", "media": "all", "preprocess": true, "library": "core/drupal.dropbutton"},
+        {"weight": -10, "category": "component", "group": 100, "type": "file", "data": "core/themes/starterkit_theme/css/components/dropbutton.css", "version": "VERSION", "media": "all", "preprocess": true, "library": "core/drupal.dropbutton"}
+      ],
+      "js": [
+        {"group": -100, "type": "file", "data": "core/misc/drupalSettingsLoader.js", "version": "VERSION", "minified": false, "weight": 0, "preprocess": true, "attributes": [], "scope": "footer", "library": "core/drupalSettings"},
+        {"group": -100, "type": "file", "data": "core/misc/drupal.js", "version": "VERSION", "minified": false, "weight": 0, "preprocess": true, "attributes": [], "scope": "footer", "library": "core/drupal"},
+        {"group": -100, "type": "file", "data": "core/misc/drupal.init.js", "version": "VERSION", "minified": false, "weight": 0, "preprocess": true, "attributes": [], "scope": "footer", "library": "core/drupal"},
+        {"group": -100, "type": "file", "data": "core/misc/announce.js", "version": "VERSION", "minified": false, "weight": 0, "preprocess": true, "attributes": [], "scope": "footer", "library": "core/drupal.announce"},
+        {"minified": true, "preprocess": false, "group": -100, "type": "file", "data": "core/assets/vendor/once/once.min.js", "version": "1.0.1", "weight": 0, "attributes": [], "scope": "footer", "library": "core/once"},
+        {"group": -100, "type": "file", "data": "core/misc/form-events.js", "version": "VERSION", "minified": false, "weight": 0, "preprocess": true, "attributes": [], "scope": "footer", "library": "core/drupal.form.events"},
+        {"group": -100, "type": "file", "data": "core/misc/dropbutton/dropbutton.js", "version": "VERSION", "minified": false, "weight": 0, "preprocess": true, "attributes": [], "scope": "footer", "library": "core/drupal.dropbutton"}
+      ]
+    },
+    "standard:default_admin": {
+      "libraries": [
+        "core/drupalSettings",
+        "system/base",
+        "core/drupal",
+        "core/drupal.announce",
+        "core/once",
+        "core/drupal.form.events",
+        "core/drupal.dropbutton"
+      ],
+      "css": [
+        {"weight": -200, "category": "base", "group": 0, "type": "file", "data": "core/modules/system/css/components/align.module.css", "version": "VERSION", "media": "all", "preprocess": true, "library": "system/base"},
+        {"weight": -200, "category": "base", "group": 0, "type": "file", "data": "core/modules/system/css/components/container-inline.module.css", "version": "VERSION", "media": "all", "preprocess": true, "library": "system/base"},
+        {"weight": -200, "category": "base", "group": 0, "type": "file", "data": "core/modules/system/css/components/clearfix.module.css", "version": "VERSION", "media": "all", "preprocess": true, "library": "system/base"},
+        {"weight": -200, "category": "base", "group": 0, "type": "file", "data": "core/modules/system/css/components/hidden.module.css", "version": "VERSION", "media": "all", "preprocess": true, "library": "system/base"},
+        {"weight": -200, "category": "base", "group": 0, "type": "file", "data": "core/modules/system/css/components/js.module.css", "version": "VERSION", "media": "all", "preprocess": true, "library": "system/base"},
+        {"weight": 0, "category": "component", "group": 0, "type": "file", "data": "core/themes/default_admin/css/components/dropbutton.css", "version": "VERSION", "media": "all", "preprocess": true, "library": "core/drupal.dropbutton"}
+      ],
+      "js": [
+        {"group": -100, "type": "file", "data": "core/misc/drupalSettingsLoader.js", "version": "VERSION", "minified": false, "weight": 0, "preprocess": true, "attributes": [], "scope": "footer", "library": "core/drupalSettings"},
+        {"group": -100, "type": "file", "data": "core/misc/drupal.js", "version": "VERSION", "minified": false, "weight": 0, "preprocess": true, "attributes": [], "scope": "footer", "library": "core/drupal"},
+        {"group": -100, "type": "file", "data": "core/misc/drupal.init.js", "version": "VERSION", "minified": false, "weight": 0, "preprocess": true, "attributes": [], "scope": "footer", "library": "core/drupal"},
+        {"group": -100, "type": "file", "data": "core/misc/announce.js", "version": "VERSION", "minified": false, "weight": 0, "preprocess": true, "attributes": [], "scope": "footer", "library": "core/drupal.announce"},
+        {"minified": true, "preprocess": false, "group": -100, "type": "file", "data": "core/assets/vendor/once/once.min.js", "version": "1.0.1", "weight": 0, "attributes": [], "scope": "footer", "library": "core/once"},
+        {"group": -100, "type": "file", "data": "core/misc/form-events.js", "version": "VERSION", "minified": false, "weight": 0, "preprocess": true, "attributes": [], "scope": "footer", "library": "core/drupal.form.events"},
+        {"group": -100, "type": "file", "data": "core/misc/dropbutton/dropbutton.js", "version": "VERSION", "minified": false, "weight": 0, "preprocess": true, "attributes": [], "scope": "footer", "library": "core/drupal.dropbutton"},
+        {"minified": false, "group": -100, "type": "file", "data": "core/themes/default_admin/js/dropbutton.js", "version": "VERSION", "weight": 0, "preprocess": true, "attributes": [], "scope": "footer", "library": "core/drupal.dropbutton"},
+        {"minified": false, "group": -100, "type": "file", "data": "core/themes/default_admin/migration/js/dropbutton.js", "version": "VERSION", "weight": 0, "preprocess": true, "attributes": [], "scope": "footer", "library": "core/drupal.dropbutton"}
+      ]
+    },
+    "demo_umami:umami": {
+      "libraries": [
+        "core/drupalSettings",
+        "system/base",
+        "locale/translations",
+        "core/drupal",
+        "core/drupal.announce",
+        "core/once",
+        "core/drupal.form.events",
+        "core/drupal.dropbutton"
+      ],
+      "css": [
+        {"weight": -200, "category": "base", "group": 0, "type": "file", "data": "core/modules/system/css/components/align.module.css", "version": "VERSION", "media": "all", "preprocess": true, "library": "system/base"},
+        {"weight": -200, "category": "base", "group": 0, "type": "file", "data": "core/modules/system/css/components/container-inline.module.css", "version": "VERSION", "media": "all", "preprocess": true, "library": "system/base"},
+        {"weight": -200, "category": "base", "group": 0, "type": "file", "data": "core/modules/system/css/components/clearfix.module.css", "version": "VERSION", "media": "all", "preprocess": true, "library": "system/base"},
+        {"weight": -200, "category": "base", "group": 0, "type": "file", "data": "core/modules/system/css/components/hidden.module.css", "version": "VERSION", "media": "all", "preprocess": true, "library": "system/base"},
+        {"weight": -200, "category": "base", "group": 0, "type": "file", "data": "core/modules/system/css/components/js.module.css", "version": "VERSION", "media": "all", "preprocess": true, "library": "system/base"},
+        {"weight": 0, "category": "component", "group": 0, "type": "file", "data": "core/misc/dropbutton/dropbutton.css", "version": "VERSION", "media": "all", "preprocess": true, "library": "core/drupal.dropbutton"},
+        {"weight": -10, "category": "component", "group": 100, "type": "file", "data": "core/profiles/demo_umami/themes/umami/css/classy/components/dropbutton.css", "version": "VERSION", "media": "all", "preprocess": true, "library": "core/drupal.dropbutton"}
+      ],
+      "js": [
+        {"group": -100, "type": "file", "data": "core/misc/drupalSettingsLoader.js", "version": "VERSION", "minified": false, "weight": 0, "preprocess": true, "attributes": [], "scope": "footer", "library": "core/drupalSettings"},
+        {"group": -100, "type": "file", "data": "core/misc/drupal.js", "version": "VERSION", "minified": false, "weight": 0, "preprocess": true, "attributes": [], "scope": "footer", "library": "core/drupal"},
+        {"group": -100, "type": "file", "data": "core/misc/drupal.init.js", "version": "VERSION", "minified": false, "weight": 0, "preprocess": true, "attributes": [], "scope": "footer", "library": "core/drupal"},
+        {"group": -100, "type": "file", "data": "core/misc/announce.js", "version": "VERSION", "minified": false, "weight": 0, "preprocess": true, "attributes": [], "scope": "footer", "library": "core/drupal.announce"},
+        {"minified": true, "preprocess": false, "group": -100, "type": "file", "data": "core/assets/vendor/once/once.min.js", "version": "1.0.1", "weight": 0, "attributes": [], "scope": "footer", "library": "core/once"},
+        {"group": -100, "type": "file", "data": "core/misc/form-events.js", "version": "VERSION", "minified": false, "weight": 0, "preprocess": true, "attributes": [], "scope": "footer", "library": "core/drupal.form.events"},
+        {"group": -100, "type": "file", "data": "core/misc/dropbutton/dropbutton.js", "version": "VERSION", "minified": false, "weight": 0, "preprocess": true, "attributes": [], "scope": "footer", "library": "core/drupal.dropbutton"}
+      ]
+    },
+    "demo_umami:default_admin": {
+      "libraries": [
+        "core/drupalSettings",
+        "system/base",
+        "locale/translations",
+        "core/drupal",
+        "core/drupal.announce",
+        "core/once",
+        "core/drupal.form.events",
+        "core/drupal.dropbutton"
+      ],
+      "css": [
+        {"weight": -200, "category": "base", "group": 0, "type": "file", "data": "core/modules/system/css/components/align.module.css", "version": "VERSION", "media": "all", "preprocess": true, "library": "system/base"},
+        {"weight": -200, "category": "base", "group": 0, "type": "file", "data": "core/modules/system/css/components/container-inline.module.css", "version": "VERSION", "media": "all", "preprocess": true, "library": "system/base"},
+        {"weight": -200, "category": "base", "group": 0, "type": "file", "data": "core/modules/system/css/components/clearfix.module.css", "version": "VERSION", "media": "all", "preprocess": true, "library": "system/base"},
+        {"weight": -200, "category": "base", "group": 0, "type": "file", "data": "core/modules/system/css/components/hidden.module.css", "version": "VERSION", "media": "all", "preprocess": true, "library": "system/base"},
+        {"weight": -200, "category": "base", "group": 0, "type": "file", "data": "core/modules/system/css/components/js.module.css", "version": "VERSION", "media": "all", "preprocess": true, "library": "system/base"},
+        {"weight": 0, "category": "component", "group": 0, "type": "file", "data": "core/themes/default_admin/css/components/dropbutton.css", "version": "VERSION", "media": "all", "preprocess": true, "library": "core/drupal.dropbutton"}
+      ],
+      "js": [
+        {"group": -100, "type": "file", "data": "core/misc/drupalSettingsLoader.js", "version": "VERSION", "minified": false, "weight": 0, "preprocess": true, "attributes": [], "scope": "footer", "library": "core/drupalSettings"},
+        {"group": -100, "type": "file", "data": "core/misc/drupal.js", "version": "VERSION", "minified": false, "weight": 0, "preprocess": true, "attributes": [], "scope": "footer", "library": "core/drupal"},
+        {"group": -100, "type": "file", "data": "core/misc/drupal.init.js", "version": "VERSION", "minified": false, "weight": 0, "preprocess": true, "attributes": [], "scope": "footer", "library": "core/drupal"},
+        {"group": -100, "type": "file", "data": "core/misc/announce.js", "version": "VERSION", "minified": false, "weight": 0, "preprocess": true, "attributes": [], "scope": "footer", "library": "core/drupal.announce"},
+        {"minified": true, "preprocess": false, "group": -100, "type": "file", "data": "core/assets/vendor/once/once.min.js", "version": "1.0.1", "weight": 0, "attributes": [], "scope": "footer", "library": "core/once"},
+        {"group": -100, "type": "file", "data": "core/misc/form-events.js", "version": "VERSION", "minified": false, "weight": 0, "preprocess": true, "attributes": [], "scope": "footer", "library": "core/drupal.form.events"},
+        {"group": -100, "type": "file", "data": "core/misc/dropbutton/dropbutton.js", "version": "VERSION", "minified": false, "weight": 0, "preprocess": true, "attributes": [], "scope": "footer", "library": "core/drupal.dropbutton"},
+        {"minified": false, "group": -100, "type": "file", "data": "core/themes/default_admin/js/dropbutton.js", "version": "VERSION", "weight": 0, "preprocess": true, "attributes": [], "scope": "footer", "library": "core/drupal.dropbutton"},
+        {"minified": false, "group": -100, "type": "file", "data": "core/themes/default_admin/migration/js/dropbutton.js", "version": "VERSION", "weight": 0, "preprocess": true, "attributes": [], "scope": "footer", "library": "core/drupal.dropbutton"}
+      ]
+    }
+  },
+  "groups": {
+    "neutral": {
+      "css": [
+        ["core/modules/system/css/components/align.module.css", "core/modules/system/css/components/container-inline.module.css", "core/modules/system/css/components/clearfix.module.css", "core/modules/system/css/components/hidden.module.css", "core/modules/system/css/components/js.module.css"],
+        ["http://example.com/stylesheet.css"],
+        ["core/assets/vendor/normalize-css/normalize.css"]
+      ],
+      "js": [
+        ["core/misc/drupalSettingsLoader.js"],
+        ["http://example.com/script.js"],
+        ["core/misc/drupal.js", "core/misc/drupal.init.js"],
+        ["core/assets/vendor/once/once.min.js"],
+        ["core/assets/vendor/loadjs/loadjs.min.js"],
+        ["core/misc/debounce.js", "core/misc/checkbox.js"]
+      ]
+    },
+    "already-loaded": {
+      "css": [
+        ["http://example.com/stylesheet.css"],
+        ["core/assets/vendor/normalize-css/normalize.css"]
+      ],
+      "js": [
+        ["http://example.com/script.js"],
+        ["core/assets/vendor/once/once.min.js"],
+        ["core/assets/vendor/loadjs/loadjs.min.js"],
+        ["core/misc/debounce.js"]
+      ]
+    }
+  }
+}

@@ -155,7 +155,7 @@ class FileVideoFormatter extends FileMediaFormatterBase {
         ],
         '#states' => [
           'visible' => [
-            ':input[name$="[settings][poster]"]' => ['filled' => TRUE],
+            '[name$="[settings][poster]"]' => ['filled' => TRUE],
           ],
         ],
       ],

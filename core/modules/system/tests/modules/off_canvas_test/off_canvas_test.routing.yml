@@ -27,3 +27,11 @@ off_canvas_test.dialog_links:
     _controller: '\Drupal\off_canvas_test\Controller\TestController::otherDialogLinks'
   requirements:
     _access: 'TRUE'
+
+off_canvas_test.htmx_links:
+  path: '/off-canvas-test-htmx-links'
+  defaults:
+    _controller: '\Drupal\off_canvas_test\Controller\TestController::htmxLinks'
+    _title: 'Links'
+  requirements:
+    _access: 'TRUE'

@@ -3,31 +3,33 @@
  * Menu UI behaviors.
  */
 
-(function ($, Drupal) {
+(function (Drupal) {
+  const overrides = new WeakSet();
+
   /**
    * Set a summary on the menu link form.
    *
    * @type {Drupal~behavior}
    *
    * @prop {Drupal~behaviorAttach} attach
-   *   Find the form and call `drupalSetSummary` on it.
+   *   Find the form and set its summary.
    */
   Drupal.behaviors.menuUiDetailsSummaries = {
     attach(context) {
-      $(context)
-        .find('.menu-link-form')
-        .drupalSetSummary((context) => {
-          const $context = $(context);
+      Drupal.form.setSummary(
+        context.querySelectorAll('.menu-link-form'),
+        (context) => {
           if (
-            $context.find('.js-form-item-menu-enabled input:checked').length
+            context.querySelector('.js-form-item-menu-enabled input:checked')
           ) {
             return Drupal.checkPlain(
-              $context.find('.js-form-item-menu-title input')[0].value,
+              context.querySelector('.js-form-item-menu-title input').value,
             );
           }
 
           return Drupal.t('Not in menu');
-        });
+        },
+      );
     },
   };
 
@@ -42,55 +44,60 @@
    */
   Drupal.behaviors.menuUiLinkAutomaticTitle = {
     attach(context) {
-      const $context = $(context);
-      $context.find('.menu-link-form').each(function () {
-        const $this = $(this);
-        // Try to find menu settings widget elements as well as a 'title' field
-        // in the form, but play nicely with user permissions and form
-        // alterations.
-        const $checkbox = $this.find('.js-form-item-menu-enabled input');
-        const $linkTitle = $context.find('.js-form-item-menu-title input');
-        const $title = $this
+      context.querySelectorAll('.menu-link-form').forEach((widget) => {
+        const checkboxes = widget.querySelectorAll(
+          '.js-form-item-menu-enabled input',
+        );
+        const linkTitles = context.querySelectorAll(
+          '.js-form-item-menu-title input',
+        );
+        const titles = widget
           .closest('form')
-          .find('.js-form-item-title-0-value input');
-        // Bail out if we do not have all required fields.
-        if (!($checkbox.length && $linkTitle.length && $title.length)) {
+          ?.querySelectorAll('.js-form-item-title-0-value input');
+        const [checkbox] = checkboxes;
+        const [linkTitle] = linkTitles;
+        const title = titles?.[0];
+        if (!checkbox || !linkTitle || !title) {
           return;
         }
-        // If there is a link title already, mark it as overridden. The user
-        // expects that toggling the checkbox twice will take over the node's
-        // title.
-        if ($checkbox[0].checked && $linkTitle[0].value.length) {
-          $linkTitle.data('menuLinkAutomaticTitleOverridden', true);
+        if (checkbox.checked && linkTitle.value) {
+          linkTitles.forEach((field) => overrides.add(field));
         }
-        // Whenever the value is changed manually, disable this behavior.
-        $linkTitle.on('keyup', () => {
-          $linkTitle.data('menuLinkAutomaticTitleOverridden', true);
+        linkTitles.forEach((field) => {
+          Drupal.formEvents.listen(field, 'keyup', () => {
+            linkTitles.forEach((input) => overrides.add(input));
+          });
         });
-        // Global trigger on checkbox (do not fill-in a value when disabled).
-        $checkbox.on('change', () => {
-          if ($checkbox[0].checked) {
-            if (!$linkTitle.data('menuLinkAutomaticTitleOverridden')) {
-              $linkTitle[0].value = $title[0].value;
+        checkboxes.forEach((field) => {
+          Drupal.formEvents.listen(field, 'change', () => {
+            if (checkbox.checked) {
+              if (!overrides.has(linkTitle)) {
+                linkTitle.value = title.value;
+              }
+            } else {
+              linkTitle.value = '';
+              linkTitles.forEach((input) => overrides.delete(input));
             }
-          } else {
-            $linkTitle[0].value = '';
-            $linkTitle.removeData('menuLinkAutomaticTitleOverridden');
-          }
-          $checkbox.closest('.vertical-tabs-pane').trigger('summaryUpdated');
-          $checkbox.trigger('formUpdated');
+            const pane = checkbox.closest('.vertical-tabs-pane');
+            if (pane) {
+              Drupal.formEvents.publish(pane, 'summaryUpdated');
+            }
+            checkboxes.forEach((input) =>
+              Drupal.formEvents.publish(input, 'formUpdated'),
+            );
+          });
         });
-        // Take over any title change.
-        $title.on('keyup', () => {
-          if (
-            !$linkTitle.data('menuLinkAutomaticTitleOverridden') &&
-            $checkbox[0].checked
-          ) {
-            $linkTitle[0].value = $title[0].value;
-            $linkTitle.trigger('formUpdated');
-          }
+        titles.forEach((field) => {
+          Drupal.formEvents.listen(field, 'keyup', () => {
+            if (!overrides.has(linkTitle) && checkbox.checked) {
+              linkTitle.value = title.value;
+              linkTitles.forEach((input) =>
+                Drupal.formEvents.publish(input, 'formUpdated'),
+              );
+            }
+          });
         });
       });
     },
   };
-})(jQuery, Drupal);
+})(Drupal);

@@ -1,0 +1,6 @@
+jqf_script.probe:
+  path: '/test-jquery-free/probe'
+  defaults:
+    _controller: '\Drupal\jqf_script\Controller\ProbeController::page'
+  requirements:
+    _access: 'TRUE'

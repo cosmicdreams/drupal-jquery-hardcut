@@ -69,7 +69,7 @@ class Fields extends RowPluginBase {
       '#description' => $this->t('Inline fields will be displayed next to each other rather than one after another. Note that some fields will ignore this if they are block elements, particularly body fields and other formatted HTML.'),
       '#states' => [
         'visible' => [
-          ':input[name="row_options[default_field_elements]"]' => ['checked' => TRUE],
+          '[name="row_options[default_field_elements]"]' => ['checked' => TRUE],
         ],
       ],
     ];
@@ -82,7 +82,7 @@ class Fields extends RowPluginBase {
       '#description' => $this->t('The separator may be placed between inline fields to keep them from squishing up next to each other. You can use HTML in this field.'),
       '#states' => [
         'visible' => [
-          ':input[name="row_options[default_field_elements]"]' => ['checked' => TRUE],
+          '[name="row_options[default_field_elements]"]' => ['checked' => TRUE],
         ],
       ],
     ];

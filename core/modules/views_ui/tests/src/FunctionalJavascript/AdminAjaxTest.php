@@ -4,7 +4,12 @@ declare(strict_types=1);
 
 namespace Drupal\Tests\views_ui\FunctionalJavascript;
 
+use Drupal\ckeditor5\Plugin\CKEditor5Plugin\Heading;
+use Drupal\editor\Entity\Editor;
+use Drupal\filter\Entity\FilterFormat;
 use Drupal\FunctionalJavascriptTests\WebDriverTestBase;
+use Drupal\node\Entity\NodeType;
+use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\Attributes\Group;
 use PHPUnit\Framework\Attributes\RunTestsInSeparateProcesses;
 
@@ -57,10 +62,228 @@ class AdminAjaxTest extends WebDriverTestBase {
     $page->clickLink('User: Name (Username)');
     $assert_session->waitForElementVisible('css', '.views-ui-dialog');
     $page->fillField('Label', 'New Title');
-    $page->find('css', '.ui-dialog-buttonset button:contains("Apply")')->press();
+    $page->find('css', '.drupal-dialog-buttonset button:contains("Apply")')->press();
     $assert_session->waitForElementRemoved('css', '.views-ui-dialog');
     $assert_session->pageTextContains('This is text added to the display tabs at the top');
     $assert_session->pageTextContains('This is text added to the display edit form');
+  }
+
+  /**
+   * Tests finding and selecting a handler in the add-fields dialog.
+   */
+  #[DataProvider('viewsThemes')]
+  public function testFindHandler(string $theme): void {
+    $this->useViewsTheme($theme);
+    $this->drupalGet('admin/structure/views/view/user_admin_people');
+    $assert = $this->assertSession();
+    $assert->elementExists('css', '#views-add-field')->click();
+    $assert->assertWaitOnAjaxRequest();
+
+    $dialog = $assert->elementExists('css', 'dialog.views-ui-dialog[open]');
+    $selected = $assert->elementExists('css', '.views-add-form-selected', $dialog);
+    $this->assertFalse($selected->isVisible());
+    $search = $dialog->findField('Search');
+    $category = $dialog->findField('Category');
+    $checkbox = $assert->fieldExists('name[views.dropbutton]', $dialog);
+    $title = $assert->elementExists('css', '.title', $checkbox->getParent()->getParent()->getParent());
+
+    $this->assertJsCondition(<<<'JS'
+      (() => {
+        const list = document.querySelector('dialog.views-ui-dialog[open] [data-drupal-views-scroll]');
+        return list.clientHeight > 0 && list.scrollHeight > list.clientHeight;
+      })()
+      JS);
+
+    // Select several handlers that are visible after scrolling.
+    $scroll_positions = $this->getSession()->evaluateScript(<<<'JS'
+      (() => {
+        const list = document.querySelector('dialog.views-ui-dialog[open] [data-drupal-views-scroll]');
+        list.scrollTop = 150;
+        const positions = [list.scrollTop];
+        const bounds = list.getBoundingClientRect();
+        const visible = [...list.querySelectorAll('.filterable-option .title')].filter((title) => {
+          const row = title.getBoundingClientRect();
+          return row.top >= bounds.top && row.bottom <= bounds.bottom;
+        });
+        visible.slice(0, 3).forEach((title) => {
+          title.click();
+          positions.push(list.scrollTop);
+        });
+        return positions;
+      })()
+      JS);
+    $this->assertSame(array_fill(0, 4, 150), $scroll_positions);
+    $this->assertJsCondition(<<<'JS'
+      (() => {
+        const content = document.querySelector('dialog.views-ui-dialog[open] .drupal-dialog-content');
+        const panel = content.querySelector('.views-add-form-selected');
+        const list = content.querySelector('[data-drupal-views-scroll]');
+        return !panel.hidden && list.scrollTop === 150 &&
+          panel.getBoundingClientRect().bottom <= content.getBoundingClientRect().top + content.clientHeight + 1;
+      })()
+      JS);
+    $this->getSession()->executeScript(<<<'JS'
+      document.querySelectorAll('dialog.views-ui-dialog[open] .filterable-option input:checked')
+        .forEach((checkbox) => checkbox.click());
+      JS);
+    $this->assertFalse($selected->isVisible());
+
+    $search->setValue('dropbutton');
+    $this->assertTrue($title->isVisible());
+    $this->assertCount(1, $this->getSession()->getPage()->findAll('css', '.filterable-option:not([hidden])'));
+
+    $category->selectOption('User');
+    $this->assertFalse($title->isVisible());
+    $category->selectOption('- All -');
+    $this->assertTrue($title->isVisible());
+    $title->click();
+    $this->assertTrue($selected->isVisible());
+    $assert->elementTextContains('css', '.views-selected-options', 'Dropbutton');
+
+    // A selection remains checked when it is filtered out.
+    $search->setValue('no such field');
+    $this->assertFalse($title->isVisible());
+    $assert->elementTextContains('css', '.views-selected-options', 'Dropbutton');
+    $search->setValue('dropbutton');
+    $title->click();
+    $this->assertFalse($selected->isVisible());
+  }
+
+  /**
+   * Tests Select all before and after the filter behavior is attached.
+   */
+  #[DataProvider('viewsThemes')]
+  public function testSelectAll(string $theme): void {
+    $this->useViewsTheme($theme);
+    \Drupal::service('module_installer')->install(['node']);
+    $this->resetAll();
+    NodeType::create(['type' => 'page', 'name' => 'Page'])->save();
+    NodeType::create(['type' => 'article', 'name' => 'Article'])->save();
+    $this->config('views.view.content')
+      ->set('display.default.display_options.filters.type.exposed', FALSE)
+      ->save();
+    $this->drupalGet('admin/structure/views/view/content');
+
+    $assert = $this->assertSession();
+    $filter = $assert->elementExists('css', 'a[href$="/filter/type"]');
+    $filter->click();
+    $assert->assertWaitOnAjaxRequest();
+    $dialog = $assert->elementExists('css', 'dialog.views-ui-dialog[open]');
+    $select_all = $assert->fieldExists('Select all', $dialog);
+    $this->assertTrue($select_all->isVisible());
+    $select_all->check();
+    $page = $assert->fieldExists('options[value][page]', $dialog);
+    $this->assertTrue($page->isChecked());
+    $this->assertTrue($assert->fieldExists('options[value][article]', $dialog)->isChecked());
+    $page->uncheck();
+    $this->assertFalse($select_all->isChecked());
+
+    $assert->buttonExists('Close', $dialog)->press();
+    $this->getSession()->executeScript('delete Drupal.behaviors.viewsFilterConfigSelectAll');
+    $filter->click();
+    $assert->assertWaitOnAjaxRequest();
+    $this->assertFalse($assert->fieldExists('Select all')->isVisible());
+  }
+
+  /**
+   * Provides core themes for Views UI visibility tests.
+   */
+  public static function viewsThemes(): array {
+    return [
+      'Stark' => ['stark'],
+      'Default Admin' => ['default_admin'],
+      'Starterkit' => ['starterkit_theme'],
+    ];
+  }
+
+  /**
+   * Sets the current theme for the Views editor and its dialog requests.
+   */
+  private function useViewsTheme(string $theme): void {
+    $this->container->get('theme_installer')->install([$theme]);
+    $this->config('system.theme')->set('default', $theme)->save();
+  }
+
+  /**
+   * Tests replacing a rearrange dialog while its response is loading assets.
+   */
+  public function testCloseWhileAddingFilterGroup(): void {
+    $this->drupalGet('admin/structure/views/view/user_admin_people');
+    $assert = $this->assertSession();
+    $assert->elementExists('css', '.views-ui-display-tab-bucket.filter .dropbutton-toggle button')->click();
+    $assert->elementExists('css', '#views-rearrange-filter')->click();
+    $assert->assertWaitOnAjaxRequest();
+
+    $session = $this->getSession();
+    $session->executeScript(<<<'JS'
+      const prototype = Drupal.Ajax.prototype;
+      const queue = prototype.commandExecutionQueue;
+      prototype.commandExecutionQueue = function (response, status) {
+        prototype.commandExecutionQueue = queue;
+        this.commands.add_css = () => new Promise((resolve) => {
+          window.finishFilterGroupAssets = resolve;
+        });
+        return queue.call(this, [{ command: 'add_css', data: [] }, ...Object.values(response)], status);
+      };
+      JS);
+    $assert->elementExists('css', '#views-add-group-link')->click();
+    $this->assertJsCondition('typeof window.finishFilterGroupAssets === "function"');
+    $dialog = $assert->elementExists('css', 'dialog.views-ui-dialog[open]');
+    $assert->buttonExists('Close', $dialog)->press();
+    $assert->elementExists('css', '#views-add-field')->click();
+    $this->assertJsCondition('document.querySelector("dialog[open] .views-selected-options") !== null');
+
+    $session->executeScript('window.finishFilterGroupAssets()');
+    $assert->assertWaitOnAjaxRequest();
+    $assert->elementExists('css', 'dialog[open] .views-selected-options');
+    $assert->elementNotExists('css', 'dialog[open] #views-add-group-link');
+  }
+
+  /**
+   * Tests the heading menu and link balloon in a text area handler.
+   */
+  public function testAreaEditor(): void {
+    \Drupal::service('module_installer')->install(['ckeditor5', 'views_ui_test']);
+    $this->resetAll();
+    \Drupal::state()->set('views_ui_test.enable_area_editor', TRUE);
+    FilterFormat::create([
+      'format' => 'area_format',
+      'name' => 'Area format',
+      'weight' => -10,
+      'roles' => ['authenticated'],
+    ])->save();
+    Editor::create([
+      'format' => 'area_format',
+      'editor' => 'ckeditor5',
+      'image_upload' => ['status' => FALSE],
+      'settings' => [
+        'toolbar' => ['items' => ['heading', 'link']],
+        'plugins' => ['ckeditor5_heading' => Heading::DEFAULT_CONFIGURATION],
+      ],
+    ])->save();
+
+    $this->drupalGet('admin/structure/views/view/user_admin_people');
+    $assert = $this->assertSession();
+    $assert->elementExists('css', '#views-add-header')->click();
+    $assert->assertWaitOnAjaxRequest();
+    $this->getSession()->getPage()->checkField('name[views.area]');
+    $assert->elementExists('css', '.drupal-dialog-buttonset')->pressButton('Add and configure header');
+    $assert->assertWaitOnAjaxRequest();
+    $editable = $assert->waitForElementVisible('css', 'dialog[open] .ck-editor__editable');
+    $this->assertNotNull($editable);
+
+    $assert->elementExists('css', '.ck-heading-dropdown button')->click();
+    $heading = $assert->waitForElementVisible('css', '.ck-heading-dropdown .ck-dropdown__panel .ck-list__item button');
+    $this->assertNotNull($heading);
+    $heading->click();
+    $editable->click();
+    $assert->elementExists('xpath', '//button[span[text()="Link"]]')->click();
+    $url = $assert->waitForElementVisible('css', 'dialog[open] .ck-balloon-panel_visible input[inputmode=url]');
+    $this->assertNotNull($url);
+    $url->setValue('https://example.com');
+    $this->assertJsCondition('document.activeElement.matches("dialog[open] .ck-balloon-panel_visible input[inputmode=url]")');
+    $assert->elementExists('css', '.ck-balloon-panel_visible .ck-link-form')->pressButton('Insert');
+    $assert->elementAttributeContains('css', '.ck-editor__editable a', 'href', 'https://example.com');
   }
 
   /**
@@ -73,10 +296,10 @@ class AdminAjaxTest extends WebDriverTestBase {
       $page->find('css', '#views-add-field')->click();
       $this->assertSession()->assertWaitOnAjaxRequest();
       $page->checkField($field);
-      $page->find('css', '.ui-dialog-buttonset')->pressButton('Add and configure fields');
+      $page->find('css', '.drupal-dialog-buttonset')->pressButton('Add and configure fields');
       $this->assertSession()->assertWaitOnAjaxRequest();
       $this->assertJsCondition('document.documentElement.style.overflow === "hidden"');
-      $page->find('css', '.ui-dialog-buttonset')->pressButton('Apply');
+      $page->find('css', '.drupal-dialog-buttonset')->pressButton('Apply');
       $this->assertSession()->assertWaitOnAjaxRequest();
 
       // Check overflow.

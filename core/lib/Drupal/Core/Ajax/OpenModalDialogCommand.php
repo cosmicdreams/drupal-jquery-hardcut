@@ -23,8 +23,7 @@ class OpenModalDialogCommand extends OpenDialogCommand {
    *   The content that will be placed in the dialog, either a render array
    *   or an HTML string.
    * @param array $dialog_options
-   *   (optional) Settings to be passed to the dialog implementation. Any
-   *   jQuery UI option can be used. See http://api.jqueryui.com/dialog.
+   *   (optional) Settings to be passed to the dialog implementation.
    * @param array|null $settings
    *   (optional) Custom settings that will be passed to the Drupal behaviors
    *   on the content of the dialog. If left empty, the settings will be

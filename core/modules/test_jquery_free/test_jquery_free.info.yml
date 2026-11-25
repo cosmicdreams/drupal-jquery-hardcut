@@ -1,0 +1,5 @@
+name: jQuery readiness canary
+type: module
+description: 'Reports dependencies on jQuery and warns when scripts access missing jQuery globals.'
+package: Testing
+version: VERSION

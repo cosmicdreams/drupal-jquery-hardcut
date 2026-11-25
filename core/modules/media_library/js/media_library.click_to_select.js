@@ -1,65 +1,84 @@
 /**
- * @file media_library.click_to_select.js
+ * @file
+ * Lets media previews toggle their selection checkboxes.
  */
 
-(($, Drupal) => {
+((Drupal, once) => {
+  const itemSelector = '.js-click-to-select';
+  const checkboxSelector = '.js-click-to-select-checkbox';
+  const hoverSelector = `.js-click-to-select-trigger, ${checkboxSelector}`;
+
   /**
    * Allows users to select an element which checks a hidden checkbox.
    *
    * @type {Drupal~behavior}
-   *
-   * @prop {Drupal~behaviorAttach} attach
-   *   Attaches behavior for selecting media library item.
    */
   Drupal.behaviors.ClickToSelect = {
     attach(context) {
-      $(
-        once(
-          'media-library-click-to-select',
-          '.js-click-to-select-trigger',
-          context,
-        ),
-      ).on('click', (event) => {
-        // Links inside the trigger should not be click-able.
-        event.preventDefault();
-        // Click the hidden checkbox when the trigger is clicked.
-        const $input = $(event.currentTarget)
-          .closest('.js-click-to-select')
-          .find('.js-click-to-select-checkbox input');
-        $input.prop('checked', !$input.prop('checked')).trigger('change');
+      once(
+        'media-library-click-to-select',
+        '.js-click-to-select-trigger',
+        context,
+      ).forEach((trigger) => {
+        trigger.addEventListener('click', (event) => {
+          const checkbox = trigger
+            .closest(itemSelector)
+            ?.querySelector(`${checkboxSelector} input`);
+          if (
+            checkbox &&
+            event.target.closest(hoverSelector) !==
+              checkbox.closest(checkboxSelector)
+          ) {
+            // Select the item instead of following a link in its preview.
+            event.preventDefault();
+            checkbox.checked = !checkbox.checked;
+            checkbox.dispatchEvent(new Event('change', { bubbles: true }));
+          }
+        });
       });
 
-      $(
-        once(
-          'media-library-click-to-select',
-          '.js-click-to-select-checkbox input',
-          context,
-        ),
-      )
-        .on('change', ({ currentTarget }) => {
-          $(currentTarget)
-            .closest('.js-click-to-select')
-            .toggleClass('checked', $(currentTarget).prop('checked'));
-        })
-        // Adds is-focus class to the click-to-select element.
-        .on('focus blur', ({ currentTarget, type }) => {
-          $(currentTarget)
-            .closest('.js-click-to-select')
-            .toggleClass('is-focus', type === 'focus');
+      once(
+        'media-library-click-to-select',
+        '.js-click-to-select-checkbox input',
+        context,
+      ).forEach((checkbox) => {
+        const item = checkbox.closest(itemSelector);
+        if (!item) {
+          return;
+        }
+        checkbox.addEventListener('change', () => {
+          item.classList.toggle('checked', checkbox.checked);
         });
+        checkbox.addEventListener('focus', () =>
+          item.classList.add('is-focus'),
+        );
+        checkbox.addEventListener('blur', () =>
+          item.classList.remove('is-focus'),
+        );
+      });
 
-      // Adds hover class to the click-to-select element.
-      $(
-        once(
-          'media-library-click-to-select-hover',
-          '.js-click-to-select-trigger, .js-click-to-select-checkbox',
-          context,
-        ),
-      ).on('mouseover mouseout', ({ currentTarget, type }) => {
-        $(currentTarget)
-          .closest('.js-click-to-select')
-          .toggleClass('is-hover', type === 'mouseover');
+      once(
+        'media-library-click-to-select-hover',
+        hoverSelector,
+        context,
+      ).forEach((region) => {
+        const item = region.closest(itemSelector);
+        if (!item) {
+          return;
+        }
+        region.addEventListener('mouseenter', () =>
+          item.classList.add('is-hover'),
+        );
+        region.addEventListener('mouseleave', ({ relatedTarget }) => {
+          // The pointer may still be over another selection region of this item.
+          if (
+            !(relatedTarget instanceof Element) ||
+            relatedTarget.closest(hoverSelector)?.closest(itemSelector) !== item
+          ) {
+            item.classList.remove('is-hover');
+          }
+        });
       });
     },
   };
-})(jQuery, Drupal);
+})(Drupal, once);

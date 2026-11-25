@@ -1,0 +1,4 @@
+name: 'jQuery readiness fixture (jqf_clean)'
+type: module
+package: Testing
+version: VERSION

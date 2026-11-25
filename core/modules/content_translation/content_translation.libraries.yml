@@ -6,6 +6,6 @@ drupal.content_translation.admin:
     theme:
       css/content_translation.admin.css: {}
   dependencies:
-    - core/jquery
+    - core/drupal.form.events
     - core/drupal
     - core/once

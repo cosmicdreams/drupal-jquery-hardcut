@@ -7,8 +7,10 @@ namespace Drupal\form_test\Controller;
 use Drupal\Core\Controller\ControllerBase;
 use Drupal\Core\Form\FormState;
 use Drupal\Core\Language\LanguageInterface;
+use Drupal\Core\Url;
 use Drupal\form_test\FormTestObject;
 use Symfony\Component\HttpFoundation\JsonResponse;
+use Symfony\Component\HttpFoundation\Request;
 
 /**
  * Controller routines for form_test routes.
@@ -74,6 +76,99 @@ class FormTestController extends ControllerBase {
       ],
     ];
     return $return;
+  }
+
+  /**
+   * Renders a dropbutton with a primary and secondary action.
+   */
+  public function dropbutton(): array {
+    return [
+      'actions' => [
+        '#type' => 'dropbutton',
+        '#links' => [
+          'primary' => ['title' => 'Primary action', 'url' => Url::fromRoute('<front>')],
+          'secondary' => ['title' => 'Secondary action', 'url' => Url::fromRoute('<front>')],
+        ],
+      ],
+    ];
+  }
+
+  /**
+   * Renders the markup needed by locale and text form behaviors.
+   */
+  public function adminBehaviors(Request $request): array {
+    $build = [
+      '#type' => 'inline_template',
+      '#template' => <<<'HTML'
+        <form id="locale-translate-edit-form">
+          <table><tbody>
+            <tr><td><div class="js-form-item"><input name="first-translation"></div></td></tr>
+            <tr><td><div class="js-form-item"><input name="second-translation"></div></td></tr>
+          </tbody></table>
+        </form>
+        <form id="locale-translation-status-form">
+          <table><tbody><tr>
+            <td><a href="#updates" class="description">
+              <span class="locale-translation-update__prefix">Show description</span>
+            </a><div id="updates" class="requirements">Translation details</div></td>
+          </tr></tbody></table>
+        </form>
+        <form id="locale-translate-import-form">
+          <input type="file" class="file-import-input">
+          <select class="langcode-input"><option value="en">English</option><option value="fr">French</option></select>
+        </form>
+        <fieldset id="translation-columns">
+          <input name="translation-columns[]" type="checkbox" value="body">
+          <input name="translation-columns[]" type="checkbox" value="format">
+        </fieldset>
+        <div class="js-text-format-wrapper">
+          <div class="js-text-summary-wrapper">
+            <label for="empty-summary">Summary</label>
+            <textarea id="empty-summary" class="js-text-summary"></textarea>
+          </div>
+          <div class="js-form-type-textarea">
+            <label for="full-text" class="visually-hidden">Full text</label>
+            <textarea id="full-text"></textarea>
+          </div>
+        </div>
+        <div class="js-text-format-wrapper">
+          <div class="js-text-summary-wrapper">
+            <label for="existing-summary">Summary</label>
+            <textarea id="existing-summary" class="js-text-summary">Existing summary</textarea>
+          </div>
+          <div class="js-form-type-textarea"><textarea></textarea></div>
+        </div>
+        <div id="copy-field-fixture">
+          <input id="copy-source-field" type="text">
+          <input id="copy-target-field" type="text">
+        </div>
+        <div class="node-preview-container"></div>
+        <a id="preview-leave-link" href="/preview-target">Leave preview</a>
+        HTML,
+      '#attached' => [
+        'library' => [
+          'form_test/admin_behaviors',
+          'locale/drupal.locale.admin',
+          'content_translation/drupal.content_translation.admin',
+          'system/drupal.system',
+        ],
+        'drupalSettings' => [
+          'contentTranslationDependentOptions' => [
+            'dependent_selectors' => ['translation-columns' => ['body']],
+          ],
+          'copyFieldValue' => [
+            'copy-source-field' => ['copy-target-field'],
+          ],
+        ],
+      ],
+      '#cache' => [
+        'contexts' => ['url.query_args:preview'],
+      ],
+    ];
+    if ($request->query->getBoolean('preview')) {
+      $build['#attached']['library'][] = 'node/drupal.node.preview';
+    }
+    return $build;
   }
 
 }

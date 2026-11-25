@@ -3,18 +3,11 @@
 namespace Drupal\Core\Ajax;
 
 /**
- * AJAX command for calling the jQuery remove() method.
+ * An Ajax command for removing each match.
  *
- * The 'remove' command instructs the client to use jQuery's remove() method
- * to remove each of elements matched by the given selector, and everything
- * within them.
+ * The 'remove' command operates on elements that match the selector.
  *
- * This command is implemented by Drupal.AjaxCommands.prototype.remove()
- * defined in misc/ajax.js.
- *
- * @see http://docs.jquery.com/Manipulation/remove#expr
- *
- * @ingroup ajax
+ * @see Drupal.AjaxCommands.prototype.remove
  */
 class RemoveCommand implements CommandInterface {
 

@@ -1,0 +1,4 @@
+name: 'jQuery readiness fixture (jqf_dependency)'
+type: module
+package: Testing
+version: VERSION

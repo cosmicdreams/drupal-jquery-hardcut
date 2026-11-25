@@ -4,12 +4,17 @@ declare(strict_types=1);
 
 namespace Drupal\ajax_test\Controller;
 
+use Drupal\ajax_test\Form\DuplicateAjaxForm;
 use Drupal\Component\Serialization\Json;
+use Drupal\contextual\ContextualLinksSerializer;
 use Drupal\Core\Ajax\AjaxResponse;
 use Drupal\Core\Ajax\AlertCommand;
 use Drupal\Core\Ajax\CloseDialogCommand;
 use Drupal\Core\Ajax\HtmlCommand;
+use Drupal\Core\Render\Markup;
 use Drupal\Core\Url;
+use Drupal\form_test\FormTestAutocompleteForm;
+use Symfony\Component\HttpFoundation\File\UploadedFile;
 use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\Response;
@@ -28,7 +33,7 @@ class AjaxTestController {
   public static function dialogContents() {
     // This is a regular render array; the keys do not have special meaning.
     $content = [
-      '#title' => '<em>AJAX Dialog & contents</em>',
+      '#title' => Markup::create('<em>AJAX Dialog &amp; contents:</em> Release &lt;draft&gt;'),
       'content' => [
         '#markup' => 'Example message',
       ],
@@ -48,6 +53,66 @@ class AjaxTestController {
   }
 
   /**
+   * Provides nested form widgets for dialog tests.
+   */
+  public function dialogWidgets(): array {
+    $serializer = \Drupal::service(ContextualLinksSerializer::class);
+    $suggestions = \Drupal::formBuilder()->getForm(FormTestAutocompleteForm::class)['autocomplete_1'];
+    $suggestions['#title'] = 'Suggestions';
+    $suggestions['#size'] = 20;
+    $table = [
+      '#type' => 'table',
+      '#attributes' => ['id' => 'dialog-order'],
+      '#header' => ['Item', 'Weight'],
+      '#tabledrag' => [
+        ['action' => 'order', 'relationship' => 'sibling', 'group' => 'dialog-weight'],
+      ],
+    ];
+    foreach (['First item', 'Second item'] as $weight => $label) {
+      $table[] = [
+        '#attributes' => ['class' => ['draggable']],
+        'label' => ['#plain_text' => $label],
+        'weight' => [
+          '#type' => 'select',
+          '#name' => 'weight-' . $weight,
+          '#options' => [0 => 0, 1 => 1],
+          '#value' => $weight,
+          '#attributes' => ['class' => ['dialog-weight']],
+        ],
+      ];
+    }
+    return [
+      '#title' => 'Dialog widgets',
+      '#type' => 'container',
+      'region' => [
+        '#type' => 'inline_template',
+        '#template' => '<div class="contextual-region">{{ placeholder }}Test region</div>',
+        '#context' => [
+          'placeholder' => [
+            '#type' => 'contextual_links_placeholder',
+            '#id' => $serializer->linksToId([
+              'contextual_test' => ['route_parameters' => []],
+            ]),
+          ],
+        ],
+      ],
+      'options' => [
+        '#type' => 'details',
+        '#title' => 'Options',
+        'choice' => [
+          '#type' => 'select',
+          '#title' => 'Choice',
+          '#id' => 'dialog-choice',
+          '#name' => 'choice',
+          '#options' => ['first' => 'First', 'second' => 'Second'],
+        ],
+        'suggestions' => $suggestions,
+        'table' => $table,
+      ],
+    ];
+  }
+
+  /**
    * Example content for testing the wrapper of the response.
    *
    * @param string $type
@@ -58,7 +123,7 @@ class AjaxTestController {
    */
   public function renderTypes($type) {
     return [
-      '#title' => '<em>AJAX Dialog & contents</em>',
+      '#title' => Markup::create('<em>AJAX Dialog &amp; contents</em>'),
       'content' => [
         '#type' => 'inline_template',
         '#template' => $this->getRenderTypes()[$type]['render'],
@@ -213,6 +278,27 @@ class AjaxTestController {
     $response->setAttachments($build['#attached']);
 
     return $response;
+  }
+
+  /**
+   * Returns an Ajax-loaded widget with library defaults.
+   */
+  public function settingsWidget(): AjaxResponse {
+    $response = new AjaxResponse();
+    $response->addCommand(new HtmlCommand('#settings-widget', '<div><span data-ajax-test-widget></span></div>'));
+    $response->addAttachments(['library' => ['ajax_test/settings-widget']]);
+    return $response;
+  }
+
+  /**
+   * Builds two copies of the same Ajax form.
+   */
+  public function duplicateForms(): array {
+    $form_builder = \Drupal::formBuilder();
+    return [
+      'first' => $form_builder->getForm(DuplicateAjaxForm::class),
+      'second' => $form_builder->getForm(DuplicateAjaxForm::class),
+    ];
   }
 
   /**
@@ -391,36 +477,108 @@ class AjaxTestController {
   }
 
   /**
-   * Returns a page from which to test Ajax global events.
+   * Provides a page for testing native Ajax transport and commands.
    *
    * @return array
    *   The render array.
    */
-  public function globalEvents() {
+  public function nativeTransport() {
     return [
       '#attached' => [
         'library' => [
-          'ajax_test/global_events',
+          'core/drupal.ajax',
+          'core/drupal.xhr',
         ],
       ],
-      '#markup' => implode('', [
-        '<div id="test_global_events_log"></div>',
-        '<a id="test_global_events_drupal_ajax_link" class="use-ajax" href="' . Url::fromRoute('ajax_test.global_events_clear_log')->toString() . '">Drupal Ajax</a>',
-        '<div id="test_global_events_log2"></div>',
-      ]),
+      '#markup' => '<div id="native-transport-result"></div>',
     ];
   }
 
   /**
-   * Returns an AjaxResponse with command to clear the 'test_global_events_log'.
-   *
-   * @return \Drupal\Core\Ajax\AjaxResponse
-   *   The JSON response object.
+   * Returns the request header in an Ajax command.
    */
-  public function globalEventsClearLog() {
+  public function echoHeader(Request $request): AjaxResponse {
     $response = new AjaxResponse();
-    $response->addCommand(new HtmlCommand('#test_global_events_log', ''));
+    $response->addCommand(new HtmlCommand('#native-transport-result', [
+      '#plain_text' => $request->headers->get('X-Test-Ajax-Send', 'missing'),
+    ]));
     return $response;
+  }
+
+  /**
+   * Loads the shared transport for a test page.
+   */
+  public function nativeRequest(Request $request): array {
+    if ($request->query->getBoolean('commands')) {
+      return [
+        'link' => [
+          '#type' => 'link',
+          '#title' => 'Send native Ajax request',
+          '#url' => Url::fromRoute('ajax_test.echo_request'),
+          '#attributes' => ['class' => ['use-ajax']],
+        ],
+        'output' => ['#markup' => '<div id="request-lane-echo"></div>'],
+        '#attached' => ['library' => ['core/drupal.ajax']],
+      ];
+    }
+    return [
+      '#markup' => 'Native request test',
+      '#attached' => ['library' => ['core/drupal.xhr']],
+    ];
+  }
+
+  /**
+   * Returns the request method and payload as an Ajax command.
+   */
+  public function echoRequest(Request $request): Response {
+    if ($request->query->getBoolean('failure_test')) {
+      return new Response('Ajax form failure', 500);
+    }
+    $response = new AjaxResponse();
+    $response->addCommand(new HtmlCommand('#request-lane-echo', [
+      '#plain_text' => json_encode($this->getRequestData($request), JSON_THROW_ON_ERROR),
+    ]));
+    if ($request->query->getBoolean('iframe_test')) {
+      $json = htmlspecialchars(json_encode($response->getCommands(), JSON_THROW_ON_ERROR), ENT_QUOTES, 'UTF-8');
+      return new Response('<textarea>' . $json . '</textarea>', 200, ['Content-Type' => 'text/html; charset=UTF-8']);
+    }
+    return $response;
+  }
+
+  /**
+   * Returns the request method and payload as JSON.
+   */
+  public function echoNativeRequest(Request $request): JsonResponse {
+    $data = $this->getRequestData($request);
+    if ($request->query->getBoolean('progress')) {
+      $data += [
+        'status' => 1,
+        'percentage' => 100,
+        'message' => $data['method'] . ' ' . $data['requestedWith'],
+        'label' => 'Finished',
+      ];
+    }
+    return new JsonResponse($data);
+  }
+
+  /**
+   * Collects the request method, headers, fields, and uploaded file details.
+   */
+  private function getRequestData(Request $request): array {
+    $upload = $request->files->get('upload');
+    return [
+      'method' => $request->getMethod(),
+      'query' => $request->server->get('QUERY_STRING'),
+      'body' => $request->getContent(),
+      'requestedWith' => $request->headers->get('X-Requested-With'),
+      'contentType' => $request->headers->get('Content-Type'),
+      'fields' => $request->request->all(),
+      'upload' => $upload instanceof UploadedFile ? [
+        $upload->getClientOriginalName(),
+        $upload->getSize(),
+        hash_file('sha256', $upload->getPathname()),
+      ] : NULL,
+    ];
   }
 
   /**

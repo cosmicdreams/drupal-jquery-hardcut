@@ -3,7 +3,14 @@
  * Extends table select functionality for Default Admin.
  */
 
-(($, Drupal, { tabbable }) => {
+((Drupal, { tabbable }, once) => {
+  const { tableInteraction } = Drupal;
+  const isSyntheticChange = (event) =>
+    tableInteraction.tableSelect?.isSelectionChange(event);
+
+  /**
+   * Adds sticky bulk actions for tables with selectable rows.
+   */
   Drupal.DefaultAdminBulkActions = class {
     constructor(bulkActions) {
       this.bulkActions = bulkActions;
@@ -17,73 +24,89 @@
       this.selectAll = this.form.querySelectorAll(
         '.select-all > [type="checkbox"]',
       );
-      this.$tabbable = $(tabbable(this.form));
+      this.tabbable = tabbable(this.form);
       this.bulkActionsSticky = false;
       this.scrollingTimeout = '';
       this.ignoreScrollEvent = false;
 
-      $(this.checkboxes).on('change', (event) =>
-        this.rowCheckboxHandler(event),
-      );
-      $(this.selectAll).on('change', (event) => this.selectAllHandler(event));
-      this.$tabbable.on('focus', (event) => this.focusHandler(event));
-      this.$tabbable.on('blur', (event) => this.blurHandler(event));
+      const { form } = this;
+      const releaseListeners = [];
+      this.checkboxes.forEach((checkbox) => {
+        releaseListeners.push(
+          tableInteraction.listen(form, checkbox, 'change', (event) =>
+            this.rowCheckboxHandler(event),
+          ),
+        );
+      });
+      this.selectAll.forEach((checkbox) => {
+        releaseListeners.push(
+          tableInteraction.listen(form, checkbox, 'change', (event) =>
+            this.selectAllHandler(event),
+          ),
+        );
+      });
+      this.tabbable.forEach((element) => {
+        releaseListeners.push(
+          tableInteraction.listen(form, element, 'focus', (event) =>
+            this.focusHandler(event),
+          ),
+          tableInteraction.listen(form, element, 'blur', (event) =>
+            this.blurHandler(event),
+          ),
+        );
+      });
 
-      // The will contain the CSS that hides the spacer during scroll
-      // and resize.
       this.spacerCss = document.createElement('style');
       document.body.appendChild(this.spacerCss);
-
       const scrollResizeHandler = Drupal.debounce(() => {
         this.scrollResizeHandler();
       }, 10);
-      $(window).on('scroll', () => scrollResizeHandler());
-      $(window).on('resize', () => scrollResizeHandler());
-
-      // Execute checkbox handler after the load event. This ensures that the
-      // actions form is sticky if any checkboxes are already checked on page
-      // load. One of the situations where it is possible to have pre-checked
-      // checkboxes on load is when the page is requested via the back button.
-      // window.addEventListener('load', () => this.rowCheckboxHandler({}));
-      $(window).on('load', () => this.rowCheckboxHandler({}));
+      // The browser can restore checkbox state when navigating back.
+      releaseListeners.push(
+        tableInteraction.listen(form, window, 'scroll', scrollResizeHandler),
+        tableInteraction.listen(form, window, 'resize', scrollResizeHandler),
+        tableInteraction.listen(form, window, 'load', () =>
+          this.rowCheckboxHandler({}),
+        ),
+      );
+      tableInteraction.own(form, bulkActions, () => {
+        releaseListeners.forEach((release) => release());
+        clearTimeout(this.scrollingTimeout);
+        this.spacerCss.remove();
+        once.remove('DefaultAdminBulkActions', bulkActions);
+      });
     }
 
     /**
      * Ensures that focusable elements hidden under a sticky remain focusable.
      *
-     * @param {Object} event
-     *   A jQuery Event object.
+     * @param {Event} event
+     *   The native event.
      */
-    /* eslint-disable-next-line class-methods-use-this */
     blurHandler(event) {
-      // This event handler should only proceed if the event came from direct
-      // interaction with the form element. If this fires on events triggered
-      // via JavaScript there may be undesirable side effects.
-      if (!event.hasOwnProperty('isTrigger')) {
-        const row = event.target.closest('tr');
-        const nextSibling = row ? row.nextElementSibling : null;
+      const row = event.target.closest('tr');
+      const nextSibling = row ? row.nextElementSibling : null;
 
-        // Any row in this table potentially has a spacer div preceding it. The
-        // spacer is added to prevent focusable elements from appearing
-        // underneath the sticky Views Bulk Actions form. Any element underneath
-        // this spacer is beneath the viewport. If an element beneath
-        // the viewport receives focus and the previously focused element was
-        // above the spacer, some browsers have difficulty determining how much
-        // scrolling is necessary to bring the newly focused element into view.
-        // To prevent this potential miscalculation, the spacer is momentarily
-        // removed when blur occurs on rows preceding it. The spacer is
-        // reintroduced immediately after the next item receives focus.
-        if (nextSibling?.getAttribute('data-drupal-table-row-spacer')) {
-          nextSibling.parentNode.removeChild(nextSibling);
-        }
+      // Any row in this table potentially has a spacer div preceding it. The
+      // spacer is added to prevent focusable elements from appearing
+      // underneath the sticky Views Bulk Actions form. Any element underneath
+      // this spacer is beneath the viewport. If an element beneath
+      // the viewport receives focus and the previously focused element was
+      // above the spacer, some browsers have difficulty determining how much
+      // scrolling is necessary to bring the newly focused element into view.
+      // To prevent this potential miscalculation, the spacer is momentarily
+      // removed when blur occurs on rows preceding it. The spacer is
+      // reintroduced immediately after the next item receives focus.
+      if (nextSibling?.getAttribute('data-drupal-table-row-spacer')) {
+        nextSibling.parentNode.removeChild(nextSibling);
       }
     }
 
     /**
      * If a partially covered element receives focus, scroll it into full view.
      *
-     * @param {Object} event
-     *   A jQuery Event object.
+     * @param {Event} event
+     *   The native event.
      */
     focusHandler(event) {
       // Do not scroll down when element inside bulk actions is focused.
@@ -249,14 +272,12 @@
     /**
      * Triggered when the `select all` button is clicked.
      *
-     * @param {Object} event
-     *   A jQuery Event object.
+     * @param {Event} event
+     *   The native event.
      */
     selectAllHandler(event) {
-      // This event handler should only proceed if the event came from direct
-      // interaction with the form element. If this fires on events triggered
-      // via JavaScript there may be undesirable side effects.
-      if (!event.hasOwnProperty('isTrigger')) {
+      // The select-all handler accounts for its updates to the other inputs.
+      if (!isSyntheticChange(event)) {
         const itemsCheckedCount = event.target.checked
           ? this.checkboxes.length
           : 0;
@@ -268,14 +289,12 @@
     /**
      * Triggered when a row is checked or unchecked.
      *
-     * @param {Object} event
-     *   A jQuery Event object.
+     * @param {Event} event
+     *   The native event.
      */
     rowCheckboxHandler(event) {
-      // This event handler should only proceed if the event came from direct
-      // interaction with the form element. If this fires on events triggered
-      // via JavaScript there may be undesirable side effects.
-      if (!event.hasOwnProperty('isTrigger')) {
+      // The select-all handler accounts for its updates to the other inputs.
+      if (!isSyntheticChange(event)) {
         this.updateStatus(
           Array.prototype.slice
             .call(this.checkboxes)
@@ -367,10 +386,8 @@
         context,
       );
       bulkActions.map(
-        (bulkActionForm) =>
-          /* eslint-disable-next-line no-new */
-          new Drupal.DefaultAdminBulkActions(bulkActionForm),
+        (bulkActionForm) => new Drupal.DefaultAdminBulkActions(bulkActionForm),
       );
     },
   };
-})(jQuery, Drupal, window.tabbable, once);
+})(Drupal, window.tabbable, once);

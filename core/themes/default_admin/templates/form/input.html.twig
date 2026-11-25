@@ -13,7 +13,7 @@
 #}
 {% if autocomplete_message %}
   <div class="admin-autocomplete">
-    <input{{ attributes }}/><div class="admin-autocomplete__message hidden" data-drupal-selector="autocomplete-message">{{ autocomplete_message }}</div>
+    <input{{ attributes }}/><div class="admin-autocomplete__message">{{ autocomplete_message }}</div>
   </div>
   {{- children -}}
 {% else %}

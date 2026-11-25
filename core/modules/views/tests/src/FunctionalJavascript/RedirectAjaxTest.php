@@ -69,8 +69,8 @@ class RedirectAjaxTest extends WebDriverTestBase {
     $this->clickLink('Delete');
     $this->assertSession()->assertWaitOnAjaxRequest();
 
-    $this->assertEquals('Are you sure you want to delete the content item Tiny paws and playful mews, kittens bring joy in every hue?', $this->assertSession()->waitForElement('css', '.ui-dialog-title')->getText());
-    $this->getSession()->getPage()->find('css', '.ui-dialog-buttonset')->pressButton('Delete');
+    $this->assertEquals('Are you sure you want to delete the content item Tiny paws and playful mews, kittens bring joy in every hue?', $this->assertSession()->waitForElement('css', '.drupal-dialog-title')->getText());
+    $this->getSession()->getPage()->find('css', '.drupal-dialog-buttonset')->pressButton('Delete');
 
     $this->assertSession()->pageTextContains('The Article Tiny paws and playful mews, kittens bring joy in every hue has been deleted.');
     $this->assertStringStartsWith($original_url, $this->getSession()->getCurrentUrl());

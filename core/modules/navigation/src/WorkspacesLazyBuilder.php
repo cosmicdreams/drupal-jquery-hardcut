@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Drupal\navigation;
 
 use Drupal\Component\Serialization\Json;
+use Drupal\Core\Htmx\Htmx;
 use Drupal\Core\Routing\RedirectDestinationTrait;
 use Drupal\Core\Security\Attribute\TrustedCallback;
 use Drupal\Core\StringTranslation\StringTranslationTrait;
@@ -36,17 +37,17 @@ final class WorkspacesLazyBuilder {
     $active_workspace = $this->workspaceManager->getActiveWorkspace();
 
     $url = Url::fromRoute('entity.workspace.collection', [], ['query' => $this->getDestinationArray()]);
-    $url->setOption('attributes', [
+    $link = [];
+    (new Htmx())->get($url)->applyTo($link);
+    $url->setOption('attributes', $link['#attributes'] + [
       'class' => [
         $active_workspace ? 'toolbar-button--workspaces' : 'toolbar-button--workspaces--live',
-        'use-ajax',
       ],
-      'data-dialog-type' => 'dialog',
       'data-dialog-renderer' => 'off_canvas_top',
       'data-dialog-options' => Json::encode([
         'height' => 161,
         'classes' => [
-          'ui-dialog' => 'workspaces-dialog',
+          'drupal-dialog' => 'workspaces-dialog',
         ],
       ]),
     ]);
@@ -67,6 +68,8 @@ final class WorkspacesLazyBuilder {
       '#attached' => [
         'library' => [
           'navigation/internal.navigation-workspaces',
+          'core/drupal.dialog.off_canvas.htmx',
+          'core/drupal.dialog.ajax',
           'workspaces_ui/drupal.workspaces_ui.off-canvas',
         ],
       ],

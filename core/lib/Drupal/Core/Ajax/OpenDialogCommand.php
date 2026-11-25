@@ -2,6 +2,7 @@
 
 namespace Drupal\Core\Ajax;
 
+use Drupal\Component\Render\MarkupInterface;
 use Drupal\Component\Render\PlainTextOutput;
 use Drupal\Component\Utility\Xss;
 
@@ -22,13 +23,9 @@ class OpenDialogCommand implements CommandInterface, CommandWithAttachedAssetsIn
   protected $title;
 
   /**
-   * Stores dialog-specific options passed directly to jQuery UI dialogs.
-   *
-   * Any jQuery UI option can be used.
+   * Stores options passed to Drupal.dialog.
    *
    * @var array
-   *
-   * @see http://api.jqueryui.com/dialog.
    */
   protected $dialogOptions;
 
@@ -38,13 +35,12 @@ class OpenDialogCommand implements CommandInterface, CommandWithAttachedAssetsIn
    * @param string $selector
    *   The selector of the dialog.
    * @param string|\Stringable|null $title
-   *   The title of the dialog.
+   *   The title of the dialog. Markup objects are converted to plain text.
    * @param string|array $content
    *   The content that will be placed in the dialog, either a render array
    *   or an HTML string.
    * @param array $dialog_options
-   *   (optional) Options to be passed to the dialog implementation. Any
-   *   jQuery UI option can be used. See http://api.jqueryui.com/dialog.
+   *   (optional) Options to be passed to the dialog implementation.
    * @param array|null $settings
    *   (optional) Custom settings that will be passed to the Drupal behaviors
    *   on the content of the dialog. If left empty, the settings will be
@@ -57,16 +53,8 @@ class OpenDialogCommand implements CommandInterface, CommandWithAttachedAssetsIn
     array $dialog_options = [],
     protected $settings = NULL,
   ) {
-    $title = PlainTextOutput::renderFromHtml($title);
     $dialog_options += ['title' => $title];
 
-    $classes = [];
-    if (isset($dialog_options['classes']['ui-dialog'])) {
-      $classes[] = $dialog_options['classes']['ui-dialog'];
-    }
-    if ($classes) {
-      $dialog_options['classes']['ui-dialog'] = implode(' ', $classes);
-    }
     $this->dialogOptions = $dialog_options;
   }
 
@@ -74,8 +62,7 @@ class OpenDialogCommand implements CommandInterface, CommandWithAttachedAssetsIn
    * Returns the dialog options.
    *
    * @return array
-   *   An array of the dialog-specific options passed directly to jQuery UI
-   *   dialogs.
+   *   An array of dialog options.
    */
   public function getDialogOptions() {
     return $this->dialogOptions;
@@ -85,8 +72,7 @@ class OpenDialogCommand implements CommandInterface, CommandWithAttachedAssetsIn
    * Sets the dialog options array.
    *
    * @param array $dialog_options
-   *   Options to be passed to the dialog implementation. Any jQuery UI option
-   *   can be used. See http://api.jqueryui.com/dialog.
+   *   Options to be passed to the dialog implementation.
    */
   public function setDialogOptions($dialog_options) {
     $this->dialogOptions = $dialog_options;
@@ -96,8 +82,7 @@ class OpenDialogCommand implements CommandInterface, CommandWithAttachedAssetsIn
    * Sets a single dialog option value.
    *
    * @param string $key
-   *   Key of the dialog option. Any jQuery UI option can be used.
-   *   See http://api.jqueryui.com/dialog.
+   *   Key of the dialog option.
    * @param mixed $value
    *   Option to be passed to the dialog implementation.
    */
@@ -135,12 +120,23 @@ class OpenDialogCommand implements CommandInterface, CommandWithAttachedAssetsIn
       }
     }
 
+    // The client renders dialog titles as text. Convert markup titles once.
+    $options = $this->dialogOptions;
+    if (array_key_exists('title', $options)) {
+      $title = $options['title'];
+      $options['title'] = match (TRUE) {
+        $title instanceof MarkupInterface => PlainTextOutput::renderFromHtml($title),
+        is_scalar($title), $title instanceof \Stringable => (string) $title,
+        default => '',
+      };
+    }
+
     return [
       'command' => 'openDialog',
       'selector' => $this->selector,
       'settings' => $this->settings,
       'data' => $this->getRenderedContent(),
-      'dialogOptions' => $this->dialogOptions,
+      'dialogOptions' => $options,
     ];
   }
 

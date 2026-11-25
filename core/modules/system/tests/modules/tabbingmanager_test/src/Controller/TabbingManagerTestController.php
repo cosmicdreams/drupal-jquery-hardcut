@@ -17,7 +17,8 @@ class TabbingManagerTestController extends ControllerBase {
    * @return array
    *   The render array.
    */
-  public function build() {
+  public function build(): array {
+    $libraries = ['core/drupal.tabbingmanager'];
     return [
       'container' => [
         '#type' => 'container',
@@ -73,8 +74,7 @@ class TabbingManagerTestController extends ControllerBase {
           ],
         ],
       ],
-      '#attached' => ['library' => ['core/drupal.tabbingmanager']],
-
+      '#attached' => ['library' => $libraries],
     ];
   }
 

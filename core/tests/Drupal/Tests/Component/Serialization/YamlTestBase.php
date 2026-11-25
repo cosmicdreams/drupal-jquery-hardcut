@@ -60,17 +60,17 @@ abstract class YamlTestBase extends TestCase {
       // Node anchors.
       [
         "
-jquery.ui:
-  version: &jquery_ui 1.10.2
+example.base:
+  version: &example_version 1.10.2
 
-jquery.ui.accordion:
-  version: *jquery_ui
+example.widget:
+  version: *example_version
 ",
         [
-          'jquery.ui' => [
+          'example.base' => [
             'version' => '1.10.2',
           ],
-          'jquery.ui.accordion' => [
+          'example.widget' => [
             'version' => '1.10.2',
           ],
         ],

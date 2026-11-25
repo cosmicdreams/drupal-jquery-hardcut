@@ -1,0 +1,7 @@
+name: Legacy
+libraryOverrides:
+  dependencies:
+    - core/jquery
+props:
+  type: object
+  properties: {}

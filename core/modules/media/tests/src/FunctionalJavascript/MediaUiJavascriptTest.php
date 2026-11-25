@@ -23,6 +23,7 @@ class MediaUiJavascriptTest extends MediaJavascriptTestBase {
    */
   protected static $modules = [
     'block',
+    'language',
     'media_test_source',
   ];
 
@@ -65,9 +66,9 @@ class MediaUiJavascriptTest extends MediaJavascriptTestBase {
     $this->drupalGet('admin/structure/media/add');
     $page->fillField('label', $name);
     $machine_name = strtolower($name);
-    $this->assertJsCondition("jQuery('.machine-name-value').html() == '$machine_name'");
+    $this->assertJsCondition("document.querySelector('.machine-name-value')?.textContent === '$machine_name'");
     $page->selectFieldOption('source', 'test');
-    $this->assertJsCondition("jQuery('.form-item-source-configuration-test-config-value').length > 0");
+    $this->assertNotNull($this->assertSession()->waitForElement('css', '.form-item-source-configuration-test-config-value'));
     $page->fillField('description', $description);
     $page->pressButton('Save and manage fields');
     // The wait prevents intermittent test failures.
@@ -141,9 +142,23 @@ class MediaUiJavascriptTest extends MediaJavascriptTestBase {
     $page->selectFieldOption('source', 'test');
     $page->fillField('Test config value', 'This is new config value.');
     $page->selectFieldOption('field_map[attribute_1]', 'name');
+
+    $workflow_summary = 'a[href="#edit-workflow"] .vertical-tabs__menu-item-summary';
+    $assert_session->elementTextEquals('css', $workflow_summary, 'Published');
+    $page->clickLink('Publishing options');
     $page->checkField('options[new_revision]');
     $page->uncheckField('options[status]');
     $page->checkField('options[queue_thumbnail_downloads]');
+    $this->assertNotNull($assert_session->waitForElement('css', $workflow_summary . ':contains("Not published, Create new revision, Queue thumbnail downloads")'));
+
+    $language_summary = 'a[href="#edit-language"] .vertical-tabs__menu-item-summary';
+    $assert_session->elementTextEquals('css', $language_summary, "Site's default language (English)");
+    $page->clickLink('Language settings');
+    $page->selectFieldOption('Default language', 'en');
+    $this->assertJsCondition("document.querySelector('$language_summary').textContent === 'English'");
+    $page->checkField('Show language selector on create and edit pages');
+    $this->assertNotNull($assert_session->waitForElement('css', $language_summary . ':contains("English, Show language selector on create and edit pages")'));
+
     $page->pressButton('Save');
     // The wait prevents intermittent test failures.
     $result = $assert_session->waitForLink('Add media type');
@@ -194,7 +209,7 @@ class MediaUiJavascriptTest extends MediaJavascriptTestBase {
     $assert_session->assertWaitOnAjaxRequest();
     $this->assertNotEmpty($assert_session->waitForElementVisible('css', '#drupal-modal'));
     $assert_session->addressEquals('admin/structure/media/manage/' . $this->testMediaType->id());
-    $this->click('.ui-dialog button:contains("Delete")');
+    $this->click('.drupal-dialog button:contains("Delete")');
     $assert_session->addressEquals('admin/structure/media');
     $assert_session->pageTextContains('The media type ' . $new_name . ' has been deleted.');
 
@@ -209,7 +224,7 @@ class MediaUiJavascriptTest extends MediaJavascriptTestBase {
     $assert_session->assertWaitOnAjaxRequest();
     $this->assertNotEmpty($assert_session->waitForElementVisible('css', '#drupal-modal'));
     $assert_session->addressEquals('admin/structure/media/manage/' . $media_type2->id());
-    $assert_session->elementNotExists('css', '.ui-dialog button:contains("Delete")');
+    $assert_session->elementNotExists('css', '.drupal-dialog button:contains("Delete")');
     $assert_session->pageTextContains("$label2 is used by 1 media item on your site. You may not remove this media type until you have removed all of the $label2 media items.");
   }
 

@@ -22,10 +22,10 @@ Drupal.AjaxCommands.prototype.tabledragChanged = function (
   }
 
   const tableDrag = Drupal.tableDrag[response.tabledrag_instance];
+  const row = document.getElementById(response.id);
 
-  // eslint-disable-next-line new-cap
   const rowObject = new tableDrag.row(
-    document.getElementById(response.id),
+    row,
     '',
     tableDrag.indentEnabled,
     tableDrag.maxDepth,

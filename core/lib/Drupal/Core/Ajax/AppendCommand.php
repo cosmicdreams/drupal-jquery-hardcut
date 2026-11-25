@@ -3,18 +3,11 @@
 namespace Drupal\Core\Ajax;
 
 /**
- * An AJAX command for calling the jQuery append() method.
+ * An Ajax command for appending content to each match.
  *
- * The 'insert/append' command instructs the client to use jQuery's append()
- * method to append the given render array or HTML content to the inside of each
- * element matched by the given selector.
+ * The 'insert/append' command operates on elements that match the selector.
  *
- * This command is implemented by Drupal.AjaxCommands.prototype.insert()
- * defined in misc/ajax.js.
- *
- * @see http://docs.jquery.com/Manipulation/append#content
- *
- * @ingroup ajax
+ * @see Drupal.AjaxCommands.prototype.insert
  */
 class AppendCommand extends InsertCommand {
 

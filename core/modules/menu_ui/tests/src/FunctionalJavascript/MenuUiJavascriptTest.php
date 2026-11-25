@@ -104,9 +104,10 @@ class MenuUiJavascriptTest extends WebDriverTestBase {
     $this->drupalGet('admin/structure/block/list/' . $this->config('system.theme')->get('default'));
     $this->clickLink('Place block');
     // Wait for the modal dialog to be loaded.
-    $this->assertSession()->waitForElement('css', "div[aria-describedby=drupal-modal]");
+    $dialog = $this->assertSession()->waitForElementVisible('css', 'dialog[open]');
+    $this->assertNotNull($dialog);
     // Check that the block is available to be placed.
-    $this->assertSession()->pageTextContains($label);
+    $this->assertStringContainsString($label, $dialog->getText());
 
     return $menu;
   }

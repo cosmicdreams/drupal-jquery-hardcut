@@ -1,7 +1,9 @@
 /**
  * @file media_library.widget.js
  */
-(($, Drupal, Sortable) => {
+((Drupal, Sortable, once) => {
+  const selectionSelector = '.js-media-library-selection';
+
   /**
    * Allows users to re-order their selection with drag+drop.
    *
@@ -13,20 +15,30 @@
   Drupal.behaviors.MediaLibraryWidgetSortable = {
     attach(context) {
       // Allow media items to be re-sorted with drag+drop in the widget.
-      const selection = context.querySelectorAll('.js-media-library-selection');
-      selection.forEach((widget) => {
-        Sortable.create(widget, {
-          draggable: '.js-media-library-item',
-          handle: '.js-media-library-item-preview',
-          onEnd: () => {
-            $(widget)
-              .children()
-              .each((index, child) => {
-                $(child).find('.js-media-library-item-weight')[0].value = index;
+      once('media-library-widget-sortable', selectionSelector, context).forEach(
+        (widget) => {
+          Sortable.create(widget, {
+            draggable: '.js-media-library-item',
+            handle: '.js-media-library-item-preview',
+            onEnd: () => {
+              Array.from(widget.children).forEach((child, index) => {
+                child.querySelector('.js-media-library-item-weight').value =
+                  index;
               });
-          },
-        });
-      });
+            },
+          });
+        },
+      );
+    },
+    detach(context, settings, trigger) {
+      if (trigger === 'unload') {
+        once
+          .remove('media-library-widget-sortable', [
+            ...(context instanceof Element ? [context] : []),
+            ...context.querySelectorAll(selectionSelector),
+          ])
+          .forEach((widget) => Sortable.get(widget)?.destroy());
+      }
     },
   };
 
@@ -49,26 +61,30 @@
         '.js-media-library-widget-toggle-weight',
         context,
       );
-      $(mediaLibraryToggle).on('click', (e) => {
-        e.preventDefault();
-        const $target = $(e.currentTarget);
-        e.currentTarget.textContent = $target.hasClass('active')
-          ? strings.show
-          : strings.hide;
-        $target
-          .toggleClass('active')
-          .closest('.js-media-library-widget')
-          .find('.js-media-library-item-weight')
-          .parent()
-          .toggle();
-      });
-      mediaLibraryToggle.forEach((item) => {
-        item.textContent = strings.show;
+      mediaLibraryToggle.forEach((toggle) => {
+        toggle.addEventListener('click', (event) => {
+          event.preventDefault();
+          const active = toggle.classList.toggle('active');
+          toggle.textContent = active ? strings.hide : strings.show;
+          toggle
+            .closest('.js-media-library-widget')
+            .querySelectorAll('.js-media-library-item-weight')
+            .forEach((weight) => {
+              const wrapper = weight.parentElement;
+              wrapper.style.display =
+                getComputedStyle(wrapper).display === 'none' ? '' : 'none';
+            });
+        });
+        toggle.textContent = strings.show;
       });
 
-      $(once('media-library-toggle', '.js-media-library-item-weight', context))
-        .parent()
-        .hide();
+      once(
+        'media-library-toggle',
+        '.js-media-library-item-weight',
+        context,
+      ).forEach((weight) => {
+        weight.parentElement.style.display = 'none';
+      });
     },
   };
 
@@ -92,15 +108,15 @@
         '.js-media-library-open-button[data-disabled-focus="true"]',
         context,
       ).forEach((button) => {
-        $(button).focus();
+        button.focus();
 
         // There is a small delay between the focus set by the browser and the
         // focus of screen readers. We need to give screen readers time to shift
         // the focus as well before the button is disabled.
         setTimeout(() => {
-          $(button).attr('disabled', 'disabled');
+          button.disabled = true;
         }, 50);
       });
     },
   };
-})(jQuery, Drupal, Sortable);
+})(Drupal, Sortable, once);

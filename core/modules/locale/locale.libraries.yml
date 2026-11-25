@@ -6,7 +6,6 @@ drupal.locale.admin:
     component:
       css/locale.admin.css: {}
   dependencies:
-    - core/jquery
     - core/drupal
     - core/drupal.form
     - core/once

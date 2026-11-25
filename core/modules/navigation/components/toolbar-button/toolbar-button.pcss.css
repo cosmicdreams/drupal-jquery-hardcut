@@ -69,6 +69,7 @@
       border: solid 1px transparent; /* For forced colors. */
     }
 
+    &.toolbar-button--icon--workspaces.htmx-request,
     &[class*="toolbar-button--icon"]:has(+ .ajax-progress--throbber),
     &[class*="toolbar-button--icon"]:has(+ .ajax-progress-throbber) {
       .toolbar-button__icon {

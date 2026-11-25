@@ -69,4 +69,57 @@ class ImageTest extends ImageTestTestBase {
     $this->assertNotEmpty($this->assertSession()->waitForElementVisible('css', '.ck-widget.image-inline > img[src$="test-svg-upload.svg"]'));
   }
 
+  /**
+   * Tests that switching formats aborts the pending upload without a warning.
+   */
+  public function testDetachDuringUpload(): void {
+    $this->config('filter.settings')->set('always_show_fallback_choice', TRUE)->save();
+    $this->drupalGet($this->host->toUrl('edit-form'));
+    $this->waitForEditor();
+    $this->getSession()->executeScript(<<<'JS'
+      const editor = Drupal.CKEditor5Instances.values().next().value;
+      const uploadUrl = editor.config.get('drupalImageUpload').uploadUrl;
+      const { open, send, abort } = XMLHttpRequest.prototype;
+      XMLHttpRequest.prototype.open = function (method, url, ...args) {
+        this.testEditorUpload = url === uploadUrl;
+        return open.call(this, method, url, ...args);
+      };
+      XMLHttpRequest.prototype.send = function (...args) {
+        if (this.testEditorUpload) {
+          window.pendingEditorUpload = true;
+        } else {
+          send.apply(this, args);
+        }
+      };
+      XMLHttpRequest.prototype.abort = function () {
+        if (this.testEditorUpload) {
+          window.abortedEditorUpload = true;
+          this.dispatchEvent(new Event('abort'));
+        } else {
+          abort.call(this);
+        }
+      };
+
+      const notification = editor.plugins.get('Notification');
+      const showWarning = notification.showWarning.bind(notification);
+      window.editorUploadWarnings = [];
+      notification.showWarning = (message, options) => {
+        window.editorUploadWarnings.push(message);
+        return showWarning(message, options);
+      };
+      JS);
+    $page = $this->getSession()->getPage();
+    $image = $this->getTestFiles('image')[0];
+    $this->assertSession()->elementExists('css', '.ck-file-dialog-button input[type="file"]')
+      ->attachFile($this->container->get('file_system')->realpath($image->uri));
+    $this->assertJsCondition('window.pendingEditorUpload === true');
+    $page->selectFieldOption('body[0][format]', 'plain_text');
+    $this->assertJsCondition(<<<'JS'
+      window.abortedEditorUpload === true &&
+      Drupal.CKEditor5Instances.size === 0 &&
+      document.querySelector('textarea[name="body[0][value]"]').dataset.editorActiveTextFormat === 'plain_text'
+      JS);
+    $this->assertSame([], $this->getSession()->evaluateScript('window.editorUploadWarnings'));
+  }
+
 }

@@ -251,7 +251,7 @@ class MediaSourceOEmbedVideoTest extends MediaSourceTestBase {
     $this->drupalGet('admin/structure/media/add');
     $page->fillField('label', $media_type_id);
     $this->getSession()
-      ->wait(5000, "jQuery('.machine-name-value').text() === '{$media_type_id}'");
+      ->wait(5000, "document.querySelector('.machine-name-value')?.textContent === '{$media_type_id}'");
 
     // Make sure the source is available.
     $assert_session->fieldExists('Media source');
@@ -267,7 +267,7 @@ class MediaSourceOEmbedVideoTest extends MediaSourceTestBase {
     $this->drupalGet('admin/structure/media/add');
     $page->fillField('label', $media_type_id);
     $this->getSession()
-      ->wait(5000, "jQuery('.machine-name-value').text() === '{$media_type_id}'");
+      ->wait(5000, "document.querySelector('.machine-name-value')?.textContent === '{$media_type_id}'");
 
     // Make sure the source is available.
     $assert_session->fieldExists('Media source');

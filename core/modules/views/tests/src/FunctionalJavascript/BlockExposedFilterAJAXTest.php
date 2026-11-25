@@ -102,4 +102,45 @@ class BlockExposedFilterAJAXTest extends WebDriverTestBase {
     $this->assertSession()->addressEquals('some-path');
   }
 
+  /**
+   * Tests that a refresh restores focus inside the submitted view.
+   */
+  public function testFocusWithMultipleExposedForms(): void {
+    $node = $this->createNode();
+    $this->drupalPlaceBlock('views_block:test_block_exposed_ajax-block_1', ['id' => 'first_view', 'weight' => -1]);
+    $this->drupalPlaceBlock('views_block:test_block_exposed_ajax-block_1', ['id' => 'second_view', 'weight' => 1]);
+    $this->drupalGet($node->toUrl());
+
+    $session = $this->getSession();
+    $assert = $this->assertSession();
+    $second = $assert->elementExists('css', '#block-second-view');
+    $assert->elementTextContains('css', '#block-first-view', 'Article A');
+    $assert->elementTextContains('css', '#block-second-view', 'Article A');
+    $assert->fieldExists('type', $second)->selectOption('page');
+
+    // Activate Apply while focus is still on the filter, as for a keyboard
+    // submission from an exposed field.
+    $session->executeScript(<<<'JS'
+      const form = document.querySelector('#block-second-view form');
+      form.elements.type.focus();
+      form.querySelector('[type="submit"]').click();
+      JS);
+    $assert->assertWaitOnAjaxRequest();
+    $assert->elementTextContains('css', '#block-first-view', 'Article A');
+    $assert->elementTextNotContains('css', '#block-second-view', 'Article A');
+    $this->assertJsCondition("document.activeElement.matches('#block-second-view select[name=type]')");
+
+    // Give the focused field an identity that the response will not contain.
+    // Focus should fall back to this view's Apply control.
+    $session->executeScript(<<<'JS'
+      const form = document.querySelector('#block-second-view form');
+      form.elements.type.id = 'removed-filter';
+      form.elements.type.dataset.drupalSelector = 'removed-filter';
+      form.elements.type.focus();
+      form.querySelector('[type="submit"]').click();
+      JS);
+    $assert->assertWaitOnAjaxRequest();
+    $this->assertJsCondition("document.activeElement.matches('#block-second-view [type=submit]')");
+  }
+
 }

@@ -3,7 +3,6 @@ drupal.editor:
   js:
     js/editor.js: {}
   dependencies:
-    - core/jquery
     - core/drupal
     - core/drupalSettings
     - core/once
@@ -14,7 +13,6 @@ drupal.editor.dialog:
   js:
     js/editor.dialog.js: {}
   dependencies:
-    - core/jquery
     - core/drupal.dialog
     - core/drupal.ajax
     - core/drupalSettings

@@ -22,7 +22,7 @@ class FormHelper {
    * @param array $elements
    *   A render array element having a #states property.
    * @param string $search
-   *   A partial or entire jQuery selector string to replace in #states.
+   *   A partial or entire selector string to replace in #states.
    * @param string $replace
    *   The string to replace all instances of $search with.
    *
@@ -48,7 +48,7 @@ class FormHelper {
    * @param array $conditions
    *   States conditions array.
    * @param string $search
-   *   A partial or entire jQuery selector string to replace in #states.
+   *   A partial or entire selector string to replace in #states.
    * @param string $replace
    *   The string to replace all instances of $search with.
    *
@@ -60,7 +60,7 @@ class FormHelper {
     $keys = array_keys($conditions);
     $update_keys = FALSE;
     foreach ($conditions as $id => $values) {
-      if (str_contains($id, $search)) {
+      if (is_string($id) && str_contains($id, $search)) {
         $update_keys = TRUE;
         $new_id = str_replace($search, $replace, $id);
         // Replace the key and keep the array in the same order.
@@ -112,26 +112,27 @@ class FormHelper {
    * ]
    * @endcode
    *
-   * Every condition is a key/value pair, whose key is a jQuery selector that
+   * Every condition is a key/value pair, whose key is a CSS selector that
    * denotes another element on the page, and whose value is an array of
-   * conditions, which must bet met on that element:
+   * conditions, which must be met on that element:
    * @code
    * [
    *   'visible' => [
-   *     JQUERY_SELECTOR => REMOTE_CONDITIONS,
-   *     JQUERY_SELECTOR => REMOTE_CONDITIONS,
+   *     CSS_SELECTOR => REMOTE_CONDITIONS,
+   *     CSS_SELECTOR => REMOTE_CONDITIONS,
    *     ...
    *   ],
    * ]
    * @endcode
-   * All conditions must be met for the state to be applied.
+   * All conditions must be met for the state to be applied. The browser
+   * resolves selectors from the final markup, after form and render alters.
    *
    * Each remote condition is a key/value pair specifying conditions on the
    * other element that need to be met to apply the state to the element:
    * @code
    * [
    *   'visible' => [
-   *     ':input[name="remote_checkbox"]' => ['checked' => TRUE],
+   *     'input[name="remote_checkbox"]' => ['checked' => TRUE],
    *   ],
    * ]
    * @endcode
@@ -147,7 +148,7 @@ class FormHelper {
    *   '#states' => [
    *     // Only show this field when the 'toggle_me' checkbox is enabled.
    *     'visible' => [
-   *       ':input[name="toggle_me"]' => ['checked' => TRUE],
+   *       'input[name="toggle_me"]' => ['checked' => TRUE],
    *     ],
    *   ],
    * ];
@@ -191,7 +192,7 @@ class FormHelper {
    *   '#states' => [
    *     // Show the settings if 'bar' has been selected for 'foo'.
    *     'visible' => [
-   *       ':input[name="foo"]' => ['value' => 'bar'],
+   *       'select[name="foo"]' => ['value' => 'bar'],
    *     ],
    *   ],
    * @endcode

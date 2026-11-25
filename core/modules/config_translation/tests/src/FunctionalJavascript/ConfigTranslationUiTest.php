@@ -68,20 +68,20 @@ class ConfigTranslationUiTest extends WebDriverTestBase {
 
     $this->drupalGet('admin/structure/views/view/content/translate');
     $this->clickLink('Add');
-    $this->assertEquals('Add Finnish translation for Content view', $this->assertSession()->waitForElement('css', '.ui-dialog-title')->getText());
+    $this->assertEquals('Add Finnish translation for Content view', $this->assertSession()->waitForElement('css', '.drupal-dialog-title')->getText());
     $this->assertSession()->fieldExists('translation[config_names][views.view.content][label]')->setValue('Content FI');
-    $page->find('css', '.ui-dialog-buttonset')->pressButton('Save translation');
+    $page->find('css', '.drupal-dialog-buttonset')->pressButton('Save translation');
     $this->assertSession()->pageTextContains('Successfully saved Finnish translation.');
 
     $this->clickLink('Edit');
-    $this->assertEquals('Edit Finnish translation for Content view', $this->assertSession()->waitForElement('css', '.ui-dialog-title')->getText());
-    $this->getSession()->getPage()->find('css', '.ui-dialog-buttonset')->pressButton('Save translation');
+    $this->assertEquals('Edit Finnish translation for Content view', $this->assertSession()->waitForElement('css', '.drupal-dialog-title')->getText());
+    $this->getSession()->getPage()->find('css', '.drupal-dialog-buttonset')->pressButton('Save translation');
     $this->assertSession()->pageTextContains('Successfully updated Finnish translation.');
 
     $page->find('css', '.dropbutton-toggle button')->click();
     $this->clickLink('Delete');
-    $this->assertEquals('Are you sure you want to delete the Finnish translation of Content view?', $this->assertSession()->waitForElement('css', '.ui-dialog-title')->getText());
-    $page->find('css', '.ui-dialog-buttonset')->pressButton('Delete');
+    $this->assertEquals('Are you sure you want to delete the Finnish translation of Content view?', $this->assertSession()->waitForElement('css', '.drupal-dialog-title')->getText());
+    $page->find('css', '.drupal-dialog-buttonset')->pressButton('Delete');
     $this->assertSession()->pageTextContains('Finnish translation of Content view was deleted');
   }
 

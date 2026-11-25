@@ -51,12 +51,12 @@ class CommonTestThemeHooks {
     if ($module === 'core' && isset($libraries['loadjs'])) {
       // Change the version of loadjs to 0.0.
       $libraries['loadjs']['version'] = '0.0';
-      // Make loadjs depend on jQuery Form to test library dependencies.
-      $libraries['loadjs']['dependencies'][] = 'core/internal.jquery.form';
+      // Add a neutral asset to test altered library dependencies.
+      $libraries['loadjs']['dependencies'][] = 'core/drupal.debounce';
     }
     // Alter the dynamically registered library definition.
     if ($module === 'common_test' && isset($libraries['dynamic_library'])) {
-      $libraries['dynamic_library']['dependencies'] = ['core/jquery'];
+      $libraries['dynamic_library']['dependencies'] = ['core/once'];
     }
   }
 
@@ -72,7 +72,7 @@ class CommonTestThemeHooks {
     $page['#cache']['tags'] = ['example'];
     $page['#cache']['contexts'] = ['user.permissions'];
     if (\Drupal::state()->get('common_test.hook_page_attachments.descendant_attached', FALSE)) {
-      $page['content']['#attached']['library'][] = 'core/jquery';
+      $page['content']['#attached']['library'][] = 'common_test/files';
     }
     if (\Drupal::state()->get('common_test.hook_page_attachments.render_array', FALSE)) {
       $page['something'] = ['#markup' => 'test'];
@@ -100,7 +100,7 @@ class CommonTestThemeHooks {
     $page['#cache']['tags'] = ['example'];
     $page['#cache']['contexts'] = ['user.permissions'];
     if (\Drupal::state()->get('common_test.hook_page_attachments_alter.descendant_attached', FALSE)) {
-      $page['content']['#attached']['library'][] = 'core/jquery';
+      $page['content']['#attached']['library'][] = 'common_test/files';
     }
     if (\Drupal::state()->get('common_test.hook_page_attachments_alter.render_array', FALSE)) {
       $page['something'] = ['#markup' => 'test'];
@@ -114,10 +114,12 @@ class CommonTestThemeHooks {
    */
   #[Hook('js_alter')]
   public function jsAlter(&$javascript, AttachedAssetsInterface $assets, LanguageInterface $language): void {
-    // Attach alter.js above tableselect.js.
-    $alter_js = \Drupal::service('extension.list.module')->getPath('common_test') . '/alter.js';
-    if (array_key_exists($alter_js, $javascript) && array_key_exists('core/misc/tableselect.js', $javascript)) {
-      $javascript[$alter_js]['weight'] = $javascript['core/misc/tableselect.js']['weight'] - 1;
+    // Attach alter.js above main.js.
+    $path = \Drupal::service('extension.list.module')->getPath('common_test');
+    $alter_js = "$path/alter.js";
+    $main_js = "$path/main.js";
+    if (array_key_exists($alter_js, $javascript) && array_key_exists($main_js, $javascript)) {
+      $javascript[$alter_js]['weight'] = $javascript[$main_js]['weight'] - 1;
     }
   }
 

@@ -7,7 +7,7 @@ use Drupal\Component\Utility\NestedArray;
 use Drupal\Component\Utility\SortArray;
 use Drupal\Core\Ajax\AjaxResponse;
 use Drupal\Core\Ajax\AnnounceCommand;
-use Drupal\Core\Ajax\InvokeCommand;
+use Drupal\Core\Ajax\FocusCommand;
 use Drupal\Core\Ajax\OpenModalDialogCommand;
 use Drupal\Core\Ajax\ReplaceCommand;
 use Drupal\Core\Entity\EntityTypeManagerInterface;
@@ -702,6 +702,13 @@ class MediaLibraryWidget extends WidgetBase implements TrustedCallbackInterface 
 
     $response = new AjaxResponse();
     $response->addCommand(new ReplaceCommand("#$wrapper_id", $element));
+    $focus_wrapper = '[id="' . strtr($wrapper_id, [
+      "\\" => "\\\\",
+      '"' => '\"',
+      "\n" => '\a ',
+      "\r" => '\d ',
+      "\f" => '\c ',
+    ]) . '"]';
     $response->addCommand(new AnnounceCommand($announcement));
 
     // When the remove button is clicked, shift focus to the next remove button.
@@ -726,7 +733,7 @@ class MediaLibraryWidget extends WidgetBase implements TrustedCallbackInterface 
           break;
         }
       }
-      $response->addCommand(new InvokeCommand("#$wrapper_id [data-media-library-item-delta=$delta_to_focus]", 'focus'));
+      $response->addCommand(new FocusCommand($focus_wrapper . ' [data-media-library-item-delta="' . $delta_to_focus . '"]'));
     }
     // Shift focus to the open button if the user removed the last selected
     // item, or when the user has added items to the selection and is allowed to
@@ -737,7 +744,7 @@ class MediaLibraryWidget extends WidgetBase implements TrustedCallbackInterface 
     // here.
     // @see Drupal.behaviors.MediaLibraryWidgetDisableButton
     elseif ($removed_last || (!$is_remove_button && !isset($element['open_button']['#attributes']['data-disabled-focus']))) {
-      $response->addCommand(new InvokeCommand("#$wrapper_id .js-media-library-open-button", 'focus'));
+      $response->addCommand(new FocusCommand($focus_wrapper . ' .js-media-library-open-button'));
     }
 
     return $response;

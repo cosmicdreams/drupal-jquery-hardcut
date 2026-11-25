@@ -1,0 +1,35 @@
+services:
+  Drupal\test_jquery_free\ReadinessScanner:
+    arguments:
+      - '%app.root%'
+      - '@module_handler'
+      - '@theme_handler'
+      - '@Drupal\test_jquery_free\ReadinessLibraryScanner'
+      - '@cache.discovery'
+      - '@cache.default'
+      - '@cache.bootstrap'
+      - '@extension.list.module'
+      - '@extension.list.theme'
+      - '@logger.channel.test_jquery_free'
+  Drupal\test_jquery_free\ReadinessLibraryScanner:
+    arguments: ['@Drupal\test_jquery_free\ReadinessLibraryParser', '%app.root%']
+  Drupal\test_jquery_free\ReadinessLibraryParser:
+    public: false
+    arguments: ['%app.root%', '@module_handler', '@test_jquery_free.theme_manager', '@stream_wrapper_manager', '@library.libraries_directory_file_finder', '@extension.path.resolver', '@plugin.manager.sdc', '@test_jquery_free.parsing_cache']
+  test_jquery_free.theme_manager:
+    public: false
+    class: Drupal\Core\Theme\ThemeManager
+    autowire: true
+    arguments:
+      $cache: '@test_jquery_free.theme_cache'
+  test_jquery_free.theme_cache:
+    public: false
+    class: Drupal\Core\Cache\NullBackend
+    arguments: ['test_jquery_free.theme']
+  test_jquery_free.parsing_cache:
+    public: false
+    class: Drupal\Core\Utility\YamlCacheCollector
+    factory: ['Drupal\Core\Utility\YamlCacheCollector', createWithMemoryCache]
+  logger.channel.test_jquery_free:
+    parent: logger.channel_base
+    arguments: ['test_jquery_free']

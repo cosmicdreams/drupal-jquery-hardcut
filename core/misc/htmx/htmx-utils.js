@@ -18,7 +18,6 @@
      * @return object
      *   The merged object.
      *
-     * @see https://youmightnotneedjquery.com/#deep_extend
      */
     mergeSettings(current, ...sources) {
       if (!current) {
@@ -58,35 +57,36 @@
      * @return {Promise}
      */
     addAssets(data) {
-      const bundleIds = data
-        .filter(({ href, src }) => !loadjs.isDefined(href ?? src))
-        .map(({ href, src, type, ...attributes }) => {
-          const bundleId = href ?? src;
-          let prefix = 'css!';
-          if (src) {
-            prefix = type === 'module' ? 'module!' : '';
-          }
-
-          loadjs(prefix + bundleId, bundleId, {
-            // JS files are loaded in order, so this needs to be false when 'src'
-            // is defined.
-            async: !src,
-            // Copy asset tag attributes to the new element.
-            before(path, element) {
-              // This allows all attributes to be added, like defer, async and
-              // crossorigin.
-              Object.entries(attributes).forEach(([name, value]) => {
-                element.setAttribute(name, value);
-              });
-            },
-          });
-
+      const bundleIds = data.map(({ href, src, type, ...attributes }) => {
+        const bundleId = href ?? src;
+        if (loadjs.isDefined(bundleId)) {
           return bundleId;
+        }
+        let prefix = 'css!';
+        if (src) {
+          prefix = type === 'module' ? 'module!' : '';
+        }
+
+        loadjs(prefix + bundleId, bundleId, {
+          // JS files are loaded in order, so this needs to be false when 'src'
+          // is defined.
+          async: !src,
+          // Copy asset tag attributes to the new element.
+          before(path, element) {
+            // This allows all attributes to be added, like defer, async and
+            // crossorigin.
+            Object.entries(attributes).forEach(([name, value]) => {
+              element.setAttribute(name, value);
+            });
+          },
         });
+
+        return bundleId;
+      });
 
       // Nothing to load, we resolve the promise right away.
       let assetsLoaded = Promise.resolve();
-      // If there are assets to load, use loadjs to manage this process.
+      // Wait for every bundle, including those another response is loading.
       if (bundleIds.length) {
         // Trigger the event once all the dependencies have loaded.
         assetsLoaded = new Promise((resolve, reject) => {

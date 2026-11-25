@@ -15,12 +15,6 @@ phpunit.xml
 # dependencies by users of NPMv5.
 package-lock.json
 
-# Ignore test reports
-reports
-
-# Ignore local Nightwatch settings
-nightwatch.settings.json
-
 # Ignore dotenv
 .env
 

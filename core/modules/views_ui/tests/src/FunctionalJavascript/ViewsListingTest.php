@@ -89,8 +89,6 @@ class ViewsListingTest extends WebDriverTestBase {
 
     // Reset the search string and check that we are back to the initial stage.
     $search_input->setValue('');
-    // Add a backspace to trigger the keyUp event.
-    $search_input->keyUp(8);
 
     $enabled_rows = $page->findAll('css', 'tr.views-ui-list-enabled');
     $enabled_rows = $this->filterVisibleElements($enabled_rows);
@@ -123,15 +121,15 @@ class ViewsListingTest extends WebDriverTestBase {
 
     // Test that the keyboard focus is on the dropdown button of the View we
     // just disabled.
-    $this->assertTrue($this->getSession()->evaluateScript("jQuery(document.activeElement).text() === 'Enable'"));
-    $this->assertEquals($view_description, $this->getSession()->evaluateScript("jQuery(document.activeElement).parents('tr').find('.views-ui-view-name strong').text()"));
+    $this->assertTrue($this->getSession()->evaluateScript("document.activeElement.textContent === 'Enable'"));
+    $this->assertEquals($view_description, $this->getSession()->evaluateScript("document.activeElement.closest('tr').querySelector('.views-ui-view-name strong').textContent"));
 
     // Enable the view again and ensure we have the focus on the edit button.
-    $this->getSession()->evaluateScript('jQuery(document.activeElement).click()');
+    $this->getSession()->executeScript('document.activeElement.click()');
     $session->assertWaitOnAjaxRequest();
 
-    $this->assertTrue($this->getSession()->evaluateScript("jQuery(document.activeElement).text() === 'Edit'"));
-    $this->assertEquals($view_description, $this->getSession()->evaluateScript("jQuery(document.activeElement).parents('tr').find('.views-ui-view-name strong').text()"));
+    $this->assertTrue($this->getSession()->evaluateScript("document.activeElement.textContent === 'Edit'"));
+    $this->assertEquals($view_description, $this->getSession()->evaluateScript("document.activeElement.closest('tr').querySelector('.views-ui-view-name strong').textContent"));
   }
 
   /**

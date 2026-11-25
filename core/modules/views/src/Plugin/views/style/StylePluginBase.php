@@ -329,7 +329,7 @@ abstract class StylePluginBase extends PluginBase {
             '#description' => $this->t('If enabled the rendered output of the grouping field is used to group the rows.'),
             '#states' => [
               'invisible' => [
-                ':input[name="style_options[grouping][' . $i . '][field]"]' => ['value' => ''],
+                '[name="style_options[grouping][' . $i . '][field]"]' => ['value' => ''],
               ],
             ],
           ];
@@ -339,7 +339,7 @@ abstract class StylePluginBase extends PluginBase {
             '#default_value' => $grouping['rendered_strip'],
             '#states' => [
               'invisible' => [
-                ':input[name="style_options[grouping][' . $i . '][field]"]' => ['value' => ''],
+                '[name="style_options[grouping][' . $i . '][field]"]' => ['value' => ''],
               ],
             ],
           ];

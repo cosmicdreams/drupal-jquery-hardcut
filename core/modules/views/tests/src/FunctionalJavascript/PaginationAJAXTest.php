@@ -151,6 +151,96 @@ class PaginationAJAXTest extends WebDriverTestBase {
   }
 
   /**
+   * Tests that only the current pager response scrolls to its view.
+   */
+  public function testPagerScroll(): void {
+    $this->config('views.view.test_content_ajax')
+      ->set('display.default.display_options.pager.options.items_per_page', 5)
+      ->save();
+    $this->drupalGet('test-content-ajax');
+    $session = $this->getSession();
+    $assert = $this->assertSession();
+
+    // Give the viewport room to scroll and isolate the pager's scroll command
+    // from automatic scroll adjustments when the view is replaced.
+    $session->executeScript(<<<'JS'
+      document.documentElement.style.overflowAnchor = 'none';
+      const { view_dom_id } = Object.values(drupalSettings.views.ajaxViews)[0];
+      window.pagingView = '.js-view-dom-id-' + view_dom_id;
+      const view = document.querySelector(pagingView);
+      view.insertAdjacentHTML('beforebegin', '<div style="height: 200vh"></div>');
+      view.insertAdjacentHTML('afterend', '<div style="height: 200vh"></div>');
+      view.querySelector('a[title="Go to page 2"]').click();
+      JS);
+    $assert->assertWaitOnAjaxRequest();
+    $this->assertGreaterThan(0, $session->evaluateScript('scrollY'));
+    $this->assertJsCondition('Math.abs(document.querySelector(pagingView).getBoundingClientRect().top) < innerHeight / 4');
+
+    $session->executeScript(<<<'JS'
+      const prototype = Drupal.Ajax.prototype;
+      const queue = prototype.commandExecutionQueue;
+      prototype.commandExecutionQueue = function (response, status) {
+        prototype.commandExecutionQueue = queue;
+        window.oldPagerWouldScroll = Object.values(response).some(({ command, selector }) =>
+          command === 'scrollTop' && selector === pagingView);
+        return new Promise((resolve) => {
+          window.finishOldPager = () => resolve(queue.call(this, response, status));
+        });
+      };
+      document.querySelector(pagingView + ' a[title="Go to first page"]').click();
+      JS);
+    $this->assertJsCondition('window.oldPagerWouldScroll');
+    $this->clickLink('Go to page 3');
+    $this->assertJsCondition('[...Drupal.ajax.pendingRequests()].length === 1 && new URL(location.href).searchParams.get("page") === "2"');
+    $session->executeScript(<<<'JS'
+      window.scrollTo(0, 0);
+      window.finishOldPager();
+      JS);
+    $assert->assertWaitOnAjaxRequest();
+    $this->assertJsCondition('scrollY === 0');
+    $this->assertJsCondition('new URL(location.href).searchParams.get("page") === "2"');
+  }
+
+  /**
+   * Tests that attachment pager and sort links refresh the outer view.
+   */
+  public function testAttachmentPaginationAndSorting(): void {
+    $this->container->get('theme_installer')->install(['default_admin', 'starterkit_theme']);
+    $this->config('views.view.test_content_ajax')
+      ->set('display.default.display_options.pager.options.items_per_page', 5)
+      ->set('display.attachment_1', [
+        'id' => 'attachment_1',
+        'display_title' => 'Attachment',
+        'display_plugin' => 'attachment',
+        'position' => 3,
+        'display_options' => [
+          'displays' => ['page_1' => 'page_1'],
+          'inherit_pager' => TRUE,
+          'render_pager' => TRUE,
+        ],
+      ])
+      ->save();
+
+    $assert = $this->assertSession();
+    $attachment_selector = '.attachment-before .view-display-id-attachment_1';
+    $outer_rows = '.view-display-id-page_1 > .view-content tbody tr';
+    foreach (['default_admin', 'starterkit_theme'] as $theme) {
+      $this->config('system.theme')->set('default', $theme)->save();
+      $this->drupalGet('test-content-ajax');
+
+      $attachment = $assert->elementExists('css', $attachment_selector);
+      $assert->elementExists('named', ['link', 'Updated'], $attachment)->click();
+      $assert->assertExpectedAjaxRequest(1);
+      $assert->elementTextContains('css', "$outer_rows:first-child", 'Node 1 content');
+
+      $attachment = $assert->elementExists('css', $attachment_selector);
+      $assert->elementExists('css', '.js-pager__items a[href*="page=1"]', $attachment)->click();
+      $assert->assertExpectedAjaxRequest(2);
+      $assert->elementTextContains('css', "$outer_rows:first-child", 'Node 6 content');
+    }
+  }
+
+  /**
    * Tests if pagination via AJAX works for the filter with default value.
    */
   public function testDefaultFilterPagination(): void {
