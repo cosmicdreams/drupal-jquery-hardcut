@@ -92,6 +92,47 @@ class BlockDragTest extends WebDriverTestBase {
   }
 
   /**
+   * Tests that two draggable tables retain their own row-swap behavior.
+   */
+  public function testRowSwapCallbacks(): void {
+    $session = $this->getSession();
+    $session->resizeWindow(1024, 2048);
+    $this->drupalGet('admin/structure/block');
+    $assert = $this->assertSession();
+
+    // Simulate another tabledrag behavior that uses the shared row prototype.
+    $session->executeScript(<<<'JS'
+      const table = document.createElement('table');
+      table.id = 'other-tabledrag';
+      const body = table.createTBody();
+      ['First row', 'Second row'].forEach((label) => {
+        const row = body.insertRow();
+        row.classList.add('draggable');
+        row.insertCell().textContent = label;
+      });
+      document.getElementById('blocks').before(table);
+      drupalSettings.tableDrag[table.id] = {};
+      Drupal.tableDrag.prototype.row.prototype.onSwap = function () {
+        this.element.classList.add('other-table-row-swapped');
+      };
+      Drupal.attachBehaviors();
+      JS);
+
+    $handle = $assert->elementExists('css', '#other-tabledrag tr:last-child .tabledrag-handle');
+    $handle->focus();
+    $handle->keyDown(38);
+    $handle->keyUp(38);
+    $handle->blur();
+    $assert->elementTextContains('css', '#other-tabledrag tr:first-child.other-table-row-swapped', 'Second row');
+
+    $assert->elementExists('css', '#blocks .region-help-message.region-empty');
+    $title = $this->getDragRow($session->getPage(), 'edit-blocks-default-admin-page-title');
+    $title->dragTo($assert->elementExists('css', '#blocks .region-help-message'));
+    $assert->elementExists('css', '#blocks .region-help-message.region-populated');
+    $assert->elementNotExists('css', '#blocks .other-table-row-swapped');
+  }
+
+  /**
    * Tests moving a block with its region select on a fresh page load.
    */
   #[TestWith([100, 'select'], 'select weight')]

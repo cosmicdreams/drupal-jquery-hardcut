@@ -66,6 +66,8 @@
     },
   };
 
+  const initializedBlockDrags = new WeakSet();
+
   /**
    * Move a block in the blocks table between regions via select list.
    *
@@ -145,12 +147,6 @@
           });
       };
 
-      function onSwap() {
-        checkEmptyRegions(this);
-        updateLastPlaced(this);
-      }
-      tableDrag.row.prototype.onSwap = onSwap;
-
       function onDrop() {
         const row = this.rowObject.element;
         let regionRow = row.previousElementSibling;
@@ -173,7 +169,17 @@
         updateRegionFields(row, regionField, region);
         updateBlockWeights(region);
       }
-      tableDrag.onDrop = onDrop;
+      if (!initializedBlockDrags.has(tableDrag)) {
+        // Other tables can provide their own callback on the shared prototype.
+        tableDrag.row = class extends tableDrag.row {
+          onSwap() {
+            checkEmptyRegions(this);
+            updateLastPlaced(this);
+          }
+        };
+        tableDrag.onDrop = onDrop;
+        initializedBlockDrags.add(tableDrag);
+      }
 
       once(
         'block-region-select',
