@@ -10,6 +10,7 @@
 const path = require('node:path');
 const { copyFile, writeFile, readFile, chmod, mkdir } = require('node:fs').promises;
 const ckeditor5Files = require('./assets/ckeditor5Files');
+const htmxProcess = require('./assets/process/htmx');
 const mapProcess = require('./assets/process/map');
 
 const coreFolder = path.resolve(__dirname, '../../');
@@ -77,6 +78,7 @@ const assetsFolder = `${coreFolder}/assets/vendor`;
       pack: 'htmx.org',
       folder: 'htmx',
       library: 'htmx',
+      process: { '.js': htmxProcess },
       files: [
         { from: 'dist/htmx.min.js', to: 'htmx.min.js' },
         { from: 'dist/htmx.js', to: 'htmx.js' },
