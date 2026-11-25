@@ -81,7 +81,7 @@ class NavigationWorkspacesDialogTest extends WebDriverTestBase {
   }
 
   /**
-   * Tests viewport-centered confirmation from a narrow Workspaces tray.
+   * Tests the desktop tray layout and confirmation after resizing.
    */
   public function testConfirmationFromNarrowTray(): void {
     Workspace::create(['id' => 'stage', 'label' => 'Stage'])->save();
@@ -89,11 +89,43 @@ class NavigationWorkspacesDialogTest extends WebDriverTestBase {
       'access navigation',
       'administer workspaces',
     ]));
+    $this->getSession()->resizeWindow(1280, 800);
     $this->drupalGet('<front>');
     $assert = $this->assertSession();
     $assert->elementExists('css', 'a.toolbar-button--icon--workspaces[data-hx-get]')->click();
     $tray = $assert->waitForElementVisible('css', 'dialog#drupal-off-canvas-wrapper[open]');
     $this->assertNotNull($tray);
+    $widths = $this->getSession()->evaluateScript(<<<'JS'
+      (() => {
+        const { left, right } = Drupal.displace.offsets;
+        const tray = document.querySelector('dialog#drupal-off-canvas-wrapper');
+        return {
+          actual: tray.getBoundingClientRect().width,
+          expected: document.documentElement.clientWidth - left - right,
+        };
+      })()
+      JS);
+    $this->assertEqualsWithDelta($widths['expected'], $widths['actual'], 1);
+    $this->assertNotNull($tray->findLink('Stage'));
+    $this->assertNotNull($tray->findLink('View all workspaces'));
+    $this->assertJsCondition(<<<'JS'
+      (() => {
+        const content = document.querySelector('#drupal-off-canvas');
+        const bounds = content.getBoundingClientRect();
+        const links = [
+          content.querySelector('.workspaces__item'),
+          content.querySelector('.all-workspaces'),
+        ];
+        return links.every((link) => {
+          const { top, right, bottom, left, width, height } = link.getBoundingClientRect();
+          const hit = document.elementFromPoint(left + width / 2, top + height / 2);
+          return width > 0 && height > 0 &&
+            top >= bounds.top && right <= bounds.right &&
+            bottom <= bounds.bottom && left >= bounds.left &&
+            link.contains(hit);
+        });
+      })()
+      JS);
     $this->getSession()->resizeWindow(640, 480);
     $overlay = $assert->waitForElementVisible('css', '.admin-toolbar-overlay');
     $this->assertNotNull($overlay);

@@ -9,7 +9,7 @@
 #drupal-off-canvas-wrapper.workspaces-dialog {
   padding-bottom: calc(var(--off-canvas-padding) / 2);
 
-  & .drupal-dialog-content > div {
+  & .workspace-switcher {
     @media (--workspace-layout-large) {
       display: flex;
       align-items: flex-end;

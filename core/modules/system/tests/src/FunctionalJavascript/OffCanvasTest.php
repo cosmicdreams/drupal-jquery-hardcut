@@ -84,6 +84,10 @@ class OffCanvasTest extends OffCanvasTestBase {
     // Test the off_canvas_top tray.
     foreach ([1, 2] as $link_index) {
       $this->assertOffCanvasDialog($link_index, 'top');
+      $this->assertJsCondition(<<<'JS'
+        document.getElementById('drupal-off-canvas-wrapper').getBoundingClientRect().width ===
+          document.documentElement.clientWidth
+        JS);
 
       if ($link_index === 2) {
         $style = $page->find('css', '.drupal-dialog-off-canvas')->getAttribute('style');
