@@ -7,6 +7,7 @@ import {
  * Ports defaultAdminPrimaryTabsTest.js.
  *
  * @see https://www.drupal.org/i/3244621
+ * @see https://www.drupal.org/i/3265617
  * @see https://www.drupal.org/i/3432632
  * @see https://www.drupal.org/i/3490621
  * @see https://www.drupal.org/i/3500425
@@ -49,12 +50,14 @@ test.describe(
         await expect(tabs.inactiveTab).toHaveCount(1);
         await expect(tabs.inactiveTab).toBeHidden();
         await expect(tabs.toggle).toBeVisible();
+        await expect(tabs.toggleIcon).toBeVisible();
         await expect(tabs.toggle).toHaveAttribute('aria-expanded', 'false');
       });
 
       await test.step('Open the primary tabs', async () => {
         await tabs.toggleButton.click();
         await expect(tabs.inactiveTab).toBeVisible();
+        await expect(tabs.toggleIcon).toBeVisible();
         await expect(tabs.toggle).toHaveAttribute('aria-expanded', 'true');
       });
 
@@ -62,6 +65,7 @@ test.describe(
         await tabs.toggleButton.click();
         await expect(tabs.inactiveTab).toHaveCount(1);
         await expect(tabs.inactiveTab).toBeHidden();
+        await expect(tabs.toggleIcon).toBeVisible();
         await expect(tabs.toggle).toHaveAttribute('aria-expanded', 'false');
       });
     });

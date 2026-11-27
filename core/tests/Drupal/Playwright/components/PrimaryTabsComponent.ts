@@ -6,6 +6,7 @@ export class PrimaryTabsComponent {
   readonly inactiveTab: Locator;
   readonly toggle: Locator;
   readonly toggleButton: Locator;
+  readonly toggleIcon: Locator;
 
   constructor(page: Page) {
     // Improvement: Expose the initialized state on the named landmark so
@@ -31,5 +32,8 @@ export class PrimaryTabsComponent {
         exact: true,
       }),
     );
+    // The toggle's single decorative SVG has no role or name.
+    // Improvement: Give the icon an authored hook if it gains state variants.
+    this.toggleIcon = this.toggle.locator('svg');
   }
 }
