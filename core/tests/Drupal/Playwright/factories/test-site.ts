@@ -16,7 +16,7 @@ const fixtureMargin = 20_000;
 const maxInstallTimeoutSeconds = Math.floor(
   (2_147_483_647 - fixtureMargin) / 1000,
 );
-const installTimeout = process.env.DRUPAL_TEST_INSTALL_TIMEOUT || '40';
+const installTimeout = process.env.DRUPAL_TEST_INSTALL_TIMEOUT || '120';
 const installTimeoutSeconds = Number(installTimeout);
 if (
   !/^[1-9][0-9]*$/.test(installTimeout) ||
