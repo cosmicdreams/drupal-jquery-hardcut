@@ -20,7 +20,8 @@ test(
   { tag: ['@core', '@local'] },
   async ({ drupalPage }) => {
     await test.step('Open the test page after installing with French translations', async () => {
-      await drupalPage.open('test-page');
+      const response = await drupalPage.open('test-page');
+      expect(response?.ok(), 'The test page responds successfully').toBe(true);
     });
 
     await test.step('Check the document language', async () => {

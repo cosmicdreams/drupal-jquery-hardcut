@@ -1,6 +1,6 @@
 import { execFile } from 'node:child_process';
-import { randomUUID } from 'node:crypto';
-import { readdir, readFile, rmdir, unlink } from 'node:fs/promises';
+import { createHash, randomUUID } from 'node:crypto';
+import { mkdir, readdir, readFile, rmdir, stat } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import { promisify } from 'node:util';
 
@@ -8,6 +8,10 @@ const run = promisify(execFile);
 const coreRoot = resolve(__dirname, '../../../..');
 const repositoryRoot = resolve(coreRoot, '..');
 const prefixPattern = /^test[0-9]{8}$/;
+const uuidPattern = /^[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}$/;
+const staleRunAge = 24 * 60 * 60 * 1000;
+const registryScript =
+  './tests/Drupal/Playwright/support/test-site-registry.sh';
 
 export interface SiteOptions {
   profile?: string;
@@ -58,8 +62,7 @@ function databaseURL(): string {
 /**
  * Runs PHP inside DDEV locally and directly in the GitLab job's PHP image.
  */
-async function testSiteCommand(args: string[]): Promise<string> {
-  const command = ['php', './scripts/test-site.php', ...args];
+async function containerCommand(command: string[]): Promise<string> {
   const inContainer =
     process.env.GITLAB_CI === 'true' || process.env.IS_DDEV_PROJECT === 'true';
   const invocation = inContainer
@@ -82,42 +85,59 @@ async function testSiteCommand(args: string[]): Promise<string> {
   return stdout.trim();
 }
 
+function registryRoot(): string {
+  const scope = createHash('sha256').update(databaseURL()).digest('hex');
+  return `sites/simpletest/.playwright/${scope}`;
+}
+
 function registryDirectory(): string {
   const id = process.env.DRUPAL_PLAYWRIGHT_RUN_ID ?? '';
-  if (!/^[a-f0-9-]{36}$/.test(id)) {
+  if (!uuidPattern.test(id)) {
     throw new Error('The Playwright test site registry was not initialized.');
   }
-  return `sites/simpletest/.playwright/${id}`;
+  return `${registryRoot()}/${id}`;
+}
+
+async function recordStat(record: string) {
+  try {
+    return await stat(resolve(repositoryRoot, record));
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== 'ENOENT') {
+      throw error;
+    }
+    return null;
+  }
 }
 
 async function cleanupSite(record: string): Promise<void> {
-  const path = resolve(repositoryRoot, record);
-  let prefix: string;
+  if (!(await recordStat(record))) {
+    return;
+  }
   try {
-    prefix = await readFile(path, 'utf8');
+    await containerCommand([
+      'sh',
+      registryScript,
+      'cleanup',
+      record,
+      `--db-url=${databaseURL()}`,
+    ]);
   } catch (error) {
-    if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
-      return;
+    // A concurrent sweep may already have removed the record.
+    if (await recordStat(record)) {
+      throw error;
     }
-    throw error;
   }
-  if (!prefixPattern.test(prefix)) {
-    throw new Error(
-      `Refusing to tear down an invalid test site prefix in ${record}.`,
-    );
-  }
-  await testSiteCommand(['tear-down', prefix, `--db-url=${databaseURL()}`]);
-  await unlink(path);
 }
 
 export async function installSite(options: SiteOptions): Promise<TestSite> {
   const url = testBaseURL();
-  const directory = registryDirectory();
-  const record = `${directory}/${randomUUID()}`;
-  const install = await testSiteCommand([
+  const record = `${registryDirectory()}/${randomUUID()}`;
+  await mkdir(resolve(repositoryRoot, record), { recursive: true });
+  const install = await containerCommand([
+    'sh',
+    registryScript,
     'install',
-    '--json',
-    `--fixture-prefix-file=${record}`,
+    record,
     `--base-url=${url.href}`,
     `--db-url=${databaseURL()}`,
     `--install-profile=${options.profile ?? 'playwright_testing'}`,
@@ -131,7 +151,7 @@ export async function installSite(options: SiteOptions): Promise<TestSite> {
     user_agent: userAgent,
   } = JSON.parse(install);
   const registeredPrefix = await readFile(
-    resolve(repositoryRoot, record),
+    resolve(repositoryRoot, record, 'complete'),
     'utf8',
   );
   if (
@@ -154,7 +174,9 @@ export async function installSite(options: SiteOptions): Promise<TestSite> {
       path: url.pathname,
     },
     async adminLoginURL() {
-      const link = await testSiteCommand([
+      const link = await containerCommand([
+        'php',
+        './scripts/test-site.php',
         'user-login',
         '1',
         `--site-path=${sitePath}`,
@@ -171,20 +193,25 @@ export async function installSite(options: SiteOptions): Promise<TestSite> {
   };
 }
 
-export async function sweepOrphanedSites(): Promise<void> {
-  const directory = registryDirectory();
-  let records: string[];
+async function registryEntries(directory: string): Promise<string[]> {
   try {
-    records = await readdir(resolve(repositoryRoot, directory));
+    const entries = await readdir(resolve(repositoryRoot, directory), {
+      withFileTypes: true,
+    });
+    return entries
+      .filter((entry) => entry.isDirectory() && uuidPattern.test(entry.name))
+      .map(({ name }) => `${directory}/${name}`);
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
-      return;
+      return [];
     }
     throw error;
   }
-  const results = await Promise.allSettled(
-    records.map((record) => cleanupSite(`${directory}/${record}`)),
-  );
+}
+
+async function sweepRun(directory: string): Promise<void> {
+  const records = await registryEntries(directory);
+  const results = await Promise.allSettled(records.map(cleanupSite));
   const failures = results.flatMap((result) =>
     result.status === 'rejected' ? [result.reason] : [],
   );
@@ -194,5 +221,30 @@ export async function sweepOrphanedSites(): Promise<void> {
       'Could not tear down every Playwright test site.',
     );
   }
-  await rmdir(resolve(repositoryRoot, directory));
+  try {
+    await rmdir(resolve(repositoryRoot, directory));
+  } catch (error) {
+    if (
+      !['ENOENT', 'ENOTEMPTY'].includes(
+        (error as NodeJS.ErrnoException).code ?? '',
+      )
+    ) {
+      throw error;
+    }
+  }
+}
+
+export async function sweepOrphanedSites(): Promise<void> {
+  await sweepRun(registryDirectory());
+}
+
+export async function recoverStaleSites(): Promise<void> {
+  // Leave other runs alone while they may still be using their installed sites.
+  // Legacy records lack a database scope and an installer lock.
+  for (const directory of await registryEntries(registryRoot())) {
+    const record = await recordStat(directory);
+    if (record && Date.now() - record.mtimeMs >= staleRunAge) {
+      await sweepRun(directory);
+    }
+  }
 }

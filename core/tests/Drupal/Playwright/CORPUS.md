@@ -23,14 +23,27 @@ Origins below are relative to `core/tests/Drupal/Nightwatch/Tests/`. The tag
 | Test umami profile | `installProfileTest.js:16` | The Umami branding block exists | `NW-installProfileTest-umami-branding` |
 | Test page with langcode | `langcodeTest.js:16` | The document language is French | `NW-langcodeTest-french-document` |
 
-This covers three cases, four explicit assertions and two visibility waits. The
-login fixture also carries over the session-cookie assertion from
-`Commands/drupalLogin.js`. The database setup creates the same user and grants
-the same permissions as the old role and account forms. The old form success
-messages were checks on that setup. Login and Reports access verify the seeded
-account and permissions. The administrator fixture owns a separate context
-and closes it afterwards, taking the place of setup-time sign-out. Playwright
-records diagnostics in its report and traces on failure.
+This covers three Nightwatch cases. The Reports fixture retains the
+session-cookie assertion from `Commands/drupalLogin.js:26` and checks
+deprecation warnings on the page that signed in. A separate
+`PW-login-reports-session-isolation` test checks that the default page stays
+anonymous when the Reports page signs in. The French test also checks the
+navigation response before reading the document language.
+
+### Nightwatch login helper assertions
+
+Origins below are relative to `core/tests/Drupal/Nightwatch/Commands/`.
+The Reports fixture seeds the account, role, and permissions.
+
+| Origin | Assertion | Disposition | PHPUnit coverage |
+|---|---|---|---|
+| `drupalCreateRole.js:34` | The generated role machine name appears | Harness setup, not ported | `MachineNameTransliterationTest::testMachineNameTransliterations()` checks the generated preview on the add-role form |
+| `drupalCreateRole.js:39` | The role-added message appears | Harness setup, not ported | `UserRoleAdminTest::testRoleAdministration()` checks the message after submitting the add-role form |
+| `drupalCreateRole.js:44` | The permissions table appears | Harness setup, not ported | `UserPermissionsTest::testPermissionTableHtml()` checks rendered table markup. See [coverage gaps](COVERAGE-GAPS.md) for browser visibility. |
+| `drupalCreateRole.js:57` | The permissions-saved message appears | Harness setup, not ported | `UserPermissionsTest::testUserPermissionChanges()` checks the message after saving |
+| `drupalCreateUser.js:35,40` | The password input is visible | Harness setup, not ported | See [coverage gaps](COVERAGE-GAPS.md) |
+| `drupalCreateUser.js:49,54–57` | The account-created message appears | Harness setup, not ported | `UserCreateTest::testUserAdd()` checks the confirmation after submitting the form |
+| `drupalLogout.js:24` | Logout confirmation removes the browser session cookie | Harness setup, not ported | See [coverage gaps](COVERAGE-GAPS.md) |
 
 ## Pending slices
 
@@ -62,7 +75,8 @@ DRUPAL_TEST_BASE_URL=http://drupal-jquery-hardcut-playwright.ddev.site \
 
 The site factory invokes PHP through DDEV when Playwright runs on the host.
 Each test gets a separate database prefix and signed routing cookie. Global
-teardown reads this run's prefix records under `sites/simpletest/.playwright/`
-and cleans up any site the fixture left behind. The repository root holds
+teardown cleans up this run's registered sites. Global setup also recovers
+records in the current database scope from runs inactive for at least 24
+hours. Both use the installer's container-side lock. The repository root holds
 `playwright-report/` and `playwright_output/`, which contains the JUnit file
 and retained traces.

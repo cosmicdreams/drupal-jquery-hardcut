@@ -53,13 +53,18 @@ export const test = base.extend<Fixtures>({
   umamiPage: async ({ page }, use) => {
     await use(new UmamiTestPage(page));
   },
-  reportsUserPage: async ({ page }, use) => {
-    const loginPage = new LoginPage(page);
-    await test.step('Sign in with the reports account credentials', async () => {
-      await loginPage.signIn('user', '123');
-      await expect.poll(() => loginPage.hasSession()).toBe(true);
-    });
-    await use(loginPage);
+  reportsUserPage: async ({ browser, baseURL, storageState }, use) => {
+    const context = await browser.newContext({ baseURL, storageState });
+    try {
+      const loginPage = new LoginPage(await context.newPage());
+      await test.step('Sign in with the reports account credentials', async () => {
+        await loginPage.signIn('user', '123');
+        await expect.poll(() => loginPage.hasSession()).toBe(true);
+      });
+      await use(loginPage);
+    } finally {
+      await context.close();
+    }
   },
   adminAuthState: async ({ playwright, site, storageState }, use) => {
     const request = await playwright.request.newContext({ storageState });

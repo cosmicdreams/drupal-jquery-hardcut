@@ -1,4 +1,4 @@
-import type { Locator, Page } from '@playwright/test';
+import type { Locator, Page, Response } from '@playwright/test';
 
 export class DrupalPage {
   readonly body: Locator;
@@ -12,8 +12,8 @@ export class DrupalPage {
     this.heading = page.getByRole('heading', { level: 1 });
   }
 
-  async open(path: string): Promise<void> {
-    await this.page.goto(path);
+  async open(path: string): Promise<Response | null> {
+    return this.page.goto(path);
   }
 
   async hasSession(): Promise<boolean> {
