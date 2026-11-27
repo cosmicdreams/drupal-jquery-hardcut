@@ -27,6 +27,14 @@ test(
       await expect(htmxAttachmentsPage.body).toBeVisible();
       await attachments.expectVisibleInitializedContent();
       await expect(htmxAttachmentsPage.deleteButton).toBeVisible();
+      await expect(htmxAttachmentsPage.deleteButton).toHaveAttribute(
+        'data-hx-swap',
+        /^delete(?:\s|$)/,
+      );
+      await expect(htmxAttachmentsPage.body).toHaveAttribute(
+        'data-htmx-behavior-test',
+        'attached',
+      );
     });
 
     await test.step('Delete the initialized content', async () => {

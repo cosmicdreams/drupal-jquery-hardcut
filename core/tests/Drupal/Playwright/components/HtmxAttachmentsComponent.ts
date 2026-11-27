@@ -11,6 +11,8 @@ export class HtmxAttachmentsComponent {
   constructor(page: Page) {
     // The fixture renders plain containers. Its content class identifies
     // the element that Drupal's behavior changes and that htmx can delete.
+    // An authored data-* hook on that container would decouple this locator
+    // from the class that test_htmx's behavior.js and style.css also use.
     this.content = page.locator('.ajax-content');
     this.initializedContent = this.content.and(
       page.locator('[data-once="htmx-init"]'),
