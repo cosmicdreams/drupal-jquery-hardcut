@@ -33,6 +33,7 @@
     "test:playwright": "playwright test"
   },
   "devDependencies": {
+    "@axe-core/playwright": "4.10.2",
     "@drupal/once": "^1.0.1",
     "@floating-ui/dom": "^1.8.0",
     "@gitlab-formatters/stylelint-formatter-gitlab": "^1.0.2",
@@ -57,6 +58,7 @@
     "minimist": "^1.2.8",
     "mkdirp": "^3.0.1",
     "normalize.css": "^8.0.1",
+    "playwright-core": "^1.65.1",
     "postcss": "^8.5.28",
     "postcss-header": "^3.0.3",
     "postcss-import": "^17.0.0",

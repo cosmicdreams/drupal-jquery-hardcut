@@ -1,0 +1,15 @@
+name: Playwright A11y Testing
+type: profile
+description: 'Minimal profile for running A11y Playwright tests. Includes absolutely required modules only.'
+version: VERSION
+hidden: true
+install:
+  - block
+  - comment
+  - image
+  - node
+  - path
+  - taxonomy
+themes:
+  - default_admin
+  - stark

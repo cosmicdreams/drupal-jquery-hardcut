@@ -215,6 +215,47 @@ delays the competing Workspaces and Layout Builder requests and checks the
 winning content in the same tray. `211a73d75ab` removes jQuery references.
 S3 introduces no retirement, new `PW-` spec, or uncovered corpus assertion.
 
+## S4 navigation
+
+All four originals are under
+`core/modules/navigation/tests/src/Nightwatch/Tests/` in the historical tree.
+Their seven cases are in `core/modules/navigation/tests/src/Playwright/`.
+
+| Original case | Playwright spec | Classification and assertion mapping |
+|---|---|---|
+| `expandCollapseTest.js:25–45`, wide | `NW-expandCollapseTest-sidebar-toggle` | Adapt. At 1220 × 800, submit the original cache-clear form with BigPipe enabled. Assert the document listener marker, absence of the expanded footer toggle, collapsed toggle state, and collapsed document state. After expanding, assert the expanded toggle and document state. After collapsing, repeat all three collapsed checks. Start with the persisted collapsed preference so a fresh authenticated context reproduces the original starting state. |
+| `expandCollapseTest.js:48–80`, narrow | Same file, Escape case | Port faithfully. At 1000 × 800, verify the Configuration trigger is hidden, becomes visible on opening, and is hidden after Escape. Assert the same mobile trigger loses focus on opening and regains it on Escape. The Configuration button has the accessible name “Extend Configuration”. |
+| `navigationDisplaceTest.js:17–24` | `NW-navigationDisplaceTest-sidebar-offset` | Port faithfully. At 1220 × 800, assert `data-offset-left` on the actual sidebar displacement placeholder at `/admin/` with BigPipe enabled. |
+| `navigationMobileFocusTrapTest.js:47–197`, close button | `NW-navigationMobileFocusTrapTest-sidebar-inert` | Adapt. On the 375 × 800 homepage, verify the body is visible and the burger reports closed, open, and closed in order. After opening, every original non-sidebar body child has both inert attributes and the population is nonempty. The sidebar and overlay remain exempt. The original conditional focus probe becomes a guaranteed attempt on the real skip link, with a successful baseline attempt while the sidebar is closed. Closing clears every tracking marker. |
+| `navigationMobileFocusTrapTest.js:199–251`, overlay | Same file, overlay case | Adapt. Verify the body, open burger state, and active tracking markers. Click the exposed edge of the actual overlay with a pointer. Verify the closed burger state and that all tracking markers clear. |
+| `navigationMobileFocusTrapTest.js:253–304`, resize | Same file, resize case | Port faithfully. Load at 375 × 800, resize to 1280 × 800, and verify the sidebar is visible and tracking markers are absent. Resize back, verify the burger is visible and reports open after clicking, and verify tracking markers are present. |
+| `a11yTest.js:15–45`, account edit | `NW-a11yTest-navigation-sidebar` | Adapt. Scan `body` on `/user/1/edit` at 1220 × 800 and 1000 × 800 in the same session. At the narrow width, verify the Expand sidebar button is visible and click it. Verify the original Create button, named “Extend Create”, is visible before scanning. Both scans require zero violations with empty axe options. |
+
+The non-accessibility cases use `playwright_testing` and install Navigation
+with its dependencies through `siteOptions.modules`. The wide, narrow, and
+displacement cases also install BigPipe. Each case gets a fresh site. The
+focus-trap cases wait for the same animation marker using a Playwright
+assertion. They preserve the original outside-child filter, which excludes
+the control bar even though the current implementation also makes it inert.
+
+The accessibility profile is restored as `playwright_a11y_testing`.
+`system.theme.yml` already names `default_admin` and `stark`, and all 19
+install configuration files are unchanged. The profile omits the deleted
+`nightwatch_theme_install_utility`, which the Navigation case never invoked.
+`DrupalPage.scanAccessibility(context, options)` uses
+`@axe-core/playwright` 4.10.2 and the historical axe-core 4.10.3. Its direct
+axe run mode preserves the old frame scope. The options pass through so S5
+can supply each original scan's tags and disabled rules.
+
+`NavigationWorkspacesDialogTest::testConfirmationFromNarrowTray()` clicks
+the same overlay, but checks the HTML state and tray geometry. It reads the
+same displacement placeholder's geometry. Its assertions do not replace the
+burger state, focus trap cleanup, or displacement attribute checks here.
+`NavigationUserBlockTest::testNavigationUserBlock()` checks the rendered
+username. `NavigationBlockUiTest::testNavigationBlockAdminUiPageNestedForm()`
+checks layout editing. The sidebar behavior remains native on the hard-cut
+branch. There are no jQuery-only retirements or new `PW-` cases.
+
 ## Pending slices
 
 Each pending case and assertion from the following files maps to the pending
@@ -222,7 +263,6 @@ corpus entry in [COVERAGE-GAPS.md](COVERAGE-GAPS.md).
 
 | Slice | Original files |
 |---|---|
-| S4 | Navigation tests `expandCollapseTest.js`, `navigationDisplaceTest.js`, `navigationMobileFocusTrapTest.js`, and `a11yTest.js` |
 | S5 | `defaultAdminDrupalMessageTest.js`, `defaultAdminPrimaryTabsTest.js`, `a11yTestAdmin.js`, `a11yTestDefault.js` |
 | S6 | `drupalHtmlBuilderTest.js` |
 

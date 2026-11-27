@@ -1,5 +1,5 @@
 import { expect, test as base } from '@playwright/test';
-import type { APIRequest, BrowserContext } from '@playwright/test';
+import type { APIRequest, BrowserContext, Page } from '@playwright/test';
 import { installSite, siteFixtureTimeout } from '../factories/test-site';
 import type { SiteOptions, TestSite } from '../factories/test-site';
 import { AjaxPromiseFormPage } from '../pages/AjaxPromiseFormPage';
@@ -10,6 +10,7 @@ import { DrupalPage } from '../pages/DrupalPage';
 import { HtmxAttachmentsPage } from '../pages/HtmxAttachmentsPage';
 import { LoginPage } from '../pages/LoginPage';
 import { MachineNameTestPage } from '../pages/MachineNameTestPage';
+import { NavigationPage } from '../pages/NavigationPage';
 import { OnceTestPage } from '../pages/OnceTestPage';
 import { TabbingManagerTestPage } from '../pages/TabbingManagerTestPage';
 import { UmamiTestPage } from '../pages/UmamiTestPage';
@@ -28,6 +29,7 @@ type Fixtures = {
   displaceTestPage: DisplaceTestPage;
   htmxAttachmentsPage: HtmxAttachmentsPage;
   machineNameTestPage: MachineNameTestPage;
+  navigationPage: NavigationPage;
   onceTestPage: OnceTestPage;
   tabbingManagerTestPage: TabbingManagerTestPage;
   /**
@@ -37,6 +39,7 @@ type Fixtures = {
   reportsLoginPage: LoginPage;
   reportsUserPage: DrupalPage;
   adminAuthState: AuthState;
+  adminBrowserPage: Page;
   adminPage: DrupalPage;
 };
 
@@ -152,6 +155,9 @@ export const test = base.extend<Fixtures>({
   machineNameTestPage: async ({ page }, use) => {
     await use(new MachineNameTestPage(page));
   },
+  navigationPage: async ({ adminBrowserPage }, use) => {
+    await use(new NavigationPage(adminBrowserPage));
+  },
   onceTestPage: async ({ page }, use) => {
     await use(new OnceTestPage(page));
   },
@@ -194,13 +200,16 @@ export const test = base.extend<Fixtures>({
       await captureAuthState(playwright.request, site, storageState, 1),
     );
   },
-  adminPage: async ({ browser, baseURL, adminAuthState }, use) => {
+  adminPage: async ({ adminBrowserPage }, use) => {
+    await use(new DrupalPage(adminBrowserPage));
+  },
+  adminBrowserPage: async ({ browser, baseURL, adminAuthState }, use) => {
     const context = await browser.newContext({
       baseURL,
       storageState: adminAuthState,
     });
     try {
-      await use(new DrupalPage(await context.newPage()));
+      await use(await context.newPage());
     } finally {
       await context.close();
     }

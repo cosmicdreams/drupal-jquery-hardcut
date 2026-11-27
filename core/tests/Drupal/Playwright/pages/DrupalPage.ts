@@ -1,3 +1,4 @@
+import { AxeBuilder } from '@axe-core/playwright';
 import type { Locator, Page, Response } from '@playwright/test';
 
 export class DrupalPage {
@@ -14,6 +15,20 @@ export class DrupalPage {
 
   async open(path: string): Promise<Response | null> {
     return this.page.goto(path);
+  }
+
+  async scanAccessibility(
+    context = 'body',
+    options: Parameters<AxeBuilder['options']>[0] = {},
+  ): ReturnType<AxeBuilder['analyze']> {
+    return (
+      new AxeBuilder({ page: this.page })
+        .include(context)
+        .options(options)
+        // Match Nightwatch’s axe.run() scope, including same-origin frames.
+        .setLegacyMode()
+        .analyze()
+    );
   }
 
   async hasSession(): Promise<boolean> {
