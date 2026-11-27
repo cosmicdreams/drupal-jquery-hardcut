@@ -29,7 +29,7 @@ test.use({
 
 test(
   'NW-defaultAdminAutocompleteTest-inline-loading',
-  { tag: ['@core', '@local'] },
+  { tag: ['@core', '@local', '@default-admin'] },
   async ({ autocompleteTestPage }) => {
     const { inlineAutocomplete, denylistAutocomplete } = autocompleteTestPage;
 

@@ -67,10 +67,25 @@ test(
   'NW-expandCollapseTest-sidebar-toggle Escape closes the narrow sidebar and restores focus',
   { tag: ['@core', '@local', '@navigation'] },
   async ({ navigationPage }) => {
-    const { navigation } = navigationPage;
-    await test.step('Open the performance page at the narrow viewport', async () => {
-      await navigationPage.resize(1000, 800);
+    const { navigation, document } = navigationPage;
+    await test.step('Load the performance page with the saved desktop preference', async () => {
+      // Nightwatch carried the viewport and the saved collapse from its wide case.
+      await navigationPage.resize(1220, 800);
+      await navigationPage.startWithCollapsedSidebar();
       await navigationPage.open('admin/config/development/performance');
+      await expect(document).toHaveAttribute(
+        'data-once',
+        /\badmin-toolbar-document-triggers-listener\b/,
+      );
+      await expect(navigation.desktopToggle).toHaveAttribute(
+        'aria-expanded',
+        'false',
+      );
+      await expect(document).toHaveAttribute('data-admin-toolbar', 'collapsed');
+    });
+
+    await test.step('Resize and verify the narrow sidebar starts closed', async () => {
+      await navigationPage.resize(1000, 800);
       await expect(navigation.configuration).toHaveCount(1);
       await expect(navigation.configuration).toBeHidden();
     });

@@ -778,7 +778,7 @@ default:
         - core/playwright.config.ts
         - core/tsconfig.playwright.json
         - core/tests/Drupal/Playwright/**/*
-        - "core/{modules,themes}/*/tests/src/Playwright/**/*.ts"
+        - "core/{modules,profiles,themes}/**/tests/src/Playwright/**/*.ts"
         - "**/*.yml"
     - if: ($CI_PIPELINE_SOURCE == "merge_request_event" && $CI_MERGE_REQUEST_LABELS =~ /Test lint cache warming/)
     - when: manual

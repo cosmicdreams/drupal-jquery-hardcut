@@ -21,6 +21,7 @@ import { MessageTestPage } from '../pages/MessageTestPage';
 import { NavigationPage } from '../pages/NavigationPage';
 import { OnceTestPage } from '../pages/OnceTestPage';
 import { PrimaryTabsTestPage } from '../pages/PrimaryTabsTestPage';
+import { StatesTestPage } from '../pages/StatesTestPage';
 import { TabbingManagerTestPage } from '../pages/TabbingManagerTestPage';
 import { UmamiTestPage } from '../pages/UmamiTestPage';
 
@@ -47,6 +48,7 @@ type Fixtures = {
   machineNameTestPage: MachineNameTestPage;
   navigationPage: NavigationPage;
   onceTestPage: OnceTestPage;
+  statesTestPage: StatesTestPage;
   tabbingManagerTestPage: TabbingManagerTestPage;
   /**
    * Signs in through the browser for the Reports deprecation check, which
@@ -267,6 +269,9 @@ export const test = base.extend<Fixtures>({
   },
   deprecationTestPage: async ({ page }, use) => {
     await use(new DeprecationTestPage(page));
+  },
+  statesTestPage: async ({ page }, use) => {
+    await use(new StatesTestPage(page));
   },
   displaceTestPage: async ({ page }, use) => {
     await use(new DisplaceTestPage(page));

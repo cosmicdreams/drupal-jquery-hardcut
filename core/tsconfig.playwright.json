@@ -10,7 +10,8 @@
   "include": [
     "playwright.config.ts",
     "tests/Drupal/Playwright/**/*.ts",
-    "modules/*/tests/src/Playwright/**/*.ts",
-    "themes/*/tests/src/Playwright/**/*.ts"
+    "modules/**/tests/src/Playwright/**/*.ts",
+    "profiles/**/tests/src/Playwright/**/*.ts",
+    "themes/**/tests/src/Playwright/**/*.ts"
   ]
 }

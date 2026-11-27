@@ -6,6 +6,7 @@ import { DrupalPage } from './DrupalPage';
 export class NavigationPage extends DrupalPage {
   readonly navigation: NavigationSidebarComponent;
   readonly clearCaches: Locator;
+  readonly cachesCleared: Locator;
   readonly skipLink: Locator;
 
   constructor(page: Page) {
@@ -15,6 +16,8 @@ export class NavigationPage extends DrupalPage {
       name: 'Clear all caches',
       exact: true,
     });
+    // Improvement: a role-based locator once the message has a stable role.
+    this.cachesCleared = page.getByText('Caches cleared.');
     this.skipLink = page.getByRole('link', {
       name: 'Skip to main content',
       exact: true,
@@ -37,8 +40,7 @@ export class NavigationPage extends DrupalPage {
     // The 303 arrives before the redirected page commits. Wait for the
     // confirmation that only the redirected page renders, so later assertions
     // cannot pass against the page that was open before the submission.
-    // Improvement: a role-based locator once the message has a stable role.
-    await expect(this.page.getByText('Caches cleared.')).toBeVisible();
+    await expect(this.cachesCleared).toBeVisible();
     return submission;
   }
 

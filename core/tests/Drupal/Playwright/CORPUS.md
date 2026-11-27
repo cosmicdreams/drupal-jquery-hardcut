@@ -108,9 +108,9 @@ Admin as the default theme and signs in a disposable account with
 | Origin | Assertion | Disposition | Coverage |
 |---|---|---|---|
 | `statesTest.js:12,19` | The full States form page body is visible | Port faithfully. Both visits used the same fixture and initial state. | `NW-statesTest-form-deprecations` |
-| `statesTest.js:13` | The textfield controlled by an OR condition starts hidden | Adapt. Existing browser coverage uses the same route and verifies both inputs in the condition. | `JavascriptStatesTest::testNumberTrigger()` |
+| `statesTest.js:13` | The textfield controlled by an OR condition starts hidden | Port faithfully on the original form. | `NW-statesTest-form-deprecations` |
 | `statesTest.js:14` | The full States form logs no deprecation warnings | Adapt. Subscribe to the browser console for Drupal's `[Deprecation]` warnings. | `NW-statesTest-form-deprecations` |
-| `statesTest.js:20,32` | The dependent item starts hidden and appears after the number spinner changes | Adapt. Existing browser coverage sends Arrow Up and Tab, suppresses key-release handlers, and checks the trusted change event. | `JavascriptStatesTest::testNumberTrigger()` |
+| `statesTest.js:20,32` | The dependent item starts hidden and appears after the number spinner changes | Adapt. Press Arrow Up and Tab and suppress the Arrow Up key release so the dependent item must respond to the browser’s native change event. | `NW-statesTest-form-deprecations` |
 | `machineNameTransliterationTest.js:231` | The filtered module checkbox is visible as part of setup | Adapt. Provision the module through the installer and verify its fixture is reachable. | `NW-machineNameTransliterationTest-configured-transliteration` |
 | `machineNameTransliterationTest.js:257`, vectors at lines 8, 15 | English `Bob → bob` and `Äwesome → awesome` through `Drupal.behaviors.machineName.transliterate()` with the original settings | Port. | `NW-machineNameTransliterationTest-configured-transliteration` |
 | `machineNameTransliterationTest.js:257`, vector at line 59 | English uppercase Latin-1 transliteration through the same call and settings | Port, expected value updated. Nightwatch expected `dnoooooxouuuuuthss`; transliteration 2.7.0 (`5776d7ded4d`, merged by `abf9f022c68`) maps `Ý` to `y`, giving `dnoooooxouuuuythss`. | `NW-machineNameTransliterationTest-configured-transliteration` |
@@ -224,7 +224,7 @@ Their seven cases are in `core/modules/navigation/tests/src/Playwright/`.
 | Original case | Playwright spec | Classification and assertion mapping |
 |---|---|---|
 | `expandCollapseTest.js:25–45`, wide | `NW-expandCollapseTest-sidebar-toggle` | Adapt. At 1220 × 800, submit the original cache-clear form with BigPipe enabled. Assert the document listener marker, absence of the expanded footer toggle, collapsed toggle state, and collapsed document state. After expanding, assert the expanded toggle and document state. After collapsing, repeat all three collapsed checks. Start with the persisted collapsed preference so a fresh authenticated context reproduces the original starting state. |
-| `expandCollapseTest.js:48–80`, narrow | Same file, Escape case | Port faithfully. At 1000 × 800, verify the Configuration trigger is hidden, becomes visible on opening, and is hidden after Escape. Assert the same mobile trigger loses focus on opening and regains it on Escape. The Configuration button has the accessible name “Extend Configuration”. |
+| `expandCollapseTest.js:48–80`, narrow | Same file, Escape case | Adapt. Recreate the viewport and collapsed preference carried over from the wide case. Load at 1220 × 800 with the saved preference set to false, verify the initialized collapsed state, then resize to 1000 × 800. Verify the Configuration trigger is hidden, becomes visible on opening, and is hidden after Escape. Assert the same mobile trigger loses focus on opening and regains it on Escape. The Configuration button has the accessible name “Extend Configuration”. |
 | `navigationDisplaceTest.js:17–24` | `NW-navigationDisplaceTest-sidebar-offset` | Port faithfully. At 1220 × 800, assert `data-offset-left` on the actual sidebar displacement placeholder at `/admin/` with BigPipe enabled. |
 | `navigationMobileFocusTrapTest.js:47–197`, close button | `NW-navigationMobileFocusTrapTest-sidebar-inert` | Adapt. On the 375 × 800 homepage, verify the body is visible and the burger reports closed, open, and closed in order. After opening, every original non-sidebar body child has both inert attributes and the population is nonempty. The sidebar and overlay remain exempt. The original conditional focus probe becomes a guaranteed attempt on the real skip link, with a successful baseline attempt while the sidebar is closed. Closing clears every tracking marker. |
 | `navigationMobileFocusTrapTest.js:199–251`, overlay | Same file, overlay case | Adapt. Verify the body, open burger state, and active tracking markers. Click the exposed edge of the actual overlay with a pointer. Verify the closed burger state and that all tracking markers clear. |
@@ -281,10 +281,15 @@ with the historical `administer nodes` grant.
 Core theme scans use fresh `playwright_a11y_testing` sites and require a
 successful response on the requested route before running axe. Nightwatch
 ended the browser session once per test file, in the global `afterEach`.
-Cases before the first explicit resize used the runner's initial window size;
-the Block case inherited 415 × 823 from the mobile case before it.
-Playwright uses its runner default for those cases. Override the installed
-theme with `DRUPAL_TEST_ADMIN_THEME` or `DRUPAL_TEST_DEFAULT_THEME`.
+Seven admin scans and two public scans used the old runner's unrecorded
+initial window. Playwright uses its default 1280 × 720 for these nine scans
+as an intentional coverage boundary. Revisit when an old continuous
+integration (CI) artifact or matched runner shows the historical window.
+The two admin scans at 415 × 823 preserve the explicit mobile resize and
+the Block case's inherited viewport.
+
+Override the installed theme with `DRUPAL_TEST_ADMIN_THEME` or
+`DRUPAL_TEST_DEFAULT_THEME`.
 For example, run `DRUPAL_TEST_DEFAULT_THEME=default_admin yarn test:playwright --grep @a11y-default`
 with the test environment configured below. The restored
 `playwright_theme_install_utility` is installed only on sites with a theme

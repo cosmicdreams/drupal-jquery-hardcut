@@ -1,11 +1,9 @@
 import { expect, test } from '../fixtures/base.fixture';
 
 /**
- * Covers deprecations on the full Form API States fixture.
+ * Covers visibility and deprecations on the full Form API States fixture.
  *
- * JavascriptStatesTest::testNumberTrigger() covers the initial visibility and
- * trusted spinner interaction on this route. The Nightwatch spinner comment
- * described its synthetic change event:
+ * Historical comment on the spinner interaction:
  *
  * Emulate usage of the spinner browser widget on number inputs
  * on modern browsers.
@@ -20,17 +18,28 @@ test.use({ siteOptions: { modules: ['form_test'] } });
 test(
   'NW-statesTest-form-deprecations',
   { tag: ['@core', '@local'] },
-  async ({ deprecationTestPage }) => {
+  async ({ statesTestPage }) => {
+    const { body, conditionalTextfield, spinnerDependentItem } = statesTestPage;
+
     await test.step('Open the States form', async () => {
-      const response = await deprecationTestPage.open(
+      const response = await statesTestPage.open(
         'form-test/javascript-states-form',
       );
       expect(response?.ok()).toBe(true);
-      await expect(deprecationTestPage.body).toBeVisible();
+      await expect(body).toBeVisible();
+      await expect(conditionalTextfield).toHaveCount(1);
+      await expect(conditionalTextfield).toBeHidden();
     });
 
     await test.step('Check that form attachment logs no deprecations', async () => {
-      expect(deprecationTestPage.warnings).toEqual([]);
+      expect(statesTestPage.warnings).toEqual([]);
+    });
+
+    await test.step('Reveal the dependent item with the number spinner', async () => {
+      await expect(spinnerDependentItem).toHaveCount(1);
+      await expect(spinnerDependentItem).toBeHidden();
+      await statesTestPage.incrementNumberTrigger();
+      await expect(spinnerDependentItem).toBeVisible();
     });
   },
 );

@@ -126,7 +126,7 @@ export default defineConfig(
     files: [
       'playwright.config.ts',
       'tests/Drupal/Playwright/**/*.ts',
-      '{modules,themes}/*/tests/src/Playwright/**/*.ts',
+      '{modules,profiles,themes}/**/tests/src/Playwright/**/*.ts',
     ],
     languageOptions: { parser: tsParser },
     rules: {

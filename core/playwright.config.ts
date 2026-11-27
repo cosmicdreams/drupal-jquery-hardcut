@@ -10,7 +10,7 @@ export default defineConfig({
     '**/core/tests/Drupal/Playwright/specs/**/*.spec.ts',
     '**/core/modules/**/tests/src/Playwright/**/*.spec.ts',
     '**/core/profiles/**/tests/src/Playwright/**/*.spec.ts',
-    '**/core/themes/*/tests/src/Playwright/**/*.spec.ts',
+    '**/core/themes/**/tests/src/Playwright/**/*.spec.ts',
   ],
   testIgnore: ['**/node_modules/**', '**/.yarn/**'],
   globalSetup: `${suite}/global-setup.ts`,

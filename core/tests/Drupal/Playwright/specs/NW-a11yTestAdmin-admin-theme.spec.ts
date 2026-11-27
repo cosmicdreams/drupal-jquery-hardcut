@@ -4,6 +4,10 @@ import type { DrupalPage } from '../pages/DrupalPage';
 /**
  * Ports a11yTestAdmin.js.
  *
+ * Seven of the nine historical initial-window scans are in this file. Those
+ * scans used the old runner's unrecorded initial window. They now use
+ * Playwright's default 1280 × 720 as an intentional coverage boundary.
+ * Revisit when an old CI artifact or matched runner shows the historical window.
  * @see https://www.drupal.org/i/3223147
  * @see https://www.drupal.org/i/3293469
  * @see https://www.drupal.org/i/3318394
