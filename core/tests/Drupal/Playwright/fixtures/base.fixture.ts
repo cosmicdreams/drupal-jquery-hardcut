@@ -2,8 +2,13 @@ import { expect, test as base } from '@playwright/test';
 import type { APIRequest, BrowserContext } from '@playwright/test';
 import { installSite, siteFixtureTimeout } from '../factories/test-site';
 import type { SiteOptions, TestSite } from '../factories/test-site';
+import { AjaxPromiseFormPage } from '../pages/AjaxPromiseFormPage';
+import { DeprecationTestPage } from '../pages/DeprecationTestPage';
+import { DisplaceTestPage } from '../pages/DisplaceTestPage';
 import { DrupalPage } from '../pages/DrupalPage';
 import { LoginPage } from '../pages/LoginPage';
+import { OnceTestPage } from '../pages/OnceTestPage';
+import { TabbingManagerTestPage } from '../pages/TabbingManagerTestPage';
 import { UmamiTestPage } from '../pages/UmamiTestPage';
 
 type AuthState = Awaited<ReturnType<BrowserContext['storageState']>>;
@@ -13,6 +18,11 @@ type Fixtures = {
   site: TestSite;
   drupalPage: DrupalPage;
   umamiPage: UmamiTestPage;
+  ajaxPromiseFormPage: AjaxPromiseFormPage;
+  deprecationTestPage: DeprecationTestPage;
+  displaceTestPage: DisplaceTestPage;
+  onceTestPage: OnceTestPage;
+  tabbingManagerTestPage: TabbingManagerTestPage;
   /**
    * Signs in through the browser for the Reports deprecation check, which
    * reads session storage from the tab that performed the sign-in.
@@ -86,6 +96,21 @@ export const test = base.extend<Fixtures>({
   },
   umamiPage: async ({ page }, use) => {
     await use(new UmamiTestPage(page));
+  },
+  ajaxPromiseFormPage: async ({ page }, use) => {
+    await use(new AjaxPromiseFormPage(page));
+  },
+  deprecationTestPage: async ({ page }, use) => {
+    await use(new DeprecationTestPage(page));
+  },
+  displaceTestPage: async ({ page }, use) => {
+    await use(new DisplaceTestPage(page));
+  },
+  onceTestPage: async ({ page }, use) => {
+    await use(new OnceTestPage(page));
+  },
+  tabbingManagerTestPage: async ({ page }, use) => {
+    await use(new TabbingManagerTestPage(page));
   },
   reportsLoginPage: async ({ browser, baseURL, storageState }, use) => {
     const context = await browser.newContext({ baseURL, storageState });

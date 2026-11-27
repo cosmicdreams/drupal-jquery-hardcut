@@ -34,6 +34,7 @@ export interface SiteOptions {
   profile?: string;
   langcode?: string;
   setupFile?: string;
+  modules?: readonly string[];
 }
 
 export interface TestSite {
@@ -160,6 +161,7 @@ export async function installSite(options: SiteOptions): Promise<TestSite> {
     `--db-url=${databaseURL()}`,
     `--install-profile=${options.profile ?? 'playwright_testing'}`,
     `--langcode=${options.langcode ?? 'en'}`,
+    ...(options.modules ?? []).map((module) => `--module=${module}`),
     ...(options.setupFile ? [`--setup-file=${options.setupFile}`] : []),
   ]);
 

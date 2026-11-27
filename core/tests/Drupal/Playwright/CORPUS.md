@@ -45,6 +45,55 @@ The Reports fixture seeds the account, role, and permissions.
 | `drupalCreateUser.js:49,54–57` | The account-created message appears | Harness setup, not ported | `UserCreateTest::testUserAdd()` checks the confirmation after submitting the form |
 | `drupalLogout.js:24` | Logout confirmation removes the browser session cookie | Harness setup, not ported | See [coverage gaps](COVERAGE-GAPS.md) |
 
+## S1
+
+Origins are relative to `core/tests/Drupal/Nightwatch/Tests/`. Each original
+has one case and uses the per-test site fixture.
+
+| Origin | Assertion | Disposition | Playwright spec |
+|---|---|---|---|
+| `jsOnceTest.js:12` | The first fixture item is visible | Port faithfully | `NW-jsOnceTest-mark-and-remove` |
+| `jsOnceTest.js:19` | The first mark returns five items | Port faithfully | `NW-jsOnceTest-mark-and-remove` |
+| `jsOnceTest.js:32` | The repeated mark returns zero items | Port faithfully | `NW-jsOnceTest-mark-and-remove` |
+| `jsOnceTest.js:47` | A separate mark on a subset returns two items | Port faithfully | `NW-jsOnceTest-mark-and-remove` |
+| `jsOnceTest.js:62` | Repeating the separate mark returns zero items | Port faithfully | `NW-jsOnceTest-mark-and-remove` |
+| `jsOnceTest.js:74` | Removing the first mark returns five items | Port faithfully | `NW-jsOnceTest-mark-and-remove` |
+| `jsOnceTest.js:86` | Repeating removal of the first mark returns zero items | Port faithfully | `NW-jsOnceTest-mark-and-remove` |
+| `jsOnceTest.js:101` | Removing the separate mark returns two items | Port faithfully | `NW-jsOnceTest-mark-and-remove` |
+| `jsOnceTest.js:116` | Repeating removal of the separate mark returns zero items | Port faithfully | `NW-jsOnceTest-mark-and-remove` |
+| `jsDisplace.js:69` | The front-page body is visible | Port faithfully | `NW-jsDisplace-viewport-offsets` |
+| `jsDisplace.js:80–83, 88` | Returned top, right, bottom, and left offsets are 200, 110, 145, 310 | Port faithfully | `NW-jsDisplace-viewport-offsets` |
+| `jsDisplace.js:111–114, 119` | Computed custom properties report 200px, 110px, 145px, 310px | Port faithfully | `NW-jsDisplace-viewport-offsets` |
+| `tabbingManagerTest.js:12` | The constraint container exists | Port faithfully | `NW-tabbingManagerTest-focus-constraint` |
+| `tabbingManagerTest.js:25, 40, 55, 70` | Unconstrained focus goes from First to Second, Third, and Fourth | Port faithfully | `NW-tabbingManagerTest-focus-constraint` |
+| `tabbingManagerTest.js:94, 109, 124, 139` | Constrained focus goes from First to Second and Third, then wraps to First | Port faithfully | `NW-tabbingManagerTest-focus-constraint` |
+| `tabbingManagerTest.js:157, 172` | Focus starts on First and Shift+Tab wraps to Third | Port faithfully | `NW-tabbingManagerTest-focus-constraint` |
+| `ajaxExecutionOrderTest.js:12` | The promise form page body is visible | Port faithfully | `NW-ajaxExecutionOrderTest-promise-command-order` |
+| `ajaxExecutionOrderTest.js:14` | The wrapper is visible after clicking the execute button | Port faithfully | `NW-ajaxExecutionOrderTest-promise-command-order` |
+| `ajaxExecutionOrderTest.js:15` | The command output contains 12345 in order | Port faithfully | `NW-ajaxExecutionOrderTest-promise-command-order` |
+| `jsDeprecationTest.js:12` | The fixture page body is visible | Port faithfully | `NW-jsDeprecationTest-function-and-property-warnings` |
+| `jsDeprecationTest.js:13` | The main heading contains JsDeprecationTest | Port faithfully | `NW-jsDeprecationTest-function-and-property-warnings` |
+| `jsDeprecationTest.js:14–16` | Calling a deprecated function emits its tagged warning | Adapt | `NW-jsDeprecationTest-function-and-property-warnings` |
+| `jsDeprecationTest.js:17–19` | Reading a deprecated property emits its tagged warning | Adapt | `NW-jsDeprecationTest-function-and-property-warnings` |
+
+The public `once`, `Drupal.displace()`, `Drupal.tabbingManager.constrain()`,
+and Ajax promise ordering contracts survive the hard cut. The tabbing test
+drives the real keyboard and uses the accessible textbox names. The fixture
+fields use Drupal's `#id` so their visible labels name the inputs. The module
+installer resolves dependencies, including `dialog_test` for `ajax_test`.
+
+`Drupal.deprecationError()` and `Drupal.deprecatedProperty()` still emit
+`console.warn` with the `[Deprecation]` prefix. Playwright subscribes before
+navigation and checks the original messages directly on the browser console.
+Nightwatch read the same warnings through its session-storage logger.
+
+`PW-displace-native-viewport-offset-event` also guards the document
+`CustomEvent` and its four offsets in `detail`. Commit `9b60ef69556` replaced
+the jQuery broadcast with this native contract. The original displacement
+case checked return values and computed styles.
+
+All five original cases have coverage. S1 has no retirements.
+
 ## Pending slices
 
 Each pending case and assertion from the following files maps to the pending
@@ -52,14 +101,13 @@ corpus entry in [COVERAGE-GAPS.md](COVERAGE-GAPS.md).
 
 | Slice | Original files |
 |---|---|
-| S1 | `jsOnceTest.js`, `jsDisplace.js`, `tabbingManagerTest.js`, `ajaxExecutionOrderTest.js`, `jsDeprecationTest.js` |
 | S2 | `statesTest.js`, `machineNameTransliterationTest.js`, `defaultAdminAutocompleteTest.js` |
 | S3 | `htmx/htmxTest.js` |
 | S4 | Navigation tests `expandCollapseTest.js`, `navigationDisplaceTest.js`, `navigationMobileFocusTrapTest.js`, and `a11yTest.js` |
 | S5 | `defaultAdminDrupalMessageTest.js`, `defaultAdminPrimaryTabsTest.js`, `a11yTestAdmin.js`, `a11yTestDefault.js` |
 | S6 | `drupalHtmlBuilderTest.js` |
 
-## Run S0
+## Run the Playwright suite
 
 Start the worktree's DDEV project and run `ddev composer install` at the worktree
 root. The worktree needs a writable `sites/simpletest` and a test database.
