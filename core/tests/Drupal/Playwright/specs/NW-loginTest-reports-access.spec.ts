@@ -15,20 +15,20 @@ test.use({ siteOptions: { setupFile: loginSetup } });
 test(
   'NW-loginTest-reports-access',
   { tag: ['@core', '@local'] },
-  async ({ adminPage, reportsUserPage }) => {
+  async ({ adminPage, reportsLoginPage }) => {
     await test.step('Verify the administrator session on the fixture site', async () => {
       await adminPage.open('user');
       await expect.poll(() => adminPage.hasSession()).toBe(true);
     });
 
     await test.step('Open Reports as the user granted access to site reports', async () => {
-      await reportsUserPage.open('admin/reports');
-      await expect(reportsUserPage.body).toBeVisible();
-      await expect(reportsUserPage.heading).toContainText('Reports');
+      await reportsLoginPage.open('admin/reports');
+      await expect(reportsLoginPage.body).toBeVisible();
+      await expect(reportsLoginPage.heading).toContainText('Reports');
     });
 
     await test.step('Check for JavaScript deprecation warnings', async () => {
-      expect(await reportsUserPage.deprecationWarnings()).toEqual([]);
+      expect(await reportsLoginPage.deprecationWarnings()).toEqual([]);
     });
   },
 );

@@ -39,7 +39,7 @@ The Reports fixture seeds the account, role, and permissions.
 |---|---|---|---|
 | `drupalCreateRole.js:34` | The generated role machine name appears | Harness setup, not ported | `MachineNameTransliterationTest::testMachineNameTransliterations()` checks the generated preview on the add-role form |
 | `drupalCreateRole.js:39` | The role-added message appears | Harness setup, not ported | `UserRoleAdminTest::testRoleAdministration()` checks the message after submitting the add-role form |
-| `drupalCreateRole.js:44` | The permissions table appears | Harness setup, not ported | `UserPermissionsTest::testPermissionTableHtml()` checks rendered table markup. See [coverage gaps](COVERAGE-GAPS.md) for browser visibility. |
+| `drupalCreateRole.js:44` | The permissions table appears | Harness setup, not ported | `UserPermissionsTest::testPermissionTableHtml()` checks the cell count of a module header row. See [coverage gaps](COVERAGE-GAPS.md) for the table selector and visibility. |
 | `drupalCreateRole.js:57` | The permissions-saved message appears | Harness setup, not ported | `UserPermissionsTest::testUserPermissionChanges()` checks the message after saving |
 | `drupalCreateUser.js:35,40` | The password input is visible | Harness setup, not ported | See [coverage gaps](COVERAGE-GAPS.md) |
 | `drupalCreateUser.js:49,54–57` | The account-created message appears | Harness setup, not ported | `UserCreateTest::testUserAdd()` checks the confirmation after submitting the form |

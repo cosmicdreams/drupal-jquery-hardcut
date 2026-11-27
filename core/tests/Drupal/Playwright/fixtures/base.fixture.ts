@@ -1,22 +1,53 @@
 import { expect, test as base } from '@playwright/test';
-import type { BrowserContext } from '@playwright/test';
+import type { APIRequest, BrowserContext } from '@playwright/test';
 import { installSite } from '../factories/test-site';
 import type { SiteOptions, TestSite } from '../factories/test-site';
 import { DrupalPage } from '../pages/DrupalPage';
 import { LoginPage } from '../pages/LoginPage';
 import { UmamiTestPage } from '../pages/UmamiTestPage';
 
+type AuthState = Awaited<ReturnType<BrowserContext['storageState']>>;
+
 type Fixtures = {
   siteOptions: SiteOptions;
   site: TestSite;
   drupalPage: DrupalPage;
   umamiPage: UmamiTestPage;
-  reportsUserPage: LoginPage;
-  adminAuthState: Awaited<ReturnType<BrowserContext['storageState']>>;
+  /**
+   * Signs in through the browser for the Reports deprecation check, which
+   * reads session storage from the tab that performed the sign-in.
+   */
+  reportsLoginPage: LoginPage;
+  reportsUserPage: DrupalPage;
+  adminAuthState: AuthState;
   adminPage: DrupalPage;
 };
 
 const loginSetup = 'core/tests/Drupal/TestSite/PlaywrightLoginTestSetup.php';
+
+async function captureAuthState(
+  api: APIRequest,
+  site: TestSite,
+  storageState: string | AuthState | undefined,
+  uid: number,
+): Promise<AuthState> {
+  const request = await api.newContext({ storageState });
+  try {
+    const response = await request.get(await site.loginURL(uid));
+    const state = await request.storageState();
+    if (
+      !response.ok() ||
+      !state.cookies.some(({ name }) => /^S?SESS/.test(name))
+    ) {
+      throw new Error(
+        `Login for user ${uid} failed (HTTP ${response.status()}).`,
+      );
+    }
+    return state;
+  } finally {
+    await request.dispose();
+  }
+}
 
 export const test = base.extend<Fixtures>({
   siteOptions: [{}, { option: true }],
@@ -53,7 +84,7 @@ export const test = base.extend<Fixtures>({
   umamiPage: async ({ page }, use) => {
     await use(new UmamiTestPage(page));
   },
-  reportsUserPage: async ({ browser, baseURL, storageState }, use) => {
+  reportsLoginPage: async ({ browser, baseURL, storageState }, use) => {
     const context = await browser.newContext({ baseURL, storageState });
     try {
       const loginPage = new LoginPage(await context.newPage());
@@ -66,23 +97,28 @@ export const test = base.extend<Fixtures>({
       await context.close();
     }
   },
-  adminAuthState: async ({ playwright, site, storageState }, use) => {
-    const request = await playwright.request.newContext({ storageState });
+  reportsUserPage: async (
+    { browser, baseURL, playwright, site, storageState },
+    use,
+  ) => {
+    // The login setup creates the reports account as the first user after UID 1.
+    const state = await captureAuthState(
+      playwright.request,
+      site,
+      storageState,
+      2,
+    );
+    const context = await browser.newContext({ baseURL, storageState: state });
     try {
-      const response = await request.get(await site.adminLoginURL());
-      const state = await request.storageState();
-      if (
-        !response.ok() ||
-        !state.cookies.some(({ name }) => /^S?SESS/.test(name))
-      ) {
-        throw new Error(
-          `Administrator login failed (HTTP ${response.status()}).`,
-        );
-      }
-      await use(state);
+      await use(new DrupalPage(await context.newPage()));
     } finally {
-      await request.dispose();
+      await context.close();
     }
+  },
+  adminAuthState: async ({ playwright, site, storageState }, use) => {
+    await use(
+      await captureAuthState(playwright.request, site, storageState, 1),
+    );
   },
   adminPage: async ({ browser, baseURL, adminAuthState }, use) => {
     const context = await browser.newContext({

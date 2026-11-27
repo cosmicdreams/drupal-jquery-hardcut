@@ -231,6 +231,51 @@ class TestSiteApplicationTest extends KernelTestBase {
   }
 
   /**
+   * Tests that a site directory left behind keeps the database prefix locked.
+   */
+  public function testTearDownWithUndeletedSiteDirectory(): void {
+    $test_database = new TestDatabase(NULL, TRUE);
+    $db_prefix = $test_database->getDatabasePrefix();
+    $site_path = $test_database->getTestSitePath();
+    $directory = $this->root . DIRECTORY_SEPARATOR . $site_path;
+    $lock = $this->getTestLockFile($db_prefix);
+    $target = $directory . '-empty';
+    $obstruction = $directory . '/obstruction';
+    $process = new Process([$this->php, 'core/scripts/test-site.php', 'tear-down', $db_prefix], $this->root);
+
+    // Recursive deletion cannot remove a directory symlink with rmdir().
+    try {
+      $this->assertTrue(mkdir($directory, recursive: TRUE));
+      $this->assertTrue(mkdir($target));
+      $this->assertTrue(symlink($target, $obstruction));
+      $this->assertSame(1, $process->run());
+      $this->assertStringContainsString($site_path, $process->getErrorOutput());
+      $this->assertDirectoryExists($directory);
+      $this->assertFileExists($lock);
+
+      // The filesystem may already be clean when teardown is retried.
+      $this->assertTrue(unlink($obstruction));
+      $this->assertTrue(rmdir($directory));
+      $this->assertSame(0, $process->run());
+      $this->assertFileDoesNotExist($lock);
+    }
+    finally {
+      if (is_link($obstruction)) {
+        unlink($obstruction);
+      }
+      if (is_dir($directory)) {
+        rmdir($directory);
+      }
+      if (is_dir($target)) {
+        rmdir($target);
+      }
+      if (is_link($lock)) {
+        $test_database->releaseLock();
+      }
+    }
+  }
+
+  /**
    * Tests user login.
    */
   public function testUserLogin(): void {

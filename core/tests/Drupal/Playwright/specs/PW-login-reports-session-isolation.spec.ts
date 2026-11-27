@@ -8,6 +8,7 @@ test(
   async ({ drupalPage, reportsUserPage }) => {
     await test.step('Check that only the reports page has a session cookie', async () => {
       await drupalPage.open('user/login');
+      await reportsUserPage.open('admin/reports');
       expect({
         defaultPage: await drupalPage.hasSession(),
         reportsPage: await reportsUserPage.hasSession(),

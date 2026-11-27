@@ -27,7 +27,7 @@ export interface TestSite {
     domain: string;
     path: string;
   };
-  adminLoginURL(): Promise<string>;
+  loginURL(uid: number): Promise<string>;
   cleanup(): Promise<void>;
 }
 
@@ -109,7 +109,7 @@ async function recordStat(record: string) {
   }
 }
 
-async function cleanupSite(record: string): Promise<void> {
+async function cleanupSite(record: string, recover = false): Promise<void> {
   if (!(await recordStat(record))) {
     return;
   }
@@ -117,14 +117,17 @@ async function cleanupSite(record: string): Promise<void> {
     await containerCommand([
       'sh',
       registryScript,
-      'cleanup',
+      recover ? 'recover' : 'cleanup',
       record,
       `--db-url=${databaseURL()}`,
     ]);
   } catch (error) {
     // A concurrent sweep may already have removed the record.
     if (await recordStat(record)) {
-      throw error;
+      const { stderr } = error as { stderr?: string };
+      throw new Error(
+        `Could not tear down Playwright test site record ${record}. ${stderr?.trim() ?? ''}`.trim(),
+      );
     }
   }
 }
@@ -173,19 +176,17 @@ export async function installSite(options: SiteOptions): Promise<TestSite> {
       domain: url.hostname,
       path: url.pathname,
     },
-    async adminLoginURL() {
+    async loginURL(uid) {
       const link = await containerCommand([
         'php',
         './scripts/test-site.php',
         'user-login',
-        '1',
+        String(uid),
         `--site-path=${sitePath}`,
       ]);
       // The console returns a root-relative route. Retain Drupal's base path.
       if (!/^\/user\/reset\//.test(link)) {
-        throw new Error(
-          'test-site.php returned an invalid administrator login link.',
-        );
+        throw new Error('test-site.php returned an invalid user login link.');
       }
       return new URL(link.slice(1), url).href;
     },
@@ -209,26 +210,31 @@ async function registryEntries(directory: string): Promise<string[]> {
   }
 }
 
-async function sweepRun(directory: string): Promise<void> {
+async function sweepRun(directory: string, recover = false): Promise<void> {
   const records = await registryEntries(directory);
-  const results = await Promise.allSettled(records.map(cleanupSite));
+  const results = await Promise.allSettled(
+    records.map((record) => cleanupSite(record, recover)),
+  );
   const failures = results.flatMap((result) =>
     result.status === 'rejected' ? [result.reason] : [],
   );
   if (failures.length) {
     throw new AggregateError(
       failures,
-      'Could not tear down every Playwright test site.',
+      failures.map((error) => String(error)).join('\n'),
     );
   }
   try {
     await rmdir(resolve(repositoryRoot, directory));
   } catch (error) {
-    if (
-      !['ENOENT', 'ENOTEMPTY'].includes(
-        (error as NodeJS.ErrnoException).code ?? '',
-      )
-    ) {
+    const { code } = error as NodeJS.ErrnoException;
+    if (code === 'ENOTEMPTY' && !recover) {
+      const remaining = await readdir(resolve(repositoryRoot, directory));
+      throw new Error(
+        `Playwright test site records remain: ${remaining.map((name) => `${directory}/${name}`).join(', ')}`,
+      );
+    }
+    if (code !== 'ENOENT' && code !== 'ENOTEMPTY') {
       throw error;
     }
   }
@@ -244,7 +250,7 @@ export async function recoverStaleSites(): Promise<void> {
   for (const directory of await registryEntries(registryRoot())) {
     const record = await recordStat(directory);
     if (record && Date.now() - record.mtimeMs >= staleRunAge) {
-      await sweepRun(directory);
+      await sweepRun(directory, true);
     }
   }
 }

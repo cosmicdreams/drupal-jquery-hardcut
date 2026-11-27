@@ -20,15 +20,21 @@ case "$operation" in
       mv "../$record/pending" "../$record/complete"
     ' sh "$record" "$@"
     ;;
-  cleanup)
-    flock -n -E 75 "../$record" sh -eu -c '
-      directory=$1
-      db_option=$2
-      case "$db_option" in
-        --db-url=?*) ;;
-        *) exit 1 ;;
-      esac
-      test -d "$directory" || exit 0
+  cleanup|recover)
+    lock_wait=-n
+    if [ "$operation" = cleanup ]; then
+      # Allow the 40-second installer deadline and its 2-second kill grace.
+      lock_wait=-w45
+    fi
+    directory="../$record"
+    db_option=$1
+    case "$db_option" in
+      --db-url=?*) ;;
+      *) exit 1 ;;
+    esac
+
+    # Open the directory read-only so a concurrent removal cannot recreate it.
+    if flock "$lock_wait" -E 75 9; then
       for state in complete pending; do
         file="$directory/$state"
         if [ -f "$file" ]; then
@@ -44,12 +50,17 @@ case "$operation" in
           rm "$file"
         fi
       done
-      rmdir "$directory"
-    ' sh "../$record" "$@" || {
-      # A live installer or another sweep still owns this record.
+      test ! -d "$directory" || rmdir "$directory"
+    else
       status=$?
-      test "$status" -eq 75 || exit "$status"
-    }
+      if [ "$status" -eq 75 ]; then
+        if [ "$operation" = recover ]; then
+          exit 0
+        fi
+        echo "Timed out waiting for the Playwright test site record lock: $record" >&2
+      fi
+      exit "$status"
+    fi 9<"$directory"
     ;;
   *) exit 1 ;;
 esac
