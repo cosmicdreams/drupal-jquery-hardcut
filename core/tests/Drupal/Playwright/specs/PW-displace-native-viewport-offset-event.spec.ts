@@ -20,5 +20,11 @@ test(
         { top: 200, right: 110, bottom: 145, left: 310 },
       ]);
     });
+
+    await test.step('Recalculate without broadcasting and receive no event', async () => {
+      expect(await displaceTestPage.displaceAndCaptureEvents(false)).toEqual(
+        [],
+      );
+    });
   },
 );

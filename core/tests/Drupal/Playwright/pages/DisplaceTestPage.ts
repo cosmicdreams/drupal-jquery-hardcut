@@ -7,7 +7,7 @@ type Offsets<T = number> = {
   left: T;
 };
 
-declare const Drupal: { displace(): Offsets };
+declare const Drupal: { displace(broadcast?: boolean): Offsets };
 
 const testElements = `
   <div data-offset-top style="background-color:red; height:110px; left:0;
@@ -45,8 +45,8 @@ export class DisplaceTestPage extends DrupalPage {
     });
   }
 
-  async displaceAndCaptureEvents(): Promise<Offsets[]> {
-    return this.page.evaluate(() => {
+  async displaceAndCaptureEvents(broadcast = true): Promise<Offsets[]> {
+    return this.page.evaluate((shouldBroadcast) => {
       const events: Offsets[] = [];
       const capture = (event: Event) => {
         if (event instanceof CustomEvent) {
@@ -55,11 +55,11 @@ export class DisplaceTestPage extends DrupalPage {
       };
       document.addEventListener('drupalViewportOffsetChange', capture);
       try {
-        Drupal.displace();
+        Drupal.displace(shouldBroadcast);
         return events;
       } finally {
         document.removeEventListener('drupalViewportOffsetChange', capture);
       }
-    });
+    }, broadcast);
   }
 }
