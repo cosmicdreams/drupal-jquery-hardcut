@@ -10,19 +10,24 @@ const repositoryRoot = resolve(coreRoot, '..');
 const prefixPattern = /^test[0-9]{8}$/;
 const uuidPattern = /^[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}$/;
 const staleRunAge = 24 * 60 * 60 * 1000;
+// Leave time for the install deadline, kill grace, and registry operations.
+const fixtureMargin = 20_000;
+// Node's setTimeout() uses a signed 32-bit millisecond delay.
+const maxInstallTimeoutSeconds = Math.floor(
+  (2_147_483_647 - fixtureMargin) / 1000,
+);
 const installTimeout = process.env.DRUPAL_TEST_INSTALL_TIMEOUT || '40';
 const installTimeoutSeconds = Number(installTimeout);
 if (
   !/^[1-9][0-9]*$/.test(installTimeout) ||
-  !Number.isSafeInteger(installTimeoutSeconds * 1000 + 20_000)
+  installTimeoutSeconds > maxInstallTimeoutSeconds
 ) {
   throw new Error(
-    'DRUPAL_TEST_INSTALL_TIMEOUT must be a positive integer in seconds.',
+    `DRUPAL_TEST_INSTALL_TIMEOUT must be a whole number of seconds from 1 to ${maxInstallTimeoutSeconds}.`,
   );
 }
 
-// Leave time for the install deadline, kill grace, and registry operations.
-export const siteFixtureTimeout = installTimeoutSeconds * 1000 + 20_000;
+export const siteFixtureTimeout = installTimeoutSeconds * 1000 + fixtureMargin;
 const registryCommand = [
   'env',
   `DRUPAL_TEST_INSTALL_TIMEOUT=${installTimeout}`,

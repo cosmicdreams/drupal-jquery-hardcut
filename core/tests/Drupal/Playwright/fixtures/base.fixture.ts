@@ -16,6 +16,7 @@ type AuthState = Awaited<ReturnType<BrowserContext['storageState']>>;
 type Fixtures = {
   siteOptions: SiteOptions;
   site: TestSite;
+  siteCleanup: (site: TestSite) => void;
   drupalPage: DrupalPage;
   umamiPage: UmamiTestPage;
   ajaxPromiseFormPage: AjaxPromiseFormPage;
@@ -61,14 +62,27 @@ async function captureAuthState(
 
 export const test = base.extend<Fixtures>({
   siteOptions: [{}, { option: true }],
-  site: [
-    async ({ siteOptions }, use) => {
-      const site = await installSite(siteOptions);
+  // Give cleanup its own timeout so a slow install cannot use its lock budget.
+  siteCleanup: [
+    // Playwright requires an object pattern even for fixtures without dependencies.
+    // eslint-disable-next-line no-empty-pattern
+    async ({}, use) => {
+      let site: TestSite | undefined;
       try {
-        await use(site);
+        await use((installedSite) => {
+          site = installedSite;
+        });
       } finally {
-        await site.cleanup();
+        await site?.cleanup();
       }
+    },
+    { timeout: siteFixtureTimeout },
+  ],
+  site: [
+    async ({ siteOptions, siteCleanup }, use) => {
+      const site = await installSite(siteOptions);
+      siteCleanup(site);
+      await use(site);
     },
     { timeout: siteFixtureTimeout },
   ],

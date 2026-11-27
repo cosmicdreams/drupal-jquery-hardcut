@@ -112,6 +112,7 @@ class TestSiteApplicationTest extends KernelTestBase {
         'upload_tmp_dir=' . $lock_directory,
         'core/scripts/test-site.php',
         'install',
+        '--base-url=http://localhost',
         '--fixture-prefix-file=sites/simpletest',
       ], $this->root, ['COLUMNS' => '200']);
       $this->assertSame(1, $process->run());

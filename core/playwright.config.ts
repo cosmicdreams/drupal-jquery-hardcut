@@ -7,12 +7,11 @@ const output = resolve(__dirname, '../playwright_output');
 export default defineConfig({
   testDir: '.',
   testMatch: [
-    'tests/Drupal/Playwright/specs/**/*.spec.ts',
-    'modules/*/tests/src/Playwright/**/*.spec.ts',
-    'modules/*/modules/*/tests/src/Playwright/**/*.spec.ts',
-    'profiles/**/tests/src/Playwright/**/*.spec.ts',
-    'themes/*/tests/src/Playwright/**/*.spec.ts',
-  ].map((pattern) => resolve(__dirname, pattern)),
+    '**/core/tests/Drupal/Playwright/specs/**/*.spec.ts',
+    '**/core/modules/**/tests/src/Playwright/**/*.spec.ts',
+    '**/core/profiles/**/tests/src/Playwright/**/*.spec.ts',
+    '**/core/themes/*/tests/src/Playwright/**/*.spec.ts',
+  ],
   testIgnore: ['**/node_modules/**', '**/.yarn/**'],
   globalSetup: `${suite}/global-setup.ts`,
   globalTeardown: `${suite}/global-teardown.ts`,
