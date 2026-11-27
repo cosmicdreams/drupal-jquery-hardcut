@@ -1,15 +1,22 @@
-/* eslint-disable no-bitwise, no-nested-ternary, no-mutable-exports, comma-dangle, strict */
+/**
+ * @file
+ * Updates the displacement of the sticky administration header.
+ */
 
-'use strict';
+((Drupal, once) => {
+  const observers = new WeakMap();
+  const watcherSelector = '.region-sticky-watcher';
 
-((Drupal) => {
   Drupal.behaviors.adminSticky = {
-    attach: () => {
-      once('adminSticky', '.region-sticky-watcher').forEach(() => {
-        // Watch sticky header
+    attach(context) {
+      once('adminSticky', watcherSelector, context).forEach((watcher) => {
+        const regionSticky = watcher.nextElementSibling;
+        if (!regionSticky?.matches('.region-sticky')) {
+          return;
+        }
+        // Watch the marker immediately before the sticky header.
         const observer = new IntersectionObserver(
           ([e]) => {
-            const regionSticky = document.querySelector('.region-sticky');
             regionSticky.classList.toggle(
               'region-sticky--is-sticky',
               e.intersectionRatio < 1,
@@ -22,11 +29,22 @@
           },
           { threshold: [1] },
         );
-        const element = document.querySelector('.region-sticky-watcher');
-        if (element) {
-          observer.observe(element);
-        }
+        observers.set(watcher, observer);
+        observer.observe(watcher);
       });
     },
+    detach(context, settings, trigger) {
+      if (trigger === 'unload') {
+        once
+          .remove('adminSticky', [
+            ...(context instanceof Element ? [context] : []),
+            ...context.querySelectorAll(watcherSelector),
+          ])
+          .forEach((watcher) => {
+            observers.get(watcher)?.disconnect();
+            observers.delete(watcher);
+          });
+      }
+    },
   };
-})(Drupal);
+})(Drupal, once);

@@ -4,11 +4,13 @@ declare(strict_types=1);
 
 namespace Drupal\Tests\ckeditor5\FunctionalJavascript;
 
+use Drupal\ckeditor5\Plugin\CKEditor5Plugin\Heading;
 use Drupal\ckeditor5\Plugin\Editor\CKEditor5;
 use Drupal\editor\Entity\Editor;
 use Drupal\filter\Entity\FilterFormat;
 use Drupal\Tests\ckeditor5\Traits\CKEditor5TestTrait;
 use Drupal\user\RoleInterface;
+use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\Attributes\Group;
 use PHPUnit\Framework\Attributes\RunTestsInSeparateProcesses;
 use Symfony\Component\Validator\ConstraintViolationInterface;
@@ -36,7 +38,8 @@ class CKEditor5DialogTest extends CKEditor5TestBase {
   /**
    * Tests if CKEditor 5 tooltips can be interacted with in dialogs.
    */
-  public function testCKEditor5FocusInTooltipsInDialog(): void {
+  #[DataProvider('dialogTypes')]
+  public function testCKEditor5FocusInTooltipsInDialog(string $link, bool $modal): void {
     FilterFormat::create([
       'format' => 'test_format',
       'name' => 'CKEditor 5 with link',
@@ -50,7 +53,10 @@ class CKEditor5DialogTest extends CKEditor5TestBase {
       ],
       'settings' => [
         'toolbar' => [
-          'items' => ['link'],
+          'items' => ['link', 'heading'],
+        ],
+        'plugins' => [
+          'ckeditor5_heading' => Heading::DEFAULT_CONFIGURATION,
         ],
       ],
     ])->save();
@@ -69,14 +75,22 @@ class CKEditor5DialogTest extends CKEditor5TestBase {
     $assert_session = $this->assertSession();
 
     $this->drupalGet('/ckeditor5_test/dialog');
-    $page->clickLink('Add Node');
-    $assert_session->waitForElementVisible('css', '[role="dialog"]');
+    $page->clickLink($link);
+    $this->assertNotNull($assert_session->waitForElementVisible('css', 'dialog[open]'));
     $assert_session->assertWaitOnAjaxRequest();
+    $this->assertSame($modal, $this->getSession()->evaluateScript('document.querySelector("dialog[open]").matches(":modal")'));
 
     $content_area = $assert_session->waitForElementVisible('css', '.ck-editor__editable');
+    $this->chooseEditorHeading();
     // Focus the editable area first.
     $content_area->click();
     // Then press the button to add a link.
+    $this->pressEditorButton('Link');
+    $this->assertLinkBalloonPosition();
+    $this->dismissEditorOverlay();
+    $assert_session->assertNoElementAfterWait('css', '.ck-balloon-panel_visible input.ck-input-text');
+    $assert_session->elementExists('css', 'dialog[open]');
+
     $this->pressEditorButton('Link');
 
     $link_url = '/ckeditor5_test/dialog';
@@ -87,6 +101,16 @@ class CKEditor5DialogTest extends CKEditor5TestBase {
     $page->find('xpath', "//button[span[text()='Insert']]")->click();
     // Make sure something was added to the text.
     $this->assertNotEmpty($content_area->getText());
+  }
+
+  /**
+   * Provides links for the modal and non-modal dialog cases.
+   */
+  public static function dialogTypes(): array {
+    return [
+      'modal' => ['Add Node', TRUE],
+      'non-modal' => ['Add Node Without Modal', FALSE],
+    ];
   }
 
   /**
@@ -124,7 +148,7 @@ class CKEditor5DialogTest extends CKEditor5TestBase {
       (function() {
         let captured = null;
         const originalAjax = Drupal.ajax;
-        Drupal.ajax = function(settings) { captured = settings; return { execute: function() {} }; };
+        Drupal.ajax = function(settings) { captured = settings; return { commands: {}, execute: function() {} }; };
         Drupal.ckeditor5.openDialog('/test', function() {}, {});
         Drupal.ajax = originalAjax;
         return { width: captured.dialog.width, autoResizeType: typeof captured.dialog.autoResize };
@@ -138,7 +162,7 @@ class CKEditor5DialogTest extends CKEditor5TestBase {
       (function() {
         let captured = null;
         const originalAjax = Drupal.ajax;
-        Drupal.ajax = function(settings) { captured = settings; return { execute: function() {} }; };
+        Drupal.ajax = function(settings) { captured = settings; return { commands: {}, execute: function() {} }; };
         Drupal.ckeditor5.openDialog('/test', function() {}, { width: '500px' });
         Drupal.ajax = originalAjax;
         return captured.dialog.width;
@@ -151,7 +175,7 @@ class CKEditor5DialogTest extends CKEditor5TestBase {
       (function() {
         let captured = null;
         const originalAjax = Drupal.ajax;
-        Drupal.ajax = function(settings) { captured = settings; return { execute: function() {} }; };
+        Drupal.ajax = function(settings) { captured = settings; return { commands: {}, execute: function() {} }; };
         Drupal.ckeditor5.openDialog('/test', function() {}, { autoResize: false });
         Drupal.ajax = originalAjax;
         return captured.dialog.autoResize;
@@ -164,7 +188,7 @@ class CKEditor5DialogTest extends CKEditor5TestBase {
       (function() {
         let captured = null;
         const originalAjax = Drupal.ajax;
-        Drupal.ajax = function(settings) { captured = settings; return { execute: function() {} }; };
+        Drupal.ajax = function(settings) { captured = settings; return { commands: {}, execute: function() {} }; };
         Drupal.ckeditor5.openDialog('/test', function() {}, { autoResize: true });
         Drupal.ajax = originalAjax;
         return captured.dialog.autoResize;
@@ -172,19 +196,19 @@ class CKEditor5DialogTest extends CKEditor5TestBase {
     JS);
     $this->assertTrue($result);
 
-    // The ui-dialog--narrow class must always be appended, even alongside
+    // The drupal-dialog--narrow class must always be appended, even alongside
     // custom existing classes.
     $result = $this->getSession()->evaluateScript(<<<JS
       (function() {
         let captured = null;
         const originalAjax = Drupal.ajax;
-        Drupal.ajax = function(settings) { captured = settings; return { execute: function() {} }; };
-        Drupal.ckeditor5.openDialog('/test', function() {}, { classes: { 'ui-dialog': 'my-custom-class' } });
+        Drupal.ajax = function(settings) { captured = settings; return { commands: {}, execute: function() {} }; };
+        Drupal.ckeditor5.openDialog('/test', function() {}, { classes: { 'drupal-dialog': 'my-custom-class' } });
         Drupal.ajax = originalAjax;
-        return captured.dialog.classes['ui-dialog'];
+        return captured.dialog.classes['drupal-dialog'];
       })()
     JS);
-    $this->assertStringContainsString('ui-dialog--narrow', $result);
+    $this->assertStringContainsString('drupal-dialog--narrow', $result);
     $this->assertStringContainsString('my-custom-class', $result);
   }
 

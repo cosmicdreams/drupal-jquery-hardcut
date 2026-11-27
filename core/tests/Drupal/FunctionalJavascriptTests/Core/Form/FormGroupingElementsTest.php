@@ -68,7 +68,7 @@ class FormGroupingElementsTest extends WebDriverTestBase {
 
     // Click on a fragment link pointing to an invisible child inside an
     // inactive vertical tab.
-    $session->executeScript("jQuery('<a href=\"$child_1_selector\"></a>').insertAfter('h1')[0].click()");
+    $session->executeScript("const link = document.createElement('a'); link.href = '$child_1_selector'; document.querySelector('h1').after(link); link.click();");
 
     // Assert that the child in the first vertical tab becomes visible.
     $web_assert->waitForElementVisible('css', $child_1_selector, 50);
@@ -100,12 +100,20 @@ class FormGroupingElementsTest extends WebDriverTestBase {
 
     // Store reusable JavaScript code to remove the current URI fragment and
     // close all details.
-    $reset_js = "location.replace('#'); jQuery('details').removeAttr('open')";
+    $reset_js = "location.replace('#'); document.querySelectorAll('details').forEach((el) => el.removeAttribute('open'))";
 
     // Request the group details testing page.
     $this->drupalGet('form-test/group-details');
 
     $page = $session->getPage();
+
+    // Verify native details-aria.js toggles aria-expanded on
+    // server-rendered open="open" details.
+    $summary = $page->find('css', '#edit-meta > summary');
+    $summary->click();
+    $this->assertEquals('false', $summary->getAttribute('aria-expanded'));
+    $summary->click();
+    $this->assertEquals('true', $summary->getAttribute('aria-expanded'));
 
     $session->executeScript($reset_js);
 
@@ -126,16 +134,346 @@ class FormGroupingElementsTest extends WebDriverTestBase {
 
     // Click on a fragment link pointing to an invisible child inside a closed
     // details element.
-    $session->executeScript("jQuery('<a href=\"$child_selector\"></a>').insertAfter('h1')[0].click()");
+    $session->executeScript("const link = document.createElement('a'); link.href = '$child_selector'; document.querySelector('h1').after(link); link.click();");
 
     // Assert that the child is visible again after a fragment link click.
     $web_assert->waitForElementVisible('css', $child_selector, 50);
 
-    // Find the summary belonging to the closest details element.
-    $summary = $page->find('css', '#edit-meta > summary');
-
-    // Assert that both aria-expanded and aria-pressed are true.
+    // Assert that aria-expanded is true.
     $this->assertEquals('true', $summary->getAttribute('aria-expanded'));
+  }
+
+  /**
+   * Tests the details summary update on a canceled click.
+   */
+  public function testCanceledSummaryClick(): void {
+    $this->drupalGet('form-test/group-details');
+
+    $result = $this->getSession()->evaluateScript(<<<'JS'
+      (() => {
+        const details = document.createElement('details');
+        const summary = details.appendChild(document.createElement('summary'));
+        const label = summary.appendChild(document.createElement('span'));
+        label.textContent = 'Details';
+        document.body.append(details);
+        Drupal.attachBehaviors(details);
+        Drupal.attachBehaviors(details);
+
+        let nativeClicks = 0;
+        summary.addEventListener('click', () => { nativeClicks++; });
+        summary.addEventListener('click', (event) => event.preventDefault());
+
+        return [null, 'open', ''].map((attribute) => {
+          if (attribute === null) {
+            details.removeAttribute('open');
+          } else {
+            details.setAttribute('open', attribute);
+          }
+          summary.removeAttribute('aria-expanded');
+          label.click();
+          return [summary.getAttribute('aria-expanded'), details.open, nativeClicks];
+        });
+      })()
+      JS);
+
+    $this->assertSame([
+      [NULL, FALSE, 1],
+      [NULL, TRUE, 2],
+      [NULL, TRUE, 3],
+    ], $result);
+  }
+
+  /**
+   * Tests the fragment event payload and deferred focus.
+   */
+  public function testFragmentPayloadAndFocus(): void {
+    $this->drupalGet('form-test/group-details');
+    $session = $this->getSession();
+    $session->executeScript(<<<'JS'
+      const target = document.getElementById('edit-element');
+      const form = target.form;
+      const type = 'formFragmentLinkClickOrHashChange';
+      document.body.addEventListener(type, (event) => {
+        form.dataset.nativeFragment = event.detail === target;
+      });
+      document.body.addEventListener(type, () => {
+        form.dataset.fragmentCount = Number(form.dataset.fragmentCount || 0) + 1;
+      });
+      const link = document.body.appendChild(document.createElement('a'));
+      link.href = '#edit-element';
+      link.click();
+      JS);
+    $this->assertJsCondition("document.activeElement.id === 'edit-element'");
+    $this->assertSame(['true', '1'], $session->evaluateScript(<<<'JS'
+      Array.from(['nativeFragment', 'fragmentCount'], (key) =>
+        document.getElementById('edit-element').form.dataset[key]
+      )
+      JS));
+  }
+
+  /**
+   * Tests native summary updates after form input and reattachment.
+   */
+  public function testNativeFormSummary(): void {
+    $this->drupalGet('form-test/group-details');
+    $session = $this->getSession();
+    $session->executeScript(<<<'JS'
+      const form = document.body.appendChild(document.createElement('form'));
+      form.id = 'summary-test-form';
+      form.innerHTML = '<div><input id="summary-input" name="summary-input"></div>';
+      const field = form.querySelector('input');
+      const summary = field.parentElement;
+      form.addEventListener('summaryUpdated', (event) => {
+        event.target.dataset.summary = Drupal.form.getSummary(event.target);
+      });
+      Drupal.form.setSummary(summary, (element) => ' ' + element.querySelector('input').value + ' ');
+      Drupal.behaviors.formUpdated.attach(form);
+      Drupal.behaviors.formUpdated.attach(form);
+      field.value = 'first';
+      field.dispatchEvent(new Event('input', { bubbles: true }));
+      JS);
+    $this->assertJsCondition("document.querySelector('#summary-test-form [data-summary]').dataset.summary === 'first'");
+
+    $session->executeScript(<<<'JS'
+      const form = document.getElementById('summary-test-form');
+      Drupal.behaviors.formUpdated.detach(form, {}, 'unload');
+      Drupal.behaviors.formUpdated.attach(form);
+      const field = form.querySelector('input');
+      field.value = 'second';
+      field.dispatchEvent(new Event('change', { bubbles: true }));
+      JS);
+    $this->assertJsCondition("document.querySelector('#summary-test-form [data-summary]').dataset.summary === 'second'");
+  }
+
+  /**
+   * Tests that unloading a form region removes its owned event bindings.
+   */
+  public function testFormEventBindingsDetach(): void {
+    $this->drupalGet('form-test/group-details');
+    $session = $this->getSession();
+    $session->executeScript(<<<'JS'
+      (async () => {
+        const region = document.body.appendChild(document.createElement('div'));
+        const details = region.appendChild(document.createElement('details'));
+        const sibling = document.body.appendChild(document.createElement('div'));
+        const destination = document.body.appendChild(document.createElement('div'));
+        const targets = [region, details, sibling, window, document.body, document];
+        const received = [];
+        const stop = targets.map((target, index) =>
+          Drupal.formEvents.listen(target, 'testFormDetach', () => received.push(index))
+        );
+        const snapshots = [];
+        const snapshot = () => {
+          targets.forEach((target) => target.dispatchEvent(new Event('testFormDetach')));
+          snapshots.push(received.splice(0));
+        };
+        const originalDisconnect = MutationObserver.prototype.disconnect;
+        let disconnects = 0;
+        MutationObserver.prototype.disconnect = function (...args) {
+          disconnects += 1;
+          return originalDisconnect.apply(this, args);
+        };
+
+        try {
+          Drupal.detachBehaviors(region, drupalSettings, 'serialize');
+          Drupal.detachBehaviors(region, drupalSettings, 'move');
+          snapshot();
+
+          // A missing Ajax wrapper falls back to the document.
+          Drupal.detachBehaviors(undefined, drupalSettings, 'unload');
+          await Promise.resolve();
+          snapshot();
+
+          // Replacing the contents removes the old child, keeps the wrapper,
+          // disconnects the observer, and lets a later two-step move keep it.
+          Drupal.detachBehaviors(region, drupalSettings, 'unload');
+          region.replaceChildren();
+          await Promise.resolve();
+          const disconnectsAfterReplace = disconnects;
+          snapshot();
+
+          region.remove();
+          await Promise.resolve();
+          destination.append(region);
+          await Promise.resolve();
+          snapshot();
+          region.dispatchEvent(new Event('testFormDetach'));
+          const survivedMove = received.splice(0);
+
+          Drupal.detachBehaviors(region, drupalSettings, 'unload');
+          // htmx can defer the swap past the current task.
+          await new Promise((resolve) => setTimeout(resolve, 0));
+          snapshot();
+          region.remove();
+          await Promise.resolve();
+          const disconnectsAfterRemove = disconnects;
+          snapshot();
+          targets.forEach((target) => target.dispatchEvent(new Event('testFormDetach')));
+          window.formEventDetachResult = [
+            snapshots,
+            survivedMove,
+            snapshots.at(-1),
+            disconnectsAfterReplace > 0,
+            disconnectsAfterRemove > disconnectsAfterReplace,
+          ];
+        }
+        finally {
+          MutationObserver.prototype.disconnect = originalDisconnect;
+          stop.forEach((unbind) => unbind());
+          region.remove();
+          sibling.remove();
+          destination.remove();
+        }
+      })();
+      JS);
+    $this->assertJsCondition('Boolean(window.formEventDetachResult)');
+    $this->assertSame([
+      [
+        [0, 1, 2, 3, 4, 5],
+        [0, 1, 2, 3, 4, 5],
+        [0, 2, 3, 4, 5],
+        [0, 2, 3, 4, 5],
+        [0, 2, 3, 4, 5],
+        [2, 3, 4, 5],
+      ],
+      [0],
+      [2, 3, 4, 5],
+      TRUE,
+      TRUE,
+    ], $session->evaluateScript('window.formEventDetachResult'));
+  }
+
+  /**
+   * Tests that an unrelated insertion or removal keeps an unload batch pending.
+   */
+  public function testUnloadBatchIgnoresUnrelatedMutations(): void {
+    $this->drupalGet('form-test/group-details');
+    $session = $this->getSession();
+    $session->executeScript(<<<'JS'
+      (async () => {
+        const region = document.body.appendChild(document.createElement('div'));
+        const inner = region.appendChild(document.createElement('div'));
+        const received = [];
+        const stop = Drupal.formEvents.listen(inner, 'testThrobber', () => received.push('inner'));
+        const count = () => {
+          inner.dispatchEvent(new Event('testThrobber'));
+          return received.splice(0).length;
+        };
+        try {
+          Drupal.detachBehaviors(region, drupalSettings, 'unload');
+          // A throbber appears inside the region before the delayed swap.
+          const throbber = document.createElement('span');
+          throbber.className = 'ajax-progress';
+          region.append(throbber);
+          await Promise.resolve();
+          const pending = count();
+          // The throbber leaves again, which removes no tracked target.
+          throbber.remove();
+          await Promise.resolve();
+          const afterThrobber = count();
+          await new Promise((resolve) => setTimeout(resolve, 0));
+          region.replaceChildren();
+          await Promise.resolve();
+          const released = count();
+          inner.dispatchEvent(new Event('testThrobber'));
+          window.unloadThrobberResult = [pending, afterThrobber, released, received];
+        }
+        finally {
+          stop();
+          region.remove();
+        }
+      })();
+      JS);
+    $this->assertJsCondition('Array.isArray(window.unloadThrobberResult)');
+    $this->assertSame([1, 1, 0, []], $session->evaluateScript('window.unloadThrobberResult'));
+  }
+
+  /**
+   * Tests that an unload batch settles when its targets stay or move.
+   */
+  public function testUnloadBatchSettlesWhenTargetsStay(): void {
+    $this->drupalGet('form-test/group-details');
+    $session = $this->getSession();
+    $session->executeScript(<<<'JS'
+      (async () => {
+        const disconnect = MutationObserver.prototype.disconnect;
+        let disconnects = 0;
+        MutationObserver.prototype.disconnect = function () {
+          disconnects += 1;
+          return disconnect.call(this);
+        };
+        const received = [];
+        const kept = document.body.appendChild(document.createElement('div'));
+        kept.appendChild(document.createElement('span'));
+        const region = document.body.appendChild(document.createElement('div'));
+        const moved = region.appendChild(document.createElement('div'));
+        const destination = document.body.appendChild(document.createElement('div'));
+        const stopKept = Drupal.formEvents.listen(kept, 'testKept', () => received.push('kept'));
+        const stopMoved = Drupal.formEvents.listen(moved, 'testMoved', () => received.push('moved'));
+        try {
+          // The swap replaces the content of a target that stays.
+          Drupal.detachBehaviors(kept, drupalSettings, 'unload');
+          disconnects = 0;
+          kept.replaceChildren(document.createElement('p'));
+          await Promise.resolve();
+          const keptDisconnects = disconnects;
+
+          // The swap moves a target elsewhere in the document.
+          Drupal.detachBehaviors(region, drupalSettings, 'unload');
+          disconnects = 0;
+          destination.append(moved);
+          await Promise.resolve();
+          const movedDisconnects = disconnects;
+
+          kept.dispatchEvent(new Event('testKept'));
+          moved.dispatchEvent(new Event('testMoved'));
+          window.unloadKeptResult = [keptDisconnects, movedDisconnects, received];
+        }
+        finally {
+          MutationObserver.prototype.disconnect = disconnect;
+          stopKept();
+          stopMoved();
+          kept.remove();
+          region.remove();
+          destination.remove();
+        }
+      })();
+      JS);
+    $this->assertJsCondition('Array.isArray(window.unloadKeptResult)');
+    $this->assertSame([1, 1, ['kept', 'moved']], $session->evaluateScript('window.unloadKeptResult'));
+  }
+
+  /**
+   * Tests that fallback time zone detection completes during attachment.
+   */
+  public function testSynchronousTimezoneDetection(): void {
+    $this->drupalGet('form-test/group-details', ['query' => ['timezone' => 1]]);
+
+    $result = $this->getSession()->evaluateScript(<<<'JS'
+      (() => {
+        const wrapper = document.body.appendChild(document.createElement('div'));
+        wrapper.innerHTML = '<select class="timezone-detect"><option value="Europe/Paris">Paris</option><option value="America/Chicago">Chicago</option></select>';
+        const select = wrapper.querySelector('select');
+        const resolvedOptions = Intl.DateTimeFormat.prototype.resolvedOptions;
+        const xhr = Drupal.xhr;
+        let request;
+        Intl.DateTimeFormat.prototype.resolvedOptions = () => ({ timeZone: 'Unsupported' });
+        Drupal.xhr = (options) => {
+          request = options;
+          return { status: 200, responseText: '"America/Chicago"' };
+        };
+        try {
+          Drupal.behaviors.setTimezone.attach(wrapper);
+          return [request?.async, request?.url.includes('/system/timezone/'), select.value];
+        } finally {
+          Intl.DateTimeFormat.prototype.resolvedOptions = resolvedOptions;
+          Drupal.xhr = xhr;
+          wrapper.remove();
+        }
+      })()
+      JS);
+
+    $this->assertSame([FALSE, TRUE, 'America/Chicago'], $result);
   }
 
   /**
@@ -241,6 +579,28 @@ class FormGroupingElementsTest extends WebDriverTestBase {
     $this->assertTrue($textfield->isVisible(), 'Text field is visible');
     $this->assertTrue($textarea->isVisible(), 'Text area field is visible');
     $this->assertTrue($select->isVisible(), 'Select field is visible');
+  }
+
+  /**
+   * Tests that a States change reaches native listeners once.
+   */
+  public function testStatesChangeRunsFormBindingOnce(): void {
+    $this->drupalGet('form-test/group-details', ['query' => ['states' => 1]]);
+    $session = $this->getSession();
+    $session->executeScript(<<<'JS'
+      const container = document.body.appendChild(document.createElement('div'));
+      container.innerHTML = `<div class="js-form-item"><input type="checkbox" id="states-dependee"></div><div class="js-form-item"><input type="checkbox" id="states-target" data-drupal-states='{"checked":{"#states-dependee":{"checked":true}}}'></div>`;
+      Drupal.attachBehaviors(container);
+      const target = document.getElementById('states-target');
+      window.statesCalls = [];
+      Drupal.formEvents.listen(target, 'change', () => window.statesCalls.push('core'));
+      target.addEventListener('change', () => window.statesCalls.push('native'));
+      JS);
+    $session->getPage()->findById('states-dependee')->click();
+    $this->assertSame(
+      [TRUE, ['core', 'native']],
+      $session->evaluateScript("[document.getElementById('states-target').checked, window.statesCalls]"),
+    );
   }
 
 }

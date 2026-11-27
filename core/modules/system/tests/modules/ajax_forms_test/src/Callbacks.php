@@ -16,11 +16,11 @@ use Drupal\Core\Ajax\CssCommand;
 use Drupal\Core\Ajax\DataCommand;
 use Drupal\Core\Ajax\HtmlCommand;
 use Drupal\Core\Ajax\InsertCommand;
-use Drupal\Core\Ajax\InvokeCommand;
 use Drupal\Core\Ajax\PrependCommand;
 use Drupal\Core\Ajax\RemoveCommand;
 use Drupal\Core\Ajax\RestripeCommand;
 use Drupal\Core\Ajax\SettingsCommand;
+use Drupal\Core\Ajax\ToggleClassCommand;
 use Drupal\Core\Form\FormStateInterface;
 
 /**
@@ -197,11 +197,11 @@ class Callbacks {
   }
 
   /**
-   * Ajax form callback: Selects 'invoke'.
+   * Ajax form callback: Toggles a class.
    */
-  public static function advancedCommandsInvokeCallback($form, FormStateInterface $form_state): AjaxResponse {
+  public static function advancedCommandsToggleClassCallback($form, FormStateInterface $form_state): AjaxResponse {
     $response = new AjaxResponse();
-    $response->addCommand(new InvokeCommand('#invoke_div', 'addClass', ['error']));
+    $response->addCommand(new ToggleClassCommand('#toggle_class_div', 'error', TRUE));
     return $response;
   }
 

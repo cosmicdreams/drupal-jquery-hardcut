@@ -14,6 +14,7 @@ use PHPUnit\Framework\Attributes\CoversNothing;
 use PHPUnit\Framework\Attributes\Group;
 use PHPUnit\Framework\Attributes\PreserveGlobalState;
 use PHPUnit\Framework\Attributes\RunTestsInSeparateProcesses;
+use Symfony\Component\Filesystem\Filesystem as SymfonyFilesystem;
 use Symfony\Component\Process\PhpExecutableFinder;
 use Symfony\Component\Process\Process;
 
@@ -89,6 +90,40 @@ class TestSiteApplicationTest extends KernelTestBase {
 
     $this->assertStringContainsString('The class Drupal\KernelTests\Scripts\TestSiteApplicationTest contained in', $process->getErrorOutput());
     $this->assertStringContainsString('needs to implement \Drupal\TestSite\TestSetupInterface', $process->getErrorOutput());
+  }
+
+  /**
+   * Tests install when the fixture prefix file cannot be written.
+   */
+  public function testInstallWhenFixturePrefixFileCannotBeWritten(): void {
+    $filesystem = new SymfonyFilesystem();
+    $lock_directory = $filesystem->tempnam(FileSystem::getOsTemporaryDirectory(), 'fixture-lock-');
+    $filesystem->remove($lock_directory);
+    $filesystem->mkdir($lock_directory);
+
+    try {
+      $sites_file = $this->root . '/sites/sites.php';
+      $sites_contents = is_file($sites_file) ? file_get_contents($sites_file) : NULL;
+
+      // An existing directory cannot be replaced by a file, even as root.
+      $process = new Process([
+        $this->php,
+        '-d',
+        'upload_tmp_dir=' . $lock_directory,
+        'core/scripts/test-site.php',
+        'install',
+        '--base-url=http://localhost',
+        '--fixture-prefix-file=sites/simpletest',
+      ], $this->root, ['COLUMNS' => '200']);
+      $this->assertSame(1, $process->run());
+      $this->assertStringContainsString('to "sites/simpletest"', $process->getErrorOutput());
+      $this->assertSame([], glob($lock_directory . '/test_*'));
+      clearstatcache(TRUE, $sites_file);
+      $this->assertSame($sites_contents, is_file($sites_file) ? file_get_contents($sites_file) : NULL);
+    }
+    finally {
+      $filesystem->remove($lock_directory);
+    }
   }
 
   /**
@@ -228,6 +263,51 @@ class TestSiteApplicationTest extends KernelTestBase {
     $process->run();
     $this->assertSame(1, $process->getExitCode());
     $this->assertStringContainsString('Invalid database prefix: not-a-valid-prefix', $process->getErrorOutput());
+  }
+
+  /**
+   * Tests that a site directory left behind keeps the database prefix locked.
+   */
+  public function testTearDownWithUndeletedSiteDirectory(): void {
+    $test_database = new TestDatabase(NULL, TRUE);
+    $db_prefix = $test_database->getDatabasePrefix();
+    $site_path = $test_database->getTestSitePath();
+    $directory = $this->root . DIRECTORY_SEPARATOR . $site_path;
+    $lock = $this->getTestLockFile($db_prefix);
+    $target = $directory . '-empty';
+    $obstruction = $directory . '/obstruction';
+    $process = new Process([$this->php, 'core/scripts/test-site.php', 'tear-down', $db_prefix], $this->root);
+
+    // Recursive deletion cannot remove a directory symlink with rmdir().
+    try {
+      $this->assertTrue(mkdir($directory, recursive: TRUE));
+      $this->assertTrue(mkdir($target));
+      $this->assertTrue(symlink($target, $obstruction));
+      $this->assertSame(1, $process->run());
+      $this->assertStringContainsString($site_path, $process->getErrorOutput());
+      $this->assertDirectoryExists($directory);
+      $this->assertFileExists($lock);
+
+      // The filesystem may already be clean when teardown is retried.
+      $this->assertTrue(unlink($obstruction));
+      $this->assertTrue(rmdir($directory));
+      $this->assertSame(0, $process->run());
+      $this->assertFileDoesNotExist($lock);
+    }
+    finally {
+      if (is_link($obstruction)) {
+        unlink($obstruction);
+      }
+      if (is_dir($directory)) {
+        rmdir($directory);
+      }
+      if (is_dir($target)) {
+        rmdir($target);
+      }
+      if (is_link($lock)) {
+        $test_database->releaseLock();
+      }
+    }
   }
 
   /**

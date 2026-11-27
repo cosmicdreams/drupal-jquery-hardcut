@@ -59,7 +59,11 @@ class TestSiteTearDownCommand extends Command {
     putenv("SIMPLETEST_DB=$db_url");
 
     // Handle the cleanup of the test site.
-    $this->tearDown($test_database, $db_url);
+    if (!$this->tearDown($test_database, $db_url)) {
+      $io = new SymfonyStyle($input, $output);
+      $io->getErrorStyle()->error('Could not delete test site directory ' . $test_database->getTestSitePath() . '.');
+      return 1;
+    }
 
     // Release the test database prefix lock.
     if (!$input->getOption('keep-lock')) {
@@ -79,9 +83,12 @@ class TestSiteTearDownCommand extends Command {
    * @param string $db_url
    *   The database URL.
    *
+   * @return bool
+   *   TRUE if the site directory is absent after cleanup.
+   *
    * @see \Drupal\Tests\BrowserTestBase::cleanupEnvironment()
    */
-  protected function tearDown(TestDatabase $test_database, string $db_url): void {
+  protected function tearDown(TestDatabase $test_database, string $db_url): bool {
     // Connect to the test database.
     $root = dirname(__DIR__, 5);
     $database = Database::convertDbUrlToConnectionInfo($db_url);
@@ -94,10 +101,10 @@ class TestSiteTearDownCommand extends Command {
     array_walk($tables, [$schema, 'dropTable']);
 
     // Delete test site directory.
-    $this->fileUnmanagedDeleteRecursive(
-      $root . DIRECTORY_SEPARATOR . $test_database->getTestSitePath(),
-      [BrowserTestBase::class, 'filePreDeleteCallback']
-    );
+    $path = $root . DIRECTORY_SEPARATOR . $test_database->getTestSitePath();
+    $this->fileUnmanagedDeleteRecursive($path, [BrowserTestBase::class, 'filePreDeleteCallback']);
+    clearstatcache(TRUE, $path);
+    return !file_exists($path) && !is_link($path);
   }
 
   /**
@@ -120,11 +127,17 @@ class TestSiteTearDownCommand extends Command {
    * @see \Drupal\Core\File\FileSystemInterface::deleteRecursive()
    */
   protected function fileUnmanagedDeleteRecursive(string $path, $callback = NULL): bool {
+    if (!file_exists($path) && !is_link($path)) {
+      return TRUE;
+    }
     if (isset($callback)) {
       call_user_func($callback, $path);
     }
     if (is_dir($path)) {
-      $dir = dir($path);
+      $dir = @dir($path);
+      if ($dir === FALSE) {
+        return FALSE;
+      }
       while (($entry = $dir->read()) !== FALSE) {
         if ($entry == '.' || $entry == '..') {
           continue;
@@ -134,9 +147,9 @@ class TestSiteTearDownCommand extends Command {
       }
       $dir->close();
 
-      return rmdir($path);
+      return @rmdir($path);
     }
-    return unlink($path);
+    return @unlink($path);
   }
 
 }

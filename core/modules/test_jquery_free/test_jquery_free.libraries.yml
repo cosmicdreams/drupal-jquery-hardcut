@@ -1,0 +1,4 @@
+canary:
+  header: true
+  js:
+    js/canary.js: { weight: -100, preprocess: false }

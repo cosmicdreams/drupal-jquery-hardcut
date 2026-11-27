@@ -32,6 +32,7 @@ export default class DrupalImageUploadAdapter {
      * @member {module:upload/adapters/simpleuploadadapter~SimpleUploadConfig} #options
      */
     this.options = options;
+    this.aborted = false;
   }
 
   /**
@@ -45,6 +46,10 @@ export default class DrupalImageUploadAdapter {
     return this.loader.file.then(
       (file) =>
         new Promise((resolve, reject) => {
+          if (this.aborted) {
+            reject();
+            return;
+          }
           this._initRequest();
           this._initListeners(resolve, reject, file);
           this._sendRequest(file);
@@ -58,9 +63,8 @@ export default class DrupalImageUploadAdapter {
    * @see module:upload/filerepository~UploadAdapter#abort
    */
   abort() {
-    if (this.xhr) {
-      this.xhr.abort();
-    }
+    this.aborted = true;
+    this.xhr?.abort();
   }
 
   /**

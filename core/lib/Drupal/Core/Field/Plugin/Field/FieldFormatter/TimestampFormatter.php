@@ -348,7 +348,7 @@ class TimestampFormatter extends FormatterBase {
     return [
       'visible' => [
         [
-          ":input[name='fields[{$this->fieldDefinition->getName()}][settings_edit_form][settings]$path']" => $conditions,
+          "[name='fields[{$this->fieldDefinition->getName()}][settings_edit_form][settings]$path']" => $conditions,
         ],
       ],
     ];

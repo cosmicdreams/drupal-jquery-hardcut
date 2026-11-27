@@ -10,11 +10,9 @@ views.ajax:
     js/base.js: {}
     js/ajax_view.js: {}
   dependencies:
-    - core/jquery
     - core/drupal
     - core/drupalSettings
     - core/once
-    - core/internal.jquery.form
     - core/drupal.ajax
 
 views.responsive-grid:

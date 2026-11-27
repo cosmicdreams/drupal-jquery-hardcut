@@ -41,7 +41,7 @@ class FileIsImageConstraintValidatorTest extends FileValidatorTestBase {
     $this->image->setFilename(basename($this->image->getFileUri()));
 
     $this->nonImage = File::create();
-    $this->nonImage->setFileUri('core/assets/vendor/jquery/jquery.min.js');
+    $this->nonImage->setFileUri('core/assets/vendor/once/once.min.js');
     $this->nonImage->setFilename(basename($this->nonImage->getFileUri()));
   }
 

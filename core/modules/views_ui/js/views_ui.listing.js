@@ -1,57 +1,42 @@
 /**
  * @file
- * Views listing behaviors.
+ * Filters the enabled and disabled Views listings by name and description.
  */
 
-(function ($, Drupal) {
-  /**
-   * Filters the view listing tables by a text input search string.
-   *
-   * Text search input: input.views-filter-text
-   * Target table:      input.views-filter-text[data-table]
-   * Source text:       [data-drupal-selector="views-table-filter-text-source"]
-   *
-   * @type {Drupal~behavior}
-   *
-   * @prop {Drupal~behaviorAttach} attach
-   *   Attaches the filter functionality to the views admin text search field.
-   */
+/**
+ * Registers the filter for both listing tables.
+ * @param {Drupal} Drupal
+ *   The Drupal object.
+ * @param {typeof window.once} once
+ *   Marks elements already processed by a behavior.
+ */
+((Drupal, once) => {
   Drupal.behaviors.viewTableFilterByText = {
-    attach(context, settings) {
-      const [input] = once('views-filter-text', 'input.views-filter-text');
-      if (!input) {
-        return;
-      }
-      const $table = $(input.getAttribute('data-table'));
-      let $rows;
-
-      function filterViewList(e) {
-        const query = e.target.value.toLowerCase();
-
-        function showViewRow(index, row) {
-          const sources = row.querySelectorAll(
-            '[data-drupal-selector="views-table-filter-text-source"]',
-          );
-          let sourcesConcat = '';
-          sources.forEach((item) => {
-            sourcesConcat += item.textContent;
-          });
-          const textMatch = sourcesConcat.toLowerCase().includes(query);
-          $(row).closest('tr').toggle(textMatch);
-        }
-
-        // Filter if the length of the query is at least 2 characters.
-        if (query.length >= 2) {
-          $rows.each(showViewRow);
-        } else {
-          $rows.show();
-        }
-      }
-
-      if ($table.length) {
-        $rows = $table.find('tbody tr');
-        $(input).on('keyup', filterViewList);
-      }
+    attach(context) {
+      once('views-filter-text', 'input.views-filter-text', context).forEach(
+        (input) => {
+          const listing = input.closest('#views-entity-list');
+          const filter = () => {
+            const query = input.value.toLowerCase();
+            const rows = listing.querySelectorAll(
+              `:is(${input.dataset.table}) tbody tr`,
+            );
+            rows.forEach((row) => {
+              const sources = row.querySelectorAll(
+                '[data-drupal-selector="views-table-filter-text-source"]',
+              );
+              let text = '';
+              for (const source of sources) {
+                text += source.textContent;
+              }
+              row.hidden =
+                query.length >= 2 && !text.toLowerCase().includes(query);
+            });
+          };
+          input.addEventListener('input', filter);
+          filter();
+        },
+      );
     },
   };
-})(jQuery, Drupal);
+})(Drupal, once);

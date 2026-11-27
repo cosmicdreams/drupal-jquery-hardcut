@@ -3,7 +3,7 @@
  * Block admin behaviors.
  */
 
-(function ($, Drupal, debounce, once) {
+(function (Drupal, debounce, once) {
   /**
    * Filters the block list by a text input search string.
    *
@@ -21,54 +21,42 @@
    *   Attaches the behavior for the block filtering.
    */
   Drupal.behaviors.blockFilterByText = {
-    attach(context, settings) {
-      const $input = $(once('block-filter-text', 'input.block-filter-text'));
-      const $table = $(document.querySelectorAll($input.attr('data-element')));
-      let $filterRows;
-
-      /**
-       * Filters the block list.
-       *
-       * @param {jQuery.Event} e
-       *   The jQuery event for the keyup event that triggered the filter.
-       */
-      function filterBlockList(e) {
-        const query = e.target.value.toLowerCase();
-
-        /**
-         * Shows or hides the block entry based on the query.
-         *
-         * @param {number} index
-         *   The index in the loop, as provided by `jQuery.each`
-         * @param {HTMLElement} label
-         *   The label of the block.
-         */
-        function toggleBlockEntry(index, label) {
-          const $row = $(label).parent().parent();
-          const textMatch = label.textContent.toLowerCase().includes(query);
-          $row.toggle(textMatch);
+    attach() {
+      const inputs = once('block-filter-text', 'input.block-filter-text');
+      for (const input of inputs) {
+        const tables = Array.from(
+          document.querySelectorAll(input.dataset.element),
+        );
+        const labels = tables.flatMap((table) =>
+          Array.from(table.querySelectorAll('div.block-filter-text-source')),
+        );
+        if (!tables.length) {
+          continue;
         }
 
-        // Filter if the length of the query is at least 2 characters.
-        if (query.length >= 2) {
-          $filterRows.each(toggleBlockEntry);
-          Drupal.announce(
-            Drupal.formatPlural(
-              $table.find('tr:visible').length - 1,
-              '1 block is available in the modified list.',
-              '@count blocks are available in the modified list.',
-            ),
-          );
-        } else {
-          $filterRows.each(function (index) {
-            $(this).parent().parent().show();
-          });
-        }
-      }
-
-      if ($table.length) {
-        $filterRows = $table.find('div.block-filter-text-source');
-        $input.on('keyup', debounce(filterBlockList, 200));
+        input.addEventListener(
+          'keyup',
+          debounce(() => {
+            const query = input.value.toLowerCase();
+            labels.forEach((label) => {
+              const textMatch = label.textContent.toLowerCase().includes(query);
+              label.closest('tr').style.display =
+                query.length < 2 || textMatch ? '' : 'none';
+            });
+            if (query.length >= 2) {
+              const visible = tables
+                .flatMap((table) => Array.from(table.rows))
+                .filter((row) => row.getClientRects().length).length;
+              Drupal.announce(
+                Drupal.formatPlural(
+                  visible - 1,
+                  '1 block is available in the modified list.',
+                  '@count blocks are available in the modified list.',
+                ),
+              );
+            }
+          }, 200),
+        );
       }
     },
   };
@@ -84,22 +72,22 @@
   Drupal.behaviors.blockHighlightPlacement = {
     attach(context, settings) {
       // Ensure that the block we are attempting to scroll to actually exists.
-      if (settings.blockPlacement && $('.js-block-placed').length) {
+      const placed = document.querySelector('.js-block-placed');
+      if (settings.blockPlacement && placed) {
         once(
           'block-highlight',
           '[data-drupal-selector="edit-blocks"]',
           context,
         ).forEach((container) => {
-          const $container = $(container);
           window.scrollTo({
             top:
-              $('.js-block-placed').offset().top -
-              $container.offset().top +
-              $container.scrollTop(),
+              placed.getBoundingClientRect().top -
+              container.getBoundingClientRect().top +
+              container.scrollTop,
             behavior: 'smooth',
           });
         });
       }
     },
   };
-})(jQuery, Drupal, Drupal.debounce, once);
+})(Drupal, Drupal.debounce, once);

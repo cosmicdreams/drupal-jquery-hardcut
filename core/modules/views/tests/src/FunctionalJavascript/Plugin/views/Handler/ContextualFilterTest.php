@@ -70,7 +70,7 @@ class ContextualFilterTest extends WebDriverTestBase {
     $this->assertNotEmpty($field);
     $field->check();
 
-    $add_button = $page->find('css', '.ui-dialog-buttonset .button--primary');
+    $add_button = $page->find('css', '.drupal-dialog-buttonset .button--primary');
     $add_button->click();
 
     $field_action = $web_assert->waitForField('options[default_action]');
@@ -78,12 +78,12 @@ class ContextualFilterTest extends WebDriverTestBase {
     $field_action->setValue('default');
 
     $page->selectFieldOption('options[default_argument_type]', 'node');
-    $add_button = $page->find('css', '.ui-dialog-buttonset .button--primary');
+    $add_button = $page->find('css', '.drupal-dialog-buttonset .button--primary');
     $add_button->click();
 
     // Wait for the dialog to close.
     $page->waitFor(10, function () use ($page): bool {
-      $field = $page->find('css', '.ui-dialog-buttonset .button--primary');
+      $field = $page->find('css', '.drupal-dialog-buttonset .button--primary');
       return empty($field);
     });
 

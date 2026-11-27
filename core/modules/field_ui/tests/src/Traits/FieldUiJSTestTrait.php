@@ -79,7 +79,7 @@ trait FieldUiJSTestTrait {
     $assert_session->waitForText("These settings apply to the $label field everywhere it is used.");
     if ($save_settings) {
       // Second step: Save field settings.
-      $save_button = $page->find('css', '.ui-dialog-buttonpane')->findButton('Save');
+      $save_button = $page->find('css', '.drupal-dialog-buttonpane')->findButton('Save');
       $save_button->click();
       $assert_session->assert($assert_session->waitForText("Saved $label configuration."), 'text not found');
 

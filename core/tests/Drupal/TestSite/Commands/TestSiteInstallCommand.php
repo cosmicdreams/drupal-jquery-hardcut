@@ -88,6 +88,11 @@ class TestSiteInstallCommand extends Command {
   protected $root;
 
   /**
+   * A file in which a browser fixture runner records the allocated prefix.
+   */
+  protected ?string $fixturePrefixFile = NULL;
+
+  /**
    * {@inheritdoc}
    */
   protected function configure(): void {
@@ -98,8 +103,10 @@ class TestSiteInstallCommand extends Command {
       ->addOption('db-url', NULL, InputOption::VALUE_OPTIONAL, 'URL for database. Defaults to the environment variable SIMPLETEST_DB.', getenv('SIMPLETEST_DB'))
       ->addOption('base-url', NULL, InputOption::VALUE_OPTIONAL, 'Base URL for site under test. Defaults to the environment variable SIMPLETEST_BASE_URL.', getenv('SIMPLETEST_BASE_URL'))
       ->addOption('install-profile', NULL, InputOption::VALUE_OPTIONAL, 'Install profile to install the site in. Defaults to testing.', 'testing')
+      ->addOption('module', NULL, InputOption::VALUE_REQUIRED | InputOption::VALUE_IS_ARRAY, 'Additional module to install with its dependencies. Repeat for multiple modules.')
       ->addOption('langcode', NULL, InputOption::VALUE_OPTIONAL, 'The language to install the site in. Defaults to en.', 'en')
       ->addOption('json', NULL, InputOption::VALUE_NONE, 'Output test site connection details in JSON.')
+      ->addOption('fixture-prefix-file', NULL, InputOption::VALUE_REQUIRED, 'Record the allocated prefix before installation in a file relative to the Drupal root. Requests must use the signed test user agent instead of a sites.php mapping.')
       ->addUsage('--setup-file core/tests/Drupal/TestSite/TestSiteMultilingualInstallTestScript.php --json')
       ->addUsage('--install-profile demo_umami --langcode fr')
       ->addUsage('--base-url "http://example.com" --db-url "mysql://username:password@localhost/database_name#table_prefix"');
@@ -116,6 +123,7 @@ class TestSiteInstallCommand extends Command {
     $class_name = $this->getSetupClass($input->getOption('setup-file'));
     // Ensure we can install a site in the sites/simpletest directory.
     $this->ensureDirectory($root);
+    $this->fixturePrefixFile = $input->getOption('fixture-prefix-file');
 
     $db_url = $input->getOption('db-url');
     $base_url = $input->getOption('base-url');
@@ -123,19 +131,21 @@ class TestSiteInstallCommand extends Command {
     putenv("SIMPLETEST_BASE_URL=$base_url");
 
     // Manage site fixture.
-    $this->setup($input->getOption('install-profile'), $class_name, $input->getOption('langcode'));
+    $this->setup($input->getOption('install-profile'), $class_name, $input->getOption('langcode'), $input->getOption('module'));
 
-    // Make sure there is an entry in sites.php for the new site.
-    $fs = new Filesystem();
-    if (!$fs->exists($root . '/sites/sites.php')) {
-      $fs->copy($root . '/sites/example.sites.php', $root . '/sites/sites.php');
+    if ($this->fixturePrefixFile === NULL) {
+      // Make sure there is an entry in sites.php for the new site.
+      $fs = new Filesystem();
+      if (!$fs->exists($root . '/sites/sites.php')) {
+        $fs->copy($root . '/sites/example.sites.php', $root . '/sites/sites.php');
+      }
+      $parsed = parse_url($base_url);
+      $port = $parsed['port'] ?? 80;
+      $host = $parsed['host'] ?? 'localhost';
+      // Remove 'sites/' from the beginning of the path.
+      $site_path = substr($this->siteDirectory, 6);
+      $fs->appendToFile($root . '/sites/sites.php', "\$sites['$port.$host'] = '$site_path';");
     }
-    $parsed = parse_url($base_url);
-    $port = $parsed['port'] ?? 80;
-    $host = $parsed['host'] ?? 'localhost';
-    // Remove 'sites/' from the beginning of the path.
-    $site_path = substr($this->siteDirectory, 6);
-    $fs->appendToFile($root . '/sites/sites.php', "\$sites['$port.$host'] = '$site_path';");
 
     $user_agent = drupal_generate_test_ua($this->databasePrefix);
     if ($input->getOption('json')) {
@@ -218,14 +228,19 @@ class TestSiteInstallCommand extends Command {
    *   test.
    * @param string $langcode
    *   (optional) The language to install the site in.
+   * @param string[] $modules
+   *   (optional) Additional modules to install before running the setup class.
    */
-  public function setup($profile = 'testing', $setup_class = NULL, $langcode = 'en'): void {
+  public function setup($profile = 'testing', $setup_class = NULL, $langcode = 'en', array $modules = []): void {
     $this->profile = $profile;
     $this->langcode = $langcode;
     $this->setupBaseUrl();
     $this->prepareEnvironment();
     $this->executePreinstallClass($setup_class);
     $this->installDrupal();
+    if ($modules !== []) {
+      \Drupal::service('module_installer')->install($modules);
+    }
     $this->executeSetupClass($setup_class);
   }
 
@@ -301,6 +316,15 @@ class TestSiteInstallCommand extends Command {
     $test_db = new TestDatabase(NULL, TRUE);
     $this->siteDirectory = $test_db->getTestSitePath();
     $this->databasePrefix = $test_db->getDatabasePrefix();
+    if ($this->fixturePrefixFile !== NULL) {
+      try {
+        (new Filesystem())->dumpFile($this->fixturePrefixFile, $this->databasePrefix);
+      }
+      catch (\Throwable $error) {
+        $test_db->releaseLock();
+        throw $error;
+      }
+    }
   }
 
 }

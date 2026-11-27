@@ -62,8 +62,23 @@ class CKEditor5Test extends CKEditor5TestBase {
     $this->drupalGet('node/1/edit');
 
     $page->selectFieldOption('body[0][format]', 'ckeditor5');
-    $this->assertNotEmpty($assert_session->waitForText('Change text format?'));
-    $page->pressButton('Continue');
+    $dialog = $assert_session->waitForElementVisible('css', 'dialog.editor-change-text-format-modal');
+    $this->assertNotNull($dialog);
+    $title = $dialog->find('css', '.drupal-dialog-title');
+    $this->assertSame('Change text format?', $title->getText());
+    $this->assertSame($title->getAttribute('id'), $dialog->getAttribute('aria-labelledby'));
+    $description = $dialog->find('css', '.drupal-dialog-content');
+    $this->assertNotEmpty($description->getAttribute('id'));
+    $this->assertSame($description->getAttribute('id'), $dialog->getAttribute('aria-describedby'));
+    $this->assertStringContainsString('Save your changes before switching the text format to avoid losing data.', $description->getText());
+    $dialog->pressButton('Cancel');
+    $assert_session->elementNotExists('css', 'dialog.editor-change-text-format-modal');
+    $assert_session->elementNotExists('css', '.ck-editor');
+    $this->assertSame('plain_text', $page->findField('body[0][format]')->getValue());
+    $this->assertSame('<p>This is test content</p>', $page->findField('body[0][value]')->getValue());
+
+    $page->selectFieldOption('body[0][format]', 'ckeditor5');
+    $assert_session->elementExists('css', 'dialog.editor-change-text-format-modal')->pressButton('Continue');
     // CKEditor initialization can exceed the normal wait time under CI.
     // Ensure the editor is loaded and has loaded the existing content.
     $this->assertNotEmpty($assert_session->waitForElement('css', '.ck-editor'));
@@ -252,18 +267,16 @@ JS;
 
     // Click on the dropdown button.
     $page->find('css', '.ck-text-fragment-language-dropdown button')->click();
+    $this->assertNotNull($assert_session->waitForElementVisible('css', '.ck-text-fragment-language-dropdown .ck-dropdown__panel'));
 
-    // Get all the languages available in dropdown.
-    $current_languages = $page->findAll('css', '.ck-text-fragment-language-dropdown li .ck-button__label');
-
-    // Remove "Remove language" element from current languages.
-    array_shift($current_languages);
-
-    // Create array of full language name.
-    $languages = [];
-    foreach ($current_languages as $item) {
-      $languages[] = $item->getText();
-    }
+    // Read labels throughout the scrollable menu, including off-screen rows.
+    // The first entry is "Remove language".
+    $languages = $this->getSession()->evaluateScript(<<<'JS'
+      Array.from(
+        document.querySelectorAll('.ck-text-fragment-language-dropdown li .ck-button__label'),
+        ({ textContent }) => textContent.trim(),
+      ).slice(1)
+      JS);
 
     // Return the values from a single column.
     $configured_languages = array_column($configured_languages, 0);

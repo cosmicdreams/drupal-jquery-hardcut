@@ -173,7 +173,6 @@ class AddHandler extends ViewsFormBase {
       '#theme_wrappers' => ['form_element', 'views_ui_container'],
       '#attributes' => [
         'class' => ['container-inline', 'views-add-form-selected', 'views-offset-bottom'],
-        'data-drupal-views-offset' => 'bottom',
       ],
     ];
     $view->getStandardButtons($form, $form_state, 'views_ui_add_handler_form', $this->t('Add and configure @types', ['@types' => $ltitle]));

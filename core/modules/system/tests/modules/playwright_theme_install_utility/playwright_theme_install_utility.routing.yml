@@ -1,0 +1,15 @@
+playwright_theme_install_utility.theme_install_default:
+  path: '/admin/theme/install_default/{theme}'
+  defaults:
+    _controller: '\Drupal\playwright_theme_install_utility\Controller\ThemeInstallController::installDefault'
+  methods: [POST]
+  requirements:
+    _permission: 'administer themes'
+
+playwright_theme_install_utility.theme_install_admin:
+  path: '/admin/theme/install_admin/{theme}'
+  defaults:
+    _controller: '\Drupal\playwright_theme_install_utility\Controller\ThemeInstallController::installAdmin'
+  methods: [POST]
+  requirements:
+    _permission: 'administer themes'

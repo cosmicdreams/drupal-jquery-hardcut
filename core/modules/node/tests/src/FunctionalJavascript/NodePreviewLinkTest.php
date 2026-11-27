@@ -67,8 +67,17 @@ class NodePreviewLinkTest extends WebDriverTestBase {
       'body[0][value]' => '<a href="/foo">Normal link</a>',
     ], 'Preview');
     $this->clickLink('Normal link');
-    $assertSession->pageTextContains('Leave preview?');
-    $this->click('button:contains("Leave preview")');
+    $dialog = $assertSession->waitForElementVisible('css', 'dialog[open]');
+    $this->assertNotNull($dialog);
+    $title = $dialog->find('css', '.drupal-dialog-title');
+    $this->assertSame('Leave preview?', $title->getText());
+    $this->assertSame($title->getAttribute('id'), $dialog->getAttribute('aria-labelledby'));
+    $description = $dialog->find('css', '.drupal-dialog-content');
+    $this->assertNotEmpty($description->getAttribute('id'));
+    $this->assertSame($description->getAttribute('id'), $dialog->getAttribute('aria-describedby'));
+    $this->assertStringContainsString('Leaving the preview will cause unsaved changes to be lost.', $description->getText());
+    $this->assertStringContainsString('CTRL+Left click', $description->getText());
+    $dialog->pressButton('Leave preview');
     $this->assertStringEndsWith('/foo', $this->getUrl());
     $this->drupalGet('node/add/test');
     $this->submitForm([

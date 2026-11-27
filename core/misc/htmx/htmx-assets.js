@@ -16,28 +16,38 @@
    *
    * @param {string} text
    *   Raw response HTML.
+   * @param {() => boolean} [isCurrent]
+   *   Checks whether this response still owns its target.
    * @return {Promise<string>}
    *   Cleaned HTML with assets and settings elements removed.
    */
-  async function processResponseText(text) {
+  async function processResponseText(text, isCurrent) {
+    if (isCurrent?.() === false) {
+      return '';
+    }
     const doc = Document.parseHTMLUnsafe(text);
 
     // Remove noscript elements.
     doc.querySelectorAll('noscript').forEach((el) => el.remove());
 
-    // 1. Extract and merge Drupal settings.
+    // Extract Drupal settings before returning the cleaned markup.
     const settingsEl = doc.querySelector(
       ':is(head, body) > script[type="application/json"][data-drupal-selector="drupal-settings-json"]',
     );
-    if (settingsEl) {
-      Drupal.htmx.mergeSettings(
-        drupalSettings,
-        JSON.parse(settingsEl.textContent),
-      );
-      settingsEl.remove();
+    const mergeSettings = () => {
+      if (settingsEl && (isCurrent?.() ?? true)) {
+        Drupal.htmx.mergeSettings(
+          drupalSettings,
+          JSON.parse(settingsEl.textContent),
+        );
+      }
+    };
+    settingsEl?.remove();
+    if (!isCurrent) {
+      mergeSettings();
     }
 
-    // 2. Extract assets from head and body.
+    // Extract assets from head and body.
     const assets = doc.querySelectorAll(
       'link[rel="stylesheet"][href], script[src]',
     );
@@ -54,7 +64,10 @@
       await Drupal.htmx.addAssets(assetData);
     }
 
-    // 3. Return cleaned HTML.
+    // Loading assets can allow another request to take over the tray.
+    if (isCurrent) {
+      mergeSettings();
+    }
     return doc.documentElement.outerHTML;
   }
 
@@ -132,7 +145,7 @@
       const realText = ctx.response.raw.text.bind(ctx.response.raw);
       ctx.response.raw.text = async () => {
         const text = await realText();
-        return processResponseText(text);
+        return processResponseText(text, ctx.swapGuard);
       };
     },
 
@@ -151,7 +164,7 @@
       history.path = url.toString();
     },
 
-    htmx_before_swap(elt, detail) {
+    htmx_before_insert(elt, detail) {
       // Get a set of unique targets for behavior processing.
       const processTargets = new Set();
       // eslint-disable-next-line no-restricted-syntax
@@ -178,9 +191,23 @@
       processTargets.forEach((target) => {
         htmx.trigger(target, 'htmx:drupal:unload');
       });
+      // An unload listener can supersede the guarded swap. The old content
+      // stays in place, so restore its behaviors.
+      if (detail.ctx.swapGuard && !detail.ctx.swapGuard()) {
+        processTargets.forEach((target) => {
+          if (target.isConnected) {
+            htmx.trigger(target, 'htmx:drupal:load');
+          }
+        });
+        return false;
+      }
+      return true;
     },
 
     htmx_after_settle(elt, detail) {
+      if (detail.task.deferDrupalBehaviors) {
+        return;
+      }
       // Attach Drupal behaviors to Element objects in newContent.
       const elements = detail.newContent.filter(
         (value) => value instanceof Element,

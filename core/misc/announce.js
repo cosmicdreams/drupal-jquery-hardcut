@@ -7,20 +7,34 @@
  * loads 10 more items into a list, one might announce the change like this.
  *
  * @example
- * $('#search-list')
- *   .on('itemInsert', function (event, data) {
- *     // Insert the new items.
- *     $(data.container.el).append(data.items.el);
- *     // Announce the change to the page contents.
- *     Drupal.announce(Drupal.t('@count items added to @container',
- *       {'@count': data.items.length, '@container': data.container.title}
- *     ));
- *   });
+ * document.getElementById('search-list').addEventListener('itemInsert', (event) => {
+ *   const { container, items } = event.detail;
+ *   container.el.append(items.el);
+ *   Drupal.announce(Drupal.t('@count items added to @container', {
+ *     '@count': items.length,
+ *     '@container': container.title,
+ *   }));
+ * });
  */
 
-(function (Drupal, debounce) {
+(function (Drupal) {
   let liveElement;
+  let flushTimer;
   const announcements = [];
+
+  /**
+   * Keeps the live region in the part of the page that is accessible.
+   */
+  function placeLiveElement() {
+    const parent = Drupal.dialog?.getOpenModal() || document.body;
+    if (liveElement && liveElement.parentElement !== parent) {
+      liveElement.replaceChildren();
+      parent.append(liveElement);
+    }
+  }
+
+  window.addEventListener('dialog:aftercreate', placeLiveElement);
+  window.addEventListener('dialog:afterclose', placeLiveElement);
 
   /**
    * Builds a div element with the aria-live attribute and add it to the DOM.
@@ -39,7 +53,7 @@
         liveElement.className = 'visually-hidden';
         liveElement.setAttribute('aria-live', 'polite');
         liveElement.setAttribute('aria-busy', 'false');
-        document.body.appendChild(liveElement);
+        placeLiveElement();
       }
     },
   };
@@ -48,6 +62,7 @@
    * Concatenates announcements to a single string; appends to the live region.
    */
   function announce() {
+    flushTimer = undefined;
     const text = [];
     let priority = 'polite';
     let announcement;
@@ -66,6 +81,7 @@
     }
 
     if (text.length) {
+      placeLiveElement();
       // Clear the liveElement so that repeated strings will be read.
       liveElement.innerHTML = '';
       // Set the busy state to true until the node changes are complete.
@@ -83,13 +99,8 @@
   /**
    * Triggers audio UAs to read the supplied text.
    *
-   * The aria-live region will only read the text that currently populates its
-   * text node. Replacing text quickly in rapid calls to announce results in
-   * only the text from the most recent call to {@link Drupal.announce} being
-   * read. By wrapping the call to announce in a debounce function, we allow for
-   * time for multiple calls to {@link Drupal.announce} to queue up their
-   * messages. These messages are then joined and append to the aria-live region
-   * as one text node.
+   * Calls within 200 ms of the first queued announcement are joined and
+   * added to the aria-live region together.
    *
    * @param {string} text
    *   A string to be read by the UA.
@@ -97,21 +108,27 @@
    *   A string to indicate the priority of the message. Can be either
    *   'polite' or 'assertive'.
    *
-   * @return {function}
-   *   The return of the call to debounce.
+   * @return {Function}
+   *   Cancels this announcement if it is still queued.
    *
    * @see https://www.w3.org/WAI/PF/aria-practices/#liveprops
    */
   Drupal.announce = function (text, priority) {
-    // Save the text and priority into a closure variable. Multiple simultaneous
-    // announcements will be concatenated and read in sequence.
-    announcements.push({
-      text,
-      priority,
-    });
-    // Immediately invoke the function that debounce returns. 200 ms is right at
-    // the cusp where humans notice a pause, so we will wait
-    // at most this much time before the set of queued announcements is read.
-    return debounce(announce, 200)();
+    const message = { text, priority };
+    announcements.push(message);
+    if (flushTimer === undefined) {
+      flushTimer = setTimeout(announce, 200);
+    }
+
+    return () => {
+      const index = announcements.indexOf(message);
+      if (index !== -1) {
+        announcements.splice(index, 1);
+        if (!announcements.length) {
+          clearTimeout(flushTimer);
+          flushTimer = undefined;
+        }
+      }
+    };
   };
-})(Drupal, Drupal.debounce);
+})(Drupal);

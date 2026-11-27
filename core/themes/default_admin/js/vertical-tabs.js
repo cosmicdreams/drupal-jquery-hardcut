@@ -3,39 +3,20 @@
  * Overrides vertical tabs theming to enable Default Admin designs.
  */
 
-(($, Drupal) => {
+((Drupal) => {
   /**
-   * Theme function for a vertical tab.
-   *
-   * @param {object} settings
-   *   An object with the following keys:
-   * @param {string} settings.title
-   *   The name of the tab.
-   *
-   * @return {object}
-   *   This function has to return an object with at least these keys:
-   *   - item: The root tab jQuery element
-   *   - link: The anchor tag that acts as the clickable area of the tab
-   *       (jQuery version)
-   *   - summary: The jQuery element that contains the tab summary
+   * Themes a tab using Default Admin's native markup.
    */
-  Drupal.theme.verticalTab = (settings) => {
-    const tab = {};
-    tab.title = $('<span class="vertical-tabs__menu-item-title"></span>');
-    tab.title[0].textContent = settings.title;
-    tab.item = $(
-      '<li class="vertical-tabs__menu-item" tabindex="-1"></li>',
-    ).append(
-      (tab.link = $('<a href="#" class="vertical-tabs__menu-link"></a>').append(
-        $('<span class="vertical-tabs__menu-link-content"></span>')
-          .append(tab.title)
-          .append(
-            (tab.summary = $(
-              '<span class="vertical-tabs__menu-link-summary"></span>',
-            )),
-          ),
-      )),
-    );
-    return tab;
+  Drupal.theme.verticalTabElements = ({ title }) => {
+    const template = document.createElement('template');
+    template.innerHTML =
+      '<li class="vertical-tabs__menu-item" tabindex="-1"><a href="#" class="vertical-tabs__menu-link"><span class="vertical-tabs__menu-link-content"><span class="vertical-tabs__menu-item-title"></span><span class="vertical-tabs__menu-link-summary"></span></span></a></li>';
+    const itemElement = template.content.firstElementChild;
+    const linkElement = itemElement.firstElementChild;
+    const content = linkElement.firstElementChild;
+    const titleElement = content.firstElementChild;
+    const summaryElement = content.lastElementChild;
+    titleElement.textContent = title;
+    return { itemElement, linkElement, titleElement, summaryElement };
   };
-})(jQuery, Drupal);
+})(Drupal);

@@ -1,0 +1,13 @@
+name: 'jQuery readiness global libraries fixture'
+type: theme
+base theme: stark
+package: Testing
+version: VERSION
+libraries:
+  - core/tabbable.jquery.shim
+  - core/drupalSettings
+libraries-override:
+  42: false
+  invalid: false
+  core/once: jqf_global/missing
+  jqf_script/script: jqf_dependency/legacy

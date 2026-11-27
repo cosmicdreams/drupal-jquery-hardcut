@@ -10,7 +10,7 @@
 const path = require('node:path');
 const { copyFile, writeFile, readFile, chmod, mkdir } = require('node:fs').promises;
 const ckeditor5Files = require('./assets/ckeditor5Files');
-const jQueryUIProcess = require('./assets/process/jqueryui');
+const htmxProcess = require('./assets/process/htmx');
 const mapProcess = require('./assets/process/map');
 
 const coreFolder = path.resolve(__dirname, '../../');
@@ -78,17 +78,10 @@ const assetsFolder = `${coreFolder}/assets/vendor`;
       pack: 'htmx.org',
       folder: 'htmx',
       library: 'htmx',
+      process: { '.js': htmxProcess },
       files: [
         { from: 'dist/htmx.min.js', to: 'htmx.min.js' },
         { from: 'dist/htmx.js', to: 'htmx.js' },
-      ],
-    },
-    {
-      pack: 'jquery',
-      files: [
-        { from: 'dist/jquery.js', to: 'jquery.js' },
-        { from: 'dist/jquery.min.js', to: 'jquery.min.js' },
-        { from: 'dist/jquery.min.map', to: 'jquery.min.map' },
       ],
     },
     {
@@ -100,6 +93,24 @@ const assetsFolder = `${coreFolder}/assets/vendor`;
     {
       pack: '@drupal/once',
       folder: 'once',
+      process: {
+        // Use a native array in the unminified documentation examples.
+        '.js': ({ file, contents }) => {
+          if (file.to !== 'once.js') {
+            return [{ contents }];
+          }
+          const examples = /( \* \/\/ Array or Array-like of Element\.\n \* once(?:\.\w+)?\('[^']+', )jQuery\(('\[[^']+\]')\)/g;
+          if ([...contents.matchAll(examples)].length !== 3) {
+            throw new Error('Expected three jQuery examples in once.js. Update the vendor rewrite.');
+          }
+          return [{
+            contents: contents.replace(
+              examples,
+              '$1Array.from(document.querySelectorAll($2))',
+            ),
+          }];
+        },
+      },
       files: [
         { from: 'dist/once.js', to: 'once.js' },
         { from: 'dist/once.min.js', to: 'once.min.js' },
@@ -129,55 +140,6 @@ const assetsFolder = `${coreFolder}/assets/vendor`;
       files: [
         { from: 'dist/browser/bundle.umd.min.js', to: 'bundle.umd.min.js' },
         { from: 'dist/browser/bundle.umd.min.js.map', to: 'bundle.umd.min.js.map' },
-      ],
-    },
-    {
-      pack: 'jquery-ui',
-      folder: 'jquery.ui',
-      process: {
-        // This will automatically minify the files and update the destination
-        // filename before saving.
-        '.js': jQueryUIProcess,
-      },
-      files: [
-        'themes/base/autocomplete.css',
-        'themes/base/button.css',
-        'themes/base/checkboxradio.css',
-        'themes/base/controlgroup.css',
-        'themes/base/core.css',
-        'themes/base/dialog.css',
-        'themes/base/draggable.css',
-        'themes/base/images/ui-bg_flat_0_aaaaaa_40x100.png',
-        'themes/base/images/ui-icons_444444_256x240.png',
-        'themes/base/images/ui-icons_555555_256x240.png',
-        'themes/base/images/ui-icons_777620_256x240.png',
-        'themes/base/images/ui-icons_777777_256x240.png',
-        'themes/base/images/ui-icons_cc0000_256x240.png',
-        'themes/base/images/ui-icons_ffffff_256x240.png',
-        'themes/base/menu.css',
-        'themes/base/resizable.css',
-        'themes/base/theme.css',
-        'ui/data.js',
-        'ui/disable-selection.js',
-        'ui/focusable.js',
-        'ui/form-reset-mixin.js',
-        'ui/jquery-patch.js',
-        'ui/keycode.js',
-        'ui/labels.js',
-        'ui/plugin.js',
-        'ui/scroll-parent.js',
-        'ui/unique-id.js',
-        'ui/version.js',
-        'ui/widget.js',
-        'ui/widgets/autocomplete.js',
-        'ui/widgets/button.js',
-        'ui/widgets/checkboxradio.js',
-        'ui/widgets/controlgroup.js',
-        'ui/widgets/dialog.js',
-        'ui/widgets/draggable.js',
-        'ui/widgets/menu.js',
-        'ui/widgets/mouse.js',
-        'ui/widgets/resizable.js',
       ],
     },
     {

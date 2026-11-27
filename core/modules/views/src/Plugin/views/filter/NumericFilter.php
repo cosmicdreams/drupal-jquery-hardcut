@@ -88,10 +88,10 @@ class NumericFilter extends FilterPluginBase implements FilterOperatorsInterface
       '#size' => 40,
     ];
     // Setup #states for all operators with two value.
-    $states = [[':input[name="options[expose][use_operator]"]' => ['checked' => TRUE]]];
+    $states = [['[name="options[expose][use_operator]"]' => ['checked' => TRUE]]];
     foreach ($this->operatorValues(2) as $operator) {
       $states[] = [
-        ':input[name="options[operator]"]' => ['value' => $operator],
+        '[name="options[operator]"]' => ['value' => $operator],
       ];
     }
     foreach (['min_placeholder', 'max_placeholder', 'min_label', 'max_label'] as $key) {
@@ -106,10 +106,10 @@ class NumericFilter extends FilterPluginBase implements FilterOperatorsInterface
       '#description' => $this->t('Hint text that appears inside the field when empty.'),
     ];
     // Setup #states for all operators with one value.
-    $form['expose']['placeholder']['#states']['visible'] = [[':input[name="options[expose][use_operator]"]' => ['checked' => TRUE]]];
+    $form['expose']['placeholder']['#states']['visible'] = [['[name="options[expose][use_operator]"]' => ['checked' => TRUE]]];
     foreach ($this->operatorValues(1) as $operator) {
       $form['expose']['placeholder']['#states']['visible'][] = [
-        ':input[name="options[operator]"]' => ['value' => $operator],
+        '[name="options[operator]"]' => ['value' => $operator],
       ];
     }
   }
@@ -240,7 +240,7 @@ class NumericFilter extends FilterPluginBase implements FilterOperatorsInterface
     // render the form items we need.
     $which = 'all';
     if (!empty($form['operator'])) {
-      $source = ':input[name="options[operator]"]';
+      $source = '[name="options[operator]"]';
     }
 
     if ($exposed = $form_state->get('exposed')) {
@@ -251,7 +251,7 @@ class NumericFilter extends FilterPluginBase implements FilterOperatorsInterface
         $which = in_array($this->operator, $this->operatorValues(2)) ? 'minmax' : 'value';
       }
       else {
-        $source = ':input[name="' . $this->options['expose']['operator_id'] . '"]';
+        $source = ':is(select, input)[name="' . $this->options['expose']['operator_id'] . '"]';
       }
     }
 

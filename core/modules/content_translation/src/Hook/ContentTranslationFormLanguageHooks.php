@@ -86,7 +86,7 @@ class ContentTranslationFormLanguageHooks {
             '#description' => $force_hidden ? $this->t('Moderated content requires non-translatable fields to be edited in the original language form.') : '',
             '#states' => [
               'visible' => [
-                ':input[name="settings[' . $entity_type_id . '][' . $bundle . '][translatable]"]' => [
+                '[name="settings[' . $entity_type_id . '][' . $bundle . '][translatable]"]' => [
                   'checked' => TRUE,
                 ],
               ],

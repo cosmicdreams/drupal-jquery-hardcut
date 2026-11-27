@@ -3,21 +3,36 @@
  * Attaches behavior for the Editor module.
  */
 
-(function ($, Drupal, drupalSettings) {
+(function (Drupal, drupalSettings, once) {
+  const filterRequests = new WeakMap();
+  const widgetListeners = new WeakMap();
+
+  /**
+   * A shared listener replaces the namespaced change and keypress handlers.
+   * @param {Event} event
+   *   The event that first signals a change to the textarea value.
+   */
+  function markChanged(event) {
+    const field = event.currentTarget;
+    field.setAttribute('data-editor-value-is-changed', 'true');
+    field.removeEventListener('change', markChanged);
+    field.removeEventListener('keypress', markChanged);
+  }
+
   /**
    * Finds the text area field associated with the given text format selector.
    *
-   * @param {jQuery} $formatSelector
+   * @param {HTMLElement} formatSelector
    *   A text format selector DOM element.
    *
    * @return {HTMLElement}
    *   The text area DOM element, if it was found.
    */
-  function findFieldForFormatSelector($formatSelector) {
-    const fieldId = $formatSelector.attr('data-editor-for');
+  function findFieldForFormatSelector(formatSelector) {
+    const fieldId = formatSelector.dataset.editorFor;
     // This selector will only find text areas in the top-level document. We do
     // not support attaching editors on text areas within iframes.
-    return $(`#${fieldId}`).get(0);
+    return document.getElementById(fieldId);
   }
 
   /**
@@ -41,22 +56,36 @@
     }
     // Otherwise, ensure XSS safety: let the server XSS filter this value.
     else {
-      $.ajax({
-        url: Drupal.url(`editor/filter_xss/${format.format}`),
-        type: 'POST',
-        data: {
+      const request = new AbortController();
+      const requests = filterRequests.get(field) ?? new Set();
+      requests.add(request);
+      filterRequests.set(field, requests);
+      fetch(Drupal.url(`editor/filter_xss/${format.format}`), {
+        method: 'POST',
+        body: new URLSearchParams({
           value: field.value,
           original_format_id: originalFormatID,
-        },
-        dataType: 'json',
-        success(xssFilteredValue) {
+        }),
+        signal: request.signal,
+      })
+        .then((response) => (response.ok ? response.json() : undefined))
+        // As with the original success callback, ignore transport failures.
+        .catch(() => undefined)
+        .then((xssFilteredValue) => {
+          if (
+            xssFilteredValue === undefined ||
+            request.signal.aborted ||
+            !field.isConnected
+          ) {
+            return;
+          }
           // If the server returns false, then no XSS filtering is needed.
           if (xssFilteredValue !== false) {
             field.value = xssFilteredValue;
           }
           callback(field, format);
-        },
-      });
+        })
+        .finally(() => requests.delete(request));
     }
   }
 
@@ -84,7 +113,8 @@
     }
     // When no text editor is currently active, stop tracking changes.
     else {
-      $(field).off('.editor');
+      field.removeEventListener('change', markChanged);
+      field.removeEventListener('keypress', markChanged);
     }
 
     // Attach the new text editor (if any).
@@ -105,12 +135,13 @@
   /**
    * Handles changes in text format.
    *
-   * @param {jQuery.Event} event
+   * @param {Event} event
    *   The text format change event.
+   * @param {HTMLElement} field
+   *   The text area DOM element.
    */
-  function onTextFormatChange(event) {
-    const select = event.target;
-    const field = event.data.field;
+  function onTextFormatChange(event, field) {
+    const select = event.currentTarget;
     const activeFormatID = field.getAttribute('data-editor-active-text-format');
     const newFormatID = select.value;
 
@@ -132,21 +163,34 @@
       const message = Drupal.t(
         'Changing the text format to %text_format will permanently remove content that is not allowed in that text format.<br><br>Save your changes before switching the text format to avoid losing data.',
         {
-          '%text_format': $(select).find('option:selected')[0].textContent,
+          '%text_format': select.selectedOptions[0].textContent,
         },
       );
-      const confirmationDialog = Drupal.dialog(`<div>${message}</div>`, {
+      const content = document.createElement('div');
+      content.innerHTML = message;
+      let confirmed = false;
+      content.addEventListener('dialog:afterclose', () => {
+        // Cancel restores the active format, including after a native close.
+        if (!confirmed && select.isConnected) {
+          select.value = activeFormatID;
+          select.dispatchEvent(new Event('change'));
+        }
+      });
+      const confirmationDialog = Drupal.dialog(content, {
         title: Drupal.t('Change text format?'),
         classes: {
-          'ui-dialog': 'editor-change-text-format-modal',
+          'drupal-dialog': 'editor-change-text-format-modal',
         },
-        resizable: false,
+        opener: select,
         buttons: [
           {
             text: Drupal.t('Continue'),
             class: 'button button--primary',
             click() {
-              changeTextEditor(field, newFormatID);
+              confirmed = true;
+              if (field.isConnected && select.isConnected) {
+                changeTextEditor(field, newFormatID);
+              }
               confirmationDialog.close();
             },
           },
@@ -154,13 +198,6 @@
             text: Drupal.t('Cancel'),
             class: 'button',
             click() {
-              // Restore the active format ID: cancel changing text format. We
-              // cannot simply call event.preventDefault() because jQuery's
-              // change event is only triggered after the change has already
-              // been accepted.
-              select.value = activeFormatID;
-              const eventChange = new Event('change');
-              select.dispatchEvent(eventChange);
               confirmationDialog.close();
             },
           },
@@ -168,14 +205,9 @@
         // Prevent this modal from being closed without the user making a choice
         // as per http://stackoverflow.com/a/5438771.
         closeOnEscape: false,
-        create() {
-          $(this).parent().find('.ui-dialog-titlebar-close').remove();
-        },
-        beforeClose: false,
-        close(event) {
-          // Automatically destroy the DOM element that was used for the dialog.
-          $(event.target).remove();
-        },
+        closeButton: false,
+        // Automatically destroy the DOM element that was used for the dialog.
+        removeOnClose: true,
       });
 
       confirmationDialog.showModal();
@@ -209,8 +241,7 @@
       }
 
       once('editor', '[data-editor-for]', context).forEach((editor) => {
-        const $this = $(editor);
-        const field = findFieldForFormatSelector($this);
+        const field = findFieldForFormatSelector(editor);
 
         // Opt-out if no supported text area was found.
         if (!field) {
@@ -230,20 +261,18 @@
         // When there is no text editor for this text format, still track
         // changes, because the user has the ability to switch to some text
         // editor, otherwise this code would not be executed.
-        $(field).on('change.editor keypress.editor', () => {
-          field.setAttribute('data-editor-value-is-changed', 'true');
-          // Just knowing that the value was changed is enough, stop tracking.
-          $(field).off('.editor');
-        });
+        field.addEventListener('change', markChanged);
+        field.addEventListener('keypress', markChanged);
 
         // Attach onChange handler to text format selector element.
+        const change = (event) => onTextFormatChange(event, field);
         if (editor.tagName === 'SELECT') {
-          $this.on('change.editorAttach', { field }, onTextFormatChange);
+          editor.addEventListener('change', change);
         }
         // Detach any editor when the containing form is submitted.
-        $(field.form).on('submit', (event) => {
+        const submit = (event) => {
           // Do not detach if the event was canceled.
-          if (event.isDefaultPrevented()) {
+          if (event.defaultPrevented) {
             return;
           }
           // Detach the current editor (if any).
@@ -254,26 +283,44 @@
               'serialize',
             );
           }
+        };
+        const form = field.form;
+        form?.addEventListener('submit', submit);
+        widgetListeners.set(editor, () => {
+          editor.removeEventListener('change', change);
+          form?.removeEventListener('submit', submit);
+          field.removeEventListener('change', markChanged);
+          field.removeEventListener('keypress', markChanged);
         });
       });
     },
 
     detach(context, settings, trigger) {
+      const selector = '[data-editor-for]';
       let editors;
       // The 'serialize' trigger indicates that we should simply update the
       // underlying element with the new text, without destroying the editor.
       if (trigger === 'serialize') {
-        // Removing the editor-processed class guarantees that the editor will
-        // be reattached. Only do this if we're planning to destroy the editor.
-        editors = once.filter('editor', '[data-editor-for]', context);
+        // Keep the once marker when serializing without destroying the editor.
+        editors = once.filter('editor', selector, context);
       } else {
-        editors = once.remove('editor', '[data-editor-for]', context);
+        editors = once.remove('editor', [
+          ...(context instanceof Element ? [context] : []),
+          ...context.querySelectorAll(selector),
+        ]);
       }
 
       editors.forEach((editor) => {
-        const $this = $(editor);
         const activeFormatID = editor.value;
-        const field = findFieldForFormatSelector($this);
+        const field = findFieldForFormatSelector(editor);
+        if (trigger !== 'serialize') {
+          widgetListeners.get(editor)?.();
+          widgetListeners.delete(editor);
+        }
+        if (trigger === 'unload' && field) {
+          filterRequests.get(field)?.forEach((request) => request.abort());
+          filterRequests.delete(field);
+        }
         if (field && activeFormatID in settings.editor.formats) {
           Drupal.editorDetach(
             field,
@@ -306,7 +353,8 @@
       // Ensures form.js' 'formUpdated' event is triggered even for changes that
       // happen within the text editor.
       Drupal.editors[format.editor].onChange(field, () => {
-        $(field).trigger('formUpdated');
+        // Bubble the native event as the original trigger did.
+        field.dispatchEvent(new Event('formUpdated', { bubbles: true }));
 
         // Keep track of changes, so we know what to do when switching text
         // formats and guaranteeing XSS protection.
@@ -336,4 +384,4 @@
       }
     }
   };
-})(jQuery, Drupal, drupalSettings);
+})(Drupal, drupalSettings, once);

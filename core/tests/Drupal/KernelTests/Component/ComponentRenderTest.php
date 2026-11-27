@@ -81,7 +81,8 @@ final class ComponentRenderTest extends KernelTestBase {
     // that usually gets auto-attached.
     $this->assertStringNotContainsString('lib-overrides.css', $output);
     // Ensure that libraryDependencies adds the expected assets.
-    $this->assertStringContainsString('dialog.position.js', $output);
+    $crawler = new Crawler($output);
+    $this->assertCount(1, $crawler->filter('script[src*="/core/misc/dialog/dialog.js"]'));
     // Ensure that libraryOverrides processes attributes properly.
     $this->assertMatchesRegularExpression('@<script.*src="[^"]*lib-overrides\.js\?v=1[^"]*".*defer.*bar="foo"></script>@', $output);
     // Ensure that libraryOverrides processes external CSS properly.

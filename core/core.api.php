@@ -1080,7 +1080,7 @@
 /**
  * @defgroup testing Automated tests
  * @{
- * Overview of PHPUnit and Nightwatch automated tests.
+ * Overview of PHPUnit automated tests.
  *
  * The Drupal project has embraced a philosophy of using automated tests,
  * consisting of both unit tests (which test the functionality of classes at a
@@ -1160,11 +1160,6 @@
  * - In some cases, you may need to write a test module to support your test;
  *   put such modules under the your_module/tests/modules directory.
  *
- * Besides the PHPUnit tests described above, Drupal Core also includes a few
- * JavaScript-only tests, which use the Nightwatch.js framework to test
- * JavaScript code using only JavaScript. These are located in
- * core/tests/Drupal/Nightwatch.
- *
  * For more details, see:
  * - core/tests/README.md for instructions on running tests
  * - https://www.drupal.org/phpunit for full documentation on how to write
@@ -1172,8 +1167,6 @@
  * - http://phpunit.de for general information on the PHPUnit framework.
  * - @link oo_conventions Object-oriented programming topic @endlink for more
  *   on PSR-4, namespaces, and where to place classes.
- * - http://nightwatchjs.org/ for information about Nightwatch testing for
- *   JavaScript
  * @}
  */
 
@@ -2535,13 +2528,11 @@ function hook_validation_constraint_alter(array &$definitions) {
  *   the callback should be placed. Note that callbacks have a choice of
  *   returning content or JavaScript commands; 'wrapper' is used for content
  *   returns.
- * - method: The jQuery method for placing the new content (used with
- *   'wrapper'). Valid options are 'replaceWith' (default), 'append', 'prepend',
- *   'before', 'after', or 'html'. See
- *   http://api.jquery.com/category/manipulation/ for more information on these
- *   methods.
- * - effect: The jQuery effect to use when placing the new HTML (used with
- *   'wrapper'). Valid options are 'none' (default), 'slide', or 'fade'.
+ * - method: How to insert the new content into or around the wrapper. Valid
+ *   options are 'replaceWith' (default), 'append', 'prepend', 'before',
+ *   'after', or 'html'.
+ * - effect: The effect to use when displaying inserted content. Supported
+ *   values are 'none' (default) and 'fade'.
  * - speed: The effect speed to use (used with 'effect' and 'wrapper'). Valid
  *   options are 'slow' (default), 'fast', or the number of milliseconds the
  *   effect should run.
@@ -2605,8 +2596,7 @@ function hook_validation_constraint_alter(array &$definitions) {
  * The individual commands that you can return implement interface
  * \Drupal\Core\Ajax\CommandInterface. Available commands provide the ability
  * to pop up alerts, manipulate text and markup in various ways, redirect
- * to a new URL, and the generic \Drupal\Core\Ajax\InvokeCommand, which
- * invokes an arbitrary jQuery command.
+ * to a new URL, and move keyboard focus.
  *
  * As noted above, status messages are prepended automatically if you use the
  * 'wrapper' method and return HTML markup. This is not the case if you return

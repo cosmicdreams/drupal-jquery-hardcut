@@ -97,7 +97,7 @@ const CSS_THEME = 200;
 const JS_SETTING = -200;
 
 /**
- * The default group for JavaScript and jQuery libraries added to the page.
+ * The default group for JavaScript libraries added to the page.
  */
 const JS_LIBRARY = -100;
 

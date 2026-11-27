@@ -45,7 +45,7 @@ class TextProcessedTest extends UnitTestCase {
 
     // Add more attachments.
     $result = $processed->addAttachments([
-      'library' => ['core/jquery'],
+      'library' => ['core/once'],
       'drupalSettings' => ['foo' => 'bar'],
     ]);
 
@@ -53,7 +53,7 @@ class TextProcessedTest extends UnitTestCase {
 
     $attachments = $processed->getAttachments();
     $this->assertContains('core/drupal', $attachments['library']);
-    $this->assertContains('core/jquery', $attachments['library']);
+    $this->assertContains('core/once', $attachments['library']);
     $this->assertSame(['foo' => 'bar'], $attachments['drupalSettings']);
   }
 

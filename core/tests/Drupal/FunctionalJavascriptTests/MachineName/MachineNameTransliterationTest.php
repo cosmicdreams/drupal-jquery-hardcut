@@ -75,6 +75,7 @@ class MachineNameTransliterationTest extends WebDriverTestBase {
       // cSpell:disable
       ['en', 'Bob', 'bob'],
       ['en', 'Äwesome', 'awesome'],
+      ['en', 'ÐÑÒÓÔÕÖ×ØÙÚÛÜÝÞß', 'dnoooooxouuuuythss'],
       ['de', 'Äwesome', 'aewesome'],
       ['da', 'äöüåøhello', 'aouaaoehello'],
       ['fr', 'ц', 'c'],

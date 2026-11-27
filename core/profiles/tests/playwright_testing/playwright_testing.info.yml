@@ -1,0 +1,8 @@
+name: Playwright Testing
+type: profile
+description: 'Minimal profile for running Playwright tests. Includes absolutely required modules only.'
+version: VERSION
+hidden: true
+opt_out_install: true
+install:
+  - js_testing_log_test

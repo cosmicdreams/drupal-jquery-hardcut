@@ -111,6 +111,235 @@ class FileManagedFileElementTest extends WebDriverTestBase {
   }
 
   /**
+   * Tests automatic upload through the managed file progress event.
+   */
+  public function testManagedFileProgressUpload(): void {
+    $file_system = $this->container->get('file_system');
+    $filename = $file_system->tempnam('temporary://', 'progress-upload') . '.txt';
+    file_put_contents($filename, 'Managed file upload with progress.');
+
+    $this->drupalGet('file/test/0/0/0', ['query' => ['upload_progress' => 1]]);
+    $session = $this->getSession();
+    $this->assertJsCondition('Object.values(drupalSettings.ajax).some((settings) => settings.event === "fileUpload")');
+    // Only web servers with the UploadProgress extension provide an upload
+    // identifier and polling endpoint. The fallback fixture still exercises
+    // the event and the progress bar with its initial message.
+    if ($session->getPage()->has('css', 'input.file-progress')) {
+      $this->assertJsCondition('Object.values(drupalSettings.ajax).some((settings) => settings.event === "fileUpload" && settings.progress.url)');
+    }
+
+    // Fast uploads can finish before WebDriver inspects the page. Record the
+    // indicator when Ajax inserts it.
+    $session->executeScript(<<<'JS'
+      document.addEventListener('drupal:ajax-before-send', ({ detail: { ajax } }) => {
+        const receive = ajax.receiveResponse;
+        ajax.receiveResponse = (...args) => new Promise((resolve) => {
+          window.finishProgressUpload = () => resolve(receive.apply(ajax, args));
+        });
+      }, { once: true });
+      const widget = document.querySelector('.js-form-managed-file');
+      const observer = new MutationObserver(() => {
+        const bar = widget.querySelector('.ajax-progress-bar');
+        const description = bar?.querySelector('.progress__description');
+        if (description) {
+          window.managedFileProgressMessage = description.textContent.trim();
+          bar.style.cssText = 'display:none; padding: 8px 0; margin: 10px 0';
+          const animate = bar.animate;
+          bar.animate = (frames, options) => {
+            window.managedFileProgressFrames = frames;
+            const animation = animate.call(bar, frames, options);
+            animation.pause();
+            window.managedFileProgressAnimation = animation;
+            return animation;
+          };
+          observer.disconnect();
+        }
+      });
+      observer.observe(widget, { childList: true, subtree: true });
+      JS);
+    $session->getPage()->attachFileToField('files[file]', $file_system->realpath($filename));
+    $this->assertJsCondition(<<<'JS'
+      (() => {
+        const frames = window.managedFileProgressFrames;
+        return window.drupalTestHasActiveAnimations() &&
+          typeof window.finishProgressUpload === 'function' && frames?.[0].height === '0' &&
+          frames[0].paddingTop === '0' && frames[0].marginBottom === '0' &&
+          frames[1].paddingTop === '8px' && frames[1].marginBottom === '10px';
+      })()
+      JS);
+    $session->executeScript('window.managedFileProgressAnimation.finish(); window.finishProgressUpload();');
+    $this->assertNotNull($this->assertSession()->waitForLink(basename($filename)));
+    $this->assertSame('Processing...', $session->evaluateScript('window.managedFileProgressMessage'));
+    $this->assertSession()->elementNotExists('css', '.js-form-managed-file .ajax-progress-bar');
+    $this->assertGreaterThan(0, $this->getLastFileId());
+  }
+
+  /**
+   * Tests rejecting files in the browser without clearing another field's error.
+   */
+  public function testClientValidation(): void {
+    $file_system = $this->container->get('file_system');
+    $wrong_extension = $file_system->tempnam('temporary://', 'invalid') . '.jpg';
+    $valid = $file_system->tempnam('temporary://', 'valid') . '.txt';
+    file_put_contents($wrong_extension, 'wrong extension');
+    file_put_contents($valid, 'valid');
+
+    $this->drupalGet('file/test/0/0/1', ['query' => ['validate_upload' => 1]]);
+    $assert = $this->assertSession();
+    $page = $this->getSession()->getPage();
+    $file = '.js-form-managed-file:has(input[name="files[file][]"])';
+    $other = '.js-form-managed-file:has(input[name="files[other_file][]"])';
+    $fid = $this->getLastFileId();
+
+    $page->attachFileToField('files[file][]', $file_system->realpath($wrong_extension));
+    $assert->elementTextContains('css', "$file .file-upload-js-error", 'Only files with the following extensions are allowed');
+    $assert->fieldValueEquals('files[file][]', '');
+    $page->attachFileToField('files[other_file][]', $file_system->realpath($wrong_extension));
+    $assert->elementTextContains('css', "$other .file-upload-js-error", 'Only files with the following extensions are allowed');
+    $assert->fieldValueEquals('files[other_file][]', '');
+    $assert->elementExists('css', "$file .file-upload-js-error");
+    $this->assertSame($fid, $this->getLastFileId());
+
+    // Use the real multiple input and let the change event upload the valid
+    // file. Verify the rejected filename is still shown after replacement.
+    $this->getSession()->executeScript(<<<'JS'
+      const input = document.querySelector('input[name="files[file][]"]');
+      const selection = new DataTransfer();
+      selection.items.add(new File(['valid'], 'valid-extension.txt'));
+      selection.items.add(new File(['invalid'], 'invalid.jpg'));
+      input.files = selection.files;
+      input.dispatchEvent(new Event('change', { bubbles: true, cancelable: true }));
+      JS);
+    $this->assertNotNull($assert->waitForLink('valid-extension.txt'));
+    $assert->assertWaitOnAjaxRequest();
+    $assert->linkNotExists('invalid.jpg');
+    $assert->elementTextContains('css', "$file .file-upload-js-error", 'invalid.jpg');
+    $assert->elementTextContains('css', "$file .file-upload-js-error", 'following extensions are allowed');
+
+    // A managed file button disables only other inputs in the same form.
+    $this->getSession()->executeScript(<<<'JS'
+      const upload = document.querySelector('[data-drupal-selector$="file-upload-button"]');
+      const otherInput = upload.form.querySelector('input[name="files[other_file][]"]');
+      const extraForm = document.createElement('form');
+      extraForm.innerHTML = '<div class="js-form-managed-file"><input class="js-form-file" type="file"></div>';
+      document.body.append(extraForm);
+      const extraInput = extraForm.querySelector('input');
+      Drupal.file.disableFields({ currentTarget: upload });
+      window.onlySubmittingFormLocked = otherInput.disabled && !extraInput.disabled;
+      extraForm.remove();
+      JS);
+    $this->assertJsCondition('window.onlySubmittingFormLocked');
+
+    $page->attachFileToField('files[file][]', $file_system->realpath($valid));
+    $this->assertNotNull($assert->waitForLink(basename($valid)));
+    $assert->elementNotExists('css', "$file .file-upload-js-error");
+    $assert->elementExists('css', "$other .file-upload-js-error");
+  }
+
+  /**
+   * Tests that whitespace-only extensions do not enable browser validation.
+   */
+  public function testBlankExtensions(): void {
+    $this->drupalGet('file/test/0/0/1', ['query' => ['blank_extensions' => 1]]);
+    $assert = $this->assertSession();
+    $assert->elementNotExists('css', 'input[name="files[file][]"][data-file-extensions]');
+
+    // Exercise the client guard even if a form provides a blank attribute.
+    $this->assertJsCondition(<<<'JS'
+      (() => {
+        const input = document.querySelector('input[name="files[file][]"]');
+        const selection = new DataTransfer();
+        selection.items.add(new File(['valid'], 'valid.txt'));
+        input.files = selection.files;
+        input.dataset.fileExtensions = '   ';
+        input.addEventListener('validate-extension', Drupal.file.validateExtension, { once: true });
+        input.dispatchEvent(new Event('validate-extension', { cancelable: true }));
+        return input.files.length === 1;
+      })()
+      JS);
+    $assert->elementNotExists('css', '.file-upload-js-error');
+  }
+
+  /**
+   * Tests cleanup after a mixed upload and when its widget unloads.
+   */
+  public function testMixedUploadInsertCleanup(): void {
+    $this->drupalGet('file/test/0/0/1', ['query' => ['validate_upload' => 1]]);
+    $session = $this->getSession();
+    $result = $session->evaluateScript(<<<'JS'
+      (async () => {
+        const input = document.querySelector('input[name="files[file][]"]');
+        const widget = input.closest('.js-form-managed-file');
+        const button = widget.querySelector('[data-drupal-selector$="upload-button"]');
+        const ajax = Drupal.ajax.instances.find((instance) => instance?.element === button);
+        const { beforeSend, success } = ajax;
+        const selectFiles = () => {
+          const selection = new DataTransfer();
+          selection.items.add(new File(['valid'], 'valid.txt'));
+          selection.items.add(new File(['invalid'], 'invalid.jpg'));
+          input.files = selection.files;
+          input.dispatchEvent(new Event('change', { bubbles: true, cancelable: true }));
+        };
+
+        try {
+          ajax.beforeSend = () => false;
+          selectFiles();
+          const afterCancellation = Object.hasOwn(ajax.commands, 'insert');
+          ajax.beforeSend = beforeSend;
+
+          ajax.success = () => success.call(ajax, [
+            { command: 'insert', selector: '.file-upload-js-error', method: 'append', data: '<span></span>' },
+          ]);
+          const completed = new Promise((resolve) => {
+            document.addEventListener('drupal:ajax-complete', resolve, { once: true });
+          });
+          selectFiles();
+          await completed;
+          const afterCompletion = Object.hasOwn(ajax.commands, 'insert');
+          const errorVisible = widget.isConnected &&
+            widget.querySelector('.file-upload-js-error').textContent.includes('invalid.jpg');
+
+          ajax.success = () => success.call(ajax, []);
+          // The replacement command is private to this request. Reading its
+          // identity confirms it was released before the response completes.
+          const unloaded = new Promise((resolve) => {
+            document.addEventListener('drupal:ajax-complete', resolve, { once: true });
+          });
+          selectFiles();
+          const pending = ajax.ajaxing && Object.hasOwn(ajax.commands, 'insert');
+          Drupal.detachBehaviors(widget, drupalSettings, 'unload');
+          widget.remove();
+          const afterUnload = Object.hasOwn(ajax.commands, 'insert');
+          await unloaded;
+          return { afterCancellation, afterCompletion, errorVisible, pending,
+            afterUnload };
+        }
+        finally {
+          ajax.beforeSend = beforeSend;
+          ajax.success = success;
+        }
+      })()
+      JS);
+    $this->assertEquals([
+      'afterCancellation' => FALSE,
+      'afterCompletion' => FALSE,
+      'errorVisible' => TRUE,
+      'pending' => TRUE,
+      'afterUnload' => FALSE,
+    ], $result);
+
+    // Upload a real file in the remaining widget after the invalid selection
+    // and widget removal. No stale validation message should be restored.
+    $file_system = $this->container->get('file_system');
+    $valid = $file_system->tempnam('temporary://', 'clean-upload') . '.txt';
+    file_put_contents($valid, 'valid');
+    $this->assertJsCondition("document.querySelector('input[name=\"files[other_file][]\"]:enabled')");
+    $session->getPage()->attachFileToField('files[other_file][]', $file_system->realpath($valid));
+    $this->assertNotNull($this->assertSession()->waitForLink(basename($valid)));
+    $this->assertSession()->elementNotExists('css', '.file-upload-js-error');
+  }
+
+  /**
    * Retrieves the fid of the last inserted file.
    */
   protected function getLastFileId(): int {

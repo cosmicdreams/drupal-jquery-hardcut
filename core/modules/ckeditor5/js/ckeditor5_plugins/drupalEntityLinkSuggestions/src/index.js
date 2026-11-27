@@ -91,8 +91,6 @@ class DrupalEntityLinkSuggestions extends Plugin {
     );
     const linkFormView = editor.plugins.get('LinkUI').formView;
 
-    let wasAutocompleteAdded = false;
-
     linkFormView.extendTemplate({
       attributes: {
         class: ['ck-vertical-form', 'ck-link-form_layout-vertical'],
@@ -115,79 +113,74 @@ class DrupalEntityLinkSuggestions extends Plugin {
     });
     linkFormView.children.add(additionalButtonsView, 1);
 
-    editor.plugins
-      .get('ContextualBalloon')
-      .on('set:visibleView', (evt, propertyName, newValue) => {
-        if (newValue !== linkFormView || wasAutocompleteAdded) {
+    this.listenTo(
+      editor.plugins.get('ContextualBalloon'),
+      'set:visibleView',
+      (evt, propertyName, view) => {
+        if (view !== linkFormView) {
+          this.autocomplete?.destroy();
+          this.autocomplete = undefined;
           return;
         }
-
-        /**
-         * Used to know if a selection was made from the autocomplete results.
-         *
-         * @type {boolean}
-         */
-        let selected;
-
-        initializeAutocomplete(linkFormView.urlInputView.fieldView.element, {
-          // @see \Drupal\ckeditor5\Plugin\CKEditor5Plugin\EntityLinkSuggestions::getDynamicPluginConfig()
-          autocompleteUrl: this.editor.config.get('drupalEntityLinkSuggestions')
-            .suggestionsUrl,
-          queryParams: {
-            hostEntityLangcode,
-            hostEntityTypeId,
-          },
-          selectHandler: (event, { item }) => {
-            if (!item.path && !item.href) {
-              // eslint-disable-next-line no-throw-literal
-              throw `Missing path or href param. ${JSON.stringify(item)}`;
-            }
-
-            if (item.entity_type_id || item.entity_uuid) {
-              if (!item.entity_type_id || !item.entity_uuid) {
+        if (this.autocomplete) {
+          return;
+        }
+        this.autocomplete = initializeAutocomplete(
+          linkFormView.urlInputView.fieldView.element,
+          {
+            // @see \Drupal\ckeditor5\Plugin\CKEditor5Plugin\EntityLinkSuggestions::getDynamicPluginConfig()
+            url: editor.config.get('drupalEntityLinkSuggestions')
+              .suggestionsUrl,
+            query: { hostEntityLangcode, hostEntityTypeId },
+            selectItem: (item) => {
+              if (!item.path && !item.href) {
                 // eslint-disable-next-line no-throw-literal
-                throw `Missing entity type id and/or entity uuid. ${JSON.stringify(
-                  item,
-                )}`;
+                throw `Missing path or href param. ${JSON.stringify(item)}`;
               }
-              this.set('entityType', item.entity_type_id);
-              this.set('entityUuid', item.entity_uuid);
-              this.set('entityMetadata', JSON.stringify(item));
-            } else {
-              this.set('entityType', null);
-              this.set('entityUuid', null);
-              this.set('entityMetadata', null);
-            }
 
-            // If the displayed text is empty use the entity label as the default value.
-            if (
-              linkFormView.hasOwnProperty('displayedTextInputView') &&
-              linkFormView.displayedTextInputView.fieldView.element.value ===
-                '' &&
-              item.label
-            ) {
-              // The item label has been sanitized for display as HTML. We want this back in the original format so that
-              // characters are not double encoded (e.g. we want "foo &amp; bar" to be "foo & bar").
-              const label = document.createElement('span');
-              label.innerHTML = item.label;
-              linkFormView.displayedTextInputView.fieldView.value =
-                label.textContent;
-            }
+              if (item.entity_type_id || item.entity_uuid) {
+                if (!item.entity_type_id || !item.entity_uuid) {
+                  // eslint-disable-next-line no-throw-literal
+                  throw `Missing entity type id and/or entity uuid. ${JSON.stringify(
+                    item,
+                  )}`;
+                }
+                this.set('entityType', item.entity_type_id);
+                this.set('entityUuid', item.entity_uuid);
+                this.set('entityMetadata', JSON.stringify(item));
+              } else {
+                this.set('entityType', null);
+                this.set('entityUuid', null);
+                this.set('entityMetadata', null);
+              }
 
-            event.target.value = item.path ?? item.href;
-            selected = true;
-            return false;
-          },
-          openHandler: () => {
-            selected = false;
-          },
-          closeHandler: () => {
-            selected = false;
-          },
-        });
+              // If the displayed text is empty use the entity label as the default value.
+              if (
+                linkFormView.hasOwnProperty('displayedTextInputView') &&
+                linkFormView.displayedTextInputView.fieldView.element.value ===
+                  '' &&
+                item.label
+              ) {
+                // The item label has been sanitized for display as HTML. We want this back in the original format so that
+                // characters are not double encoded (e.g. we want "foo &amp; bar" to be "foo & bar").
+                const label = document.createElement('span');
+                label.innerHTML = item.label;
+                linkFormView.displayedTextInputView.fieldView.value =
+                  label.textContent;
+              }
 
-        wasAutocompleteAdded = true;
-      });
+              linkFormView.urlInputView.fieldView.value =
+                item.path ?? item.href;
+            },
+          },
+        );
+      },
+    );
+  }
+
+  destroy() {
+    this.autocomplete?.destroy();
+    super.destroy();
   }
 
   _handleExtraFormFieldSubmit() {

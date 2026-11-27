@@ -4,8 +4,8 @@ namespace Drupal\media_library\Form;
 
 use Drupal\Core\Ajax\AjaxResponse;
 use Drupal\Core\Ajax\CloseDialogCommand;
+use Drupal\Core\Ajax\FocusCommand;
 use Drupal\Core\Ajax\FocusFirstCommand;
-use Drupal\Core\Ajax\InvokeCommand;
 use Drupal\Core\Ajax\MessageCommand;
 use Drupal\Core\Ajax\ReplaceCommand;
 use Drupal\Core\Entity\Entity\EntityFormDisplay;
@@ -610,13 +610,13 @@ abstract class AddFormBase extends FormBase implements BaseFormIdInterface, Trus
             break;
           }
         }
-        $response->addCommand(new InvokeCommand("[data-media-library-added-delta=$delta_to_focus]", 'focus'));
+        $response->addCommand(new FocusCommand('[data-media-library-added-delta="' . $delta_to_focus . '"]'));
       }
     }
     // Update the form and shift focus to the added media items.
     else {
       $response->addCommand(new ReplaceCommand("#$wrapper_id", $form));
-      $response->addCommand(new InvokeCommand('.js-media-library-add-form-added-media', 'focus'));
+      $response->addCommand(new FocusCommand('.js-media-library-add-form-added-media'));
     }
 
     return $response;
@@ -688,7 +688,7 @@ abstract class AddFormBase extends FormBase implements BaseFormIdInterface, Trus
     $response->addCommand(new UpdateSelectionCommand($media_ids));
     $media_id_to_focus = array_pop($media_ids);
     $response->addCommand(new ReplaceCommand('#media-library-add-form-wrapper', $this->buildMediaLibraryUi($form_state)));
-    $response->addCommand(new InvokeCommand("#media-library-content [value=$media_id_to_focus]", 'focus'));
+    $response->addCommand(new FocusCommand('#media-library-content [value="' . $media_id_to_focus . '"]'));
     $available_slots = $this->getMediaLibraryState($form_state)->getAvailableSlots();
     if ($available_slots > 0 && $selected_count > $available_slots) {
       $warning = $this->formatPlural($selected_count - $available_slots, 'There are currently @total items selected. The maximum number of items for the field is @max. Remove @count item from the selection.', 'There are currently @total items selected. The maximum number of items for the field is @max. Remove @count items from the selection.', [

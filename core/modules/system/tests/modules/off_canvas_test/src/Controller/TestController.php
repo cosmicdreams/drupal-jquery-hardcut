@@ -5,12 +5,35 @@ declare(strict_types=1);
 namespace Drupal\off_canvas_test\Controller;
 
 use Drupal\Component\Serialization\Json;
+use Drupal\Core\Htmx\Htmx;
 use Drupal\Core\Url;
 
 /**
  * Test controller for 2 different responses.
  */
 class TestController {
+
+  /**
+   * Builds links that open the tray through htmx.
+   */
+  public function htmxLinks(): array {
+    $build = [];
+    foreach ([1 => 300, 2 => 555] as $index => $width) {
+      $url = Url::fromRoute("off_canvas_test.thing$index");
+      $build[$index] = [
+        '#type' => 'link',
+        '#title' => "Open panel $index",
+        '#url' => $url,
+        '#attributes' => [
+          'data-dialog-renderer' => 'off_canvas',
+          'data-dialog-options' => Json::encode(['width' => $width]),
+        ],
+      ];
+      (new Htmx())->get($url)->applyTo($build[$index]);
+    }
+    $build['#attached']['library'][] = 'core/drupal.dialog.off_canvas.htmx';
+    return $build;
+  }
 
   /**
    * Thing1.
@@ -56,7 +79,7 @@ class TestController {
           'data-dialog-renderer' => 'off_canvas',
           'data-dialog-options' => Json::encode([
             'classes' => [
-              "ui-dialog" => "ui-corner-all side-1",
+              "drupal-dialog" => "side-1",
             ],
           ]),
         ],
@@ -72,7 +95,7 @@ class TestController {
           'data-dialog-options' => Json::encode([
             'width' => 555,
             'classes' => [
-              "ui-dialog" => "ui-corner-all side-2",
+              "drupal-dialog" => "side-2",
             ],
           ]),
         ],
@@ -88,7 +111,7 @@ class TestController {
           'data-dialog-options' => Json::encode([
             'width' => 555,
             'classes' => [
-              "ui-dialog" => "ui-corner-all top-1",
+              "drupal-dialog" => "top-1",
             ],
           ]),
         ],
@@ -105,7 +128,7 @@ class TestController {
           'data-dialog-options' => Json::encode([
             'height' => 421,
             'classes' => [
-              "ui-dialog" => "ui-corner-all top-2",
+              "drupal-dialog" => "top-2",
             ],
 
           ]),

@@ -233,7 +233,7 @@ abstract class MediaLibraryTestBase extends WebDriverTestBase {
    *   The final word of the button to be clicked.
    */
   protected function saveAnd($operation) {
-    $this->assertElementExistsAfterWait('css', '.ui-dialog-buttonpane')->pressButton("Save and $operation");
+    $this->assertElementExistsAfterWait('css', '.drupal-dialog-buttonpane')->pressButton("Save and $operation");
 
     // assertWaitOnAjaxRequest() required for input "id" attributes to
     // consistently match their label's "for" attribute.
@@ -248,7 +248,7 @@ abstract class MediaLibraryTestBase extends WebDriverTestBase {
    *   pressed. Defaults to FALSE.
    */
   protected function pressSaveButton($expect_errors = FALSE) {
-    $buttons = $this->assertElementExistsAfterWait('css', '.ui-dialog-buttonpane');
+    $buttons = $this->assertElementExistsAfterWait('css', '.drupal-dialog-buttonpane');
     $buttons->pressButton('Save');
 
     // If no validation errors are expected, wait for the "Insert selected"
@@ -323,7 +323,7 @@ abstract class MediaLibraryTestBase extends WebDriverTestBase {
     $selector = '.js-media-library-add-form-added-media';
 
     // Assert that focus is shifted to the new media items.
-    $this->assertJsCondition('jQuery("' . $selector . '").is(":focus")');
+    $this->assertJsCondition('document.activeElement.matches("' . $selector . '")');
 
     $assert_session = $this->assertSession();
     $assert_session->pageTextMatches('/The media items? ha(s|ve) been created but ha(s|ve) not yet been saved. Fill in any required fields and save to add (it|them) to the media library./');
@@ -345,7 +345,7 @@ abstract class MediaLibraryTestBase extends WebDriverTestBase {
   protected function assertNoMediaAdded() {
     // Assert the focus is shifted to the first tabbable element of the add
     // form, which should be the source field.
-    $this->assertJsCondition('jQuery(tabbable.tabbable(document.getElementById("media-library-add-form-wrapper"))[0]).is(":focus")');
+    $this->assertJsCondition('document.activeElement === tabbable.tabbable(document.getElementById("media-library-add-form-wrapper"))[0]');
 
     $this->assertSession()
       ->elementNotExists('css', '[data-drupal-selector="edit-media-0-fields"]');
@@ -367,7 +367,7 @@ abstract class MediaLibraryTestBase extends WebDriverTestBase {
    */
   protected function pressInsertSelected($expected_announcement = NULL, bool $should_close = TRUE) {
     $this->assertSession()
-      ->elementExists('css', '.ui-dialog-buttonpane')
+      ->elementExists('css', '.drupal-dialog-buttonpane')
       ->pressButton('Insert selected');
 
     if ($should_close) {

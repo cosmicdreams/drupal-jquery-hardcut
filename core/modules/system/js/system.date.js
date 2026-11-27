@@ -3,7 +3,7 @@
  * Provides date format preview feature.
  */
 
-(function ($, Drupal, drupalSettings) {
+(function (Drupal, drupalSettings) {
   const dateFormats = drupalSettings.dateFormats;
 
   /**
@@ -35,8 +35,8 @@
       /**
        * Event handler that replaces date characters with value.
        *
-       * @param {jQuery.Event} e
-       *   The jQuery event triggered.
+       * @param {Event} e
+       *   The native input event.
        */
       function dateFormatHandler(e) {
         const baseValue = e.target.value || '';
@@ -49,21 +49,18 @@
           item.querySelectorAll('em').forEach((em) => {
             em.textContent = dateString;
           });
+          item.classList.toggle('js-hide', !dateString.length);
         });
-
-        $(target).toggleClass('js-hide', !dateString.length);
       }
 
-      /**
-       * On given event triggers the date character replacement.
-       */
-      $(source)
-        .on(
-          'keyup.dateFormat change.dateFormat input.dateFormat',
-          dateFormatHandler,
-        )
-        // Initialize preview.
-        .trigger('keyup');
+      source.forEach((element) => {
+        ['keyup', 'change', 'input'].forEach((type) => {
+          Drupal.form.listen(element, type, dateFormatHandler);
+        });
+      });
+      source.forEach((element) => {
+        element.dispatchEvent(new KeyboardEvent('keyup', { bubbles: true }));
+      });
     },
   };
-})(jQuery, Drupal, drupalSettings);
+})(Drupal, drupalSettings);

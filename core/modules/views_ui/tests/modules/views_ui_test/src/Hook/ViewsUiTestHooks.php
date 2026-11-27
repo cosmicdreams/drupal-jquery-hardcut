@@ -42,4 +42,16 @@ class ViewsUiTestHooks {
     unset($form['options']['widget']['#default_value']);
   }
 
+  /**
+   * Implements hook_form_FORM_ID_alter().
+   *
+   * Lets the dialog test attach an editor to a Views text area handler.
+   */
+  #[Hook('form_views_ui_config_item_form_alter')]
+  public function formViewsUiConfigItemFormAlter(array &$form): void {
+    if (isset($form['options']['content']) && \Drupal::state()->get('views_ui_test.enable_area_editor')) {
+      unset($form['options']['content']['#editor']);
+    }
+  }
+
 }

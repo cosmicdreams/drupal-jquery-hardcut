@@ -90,7 +90,7 @@ class RegistrationWithUserFieldsTest extends WebDriverTestBase {
     // In order to check the server side validation the native browser
     // validation for required fields needs to be circumvented.
     $session = $this->getSession();
-    $session->executeScript("jQuery('#edit-test-user-field-0-value').prop('required', false);");
+    $session->executeScript("document.getElementById('edit-test-user-field-0-value').required = false;");
 
     // Check that validation errors are correctly reported.
     $name = $this->randomMachineName();

@@ -248,7 +248,7 @@ function updateAttribute(element, { add, remove }) {
  * // NodeList.
  * once('my-once-id', document.querySelectorAll('[data-myelement]'));
  * // Array or Array-like of Element.
- * once('my-once-id', jQuery('[data-myelement]'));
+ * once('my-once-id', Array.from(document.querySelectorAll('[data-myelement]')));
  * // A CSS selector without a context.
  * once('my-once-id', '[data-myelement]');
  * // A CSS selector with a context.
@@ -297,7 +297,7 @@ function once(id, selector, context) {
  * // NodeList.
  * once.remove('my-once-id', document.querySelectorAll('[data-myelement]'));
  * // Array or Array-like of Element.
- * once.remove('my-once-id', jQuery('[data-myelement]'));
+ * once.remove('my-once-id', Array.from(document.querySelectorAll('[data-myelement]')));
  * // A CSS selector without a context.
  * once.remove('my-once-id', '[data-myelement]');
  * // A CSS selector with a context.
@@ -338,7 +338,7 @@ once.remove = (id, selector, context) => {
  * // NodeList.
  * once.filter('my-once-id', document.querySelectorAll('[data-myelement]'));
  * // Array or Array-like of Element.
- * once.filter('my-once-id', jQuery('[data-myelement]'));
+ * once.filter('my-once-id', Array.from(document.querySelectorAll('[data-myelement]')));
  * // A CSS selector without a context.
  * once.filter('my-once-id', '[data-myelement]');
  * // A CSS selector with a context.

@@ -30,6 +30,11 @@
   inset-inline-end: 0;
   inset-block-end: 100%;
 
+  /* Override the generic display rule for divs in an inline form. */
+  .admin-autocomplete > & {
+    display: none;
+  }
+
   .form-autocomplete.is-autocompleting + & {
     display: block;
 
@@ -66,28 +71,27 @@
 }
 
 /* <ul> dropdown */
-.ui-autocomplete {
+.autocomplete-list {
   color: var(--admin-color-text);
+  border: var(--input-border-size) solid var(--autocomplete-border-color);
+  border-block-start: 0;
   border-radius: 0 0 var(--admin-radius-m) var(--admin-radius-m);
   background: var(--admin-color-bg-input);
+  box-shadow: 0 0.125rem 0.25rem var(--autocomplete-shadow-color);
 
-  .ui-menu-item-wrapper.ui-state-active {
-    color: var(--admin-color-primary-hover);
-    background-color: var(--admin-color-bg-item-hover);
-
-    @media (forced-colors: active) {
-      outline: solid 2px transparent;
-      outline-offset: -4px;
-    }
+  &.autocomplete-list--above {
+    border-block-start: var(--input-border-size) solid var(--autocomplete-border-color);
+    border-block-end: 0;
+    border-radius: var(--admin-radius-m) var(--admin-radius-m) 0 0;
   }
 
-  .ui-menu-item a {
-    color: var(--admin-color-text);
+  & [role="option"] {
+    padding: 0.75rem 0.9375rem;
+  }
 
-    &:hover {
-      color: var(--admin-color-primary-hover);
-      background-color: var(--admin-color-bg-item-hover);
-    }
+  & [aria-selected="true"] {
+    color: var(--admin-color-primary-hover);
+    background-color: var(--admin-color-bg-item-hover);
   }
 }
 

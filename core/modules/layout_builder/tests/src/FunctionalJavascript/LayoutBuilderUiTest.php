@@ -7,6 +7,8 @@ namespace Drupal\Tests\layout_builder\FunctionalJavascript;
 use Drupal\FunctionalJavascriptTests\WebDriverTestBase;
 use Drupal\Tests\block_content\Traits\BlockContentCreationTrait;
 use Drupal\Tests\contextual\FunctionalJavascript\ContextualLinkClickTrait;
+use Drupal\user\Entity\Role;
+use Drupal\user\RoleInterface;
 use PHPUnit\Framework\Attributes\Group;
 use PHPUnit\Framework\Attributes\RunTestsInSeparateProcesses;
 
@@ -72,6 +74,22 @@ class LayoutBuilderUiTest extends WebDriverTestBase {
   }
 
   /**
+   * Tests that contextual links outside the layout are removed.
+   */
+  public function testContextualLinksOutsideLayout(): void {
+    $this->grantPermissions(Role::load(RoleInterface::AUTHENTICATED_ID), ['administer blocks']);
+    $this->placeBlock('system_branding_block', ['id' => 'branding']);
+    $assert = $this->assertSession();
+
+    $this->drupalGet('user');
+    $this->assertNotNull($assert->waitForElement('css', '#block-branding .contextual .trigger'));
+    $this->drupalGet(static::FIELD_UI_PREFIX . '/display/default/layout');
+    $this->assertNotNull($assert->waitForElement('css', '#layout-builder .contextual .trigger'));
+    $assert->elementExists('css', '#block-branding');
+    $assert->elementNotExists('css', '#block-branding [data-contextual-id]');
+  }
+
+  /**
    * Tests that after removing sections reloading the page does not re-add them.
    */
   public function testReloadWithNoSections(): void {
@@ -93,6 +111,32 @@ class LayoutBuilderUiTest extends WebDriverTestBase {
     // Assert that there are no sections on the page.
     $assert_session->pageTextNotContains('Remove Section 1');
     $assert_session->pageTextNotContains('Add block');
+  }
+
+  /**
+   * Tests reordering a Layout Builder block from the off-canvas tray.
+   */
+  public function testReorderBlockInTray(): void {
+    $this->drupalGet(static::FIELD_UI_PREFIX . '/display/default/layout');
+    $body = '.block-field-blocknodebundle-with-section-fieldbody';
+    $block_selector = '[data-region="content"] [data-layout-block-uuid]';
+    $page = $this->getSession()->getPage();
+    $assert = $this->assertSession();
+    $this->assertFalse($page->find('css', $block_selector)->hasClass(substr($body, 1)));
+
+    $this->clickContextualLink($body, 'Move');
+    $tray = $assert->waitForElementVisible('css', 'dialog#drupal-off-canvas-wrapper[open]');
+    $this->assertNotNull($tray);
+    $handle = $assert->elementExists('css', 'tr.draggable:contains("Body") .tabledrag-handle', $tray);
+    $handle->focus();
+    $handle->keyDown(38);
+    $handle->keyUp(38);
+    $handle->blur();
+    $first_row = $assert->elementExists('css', 'tr.draggable:first-child', $tray);
+    $this->assertStringContainsString('Body', $first_row->getText());
+    $tray->pressButton('Move');
+    $assert->assertNoElementAfterWait('css', 'dialog#drupal-off-canvas-wrapper');
+    $this->assertTrue($page->find('css', $block_selector)->hasClass(substr($body, 1)));
   }
 
   /**

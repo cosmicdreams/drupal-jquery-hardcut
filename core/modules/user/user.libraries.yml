@@ -7,7 +7,7 @@ drupal.user:
     component:
       css/user.module.css: {}
   dependencies:
-    - core/jquery
+    - core/drupal.form.events
     - core/drupal
     - core/once
 
@@ -22,7 +22,7 @@ drupal.user.permissions:
   js:
     js/user.permissions.js: {}
   dependencies:
-    - core/jquery
+    - core/drupal.form.events
     - core/once
     - core/drupal
     - core/drupalSettings

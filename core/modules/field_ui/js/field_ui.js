@@ -3,7 +3,9 @@
  * Attaches the behaviors for the Field UI module.
  */
 
-(function ($, Drupal, drupalSettings, debounce) {
+(function (Drupal, debounce, once) {
+  const rowHandlersByElement = new WeakMap();
+
   /**
    * @type {Drupal~behavior}
    *
@@ -12,26 +14,26 @@
    */
   Drupal.behaviors.fieldUIFieldStorageAddForm = {
     attach(context) {
-      const form = once(
+      once(
         'field_ui_add',
         '[data-drupal-selector="field-ui-field-storage-add-form"]',
         context,
-      );
-      if (form.length) {
-        const $form = $(form);
+      ).forEach((form) => {
         // Add a few 'js-form-required' and 'form-required' css classes here.
         // We can not use the Form API '#required' property because both label
         // elements for "add new" and "re-use existing" can never be filled and
         // submitted at the same time. The actual validation will happen
         // server-side.
-        $form
-          .find(
+        form
+          .querySelectorAll(
             '.js-form-item-label label,' +
               '.js-form-item-field-name label,' +
               '.js-form-item-existing-storage-label label',
           )
-          .addClass('js-form-required form-required');
-      }
+          .forEach((label) =>
+            label.classList.add('js-form-required', 'form-required'),
+          );
+      });
     },
   };
 
@@ -61,31 +63,37 @@
     },
   };
 
-  // Override the beforeSend method to disable the submit button until
-  // the AJAX request is completed. This is done to avoid the race
-  // condition that is being caused by change event listener that is
-  // attached to every form element inside field storage config edit
-  // form to update the field config form based on changes made to the
-  // storage settings.
-  const originalAjaxBeforeSend = Drupal.Ajax.prototype.beforeSend;
-  // eslint-disable-next-line func-names
-  Drupal.Ajax.prototype.beforeSend = function () {
-    // Disable the submit button on AJAX request initiation.
-    $('.field-config-edit-form [data-drupal-selector="edit-submit"]').prop(
-      'disabled',
-      true,
-    );
-    // eslint-disable-next-line prefer-rest-params
-    return originalAjaxBeforeSend.apply(this, arguments);
-  };
-  // Re-enable the submit button after AJAX request is completed.
-  // eslint-disable-next-line
-  $(document).on('ajaxComplete', () => {
-    $('.field-config-edit-form [data-drupal-selector="edit-submit"]').prop(
-      'disabled',
-      false,
-    );
-  });
+  const submitSelector = '[data-drupal-selector="edit-submit"]';
+
+  /**
+   * Keeps inline and dialog Save buttons in the same state.
+   *
+   * @param {boolean} disabled
+   *   Whether Save is disabled.
+   */
+  function setSaveDisabled(disabled) {
+    document
+      .querySelectorAll(`.field-config-edit-form ${submitSelector}`)
+      .forEach((button) => {
+        button.disabled = disabled;
+        const visibleButton = button
+          .closest('dialog')
+          ?.querySelector(
+            `[data-dialog-button-for="${CSS.escape(button.id)}"]`,
+          );
+        if (visibleButton) {
+          visibleButton.disabled = disabled;
+        }
+      });
+  }
+
+  // Disable Save while Ajax can rebuild the field configuration form.
+  document.addEventListener('drupal:ajax-before-send', () =>
+    setSaveDisabled(true),
+  );
+  document.addEventListener('drupal:ajax-complete', () =>
+    setSaveDisabled(false),
+  );
 
   /**
    * Namespace for the field UI overview.
@@ -111,50 +119,47 @@
       tableDrag.row.prototype.onSwap = this.onSwap;
 
       // Create row handlers.
-      $(table)
-        .find('tr.draggable')
-        .each(function () {
-          // Extract server-side data for the row.
-          const row = this;
-          if (row.id in rowsData) {
-            const data = rowsData[row.id];
-            data.tableDrag = tableDrag;
+      table.querySelectorAll('tr.draggable').forEach((row) => {
+        // Extract server-side data for the row.
+        if (row.id in rowsData) {
+          const data = rowsData[row.id];
+          data.tableDrag = tableDrag;
 
-            // Create the row handler, make it accessible from the DOM row
-            // element.
-            const rowHandler = new rowHandlers[data.rowHandler](row, data);
-            $(row).data('fieldUIRowHandler', rowHandler);
-          }
-        });
+          // Create the row handler, make it accessible from the DOM row
+          // element.
+          const rowHandler = new rowHandlers[data.rowHandler](row, data);
+          rowHandlersByElement.set(row, rowHandler);
+        }
+      });
     },
 
     /**
      * Event handler to be attached to form inputs triggering a region change.
      */
-    onChange() {
-      const $trigger = $(this);
-      const $row = $trigger.closest('tr');
+    onChange(event) {
+      const trigger = event.currentTarget;
+      const row = trigger.closest('tr');
 
       // Do not fire change listeners for items within forms that have their
       // own AJAX callbacks to process a change.
-      if ($trigger.closest('.ajax-new-content').length !== 0) {
+      if (trigger.closest('.ajax-new-content')) {
         return;
       }
 
-      const rowHandler = $row.data('fieldUIRowHandler');
+      const rowHandler = rowHandlersByElement.get(row);
       const refreshRows = {};
-      refreshRows[rowHandler.name] = $trigger.get(0);
+      refreshRows[rowHandler.name] = trigger;
 
       // Handle region change.
       const region = rowHandler.getRegion();
       if (region !== rowHandler.region) {
-        const $fieldParent = $row.find('select.js-field-parent');
-        if ($fieldParent.length) {
+        const fieldParent = row.querySelector('select.js-field-parent');
+        if (fieldParent) {
           // Remove parenting.
-          $fieldParent[0].value = '';
+          fieldParent.value = '';
         }
         // Let the row handler deal with the region change.
-        $.extend(refreshRows, rowHandler.regionChange(region));
+        Object.assign(refreshRows, rowHandler.regionChange(region));
         // Update the row region.
         rowHandler.region = region;
       }
@@ -164,11 +169,11 @@
       // while visible, the row should be marked as changed, but they should not
       // be processed via AJAXRefreshRows as they are intended to be fields AJAX
       // updates the value of.
-      if ($trigger.closest('.tabledrag-hide').length) {
-        const thisTableDrag = Drupal.tableDrag['field-display-overview'];
+      if (trigger.closest('.tabledrag-hide')) {
+        const thisTableDrag = rowHandler.tableDrag;
         // eslint-disable-next-line new-cap
         const rowObject = new thisTableDrag.row(
-          $row[0],
+          row,
           '',
           thisTableDrag.indentEnabled,
           thisTableDrag.maxDepth,
@@ -178,7 +183,10 @@
         rowObject.addChangedWarning();
       } else {
         // Ajax-update the rows.
-        Drupal.fieldUIOverview.AJAXRefreshRows(refreshRows);
+        Drupal.fieldUIOverview.AJAXRefreshRows(
+          refreshRows,
+          row.closest('form'),
+        );
       }
     },
 
@@ -188,10 +196,15 @@
     onDrop() {
       const dragObject = this;
       const row = dragObject.rowObject.element;
-      const $row = $(row);
-      const rowHandler = $row.data('fieldUIRowHandler');
+      const rowHandler = rowHandlersByElement.get(row);
       if (typeof rowHandler !== 'undefined') {
-        const regionRow = $row.prevAll('tr.region-message').get(0);
+        let regionRow = row.previousElementSibling;
+        while (regionRow && !regionRow.matches('tr.region-message')) {
+          regionRow = regionRow.previousElementSibling;
+        }
+        if (!regionRow) {
+          return;
+        }
         const region = regionRow.className.replace(
           /([^ ]+[ ]+)*region-([^ ]+)-message([ ]+[^ ]+)*/,
           '$2',
@@ -203,7 +216,10 @@
           // Update the row region.
           rowHandler.region = region;
           // Ajax-update the rows.
-          Drupal.fieldUIOverview.AJAXRefreshRows(refreshRows);
+          Drupal.fieldUIOverview.AJAXRefreshRows(
+            refreshRows,
+            row.closest('form'),
+          );
         }
       }
     },
@@ -218,37 +234,32 @@
      */
     onSwap(draggedRow) {
       const rowObject = this;
-      $(rowObject.table)
-        .find('tr.region-message')
-        .each(function () {
-          const $this = $(this);
-          // If the dragged row is in this region, but above the message row, swap
-          // it down one space.
+      rowObject.table.querySelectorAll('tr.region-message').forEach((row) => {
+        // If the dragged row is in this region, but above the message row, swap
+        // it down one space.
+        if (
+          row.previousElementSibling ===
+          rowObject.group[rowObject.group.length - 1]
+        ) {
+          // Prevent a recursion problem when using the keyboard to move rows
+          // up.
           if (
-            $this.prev('tr').get(0) ===
-            rowObject.group[rowObject.group.length - 1]
+            rowObject.method !== 'keyboard' ||
+            rowObject.direction === 'down'
           ) {
-            // Prevent a recursion problem when using the keyboard to move rows
-            // up.
-            if (
-              rowObject.method !== 'keyboard' ||
-              rowObject.direction === 'down'
-            ) {
-              rowObject.swap('after', this);
-            }
+            rowObject.swap('after', row);
           }
-          // This region has become empty.
-          if (
-            $this.next('tr').length === 0 ||
-            !$this.next('tr')[0].matches('.draggable')
-          ) {
-            $this.removeClass('region-populated').addClass('region-empty');
-          }
-          // This region has become populated.
-          else if (this.matches('.region-empty')) {
-            $this.removeClass('region-empty').addClass('region-populated');
-          }
-        });
+        }
+        // This region has become empty.
+        if (!row.nextElementSibling?.matches('.draggable')) {
+          row.classList.remove('region-populated');
+          row.classList.add('region-empty');
+        }
+        // This region has become populated.
+        else if (row.matches('.region-empty')) {
+          row.classList.replace('region-empty', 'region-populated');
+        }
+      });
     },
 
     /**
@@ -263,8 +274,10 @@
      *   will receive the 'ajax-new-content' effect on the server side), and
      *   whose values are the DOM element in the row that should get an Ajax
      *   throbber.
+     * @param {HTMLFormElement} form
+     *   The form containing these rows.
      */
-    AJAXRefreshRows(rows) {
+    AJAXRefreshRows(rows, form) {
       // Separate keys and values.
       const rowNames = [];
       const ajaxElements = [];
@@ -274,25 +287,25 @@
       });
       if (rowNames.length) {
         // Add a throbber next each of the ajaxElements.
-        $(ajaxElements).after(Drupal.theme.ajaxProgressThrobber());
-        const $refreshRows = $('input[name=refresh_rows]');
-        if ($refreshRows.length) {
-          // Fire the Ajax update.
-          $refreshRows[0].value = rowNames.join(' ');
+        ajaxElements.forEach((element) => {
+          element?.insertAdjacentHTML(
+            'afterend',
+            Drupal.theme.ajaxProgressThrobber(),
+          );
+        });
+        const refreshRows = form.querySelector('input[name=refresh_rows]');
+        if (refreshRows) {
+          refreshRows.value = rowNames.join(' ');
         }
-        once(
-          'edit-refresh',
-          'input[data-drupal-selector="edit-refresh"]',
-        ).forEach((input) => {
+        const refresh = 'input[data-drupal-selector="edit-refresh"]';
+        once('edit-refresh', refresh, form).forEach((input) => {
           // Keep track of the element that was focused prior to triggering the
           // mousedown event on the hidden submit button.
           let returnFocus = {
             drupalSelector: null,
             scrollY: null,
           };
-          // Use jQuery on to listen as the mousedown event is propagated by
-          // jQuery trigger().
-          $(input).on('mousedown', () => {
+          input.addEventListener('mousedown', () => {
             returnFocus = {
               drupalSelector: document.activeElement.hasAttribute(
                 'data-drupal-selector',
@@ -306,11 +319,11 @@
             if (returnFocus.drupalSelector) {
               // Refocus the element that lost focus due to this hidden submit
               // button being triggered by a mousedown event.
-              document
+              form
                 .querySelector(
-                  `[data-drupal-selector="${returnFocus.drupalSelector}"]`,
+                  `[data-drupal-selector="${CSS.escape(returnFocus.drupalSelector)}"]`,
                 )
-                .focus();
+                ?.focus();
             }
             // Ensure the scroll position is the same as when the input was
             // initially changed.
@@ -320,11 +333,19 @@
             returnFocus = {};
           });
         });
-        $('input[data-drupal-selector="edit-refresh"]').trigger('mousedown');
+        form
+          .querySelector(refresh)
+          ?.dispatchEvent(
+            new MouseEvent('mousedown', { bubbles: true, cancelable: true }),
+          );
 
         // Disabled elements do not appear in POST ajax data, so we mark the
         // elements disabled only after firing the request.
-        $(ajaxElements).prop('disabled', true);
+        ajaxElements.forEach((element) => {
+          if (element) {
+            element.disabled = true;
+          }
+        });
       }
     },
   };
@@ -357,11 +378,15 @@
     this.region = data.region;
     this.tableDrag = data.tableDrag;
     this.defaultPlugin = data.defaultPlugin;
-    this.$pluginSelect = $(row).find('.field-plugin-type');
-    this.$regionSelect = $(row).find('select.field-region');
+    this.pluginSelect = row.querySelector('.field-plugin-type');
+    this.regionSelect = row.querySelector('select.field-region');
 
     // Attach change listeners to select and input elements in the row.
-    $(row).find('select, input').on('change', Drupal.fieldUIOverview.onChange);
+    row
+      .querySelectorAll('select, input')
+      .forEach((input) =>
+        input.addEventListener('change', Drupal.fieldUIOverview.onChange),
+      );
 
     return this;
   };
@@ -374,9 +399,7 @@
      *   Either 'hidden' or 'content'.
      */
     getRegion() {
-      if (this.$regionSelect.length) {
-        return this.$regionSelect[0].value;
-      }
+      return this.regionSelect?.value;
     },
 
     /**
@@ -402,35 +425,22 @@
       // Replace dashes with underscores.
       region = region.replace(/-/g, '_');
 
-      if (this.$regionSelect.length) {
+      if (this.regionSelect) {
         // Set the region of the select list.
-        this.$regionSelect[0].value = region;
+        this.regionSelect.value = region;
       }
 
       // Restore the formatter back to the default formatter only if it was
       // disabled previously. Pseudo-fields do not have default formatters,
       // we just return to 'visible' for those.
-      if (this.region === 'hidden') {
-        const pluginSelect =
-          typeof this.$pluginSelect.find('option')[0] !== 'undefined'
-            ? this.$pluginSelect.find('option')[0].value
-            : undefined;
-        const value =
-          typeof this.defaultPlugin !== 'undefined'
-            ? this.defaultPlugin
-            : pluginSelect;
-
-        if (typeof value !== 'undefined') {
-          if (this.$pluginSelect.length) {
-            this.$pluginSelect[0].value = value;
-          }
+      if (this.region === 'hidden' && this.pluginSelect) {
+        const value = this.defaultPlugin ?? this.pluginSelect.options[0]?.value;
+        if (value !== undefined) {
+          this.pluginSelect.value = value;
         }
       }
 
-      const refreshRows = {};
-      refreshRows[this.name] = this.$pluginSelect.get(0);
-
-      return refreshRows;
+      return { [this.name]: this.pluginSelect };
     },
   };
 
@@ -440,57 +450,50 @@
    * @type {Drupal~behavior}
    */
   Drupal.behaviors.tableFilterByText = {
-    attach() {
-      const [input] = once('table-filter-text', '.js-table-filter-text');
-      if (!input) {
-        return;
-      }
-      const $table = $(input.getAttribute('data-table'));
-      let $rows;
-      let searching = false;
+    attach(context) {
+      once('table-filter-text', '.js-table-filter-text', context).forEach(
+        (input) => {
+          const table = (input.form || context).querySelector(
+            input.dataset.table,
+          );
+          if (!table) {
+            return;
+          }
+          const rows = table.querySelectorAll('tbody tr');
+          let searching = false;
 
-      function filterRows(e) {
-        const query = e.target.value;
-        function showRow(index, row) {
-          const sources = row.querySelectorAll('.form-item');
-          let sourcesConcat = '';
-          // Concatenate the textContent of the elements in the row, with a
-          // space in between.
-          sources.forEach((item) => {
-            sourcesConcat += ` ${item.textContent}`;
-          });
-          // Make it case-insensitive.
-          const textMatch = sourcesConcat
-            .toLowerCase()
-            .includes(query.toLowerCase());
-          $(row).closest('tr').toggle(textMatch);
-        }
+          function filterRows(event) {
+            const query = event.target.value.toLowerCase();
+            if (query.length > 0) {
+              searching = true;
+              rows.forEach((row) => {
+                const text = Array.from(
+                  row.querySelectorAll('.form-item'),
+                  (item) => ` ${item.textContent}`,
+                ).join('');
+                row.style.display = text.toLowerCase().includes(query)
+                  ? ''
+                  : 'none';
+              });
+            } else if (searching) {
+              searching = false;
+              rows.forEach((row) => {
+                row.style.display = '';
+              });
+            }
+          }
 
-        // Filter if the length of the query is at least 1 character.
-        if (query.length > 0) {
-          searching = true;
-          $rows.each(showRow);
-        } else if (searching) {
-          searching = false;
-          $rows.show();
-        }
-      }
+          function preventEnterKey(event) {
+            if (event.key === 'Enter') {
+              event.preventDefault();
+              event.stopPropagation();
+            }
+          }
 
-      function preventEnterKey(event) {
-        if (event.key === 'Enter') {
-          event.preventDefault();
-          event.stopPropagation();
-        }
-      }
-
-      if ($table.length) {
-        $rows = $table.find('tbody tr');
-
-        $(input).on({
-          keyup: debounce(filterRows, 200),
-          keydown: preventEnterKey,
-        });
-      }
+          input.addEventListener('keyup', debounce(filterRows, 200));
+          input.addEventListener('keydown', preventEnterKey);
+        },
+      );
     },
   };
 
@@ -508,9 +511,10 @@
       once('field-click-to-select', '.js-click-to-select', context).forEach(
         (clickToSelectEl) => {
           const input = clickToSelectEl.querySelector('input');
-          if (input) {
-            Drupal.behaviors.clickToSelect.clickHandler(clickToSelectEl, input);
+          if (!input) {
+            return;
           }
+          this.clickHandler(clickToSelectEl, input);
           if (input.classList.contains('error')) {
             clickToSelectEl.classList.add('error');
           }
@@ -522,16 +526,24 @@
     },
     // Adds click event listener to the field card.
     clickHandler(clickToSelectEl, input) {
-      $(clickToSelectEl).on('click', (event) => {
+      clickToSelectEl.addEventListener('click', (event) => {
         const clickToSelect = event.target.closest('.js-click-to-select');
         this.selectHandler(clickToSelect, input);
-        $(input).trigger('updateOptions');
+        input.dispatchEvent(
+          new Event('updateOptions', { bubbles: true, cancelable: true }),
+        );
       });
     },
     // Handles adding and removing classes for the different states.
     selectHandler(clickToSelect, input) {
-      $(input).on('focus', () => clickToSelect.classList.add('focus'));
-      $(input).on('blur', () => clickToSelect.classList.remove('focus'));
+      once('field-card-focus', input).forEach(() => {
+        input.addEventListener('focus', () =>
+          clickToSelect.classList.add('focus'),
+        );
+        input.addEventListener('blur', () =>
+          clickToSelect.classList.remove('focus'),
+        );
+      });
       input.checked = true;
       document
         .querySelectorAll('.js-click-to-select.selected')
@@ -550,4 +562,4 @@
       }, 0);
     },
   };
-})(jQuery, Drupal, drupalSettings, Drupal.debounce);
+})(Drupal, Drupal.debounce, once);

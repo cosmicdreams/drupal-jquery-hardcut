@@ -35,33 +35,63 @@ class ElementsTableSelectTest extends WebDriverTestBase {
     $page = $session->getPage();
     for ($i = 1; $i <= 3; $i++) {
       $row = 'row' . $i;
-      $page->hasUncheckedField($row);
+      $this->assertTrue($page->hasUncheckedField($row));
       $page->checkField($row);
       $this->assertSession()->assertWaitOnAjaxRequest();
       // Check current row and previous rows are checked.
       for ($j = 1; $j <= $i; $j++) {
         $other_row = 'row' . $j;
-        $page->hasCheckedField($other_row);
+        $this->assertTrue($page->hasCheckedField($other_row));
       }
     }
 
-    // Test radios (#multiple == FALSE).
+    // Test radios (#multiple == FALSE). A rebuild can assign new element IDs.
     $this->drupalGet('form_test/tableselect/multiple-false');
+    $assert = $this->assertSession();
     for ($i = 1; $i <= 3; $i++) {
-      $row = 'input[value="row' . $i . '"]';
-      $page->hasUncheckedField($row);
+      $row = 'input[type="radio"][value="row' . $i . '"]';
+      $this->assertFalse($assert->elementExists('css', $row)->isChecked());
       $this->click($row);
-      $this->assertSession()->assertWaitOnAjaxRequest();
-      $page->hasCheckedField($row);
-      // Check other rows are not checked.
+      $assert->assertWaitOnAjaxRequest();
+      $this->assertTrue($assert->elementExists('css', $row)->isChecked());
+      // Check other rows are unchecked.
       for ($j = 1; $j <= 3; $j++) {
-        if ($j == $i) {
+        if ($j === $i) {
           continue;
         }
-        $other_row = 'edit-tableselect-row' . $j;
-        $page->hasUncheckedField($other_row);
+        $other_row = 'input[type="radio"][value="row' . $j . '"]';
+        $this->assertFalse($assert->elementExists('css', $other_row)->isChecked());
       }
     }
+  }
+
+  /**
+   * Tests that a selection range updates rows without emitting change events.
+   */
+  public function testSelectionRange(): void {
+    $this->drupalGet('form_test/tableselect/disabled-rows/multiple-true');
+    $trace = $this->getSession()->evaluateScript(<<<'JS'
+      (() => {
+        const checkboxes = ['row1', 'row2', 'row3'].map((value) =>
+          document.querySelector(`input[type="checkbox"][value="${value}"]`),
+        );
+        const rows = checkboxes.map((checkbox) => checkbox.closest('tr'));
+        let changes = 0;
+        rows.forEach((row) => row.addEventListener('change', () => { changes += 1; }));
+        const read = () => checkboxes.map((checkbox, index) => [
+          checkbox.checked, checkbox.disabled, rows[index].classList.contains('selected'),
+        ]);
+        Drupal.tableSelectRange(rows[0], rows[2], true);
+        const forward = read();
+        Drupal.tableSelectRange(rows[2], rows[0], false);
+        return [forward, read(), changes];
+      })()
+      JS);
+    $this->assertSame([
+      [[FALSE, FALSE, FALSE], [TRUE, TRUE, TRUE], [TRUE, FALSE, TRUE]],
+      [[FALSE, FALSE, FALSE], [FALSE, TRUE, FALSE], [TRUE, FALSE, TRUE]],
+      0,
+    ], $trace);
   }
 
   /**
@@ -102,16 +132,28 @@ class ElementsTableSelectTest extends WebDriverTestBase {
     $assert_row_disabled(2);
     $assert_row_enabled(3);
 
-    // Table select with checkboxes allow selection of all options.
+    // A select-all interaction delivers native changes for enabled rows.
+    $this->getSession()->executeScript(<<<'JS'
+      window.rowChanges = [];
+      document.querySelector('table tbody').addEventListener('change', (event) => {
+        window.rowChanges.push([event.target.value, event.target.checked]);
+      });
+      JS);
+
+    // Table select with checkboxes allows selection of all enabled options.
     $select_all_checkbox = $this->assertSession()->elementExists('xpath', '//table/thead/tr/th/input');
     $select_all_checkbox->check();
 
     // Check that the disabled option was not enabled or selected.
     $page = $this->getSession()->getPage();
-    $page->hasCheckedField('row1');
-    $page->hasUncheckedField('row2');
+    $this->assertTrue($page->hasCheckedField('row1'));
+    $this->assertTrue($page->hasUncheckedField('row2'));
     $assert_row_disabled(2);
-    $page->hasCheckedField('row3');
+    $this->assertTrue($page->hasCheckedField('row3'));
+    $this->assertSame(
+      [['row1', TRUE], ['row3', TRUE]],
+      $this->getSession()->evaluateScript('window.rowChanges'),
+    );
   }
 
 }

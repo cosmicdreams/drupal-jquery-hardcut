@@ -33,7 +33,14 @@ trait AjaxFormHelperTrait {
       ];
       $form['#sorted'] = FALSE;
       $response = new AjaxResponse();
-      $response->addCommand(new ReplaceCommand('[data-drupal-selector="' . $form['#attributes']['data-drupal-selector'] . '"]', $form));
+      // The submitted build ID identifies one rendered copy of the form. If
+      // the response updates that ID, the update command runs before this one.
+      $build_id = isset($form['#build_id_old'])
+        ? $form['#build_id']
+        : ($form_state->getUserInput()['form_build_id'] ?? $form['#build_id']);
+      if (is_string($build_id) && preg_match('/^[a-zA-Z0-9_-]+$/D', $build_id)) {
+        $response->addCommand(new ReplaceCommand('form:has(input[name="form_build_id"][value="' . $build_id . '"])', $form));
+      }
     }
     else {
       $response = $this->successfulAjaxSubmit($form, $form_state);

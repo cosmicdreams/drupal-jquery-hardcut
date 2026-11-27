@@ -3,7 +3,7 @@
  * Defines JavaScript behaviors for the media type form.
  */
 
-(function ($, Drupal) {
+(function (Drupal) {
   /**
    * Behaviors for setting summaries on media type form.
    *
@@ -14,43 +14,44 @@
    */
   Drupal.behaviors.mediaTypeFormSummaries = {
     attach(context) {
-      const $context = $(context);
       // Provide the vertical tab summaries.
-      $context.find('#edit-workflow').drupalSetSummary((context) => {
-        const values = [];
-        $(context)
-          .find('input[name^="options"]:checked')
-          .parent()
-          .each(function () {
-            values.push(
-              Drupal.checkPlain($(this).find('label')[0].textContent),
+      Drupal.form.setSummary(
+        context.querySelectorAll('#edit-workflow'),
+        (context) => {
+          const values = [];
+          context
+            .querySelectorAll('input[name^="options"]:checked')
+            .forEach((input) =>
+              values.push(
+                Drupal.checkPlain(
+                  input.parentElement.querySelector('label').textContent,
+                ),
+              ),
             );
-          });
-        if ($(context).find('#edit-options-status:checked').length === 0) {
-          values.unshift(Drupal.t('Not published'));
-        }
-        return values.join(', ');
-      });
-      $(context)
-        .find('#edit-language')
-        .drupalSetSummary((context) => {
+          if (!context.querySelector('#edit-options-status:checked')) {
+            values.unshift(Drupal.t('Not published'));
+          }
+          return values.join(', ');
+        },
+      );
+      Drupal.form.setSummary(
+        context.querySelectorAll('#edit-language'),
+        (context) => {
           const values = [];
 
           values.push(
-            $(context).find(
-              '.js-form-item-language-configuration-langcode select option:selected',
-            )[0].textContent,
+            context.querySelector(
+              '.js-form-item-language-configuration-langcode select option:checked',
+            ).textContent,
           );
 
-          $(context)
-            .find('input:checked')
-            .next('label')
-            .each(function () {
-              values.push(Drupal.checkPlain(this.textContent));
-            });
+          context.querySelectorAll('input:checked + label').forEach((label) => {
+            values.push(Drupal.checkPlain(label.textContent));
+          });
 
           return values.join(', ');
-        });
+        },
+      );
     },
   };
-})(jQuery, Drupal);
+})(Drupal);

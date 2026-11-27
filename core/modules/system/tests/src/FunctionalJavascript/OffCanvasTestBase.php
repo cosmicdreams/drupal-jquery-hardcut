@@ -80,7 +80,7 @@ abstract class OffCanvasTestBase extends WebDriverTestBase {
   protected function waitForOffCanvasToOpen(string $position = 'side') {
     $this->waitForOffCanvasArea();
     // Check that the canvas is positioned on the side.
-    $this->assertSession()->elementExists('css', '.ui-dialog-position-' . $position);
+    $this->assertSession()->elementExists('css', '.drupal-dialog-position-' . $position);
   }
 
   /**
@@ -97,7 +97,7 @@ abstract class OffCanvasTestBase extends WebDriverTestBase {
    *   The off-canvas dialog element.
    */
   protected function getOffCanvasDialog() {
-    $off_canvas_dialog = $this->getSession()->getPage()->find('css', '.ui-dialog[aria-describedby="drupal-off-canvas"]');
+    $off_canvas_dialog = $this->getSession()->getPage()->find('css', '#drupal-off-canvas-wrapper');
     $this->assertEquals(FALSE, empty($off_canvas_dialog), 'The off-canvas dialog was found.');
     return $off_canvas_dialog;
   }

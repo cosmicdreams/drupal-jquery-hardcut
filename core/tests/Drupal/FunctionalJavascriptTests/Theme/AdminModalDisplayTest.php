@@ -91,11 +91,11 @@ class AdminModalDisplayTest extends MediaLibraryTestBase {
     // Wait for the file upload to be completed.
     // Copied from \Drupal\Tests\media_library\FunctionalJavascript\MediaLibraryTestBase::assertMediaAdded.
     $selector = '.js-media-library-add-form-added-media';
-    $this->assertJsCondition('jQuery("' . $selector . '").is(":focus")');
+    $this->assertJsCondition('document.activeElement.matches("' . $selector . '")');
 
     // Assert that the 'add another item' button is not in the dialog footer.
-    $assert_session->elementNotExists('css', '.ui-dialog-buttonset .field-add-more-submit');
-    $assert_session->elementExists('css', '.ui-dialog-content .field-add-more-submit');
+    $assert_session->elementNotExists('css', '.drupal-dialog-buttonset .field-add-more-submit');
+    $assert_session->elementExists('css', '.drupal-dialog-content .field-add-more-submit');
   }
 
 }

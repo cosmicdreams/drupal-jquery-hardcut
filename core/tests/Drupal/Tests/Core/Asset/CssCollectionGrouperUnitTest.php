@@ -59,7 +59,7 @@ class CssCollectionGrouperUnitTest extends UnitTestCase {
         'basename' => 'js.module.css',
         'library' => 'system/base',
       ],
-      'jquery.ui.core.css' => [
+      'screen.css' => [
         'group' => -100,
         'type' => 'file',
         'weight' => 0.004,
@@ -67,8 +67,8 @@ class CssCollectionGrouperUnitTest extends UnitTestCase {
         'preprocess' => TRUE,
         'category' => 'base',
         'aggregate_target' => ['css' => FALSE],
-        'data' => 'core/misc/ui/themes/base/jquery.ui.core.css',
-        'basename' => 'jquery.ui.core.css',
+        'data' => 'core/modules/system/screen.css',
+        'basename' => 'screen.css',
         'library' => 'system/base',
       ],
       'field.css' => [
@@ -133,7 +133,7 @@ class CssCollectionGrouperUnitTest extends UnitTestCase {
     $this->assertCount(4, $group['items']);
     $this->assertContainsEquals($css_assets['system.base.css'], $group['items']);
     $this->assertContainsEquals($css_assets['js.module.css'], $group['items']);
-    $this->assertContainsEquals($css_assets['jquery.ui.core.css'], $group['items']);
+    $this->assertContainsEquals($css_assets['screen.css'], $group['items']);
     $this->assertContainsEquals($css_assets['field.css'], $group['items']);
 
     // Check group 3.

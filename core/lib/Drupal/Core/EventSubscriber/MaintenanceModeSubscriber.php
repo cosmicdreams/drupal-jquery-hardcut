@@ -66,12 +66,10 @@ class MaintenanceModeSubscriber implements EventSubscriberInterface {
         // Display a message if the logged-in user has access to the site in
         // maintenance mode. Don't show maintenance message:
         // - on AJAX requests.
-        // - on Iframe uploads.
         // - on the maintenance mode settings page.
         if ($route_match->getRouteName() != 'system.site_maintenance_mode') {
           $show_message = $route_match->getRouteName() != 'system.site_maintenance_mode' &&
-            !$event->getRequest()->isXmlHttpRequest() &&
-            $event->getRequest()->request->get('ajax_iframe_upload', FALSE) === FALSE;
+            !$event->getRequest()->isXmlHttpRequest();
 
           if ($show_message) {
             if ($this->account->hasPermission('administer site configuration')) {

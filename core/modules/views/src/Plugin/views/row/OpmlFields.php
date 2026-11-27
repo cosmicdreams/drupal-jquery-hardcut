@@ -87,7 +87,7 @@ class OpmlFields extends RowPluginBase {
       '#default_value' => $this->options['description_field'],
       '#states' => [
         'visible' => [
-          ':input[name="row_options[type_field]"]' => ['value' => 'rss'],
+          '[name="row_options[type_field]"]' => ['value' => 'rss'],
         ],
       ],
     ];
@@ -99,7 +99,7 @@ class OpmlFields extends RowPluginBase {
       '#default_value' => $this->options['html_url_field'],
       '#states' => [
         'visible' => [
-          ':input[name="row_options[type_field]"]' => ['value' => 'rss'],
+          '[name="row_options[type_field]"]' => ['value' => 'rss'],
         ],
       ],
     ];
@@ -111,7 +111,7 @@ class OpmlFields extends RowPluginBase {
       '#default_value' => $this->options['language_field'],
       '#states' => [
         'visible' => [
-          ':input[name="row_options[type_field]"]' => ['value' => 'rss'],
+          '[name="row_options[type_field]"]' => ['value' => 'rss'],
         ],
       ],
     ];
@@ -123,7 +123,7 @@ class OpmlFields extends RowPluginBase {
       '#default_value' => $this->options['xml_url_field'],
       '#states' => [
         'visible' => [
-          ':input[name="row_options[type_field]"]' => ['value' => 'rss'],
+          '[name="row_options[type_field]"]' => ['value' => 'rss'],
         ],
       ],
     ];
@@ -135,7 +135,7 @@ class OpmlFields extends RowPluginBase {
       '#default_value' => $this->options['url_field'],
       '#states' => [
         'visible' => [
-          ':input[name="row_options[type_field]"]' => [
+          '[name="row_options[type_field]"]' => [
             ['value' => 'link'],
             ['value' => 'include'],
           ],

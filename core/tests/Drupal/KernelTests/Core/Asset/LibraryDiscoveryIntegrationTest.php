@@ -4,12 +4,16 @@ declare(strict_types=1);
 
 namespace Drupal\KernelTests\Core\Asset;
 
+use Drupal\Core\Asset\AttachedAssets;
 use Drupal\Core\Asset\Exception\InvalidLibrariesExtendSpecificationException;
 use Drupal\Core\Asset\Exception\InvalidLibrariesOverrideSpecificationException;
+use Drupal\Core\Cache\CacheCollectorInterface;
+use Drupal\Core\Theme\ActiveTheme;
 use Drupal\KernelTests\KernelTestBase;
 use PHPUnit\Framework\Attributes\Group;
 use PHPUnit\Framework\Attributes\IgnoreDeprecations;
 use PHPUnit\Framework\Attributes\RunTestsInSeparateProcesses;
+use PHPUnit\Framework\Attributes\TestWith;
 
 /**
  * Tests the library discovery and library discovery parser.
@@ -189,6 +193,307 @@ class LibraryDiscoveryIntegrationTest extends KernelTestBase {
     // in the sub theme.
     $this->assertNoAssetInLibrary('core/misc/dialog/dialog.js', 'core', 'drupal.dialog', 'js');
     $this->assertAssetInLibrary('core/modules/system/tests/themes/test_base_theme/js/loadjs.min.js', 'core', 'loadjs', 'js');
+  }
+
+  /**
+   * Tests the cascade order of widget stylesheet overrides.
+   */
+  #[TestWith([FALSE], 'pinned declarations')]
+  #[TestWith([TRUE], 'moved declarations')]
+  #[IgnoreDeprecations]
+  public function testWidgetCssOverrideOrdering(bool $moved): void {
+    // Use existing stylesheets as stand-ins for the vendor files.
+    $components = '/core/modules/system/css/components';
+    $legacy_css = [
+      'shared' => "$components/align.module.css",
+      'theme' => "$components/clearfix.module.css",
+      'dialog' => "$components/hidden.module.css",
+      'button' => "$components/js.module.css",
+      'resizable' => "$components/container-inline.module.css",
+      'autocomplete' => "$components/system-status-counter.css",
+    ];
+    $themes = 'core/modules/system/tests/themes';
+    $base_theme = "$themes/test_base_theme";
+    $subtheme = "$themes/test_subtheme";
+    $shared_options = ['weight' => 4, 'media' => 'print', 'preprocess' => FALSE];
+    $dialog_options = ['weight' => 4, 'media' => 'screen'];
+    $libraries = [
+      'widget_shared' => [
+        'css' => [
+          'component' => [$legacy_css['shared'] => $shared_options],
+          'theme' => [$legacy_css['theme'] => []],
+        ],
+      ],
+      'widget_dialog' => [
+        'css' => [
+          'component' => [
+            $legacy_css['dialog'] => $dialog_options,
+            $legacy_css['button'] => [],
+            $legacy_css['resizable'] => ['weight' => 4],
+          ],
+        ],
+        'dependencies' => ['theme_test/widget_shared'],
+      ],
+      'widget_autocomplete' => [
+        'css' => [
+          'component' => [$legacy_css['autocomplete'] => ['weight' => 4]],
+        ],
+        'dependencies' => ['theme_test/widget_shared'],
+      ],
+    ];
+    $resizable_css = ltrim($legacy_css['resizable'], '/');
+    $autocomplete_css = ltrim($legacy_css['autocomplete'], '/');
+    $native_dialog_css = 'core/misc/components/ajax-progress.module.css';
+    $native_autocomplete_css = 'core/misc/components/autocomplete-loading.module.css';
+    if ($moved) {
+      $libraries = $this->moveWidgetStylesheets($libraries, $legacy_css, $native_dialog_css, $native_autocomplete_css);
+    }
+    $this->container->get('state')->set('theme_test_library_info_alter theme_test', $libraries);
+
+    $overrides = [
+      $base_theme => [
+        'theme_test/widget_shared' => [
+          'css' => [
+            'component' => [$legacy_css['shared'] => 'css/base-shared.css'],
+            'theme' => [$legacy_css['theme'] => FALSE],
+          ],
+        ],
+        'theme_test/widget_dialog' => [
+          'css' => [
+            'component' => [
+              $legacy_css['dialog'] => 'css/base-dialog.css',
+              $legacy_css['button'] => FALSE,
+            ],
+          ],
+        ],
+      ],
+      $subtheme => [
+        'theme_test/widget_shared' => [
+          'css' => [
+            'component' => [
+              $legacy_css['shared'] => 'css/ignored.css',
+              "/$base_theme/css/base-shared.css" => 'css/sub-shared.css',
+            ],
+          ],
+        ],
+        'theme_test/widget_dialog' => [
+          'css' => [
+            'component' => [
+              $legacy_css['dialog'] => 'css/ignored.css',
+              $legacy_css['button'] => 'css/ignored.css',
+              "/$base_theme/css/base-dialog.css" => 'css/sub-dialog.css',
+            ],
+          ],
+        ],
+      ],
+    ];
+    $dialog = 'theme_test/widget_dialog';
+    $autocomplete = 'theme_test/widget_autocomplete';
+    $resolver = $this->container->get('asset.resolver');
+    $this->assertInstanceOf(CacheCollectorInterface::class, $this->libraryDiscovery);
+    foreach ([$base_theme, $subtheme] as $theme_path) {
+      $active_theme = new ActiveTheme([
+        'name' => basename($theme_path),
+        'path' => $theme_path,
+        'extension' => $this->container->get('extension.list.theme')->get(basename($theme_path)),
+        'libraries_override' => $theme_path === $base_theme ? [$base_theme => $overrides[$base_theme]] : $overrides,
+      ]);
+      $this->container->get('theme.manager')->setActiveTheme($active_theme);
+      $this->libraryDiscovery->reset();
+      $prefix = $theme_path === $base_theme ? 'base' : 'sub';
+      $shared_css = "$theme_path/css/$prefix-shared.css";
+      $dialog_css = "$theme_path/css/$prefix-dialog.css";
+      $dialog_neighbor = $moved ? $native_dialog_css : $resizable_css;
+      $autocomplete_neighbor = $moved ? $native_autocomplete_css : $autocomplete_css;
+
+      $cases = [
+        [[$dialog], [$shared_css, $dialog_neighbor, $dialog_css]],
+        [[$autocomplete], [$shared_css, $autocomplete_neighbor]],
+        [[$dialog, $autocomplete, $dialog], [$shared_css, $autocomplete_neighbor, $dialog_neighbor, $dialog_css]],
+      ];
+      if ($moved) {
+        $legacy = 'theme_test/widget_dialog_legacy';
+        $cases[] = [[$legacy], [$shared_css, $resizable_css, $dialog_css]];
+        $cases[] = [
+          [$legacy, $dialog, $autocomplete, $legacy],
+          [$shared_css, $autocomplete_neighbor, $dialog_neighbor, $dialog_css, $resizable_css],
+        ];
+      }
+      foreach ($cases as [$attachments, $expected]) {
+        $assets = (new AttachedAssets())->setLibraries($attachments);
+        $css = $resolver->getCssAssets($assets, FALSE);
+        $this->assertSame($expected, array_keys($css));
+        foreach ($shared_options + ['category' => 'component'] as $option => $value) {
+          $this->assertSame($value, $css[$shared_css][$option]);
+        }
+        if (isset($css[$dialog_css])) {
+          foreach ($dialog_options + ['category' => 'component'] as $option => $value) {
+            $this->assertSame($value, $css[$dialog_css][$option]);
+          }
+        }
+        $this->container->get('cache.memory')->deleteAll();
+        $this->assertSame($css, $resolver->getCssAssets(clone $assets, FALSE));
+      }
+      $assets = (new AttachedAssets())->setLibraries([$dialog])->setAlreadyLoadedLibraries([$autocomplete]);
+      $this->assertSame([$dialog_neighbor, $dialog_css], array_keys($resolver->getCssAssets($assets, FALSE)));
+    }
+
+    if ($moved) {
+      // Without an override, neither native component delivers vendor CSS.
+      $this->activateTheme('test_theme');
+      $assets = (new AttachedAssets())->setLibraries([$dialog, $autocomplete]);
+      $this->assertSame([$native_autocomplete_css, $native_dialog_css], array_keys($resolver->getCssAssets($assets, FALSE)));
+    }
+  }
+
+  /**
+   * Simulates the widgets after their vendor stylesheets have moved.
+   */
+  private function moveWidgetStylesheets(array $libraries, array $legacy_css, string $native_dialog_css, string $native_autocomplete_css): array {
+    $deprecation = [
+      'deprecation_version' => 'drupal:12.0.0',
+      'removed_version' => 'drupal:13.0.0',
+      'deprecation_link' => 'https://example.com',
+    ];
+
+    // The legacy widgets keep their vendor files in the compatibility closure.
+    $libraries['widget_dialog_legacy'] = $libraries['widget_dialog'];
+    $libraries['widget_dialog_legacy']['after'] = ['theme_test/widget_dialog'];
+    foreach (array_keys($libraries['widget_dialog']['css']['component']) as $file) {
+      $libraries['widget_dialog_legacy']['moved_files']['theme_test/widget_dialog']['css']['component'][$file] = ['component' => $file];
+    }
+    $libraries['widget_dialog_legacy']['moved_files']['theme_test/widget_dialog'] += $deprecation;
+
+    // A shared native dependency maintains the old cascade order and also
+    // prevents a second delivery when another widget is loaded later.
+    foreach ($libraries['widget_shared']['css'] as $category => $files) {
+      foreach ($files as $file => $options) {
+        $libraries['widget_shared_overrides']['css'][$category][$file] = $options + ['override_only' => TRUE];
+        $libraries['widget_shared_overrides']['moved_files']['theme_test/widget_shared']['css'][$category][$file] = [$category => $file];
+      }
+    }
+    $libraries['widget_shared_overrides']['moved_files']['theme_test/widget_shared'] += $deprecation;
+
+    $libraries['widget_dialog']['css']['component'][$legacy_css['dialog']]['override_only'] = TRUE;
+    $libraries['widget_dialog']['css']['component'][$legacy_css['button']]['override_only'] = TRUE;
+    unset($libraries['widget_dialog']['css']['component'][$legacy_css['resizable']]);
+    $libraries['widget_dialog']['css']['component']["/$native_dialog_css"] = ['weight' => 4];
+    $libraries['widget_autocomplete']['css']['component'] = ["/$native_autocomplete_css" => ['weight' => 4]];
+    $libraries['widget_dialog']['dependencies'] = $libraries['widget_autocomplete']['dependencies'] = ['theme_test/widget_shared_overrides'];
+    return $libraries;
+  }
+
+  /**
+   * Tests explicit and inherited overrides of moved stylesheets.
+   */
+  #[IgnoreDeprecations]
+  public function testMovedStylesheetOverridePrecedence(): void {
+    $themes = 'core/modules/system/tests/themes';
+    $base = "$themes/test_base_theme";
+    $sub = "$themes/test_subtheme";
+    $leaf = "$themes/test_subsubtheme";
+    $legacy = 'theme_test/moved_legacy';
+    $native = 'theme_test/moved_native';
+    $same = '/core/modules/system/css/components/align.module.css';
+    $old = '/core/modules/system/css/components/hidden.module.css';
+    $new = '/core/misc/components/ajax-progress.module.css';
+    $this->container->get('state')->set('theme_test_library_info_alter theme_test', [
+      'moved_legacy' => ['css' => ['component' => [$same => [], $old => []]]],
+      'moved_native' => [
+        'css' => ['component' => [$same => ['override_only' => TRUE], $new => ['override_only' => TRUE]]],
+        'moved_files' => [
+          $legacy => [
+            'deprecation_version' => 'drupal:12.0.0',
+            'removed_version' => 'drupal:13.0.0',
+            'deprecation_link' => 'https://example.com',
+            'css' => ['component' => [$same => ['component' => $same], $old => ['component' => $new]]],
+          ],
+        ],
+      ],
+    ]);
+    $overrides = [
+      $base => [
+        $legacy => ['css' => ['component' => [$same => 'css/ignored.css', $old => 'css/base.css']]],
+        $native => ['css' => ['component' => [$same => FALSE]]],
+      ],
+      $sub => [
+        $legacy => ['css' => ['component' => ["/$base/css/base.css" => 'css/ignored.css']]],
+        $native => ['css' => ['component' => [$new => 'css/sub.css']]],
+      ],
+      $leaf => [
+        $legacy => ['css' => ['component' => ["/$sub/css/sub.css" => 'css/leaf.css']]],
+      ],
+    ];
+    $chain = [];
+    $this->assertInstanceOf(CacheCollectorInterface::class, $this->libraryDiscovery);
+    foreach ([$base => 'base', $sub => 'sub', $leaf => 'leaf'] as $theme_path => $filename) {
+      $chain[$theme_path] = $overrides[$theme_path];
+      $name = basename($theme_path);
+      $this->container->get('theme.manager')->setActiveTheme(new ActiveTheme([
+        'name' => $name,
+        'path' => $theme_path,
+        'extension' => $this->container->get('extension.list.theme')->get($name),
+        'libraries_override' => $chain,
+      ]));
+      $this->libraryDiscovery->reset();
+      $assets = (new AttachedAssets())->setLibraries([$native]);
+      $this->assertSame(["$theme_path/css/$filename.css"], array_keys($this->container->get('asset.resolver')->getCssAssets($assets, FALSE)));
+    }
+  }
+
+  /**
+   * Tests positional script overrides and inheritance.
+   */
+  public function testScriptOverrideOrdering(): void {
+    $themes = 'core/modules/system/tests/themes';
+    $base = "$themes/test_base_theme";
+    $sub = "$themes/test_subtheme";
+    $source = '/core/misc/example.js';
+    $next = '/core/misc/example-next.js';
+    $final = '/core/misc/example-final.js';
+    $base_file = "/$base/base.js";
+    $sub_file = "/$sub/sub.js";
+    $scripts = [$source => ['preserve_override_order' => TRUE], $next => [], $final => []];
+    $this->container->get('state')->set('theme_test_library_info_alter theme_test', [
+      'ordered_scripts' => ['js' => $scripts],
+      'ordinary_scripts' => ['js' => [$source => []] + $scripts],
+    ]);
+
+    $libraries = [
+      'theme_test/ordered_scripts' => ['js' => [$source => 'base.js']],
+      'theme_test/ordinary_scripts' => ['js' => [$source => 'base.js']],
+    ];
+    $cases = [
+      'unmodified' => [[], [], [$source, $next, $final]],
+      'in-place replacement' => [$libraries, [], [$base_file, $next, $final]],
+      'canonical target' => [$libraries, [$source => 'sub.js'], [$sub_file, $next, $final]],
+      'replacement target' => [$libraries, [$base_file => 'sub.js'], [$sub_file, $next, $final]],
+      'exact target wins' => [$libraries, [$source => 'ignored.js', $base_file => 'sub.js'], [$sub_file, $next, $final]],
+      'remove inherited replacement' => [$libraries, [$source => FALSE], [$next, $final]],
+      'existing destination' => [$libraries, [$source => $final], [$next, $final]],
+    ];
+    $this->assertInstanceOf(CacheCollectorInterface::class, $this->libraryDiscovery);
+    $normalize = static fn (array $paths): array => array_map(static fn (string $path): string => substr($path, 1), $paths);
+    foreach ($cases as $label => [$base_overrides, $sub_scripts, $expected]) {
+      $this->container->get('theme.manager')->setActiveTheme(new ActiveTheme([
+        'name' => 'test_subtheme',
+        'path' => $sub,
+        'extension' => $this->container->get('extension.list.theme')->get('test_subtheme'),
+        'libraries_override' => [
+          $base => $base_overrides,
+          $sub => ['theme_test/ordered_scripts' => ['js' => $sub_scripts]],
+        ],
+      ]));
+      $this->libraryDiscovery->reset();
+      $assets = $this->libraryDiscovery->getLibraryByName('theme_test', 'ordered_scripts')['js'];
+      $this->assertSame($normalize($expected), array_column($assets, 'data'), $label);
+      foreach ($assets as $asset) {
+        $this->assertArrayNotHasKey('preserve_override_order', $asset);
+        $this->assertArrayNotHasKey('_overridden_source', $asset);
+      }
+      $ordinary = $this->libraryDiscovery->getLibraryByName('theme_test', 'ordinary_scripts')['js'];
+      $this->assertSame($normalize($base_overrides ? [$next, $final, $base_file] : [$source, $next, $final]), array_column($ordinary, 'data'));
+    }
   }
 
   /**

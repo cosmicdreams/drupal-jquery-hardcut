@@ -12,7 +12,7 @@ namespace Drupal\Core\Render;
  * example:
  *
  * @code
- *  $build['#attached']['library'][] = 'core/jquery';
+ *  $build['#attached']['library'][] = 'core/drupal';
  *  $build['#attached']['http_header'] = [
  *    ['Content-Type', 'application/rss+xml; charset=utf-8'],
  *  ];

@@ -1,0 +1,5 @@
+deprecation_spy:
+  js:
+    js/deprecation-spy.js: {}
+  dependencies:
+    - core/drupal

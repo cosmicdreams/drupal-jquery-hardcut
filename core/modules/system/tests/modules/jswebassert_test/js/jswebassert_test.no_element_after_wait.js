@@ -3,7 +3,7 @@
  *  Testing behavior for JSWebAssertTest.
  */
 
-(($, Drupal) => {
+((Drupal) => {
   /**
    * @type {Drupal~behavior}
    *
@@ -11,20 +11,19 @@
    *   Makes changes in the DOM to be able to test the completion of AJAX in assertWaitOnAjaxRequest.
    */
   Drupal.behaviors.jswebassert_test_wait_for_ajax_request = {
-    attach() {
-      $('#edit-test-assert-no-element-after-wait-pass').on('click', (e) => {
-        e.preventDefault();
-        setTimeout(() => {
-          $('#edit-test-assert-no-element-after-wait-pass').remove();
-        }, 500);
-      });
-
-      $('#edit-test-assert-no-element-after-wait-fail').on('click', (e) => {
-        e.preventDefault();
-        setTimeout(() => {
-          $('#edit-test-assert-no-element-after-wait-fail').remove();
-        }, 2000);
+    attach(context) {
+      const delays = {
+        'edit-test-assert-no-element-after-wait-pass': 500,
+        'edit-test-assert-no-element-after-wait-fail': 2000,
+      };
+      Object.entries(delays).forEach(([id, delay]) => {
+        once('jswebassert-remove', `#${id}`, context).forEach((button) => {
+          button.addEventListener('click', (event) => {
+            event.preventDefault();
+            setTimeout(() => button.remove(), delay);
+          });
+        });
       });
     },
   };
-})(jQuery, Drupal);
+})(Drupal);

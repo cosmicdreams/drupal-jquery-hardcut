@@ -39,12 +39,14 @@ command_promise:
   js:
     js/command_promise-ajax.js: {}
   dependencies:
-    - core/jquery
     - core/drupal
     - core/drupal.ajax
 
-global_events:
+settings-widget:
   js:
-    js/global_events.js: {}
+    js/settings-widget.js: {}
+  drupalSettings:
+    ajaxTestWidget:
+      label: 'Library default'
   dependencies:
-    - core/drupal.ajax
+    - core/drupal

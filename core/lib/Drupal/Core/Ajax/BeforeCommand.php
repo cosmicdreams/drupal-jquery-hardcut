@@ -3,18 +3,11 @@
 namespace Drupal\Core\Ajax;
 
 /**
- * An AJAX command for calling the jQuery before() method.
+ * An Ajax command for inserting content before each match.
  *
- * The 'insert/before' command instructs the client to use jQuery's before()
- * method to insert the given render array or HTML content before each of
- * elements matched by the given selector.
+ * The 'insert/before' command operates on elements that match the selector.
  *
- * This command is implemented by Drupal.AjaxCommands.prototype.insert()
- * defined in misc/ajax.js.
- *
- * @see http://docs.jquery.com/Manipulation/before#content
- *
- * @ingroup ajax
+ * @see Drupal.AjaxCommands.prototype.insert
  */
 class BeforeCommand extends InsertCommand {
 

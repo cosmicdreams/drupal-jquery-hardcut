@@ -133,6 +133,10 @@ class LibraryDiscoveryParser {
             $category_weight = 'CSS_' . strtoupper($category);
             assert(defined($category_weight), 'Invalid CSS category: ' . $category . '. See https://www.drupal.org/node/2274843.');
             foreach ($files as $source => $options) {
+              if (!empty($options['override_only'])) {
+                continue;
+              }
+              unset($options['override_only'], $options['_overridden_source']);
               if (!isset($options['weight'])) {
                 $options['weight'] = 0;
               }
@@ -150,6 +154,7 @@ class LibraryDiscoveryParser {
           if (!is_array($options)) {
             $options = [];
           }
+          unset($options['preserve_override_order'], $options['_overridden_source']);
           if ($type == 'js' && isset($options['weight']) && $options['weight'] > 0) {
             throw new \UnexpectedValueException("The $extension/$id library defines a positive weight for '$source'. Only negative weights are allowed (but should be avoided). Instead of a positive weight, specify accurate dependencies for this library.");
           }
@@ -259,6 +264,8 @@ class LibraryDiscoveryParser {
    *   external resource (e.g., //cdn.com/library.js). Full URLs
    *   (e.g., http://cdn.com/library.js) as well as URLs that use a valid
    *   stream wrapper (e.g., public://path/to/file.js) are also supported.
+   *   Set preserve_override_order: true when later scripts in the same
+   *   library must run after a theme replacement of this file.
    * - css: A list of categories for which the library provides CSS files. The
    *   available categories are:
    *   - base
@@ -274,7 +281,10 @@ class LibraryDiscoveryParser {
    *   @endcode
    *   Just like with JavaScript files, each CSS file is the key of an object
    *   that can define specific attributes. The format of the file path is the
-   *   same as for the JavaScript files.
+   *   same as for the JavaScript files. Set override_only: true on a
+   *   stylesheet removed from the library to retain its original category and
+   *   options for theme replacements. The entry emits a stylesheet only when
+   *   a theme supplies a replacement.
    *   If the JavaScript or CSS file starts with /libraries/ the
    *   library.libraries_directory_file_finder service is used to find the files
    *   in the following locations:
@@ -379,21 +389,51 @@ class LibraryDiscoveryParser {
     if (!isset($library['moved_files'])) {
       return $overrides;
     }
+    $library_id = "$extension/$library_name";
+    $explicit_css = $overrides[$library_id]['css'] ?? [];
+    // A direct override may still name the canonical destination after a base
+    // theme has replaced it. Resolve it before translating old library keys.
+    foreach ($library['css'] ?? [] as $category => $assets) {
+      foreach ($assets as $path => $options) {
+        $source = $options['_overridden_source'] ?? NULL;
+        if ($source !== NULL && isset($explicit_css[$category][$source])) {
+          $overrides[$library_id]['css'][$category][$path] ??= $explicit_css[$category][$source];
+        }
+      }
+    }
     foreach ($library['moved_files'] as $old_library_name => $moved_files) {
       $deprecation_version = $moved_files['deprecation_version'];
       $removed_version = $moved_files['removed_version'];
       $deprecation_link = $moved_files['deprecation_link'];
-      if (isset($overrides[$old_library_name]['css']) && isset($moved_files['css'])) {
-        foreach ($overrides[$old_library_name]['css'] as $key => $files) {
+      if (isset($overrides[$old_library_name]['css'], $moved_files['css']) && is_array($overrides[$library_id] ?? [])) {
+        foreach ($overrides[$old_library_name]['css'] as $category => $files) {
+          $moves = $moved_files['css'][$category] ?? [];
           foreach ($files as $original => $target) {
-            if (isset($moved_files['css'][$key][$original])) {
-              $new_key = array_key_first($moved_files['css'][$key][$original]);
-              $new_file = $moved_files['css'][$key][$original][$new_key];
-              $theme_name = $active_theme->getName();
-              // phpcs:ignore
-              @trigger_error("Targeting $old_library_name $original from $theme_name library_overrides is deprecated in $deprecation_version and will be removed in $removed_version. Target $extension/$library_name $new_file instead. See $deprecation_link", E_USER_DEPRECATED);
-              $overrides[$extension . '/' . $library_name]['css'][$new_key][$new_file] = $target;
+            $new_file = NULL;
+            $override_path = $original;
+            if (isset($moves[$original])) {
+              $new_category = array_key_first($moves[$original]);
+              $new_file = $moves[$original][$new_category];
+              $override_path = $new_file;
             }
+            else {
+              // Follow a base theme's replacement under the old library ID.
+              foreach ($library['css'] ?? [] as $new_category => $assets) {
+                $source = $assets[$original]['_overridden_source'] ?? NULL;
+                if ($source !== NULL && in_array($source, array_column($moves, $new_category), TRUE)) {
+                  $new_file = $source;
+                  break;
+                }
+              }
+            }
+
+            if ($new_file === NULL || isset($explicit_css[$new_category][$new_file]) || isset($explicit_css[$new_category][$override_path])) {
+              continue;
+            }
+            $theme_name = $active_theme->getName();
+            // phpcs:ignore
+            @trigger_error("Targeting $old_library_name $original from $theme_name library_overrides is deprecated in $deprecation_version and will be removed in $removed_version. Target $library_id $new_file instead. See $deprecation_link", E_USER_DEPRECATED);
+            $overrides[$library_id]['css'][$new_category][$override_path] = $target;
           }
         }
       }
@@ -537,21 +577,52 @@ class LibraryDiscoveryParser {
    *   The theme or base theme.
    */
   protected function setOverrideValue(array &$library, array $sub_key, array $overrides, $theme_path) {
+    if ($sub_key === ['js']) {
+      // Resolve canonical paths against the inherited scripts once per theme.
+      // An explicit override of the current path takes precedence.
+      foreach ($library['js'] ?? [] as $path => $options) {
+        $source = $options['_overridden_source'] ?? NULL;
+        if ($source !== NULL && array_key_exists($source, $overrides) && !array_key_exists($source, $library['js'])) {
+          if (!array_key_exists($path, $overrides)) {
+            $overrides[$path] = $overrides[$source];
+          }
+          unset($overrides[$source]);
+        }
+      }
+    }
+
     foreach ($overrides as $original => $replacement) {
-      // Get the attributes of the asset to be overridden. If the key does
-      // not exist, then throw an exception.
       $key_exists = NULL;
       $parents = array_merge($sub_key, [$original]);
       // Save the attributes of the library asset to be overridden.
       $attributes = NestedArray::getValue($library, $parents, $key_exists);
       if ($key_exists) {
+        if ($replacement) {
+          $replacement = $this->resolveThemeAssetPath($theme_path, $replacement);
+          if ($sub_key === ['js'] && !empty($attributes['preserve_override_order'])) {
+            $attributes['_overridden_source'] ??= $original;
+            if (!array_key_exists($replacement, $library['js'])) {
+              // Keep subsequent scripts in the library after the replacement.
+              $paths = array_keys($library['js']);
+              $paths[array_search($original, $paths, TRUE)] = $replacement;
+              $library['js'][$original] = $attributes;
+              $library['js'] = array_combine($paths, $library['js']);
+              continue;
+            }
+          }
+        }
         // Remove asset to be overridden.
         NestedArray::unsetValue($library, $parents);
         // No need to replace if FALSE is specified, since that is a removal.
         if ($replacement) {
-          // Ensure the replacement path is relative to drupal root.
-          $replacement = $this->resolveThemeAssetPath($theme_path, $replacement);
           $new_parents = array_merge($sub_key, [$replacement]);
+          if ($sub_key[0] === 'css') {
+            // Retain the declared destination for later moved-file overrides.
+            if (isset($library['moved_files'])) {
+              $attributes['_overridden_source'] ??= $original;
+            }
+            unset($attributes['override_only']);
+          }
           // Replace with an override if specified.
           NestedArray::setValue($library, $new_parents, $attributes);
         }

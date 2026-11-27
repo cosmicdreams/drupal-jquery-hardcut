@@ -47,7 +47,7 @@ trait ContextualLinkClickTrait {
   protected function toggleContextualTriggerVisibility($selector) {
     // Hovering over the element itself with should be enough, but does not
     // work. Manually remove the visually-hidden class.
-    $this->getSession()->executeScript("jQuery('{$selector} .contextual .trigger').toggleClass('visually-hidden');");
+    $this->getSession()->executeScript("document.querySelectorAll('{$selector} .contextual .trigger').forEach((trigger) => trigger.classList.toggle('visually-hidden'));");
   }
 
 }

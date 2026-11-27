@@ -51,14 +51,14 @@ class JavascriptStatesForm extends FormBase {
       0 => [
         '#states' => [
           'checked' => [
-            ':input[name="radios_opposite2"]' => ['value' => 1],
+            'input[name="radios_opposite2"]' => ['value' => 1],
           ],
         ],
       ],
       1 => [
         '#states' => [
           'checked' => [
-            ':input[name="radios_opposite2"]' => ['value' => 0],
+            'input[name="radios_opposite2"]' => ['value' => 0],
           ],
         ],
       ],
@@ -74,14 +74,14 @@ class JavascriptStatesForm extends FormBase {
       0 => [
         '#states' => [
           'checked' => [
-            ':input[name="radios_opposite1"]' => ['value' => 1],
+            'input[name="radios_opposite1"]' => ['value' => 1],
           ],
         ],
       ],
       1 => [
         '#states' => [
           'checked' => [
-            ':input[name="radios_opposite1"]' => ['value' => 0],
+            'input[name="radios_opposite1"]' => ['value' => 0],
           ],
         ],
       ],
@@ -149,7 +149,7 @@ class JavascriptStatesForm extends FormBase {
       '#title' => 'Textfield invisible when checkbox trigger checked',
       '#states' => [
         'invisible' => [
-          ':input[name="checkbox_trigger"]' => ['checked' => TRUE],
+          'input[name="checkbox_trigger"]' => ['checked' => TRUE],
         ],
       ],
     ];
@@ -158,7 +158,7 @@ class JavascriptStatesForm extends FormBase {
       '#title' => 'Textfield required when checkbox trigger checked',
       '#states' => [
         'required' => [
-          ':input[name="checkbox_trigger"]' => ['checked' => TRUE],
+          'input[name="checkbox_trigger"]' => ['checked' => TRUE],
         ],
       ],
     ];
@@ -167,7 +167,7 @@ class JavascriptStatesForm extends FormBase {
       '#title' => 'Textfield readonly when checkbox trigger checked',
       '#states' => [
         'readonly' => [
-          ':input[name="checkbox_trigger"]' => ['checked' => TRUE],
+          'input[name="checkbox_trigger"]' => ['checked' => TRUE],
         ],
       ],
     ];
@@ -176,7 +176,7 @@ class JavascriptStatesForm extends FormBase {
       '#title' => 'Textarea readonly when checkbox trigger checked',
       '#states' => [
         'readonly' => [
-          ':input[name="checkbox_trigger"]' => ['checked' => TRUE],
+          'input[name="checkbox_trigger"]' => ['checked' => TRUE],
         ],
       ],
     ];
@@ -185,7 +185,7 @@ class JavascriptStatesForm extends FormBase {
       '#title' => 'Details expanded when checkbox trigger checked',
       '#states' => [
         'expanded' => [
-          ':input[name="checkbox_trigger"]' => ['checked' => TRUE],
+          'input[name="checkbox_trigger"]' => ['checked' => TRUE],
         ],
       ],
     ];
@@ -198,7 +198,7 @@ class JavascriptStatesForm extends FormBase {
       '#title' => 'Checkbox checked when checkbox trigger checked',
       '#states' => [
         'checked' => [
-          ':input[name="checkbox_trigger"]' => ['checked' => TRUE],
+          'input[name="checkbox_trigger"]' => ['checked' => TRUE],
         ],
       ],
     ];
@@ -207,7 +207,7 @@ class JavascriptStatesForm extends FormBase {
       '#title' => 'Checkbox unchecked when checkbox trigger checked',
       '#states' => [
         'unchecked' => [
-          ':input[name="checkbox_trigger"]' => ['checked' => TRUE],
+          'input[name="checkbox_trigger"]' => ['checked' => TRUE],
         ],
       ],
     ];
@@ -216,7 +216,7 @@ class JavascriptStatesForm extends FormBase {
       '#title' => 'Checkbox visible when checkbox trigger checked',
       '#states' => [
         'visible' => [
-          ':input[name="checkbox_trigger"]' => ['checked' => TRUE],
+          'input[name="checkbox_trigger"]' => ['checked' => TRUE],
         ],
       ],
     ];
@@ -225,7 +225,7 @@ class JavascriptStatesForm extends FormBase {
       '#title' => 'Text format invisible when checkbox trigger checked',
       '#states' => [
         'invisible' => [
-          ':input[name="checkbox_trigger"]' => ['checked' => TRUE],
+          'input[name="checkbox_trigger"]' => ['checked' => TRUE],
         ],
       ],
     ];
@@ -239,7 +239,7 @@ class JavascriptStatesForm extends FormBase {
       ],
       '#states' => [
         'checked' => [
-          ':input[name="checkbox_trigger"]' => ['checked' => TRUE],
+          'input[name="checkbox_trigger"]' => ['checked' => TRUE],
         ],
       ],
     ];
@@ -254,14 +254,14 @@ class JavascriptStatesForm extends FormBase {
       'value1' => [
         '#states' => [
           'checked' => [
-            ':input[name="checkbox_trigger"]' => ['checked' => TRUE],
+            'input[name="checkbox_trigger"]' => ['checked' => TRUE],
           ],
         ],
       ],
       'value3' => [
         '#states' => [
           'checked' => [
-            ':input[name="checkbox_trigger"]' => ['checked' => TRUE],
+            'input[name="checkbox_trigger"]' => ['checked' => TRUE],
           ],
         ],
       ],
@@ -276,7 +276,7 @@ class JavascriptStatesForm extends FormBase {
       ],
       '#states' => [
         'disabled' => [
-          ':input[name="checkbox_trigger"]' => ['checked' => TRUE],
+          'input[name="checkbox_trigger"]' => ['checked' => TRUE],
         ],
       ],
     ];
@@ -291,14 +291,14 @@ class JavascriptStatesForm extends FormBase {
       'value1' => [
         '#states' => [
           'disabled' => [
-            ':input[name="checkbox_trigger"]' => ['checked' => TRUE],
+            'input[name="checkbox_trigger"]' => ['checked' => TRUE],
           ],
         ],
       ],
       'value3' => [
         '#states' => [
           'disabled' => [
-            ':input[name="checkbox_trigger"]' => ['checked' => TRUE],
+            'input[name="checkbox_trigger"]' => ['checked' => TRUE],
           ],
         ],
       ],
@@ -313,7 +313,7 @@ class JavascriptStatesForm extends FormBase {
       'value1' => [
         '#states' => [
           'checked' => [
-            ':input[name="checkbox_trigger"]' => ['checked' => TRUE],
+            'input[name="checkbox_trigger"]' => ['checked' => TRUE],
           ],
         ],
       ],
@@ -327,7 +327,7 @@ class JavascriptStatesForm extends FormBase {
       ],
       '#states' => [
         'disabled' => [
-          ':input[name="checkbox_trigger"]' => ['checked' => TRUE],
+          'input[name="checkbox_trigger"]' => ['checked' => TRUE],
         ],
       ],
     ];
@@ -341,7 +341,7 @@ class JavascriptStatesForm extends FormBase {
       'value1' => [
         '#states' => [
           'disabled' => [
-            ':input[name="checkbox_trigger"]' => ['checked' => TRUE],
+            'input[name="checkbox_trigger"]' => ['checked' => TRUE],
           ],
         ],
       ],
@@ -358,7 +358,7 @@ class JavascriptStatesForm extends FormBase {
       '#title' => 'Textfield visible when checkboxes trigger value2 checked',
       '#states' => [
         'visible' => [
-          ':input[name="checkboxes_trigger[value2]"]' => ['checked' => TRUE],
+          'input[name="checkboxes_trigger[value2]"]' => ['checked' => TRUE],
         ],
       ],
     ];
@@ -367,7 +367,7 @@ class JavascriptStatesForm extends FormBase {
       '#title' => 'Textfield visible when checkboxes trigger value3 checked',
       '#states' => [
         'visible' => [
-          ':input[name="checkboxes_trigger[value3]"]' => ['checked' => TRUE],
+          'input[name="checkboxes_trigger[value3]"]' => ['checked' => TRUE],
         ],
       ],
     ];
@@ -383,7 +383,7 @@ class JavascriptStatesForm extends FormBase {
       '#title' => 'Fieldset visible when radio trigger has value2',
       '#states' => [
         'visible' => [
-          ':input[name="radios_trigger"]' => ['value' => 'value2'],
+          'input[name="radios_trigger"]' => ['value' => 'value2'],
         ],
       ],
     ];
@@ -396,7 +396,7 @@ class JavascriptStatesForm extends FormBase {
       '#title' => 'Textfield invisible when radio trigger has value2',
       '#states' => [
         'invisible' => [
-          ':input[name="radios_trigger"]' => ['value' => 'value2'],
+          'input[name="radios_trigger"]' => ['value' => 'value2'],
         ],
       ],
     ];
@@ -410,7 +410,7 @@ class JavascriptStatesForm extends FormBase {
       ],
       '#states' => [
         'required' => [
-          ':input[name="radios_trigger"]' => ['value' => 'value2'],
+          'input[name="radios_trigger"]' => ['value' => 'value2'],
         ],
       ],
     ];
@@ -419,7 +419,7 @@ class JavascriptStatesForm extends FormBase {
       '#title' => 'Checkbox checked when radios trigger has value3',
       '#states' => [
         'checked' => [
-          ':input[name="radios_trigger"]' => ['value' => 'value3'],
+          'input[name="radios_trigger"]' => ['value' => 'value3'],
         ],
       ],
     ];
@@ -428,7 +428,7 @@ class JavascriptStatesForm extends FormBase {
       '#title' => 'Checkbox unchecked when radios trigger has value3',
       '#states' => [
         'unchecked' => [
-          ':input[name="radios_trigger"]' => ['value' => 'value3'],
+          'input[name="radios_trigger"]' => ['value' => 'value3'],
         ],
       ],
     ];
@@ -437,7 +437,7 @@ class JavascriptStatesForm extends FormBase {
       '#title' => 'Details expanded when radio trigger has value3',
       '#states' => [
         'expanded' => [
-          ':input[name="radios_trigger"]' => ['value' => 'value3'],
+          'input[name="radios_trigger"]' => ['value' => 'value3'],
         ],
       ],
     ];
@@ -457,7 +457,7 @@ class JavascriptStatesForm extends FormBase {
       '#title' => 'Item visible when select trigger has value2',
       '#states' => [
         'visible' => [
-          ':input[name="select_trigger"]' => ['value' => 'value2'],
+          'select[name="select_trigger"]' => ['value' => 'value2'],
         ],
       ],
     ];
@@ -466,7 +466,7 @@ class JavascriptStatesForm extends FormBase {
       '#title' => 'Textfield visible when select trigger has value3',
       '#states' => [
         'visible' => [
-          ':input[name="select_trigger"]' => ['value' => 'value3'],
+          'select[name="select_trigger"]' => ['value' => 'value3'],
         ],
       ],
     ];
@@ -475,7 +475,7 @@ class JavascriptStatesForm extends FormBase {
       '#title' => 'Textfield visible when select trigger has value2 or value3',
       '#states' => [
         'visible' => [
-          ':input[name="select_trigger"]' => [
+          'select[name="select_trigger"]' => [
             ['value' => 'value2'],
             ['value' => 'value3'],
           ],
@@ -555,7 +555,7 @@ class JavascriptStatesForm extends FormBase {
       '#default_value' => '0',
       '#states' => [
         'checked' => [
-          ':input[name="textfield_trigger"]' => ['filled' => TRUE],
+          'input[name="textfield_trigger"]' => ['filled' => TRUE],
         ],
       ],
     ];
@@ -565,7 +565,7 @@ class JavascriptStatesForm extends FormBase {
       '#default_value' => '1',
       '#states' => [
         'unchecked' => [
-          ':input[name="textfield_trigger"]' => ['filled' => TRUE],
+          'input[name="textfield_trigger"]' => ['filled' => TRUE],
         ],
       ],
     ];
@@ -575,7 +575,7 @@ class JavascriptStatesForm extends FormBase {
       '#options' => [0 => 0, 1 => 1, 2 => 2],
       '#states' => [
         'invisible' => [
-          ':input[name="textfield_trigger"]' => ['filled' => TRUE],
+          'input[name="textfield_trigger"]' => ['filled' => TRUE],
         ],
       ],
     ];
@@ -585,7 +585,7 @@ class JavascriptStatesForm extends FormBase {
       '#options' => [0 => 0, 1 => 1, 2 => 2],
       '#states' => [
         'visible' => [
-          ':input[name="textfield_trigger"]' => ['filled' => TRUE],
+          'input[name="textfield_trigger"]' => ['filled' => TRUE],
         ],
       ],
     ];
@@ -594,7 +594,7 @@ class JavascriptStatesForm extends FormBase {
       '#title' => 'Textfield required  when textfield trigger filled',
       '#states' => [
         'required' => [
-          ':input[name="textfield_trigger"]' => ['filled' => TRUE],
+          'input[name="textfield_trigger"]' => ['filled' => TRUE],
         ],
       ],
     ];
@@ -603,7 +603,7 @@ class JavascriptStatesForm extends FormBase {
       '#title' => 'Details expanded when textfield trigger filled',
       '#states' => [
         'expanded' => [
-          ':input[name="textfield_trigger"]' => ['filled' => TRUE],
+          'input[name="textfield_trigger"]' => ['filled' => TRUE],
         ],
       ],
     ];
@@ -623,8 +623,8 @@ class JavascriptStatesForm extends FormBase {
       '#title' => 'Item visible when select trigger has value2 and textfield trigger filled',
       '#states' => [
         'visible' => [
-          ':input[name="select_trigger"]' => ['value' => 'value2'],
-          ':input[name="textfield_trigger"]' => ['filled' => TRUE],
+          'select[name="select_trigger"]' => ['value' => 'value2'],
+          'input[name="textfield_trigger"]' => ['filled' => TRUE],
         ],
       ],
     ];
@@ -640,7 +640,7 @@ class JavascriptStatesForm extends FormBase {
       '#title' => 'Item visible when number trigger filled by spinner widget',
       '#states' => [
         'visible' => [
-          ':input[name="number_trigger"]' => ['filled' => TRUE],
+          'input[name="number_trigger"]' => ['filled' => TRUE],
         ],
       ],
     ];
@@ -659,9 +659,9 @@ class JavascriptStatesForm extends FormBase {
       '#title' => 'textfield',
       '#states' => [
         'visible' => [
-          [':input[name="select"]' => ['value' => '1']],
+          ['select[name="select"]' => ['value' => '1']],
           'or',
-          [':input[name="number"]' => ['value' => '1']],
+          ['input[name="number"]' => ['value' => '1']],
         ],
       ],
     ];
@@ -672,7 +672,7 @@ class JavascriptStatesForm extends FormBase {
       '#url' => Url::fromRoute('<front>'),
       '#states' => [
         'visible' => [
-          ':input[name="checkbox_trigger"]' => ['checked' => FALSE],
+          'input[name="checkbox_trigger"]' => ['checked' => FALSE],
         ],
       ],
     ];
@@ -685,7 +685,7 @@ class JavascriptStatesForm extends FormBase {
       '#type' => 'submit',
       '#value' => 'Submit button disabled when checkbox not checked',
       '#states' => [
-        'disabled' => [':input[name="checkbox_enable_submit_button"]' => ['checked' => FALSE]],
+        'disabled' => ['input[name="checkbox_enable_submit_button"]' => ['checked' => FALSE]],
       ],
     ];
     $form['test_button_disabled']['checkbox_enable_submit_button'] = [
@@ -697,7 +697,7 @@ class JavascriptStatesForm extends FormBase {
       '#type' => 'textfield',
       '#title' => 'Text field disabled when checkbox not checked',
       '#states' => [
-        'disabled' => [':input[name="checkbox_enable_input_textfield"]' => ['checked' => FALSE]],
+        'disabled' => ['input[name="checkbox_enable_input_textfield"]' => ['checked' => FALSE]],
       ],
     ];
     $form['test_button_disabled']['checkbox_enable_input_textfield'] = [
@@ -713,7 +713,7 @@ class JavascriptStatesForm extends FormBase {
         1 => 1,
       ],
       '#states' => [
-        'disabled' => [':input[name="checkbox_enable_select"]' => ['checked' => FALSE]],
+        'disabled' => ['input[name="checkbox_enable_select"]' => ['checked' => FALSE]],
       ],
     ];
     $form['test_button_disabled']['checkbox_enable_select'] = [
@@ -724,7 +724,7 @@ class JavascriptStatesForm extends FormBase {
       '#type' => 'textarea',
       '#title' => 'Textarea disabled when checkbox not checked',
       '#states' => [
-        'disabled' => [':input[name="checkbox_enable_textarea"]' => ['checked' => FALSE]],
+        'disabled' => ['input[name="checkbox_enable_textarea"]' => ['checked' => FALSE]],
       ],
     ];
     $form['test_button_disabled']['checkbox_enable_textarea'] = [
@@ -737,7 +737,7 @@ class JavascriptStatesForm extends FormBase {
       '#type' => 'password_confirm',
       '#states' => [
         'visible' => [
-          ':input[name="checkbox_trigger"]' => ['checked' => FALSE],
+          'input[name="checkbox_trigger"]' => ['checked' => FALSE],
         ],
       ],
     ];
@@ -759,8 +759,8 @@ class JavascriptStatesForm extends FormBase {
       '#options' => [0 => 0, 1 => 1],
       '#states' => [
         'visible' => [
-          ':input[name="select_visible_1"]' => ['value' => 0],
-          ':input[name="select_visible_2"]' => ['value' => 1],
+          'select[name="select_visible_1"]' => ['value' => 0],
+          'select[name="select_visible_2"]' => ['value' => 1],
         ],
       ],
     ];

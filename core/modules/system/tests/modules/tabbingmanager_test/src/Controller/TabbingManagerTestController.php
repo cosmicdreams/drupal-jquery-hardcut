@@ -17,7 +17,8 @@ class TabbingManagerTestController extends ControllerBase {
    * @return array
    *   The render array.
    */
-  public function build() {
+  public function build(): array {
+    $libraries = ['core/drupal.tabbingmanager'];
     return [
       'container' => [
         '#type' => 'container',
@@ -27,23 +28,17 @@ class TabbingManagerTestController extends ControllerBase {
         'first' => [
           '#type' => 'textfield',
           '#title' => $this->t('First'),
-          '#attributes' => [
-            'id' => 'first',
-          ],
+          '#id' => 'first',
         ],
         'second' => [
           '#type' => 'textfield',
           '#title' => $this->t('Second'),
-          '#attributes' => [
-            'id' => 'second',
-          ],
+          '#id' => 'second',
         ],
         'third' => [
           '#type' => 'textfield',
           '#title' => $this->t('Third'),
-          '#attributes' => [
-            'id' => 'third',
-          ],
+          '#id' => 'third',
         ],
       ],
       'another_container' => [
@@ -54,27 +49,20 @@ class TabbingManagerTestController extends ControllerBase {
         'fourth' => [
           '#type' => 'textfield',
           '#title' => $this->t('Fourth'),
-          '#attributes' => [
-            'id' => 'fourth',
-          ],
+          '#id' => 'fourth',
         ],
         'fifth' => [
           '#type' => 'textfield',
           '#title' => $this->t('Fifth'),
-          '#attributes' => [
-            'id' => 'fifth',
-          ],
+          '#id' => 'fifth',
         ],
         'sixth' => [
           '#type' => 'textfield',
           '#title' => $this->t('Sixth'),
-          '#attributes' => [
-            'id' => 'sixth',
-          ],
+          '#id' => 'sixth',
         ],
       ],
-      '#attached' => ['library' => ['core/drupal.tabbingmanager']],
-
+      '#attached' => ['library' => $libraries],
     ];
   }
 

@@ -94,9 +94,47 @@ class EntityReferenceWidgetTest extends MediaLibraryTestBase {
     $this->assertFalse($open_button->hasAttribute('data-disabled-focus'));
     $this->assertTrue($open_button->hasAttribute('disabled'));
     // The button should be disabled.
-    $this->assertJsCondition('jQuery("#field_twin_media-media-library-wrapper .js-media-library-open-button").is(":disabled")');
+    $this->assertJsCondition('document.querySelector("#field_twin_media-media-library-wrapper .js-media-library-open-button")?.matches(":disabled")');
     // The button should not have focus.
-    $this->assertJsCondition('jQuery("#field_twin_media-media-library-wrapper .js-media-library-open-button").not(":focus")');
+    $this->assertJsCondition('!document.activeElement.matches("#field_twin_media-media-library-wrapper .js-media-library-open-button")');
+  }
+
+  /**
+   * Tests that an older tab response cannot change a reopened library.
+   */
+  public function testStaleTabResponseAfterReopen(): void {
+    $this->drupalGet('node/add/basic_page');
+    $menu = $this->openMediaLibraryForField('field_unlimited_media');
+    $session = $this->getSession();
+    $session->executeScript(<<<'JS'
+      document.addEventListener('drupal:ajax-before-send', ({ detail: { ajax } }) => {
+        const receive = ajax.receiveResponse;
+        ajax.receiveResponse = (...args) => new Promise((resolve) => {
+          window.finishMediaTab = () => resolve(receive.apply(ajax, args));
+        });
+      }, { once: true });
+      JS);
+    $menu->clickLink('Type Three');
+    $this->assertJsCondition('typeof window.finishMediaTab === "function"');
+    // Close the dialog while fullscreen progress blocks pointer input.
+    $session->executeScript('Drupal.dialog.get(document.getElementById("drupal-modal")).close();');
+    $assert = $this->assertSession();
+    $assert->assertNoElementAfterWait('css', 'dialog[open]');
+    // Open the single-type widget, which only shows Type One media.
+    $button = '.js-media-library-open-button[name^="field_single_media_type"]';
+    $assert->elementExists('css', $button);
+    $session->executeScript(<<<JS
+      document.querySelector('$button').dispatchEvent(
+        new MouseEvent('mousedown', { bubbles: true, cancelable: true })
+      );
+      JS);
+    $this->assertNotNull($assert->waitForElementVisible('css', '#drupal-modal .js-media-library-item'));
+    $this->assertSelectedMediaCount('0 of 1 item selected');
+
+    $session->executeScript('window.finishMediaTab();');
+    $assert->assertWaitOnAjaxRequest();
+    $this->assertSelectedMediaCount('0 of 1 item selected');
+    $assert->elementExists('named', ['checkbox', 'Select Dog']);
   }
 
   /**
@@ -117,7 +155,7 @@ class EntityReferenceWidgetTest extends MediaLibraryTestBase {
 
     // Assert generic media library elements.
     $this->openMediaLibraryForField('field_unlimited_media');
-    $assert_session->elementExists('css', '.ui-dialog-titlebar-close')->click();
+    $assert_session->elementExists('css', '.drupal-dialog-titlebar-close')->click();
 
     // Assert that the media type menu is available when more than 1 type is
     // configured for the field.
@@ -126,21 +164,51 @@ class EntityReferenceWidgetTest extends MediaLibraryTestBase {
     $this->assertFalse($menu->hasLink('Type Two'));
     $this->assertTrue($menu->hasLink('Type Three'));
     $this->assertFalse($menu->hasLink('Type Four'));
-    $this->switchToMediaType('Three');
+    $session = $this->getSession();
+    $session->executeScript(<<<'JS'
+      document.addEventListener('drupal:ajax-before-send', ({ detail: { ajax } }) => {
+        const receive = ajax.receiveResponse;
+        ajax.receiveResponse = (...args) => new Promise((resolve) => {
+          window.resumeTab = () => resolve(receive.apply(ajax, args));
+        });
+      }, { once: true });
+      JS);
+    $menu->clickLink('Type Three');
+    $this->assertJsCondition('typeof window.resumeTab === "function"');
+    $this->assertJsCondition(<<<'JS'
+      (() => {
+        const progress = document.querySelector('.ajax-progress-fullscreen, .ajax-progress--fullscreen');
+        if (!progress?.closest(':modal')) {
+          return false;
+        }
+        const { x, y, width, height } = progress.getBoundingClientRect();
+        return progress.contains(document.elementFromPoint(x + width / 2, y + height / 2));
+      })()
+      JS);
+    $session->executeScript(<<<'JS'
+      window.nestedProgressModal = Drupal.dialog(document.createElement('div'), { removeOnClose: true });
+      window.nestedProgressModal.showModal();
+      JS);
+    $this->assertJsCondition('document.querySelector(".ajax-progress-fullscreen, .ajax-progress--fullscreen").closest(":modal") === window.nestedProgressModal.element');
+    $session->executeScript('window.nestedProgressModal.close()');
+    $this->assertJsCondition('document.querySelector(".ajax-progress-fullscreen, .ajax-progress--fullscreen").closest(":modal").querySelector("#drupal-modal") !== null');
+    $session->executeScript('window.resumeTab()');
+    $assert_session->assertWaitOnAjaxRequest();
+    $assert_session->elementNotExists('css', '.ajax-progress-fullscreen, .ajax-progress--fullscreen');
     // Assert the active tab is set correctly.
     $this->assertFalse($menu->hasLink('Show Type One media (selected)'));
     $this->assertTrue($menu->hasLink('Show Type Three media (selected)'));
     // Assert the focus is set to the first tabbable element when a vertical tab
     // is clicked.
-    $this->assertJsCondition('jQuery(tabbable.tabbable(document.getElementById("media-library-content"))[0]).is(":focus")');
-    $assert_session->elementExists('css', '.ui-dialog-titlebar-close')->click();
+    $this->assertJsCondition('document.activeElement === tabbable.tabbable(document.getElementById("media-library-content"))[0]');
+    $assert_session->elementExists('css', '.drupal-dialog-titlebar-close')->click();
 
     // Assert that there are no links in the media library view.
     $this->openMediaLibraryForField('field_unlimited_media');
     $assert_session->elementNotExists('css', '.media-library-item__name a');
     $assert_session->elementNotExists('css', '.view-media-library .media-library-item__edit');
     $assert_session->elementNotExists('css', '.view-media-library .media-library-item__remove');
-    $assert_session->elementExists('css', '.ui-dialog-titlebar-close')->click();
+    $assert_session->elementExists('css', '.drupal-dialog-titlebar-close')->click();
 
     // Assert that the media type menu is available when the target_bundles
     // setting for the entity reference field is null. All types should be
@@ -175,7 +243,7 @@ class EntityReferenceWidgetTest extends MediaLibraryTestBase {
     $assert_session->hiddenFieldValueEquals('media-library-modal-selection', '4');
     $this->assertSelectedMediaCount('1 of 1 item selected');
     $assert_session->elementNotExists('css', '.js-media-library-menu');
-    $assert_session->elementExists('css', '.ui-dialog-titlebar-close')->click();
+    $assert_session->elementExists('css', '.drupal-dialog-titlebar-close')->click();
 
     // Assert the menu links can be sorted through the widget configuration.
     $this->openMediaLibraryForField('field_twin_media');
@@ -214,7 +282,7 @@ class EntityReferenceWidgetTest extends MediaLibraryTestBase {
     $this->assertSame(
       $link_titles,
       ['Show Type One media (selected)', 'Show Type Three media', 'Show Type Four media', 'Show Type Two media']);
-    $assert_session->elementExists('css', '.ui-dialog-titlebar-close')->click();
+    $assert_session->elementExists('css', '.drupal-dialog-titlebar-close')->click();
 
     // Assert the announcements for media type navigation in the media library.
     $this->openMediaLibraryForField('field_unlimited_media');
@@ -225,7 +293,7 @@ class EntityReferenceWidgetTest extends MediaLibraryTestBase {
     // Assert the links can be triggered by via the space bar.
     $assert_session->elementExists('named', ['link', 'Type Three'])->keyPress(32);
     $this->assertAnnounceContains('Showing Type Three media.');
-    $assert_session->elementExists('css', '.ui-dialog-titlebar-close')->click();
+    $assert_session->elementExists('css', '.drupal-dialog-titlebar-close')->click();
 
     // Assert media is only visible on the tab for the related media type.
     $this->openMediaLibraryForField('field_unlimited_media');
@@ -238,7 +306,7 @@ class EntityReferenceWidgetTest extends MediaLibraryTestBase {
     $assert_session->pageTextNotContains('Dog');
     $assert_session->pageTextNotContains('Bear');
     $assert_session->pageTextNotContains('Turtle');
-    $assert_session->elementExists('css', '.ui-dialog-titlebar-close')->click();
+    $assert_session->elementExists('css', '.drupal-dialog-titlebar-close')->click();
 
     // Assert the exposed name filter of the view.
     $this->openMediaLibraryForField('field_unlimited_media');
@@ -253,14 +321,14 @@ class EntityReferenceWidgetTest extends MediaLibraryTestBase {
     $assert_session->assertExpectedAjaxRequest(10);
     $assert_session->pageTextContains('Dog');
     $assert_session->pageTextContains('Bear');
-    $assert_session->elementExists('css', '.ui-dialog-titlebar-close')->click();
+    $assert_session->elementExists('css', '.drupal-dialog-titlebar-close')->click();
 
     // Assert adding a single media item and removing it.
     $this->openMediaLibraryForField('field_twin_media');
     $this->selectMediaItem(0);
     $this->pressInsertSelected('Added one media item.');
     // Assert the focus is set back on the open button of the media field.
-    $this->assertJsCondition('jQuery("#field_twin_media-media-library-wrapper .js-media-library-open-button").is(":focus")');
+    $this->assertJsCondition('document.activeElement.matches("#field_twin_media-media-library-wrapper .js-media-library-open-button")');
 
     // The toggle for weight inputs' visibility should not be available when the
     // field contains a single item.
@@ -273,7 +341,7 @@ class EntityReferenceWidgetTest extends MediaLibraryTestBase {
     $button->press();
     $this->waitForText('Dog has been removed.');
     // Assert the focus is set back on the open button of the media field.
-    $this->assertJsCondition('jQuery("#field_twin_media-media-library-wrapper .js-media-library-open-button").is(":focus")');
+    $this->assertJsCondition('document.activeElement.matches("#field_twin_media-media-library-wrapper .js-media-library-open-button")');
 
     // Assert we can select the same media item twice.
     $this->openMediaLibraryForField('field_twin_media');
@@ -291,6 +359,18 @@ class EntityReferenceWidgetTest extends MediaLibraryTestBase {
     // unusable.
     $assert_session->fieldExists('Weight', $wrapper)->click();
     $wrapper->pressButton('Hide media item weights');
+
+    // Each weight follows its own visibility when the toggle is pressed.
+    $session->executeScript(<<<'JS'
+      const widget = document.getElementById('field_twin_media-media-library-wrapper');
+      const [first, second] = [...widget.querySelectorAll('.js-media-library-item-weight')].map((weight) => weight.parentElement);
+      first.style.display = '';
+      const toggle = widget.querySelector('.js-media-library-widget-toggle-weight');
+      toggle.click();
+      window.weightsToggledIndependently = !first.getClientRects().length && !!second.getClientRects().length;
+      toggle.click();
+      JS);
+    $this->assertJsCondition('window.weightsToggledIndependently');
 
     // Assert the same has been added twice and remove the items again.
     $this->waitForElementsCount('css', '.field--name-field-twin-media [data-media-library-item-delta]', 2);
@@ -364,11 +444,9 @@ class EntityReferenceWidgetTest extends MediaLibraryTestBase {
     $this->assertTrue($checkboxes[3]->hasAttribute('disabled'));
     // Select the items.
     $this->pressInsertSelected('Added 2 media items.');
-    // Assert the open button is disabled.
-    $open_button = $this->assertElementExistsAfterWait('css', '.js-media-library-open-button[name^="field_twin_media"]');
-    $this->assertTrue($open_button->hasAttribute('data-disabled-focus'));
-    $this->assertTrue($open_button->hasAttribute('disabled'));
-    $this->assertJsCondition('jQuery("#field_twin_media-media-library-wrapper .js-media-library-open-button").is(":disabled")');
+    // The open button is disabled after the focus delay.
+    $open_button_selector = '#field_twin_media-media-library-wrapper .js-media-library-open-button';
+    $this->assertElementExistsAfterWait('css', $open_button_selector . '[data-disabled-focus][disabled]');
 
     // Ensure that the selection completed successfully.
     $assert_session->pageTextNotContains('Add or select media');
@@ -383,14 +461,14 @@ class EntityReferenceWidgetTest extends MediaLibraryTestBase {
     $button->press();
     $this->waitForText('Cat has been removed.');
     // Assert the focus is set to the wrapper of the other selected item.
-    $this->assertJsCondition('jQuery("#field_twin_media-media-library-wrapper [data-media-library-item-delta]").is(":focus")');
+    $this->assertJsCondition('document.activeElement.matches("#field_twin_media-media-library-wrapper [data-media-library-item-delta]")');
     $assert_session->elementTextNotContains('css', '#field_twin_media-media-library-wrapper', 'Cat');
     $assert_session->elementTextContains('css', '#field_twin_media-media-library-wrapper', 'Turtle');
     // Assert the open button is no longer disabled.
-    $open_button = $assert_session->elementExists('css', '.js-media-library-open-button[name^="field_twin_media"]');
+    $open_button = $assert_session->elementExists('css', $open_button_selector);
     $this->assertFalse($open_button->hasAttribute('data-disabled-focus'));
     $this->assertFalse($open_button->hasAttribute('disabled'));
-    $this->assertJsCondition('jQuery("#field_twin_media-media-library-wrapper .js-media-library-open-button").is(":not(:disabled)")');
+    $this->assertJsCondition('document.querySelector("#field_twin_media-media-library-wrapper .js-media-library-open-button")?.matches(":not(:disabled)")');
 
     // Open the media library again and select another item.
     $this->openMediaLibraryForField('field_twin_media');
@@ -400,10 +478,7 @@ class EntityReferenceWidgetTest extends MediaLibraryTestBase {
     $assert_session->elementTextNotContains('css', '#field_twin_media-media-library-wrapper', 'Cat');
     $assert_session->elementTextContains('css', '#field_twin_media-media-library-wrapper', 'Turtle');
     $assert_session->elementTextNotContains('css', '#field_twin_media-media-library-wrapper', 'Snake');
-    // Assert the open button is disabled.
-    $this->assertTrue($assert_session->elementExists('css', '.js-media-library-open-button[name^="field_twin_media"]')->hasAttribute('data-disabled-focus'));
-    $this->assertTrue($assert_session->elementExists('css', '.js-media-library-open-button[name^="field_twin_media"]')->hasAttribute('disabled'));
-    $this->assertJsCondition('jQuery("#field_twin_media-media-library-wrapper .js-media-library-open-button").is(":disabled")');
+    $this->assertElementExistsAfterWait('css', $open_button_selector . '[data-disabled-focus][disabled]');
 
     // Assert the selection is cleared when the modal is closed.
     $this->openMediaLibraryForField('field_unlimited_media');
@@ -424,8 +499,17 @@ class EntityReferenceWidgetTest extends MediaLibraryTestBase {
     $this->assertTrue($checkboxes[1]->isChecked());
     $this->assertFalse($checkboxes[2]->isChecked());
     $this->assertFalse($checkboxes[3]->isChecked());
-    // Close the dialog, reopen it and assert not is selected again.
-    $assert_session->elementExists('css', '.ui-dialog-titlebar-close')->click();
+    // Closing a second dialog preserves the selection in the open picker.
+    $session->executeScript(<<<'JS'
+      const dialog = Drupal.dialog(document.createElement('div'), { removeOnClose: true });
+      dialog.showModal();
+      dialog.close();
+      JS);
+    $this->assertSelectedMediaCount('2 items selected');
+    $this->assertJsCondition('Drupal.MediaLibrary.currentSelection.length === 2');
+
+    // Close the dialog, reopen it and assert nothing is selected again.
+    $assert_session->elementExists('css', '.drupal-dialog-titlebar-close')->click();
     $this->openMediaLibraryForField('field_unlimited_media');
     $checkboxes = $this->getCheckboxes();
     $this->assertGreaterThanOrEqual(4, count($checkboxes));
@@ -433,7 +517,7 @@ class EntityReferenceWidgetTest extends MediaLibraryTestBase {
     $this->assertFalse($checkboxes[1]->isChecked());
     $this->assertFalse($checkboxes[2]->isChecked());
     $this->assertFalse($checkboxes[3]->isChecked());
-    $assert_session->elementExists('css', '.ui-dialog-titlebar-close')->click();
+    $assert_session->elementExists('css', '.drupal-dialog-titlebar-close')->click();
 
     // Finally, save the form.
     $assert_session->elementExists('css', '.js-media-library-widget-toggle-weight')->click();
@@ -529,17 +613,34 @@ class EntityReferenceWidgetTest extends MediaLibraryTestBase {
     // Order: Dog - Cat - Bear.
     $this->pressInsertSelected('Added 3 media items.');
 
+    $this->getSession()->executeScript(<<<'JS'
+      const widget = document.getElementById('field_unlimited_media-media-library-wrapper');
+      window.previousMediaSelection = widget.querySelector('.js-media-library-selection');
+      const sortable = Sortable.get(window.previousMediaSelection);
+      Drupal.behaviors.MediaLibraryWidgetSortable.attach(widget);
+      window.mediaSortableRetained = !!sortable && Sortable.get(window.previousMediaSelection) === sortable;
+      Drupal.detachBehaviors(window.previousMediaSelection, drupalSettings, 'unload');
+      window.mediaSortableReleased = !Sortable.get(window.previousMediaSelection);
+      Drupal.attachBehaviors(widget);
+      JS);
+    $this->assertJsCondition('window.mediaSortableRetained && window.mediaSortableReleased');
+
     // Move first item (Dog) to the end.
     // Order: Cat - Bear - Dog.
-    $this->sortableAfter('[data-media-library-item-delta="0"]', '[data-media-library-item-delta="2"]', '.js-media-library-selection');
+    $this->dragSortableItem(
+      $assert_session->elementExists('css', '#field_unlimited_media-media-library-wrapper [data-media-library-item-delta="0"] .js-media-library-item-preview'),
+      $assert_session->elementExists('css', '#field_unlimited_media-media-library-wrapper [data-media-library-item-delta="2"] .js-media-library-item-preview'),
+    );
 
     $wrapper = $assert_session->elementExists('css', '.field--name-field-unlimited-media');
     // Remove second item (Bear).
     // Order: Cat - Dog.
     $wrapper->find('css', "[aria-label='Remove Bear']")->press();
     $this->waitForText('Bear has been removed.');
+    $this->assertJsCondition('!window.previousMediaSelection.isConnected && !Sortable.get(window.previousMediaSelection)');
     $page->pressButton('Save');
 
+    $assert_session->elementTextContains('css', '.field--name-field-unlimited-media > .field__items > .field__item:first-child', 'Cat');
     $assert_session->elementTextContains('css', '.field--name-field-unlimited-media > .field__items > .field__item:last-child', 'Dog');
   }
 
@@ -561,7 +662,10 @@ class EntityReferenceWidgetTest extends MediaLibraryTestBase {
 
     // Change positions.
     // Order: Cat - Dog.
-    $this->sortableAfter('[data-media-library-item-delta="0"]', '[data-media-library-item-delta="1"]', '.js-media-library-selection');
+    $this->dragSortableItem(
+      $assert_session->elementExists('css', '#field_unlimited_media-media-library-wrapper [data-media-library-item-delta="0"] .js-media-library-item-preview'),
+      $assert_session->elementExists('css', '#field_unlimited_media-media-library-wrapper [data-media-library-item-delta="1"] .js-media-library-item-preview'),
+    );
 
     $this->openMediaLibraryForField('field_unlimited_media');
     $this->selectMediaItem(2);
@@ -571,6 +675,7 @@ class EntityReferenceWidgetTest extends MediaLibraryTestBase {
     $page->pressButton('Save');
 
     $assert_session->elementTextContains('css', '.field--name-field-unlimited-media > .field__items > .field__item:first-child', 'Cat');
+    $assert_session->elementTextContains('css', '.field--name-field-unlimited-media > .field__items > .field__item:nth-child(2)', 'Dog');
     $assert_session->elementTextContains('css', '.field--name-field-unlimited-media > .field__items > .field__item:last-child', 'Bear');
   }
 
@@ -586,26 +691,6 @@ class EntityReferenceWidgetTest extends MediaLibraryTestBase {
   protected function assertAnnounceContains(string $expected_message): void {
     $assert_session = $this->assertSession();
     $this->assertNotEmpty($assert_session->waitForElement('css', "#drupal-live-announce:contains('$expected_message')"));
-  }
-
-  /**
-   * {@inheritdoc}
-   */
-  protected function sortableUpdate($item, $from, $to = NULL): void {
-    // See core/modules/media_library/js/media_library.widget.js.
-    $script = <<<JS
-(function ($) {
-    var selection = document.querySelectorAll('.js-media-library-selection');
-    selection.forEach(function (widget) {
-        $(widget).children().each(function (index, child) {
-            $(child).find('.js-media-library-item-weight').val(index);
-        });
-    });
-})(jQuery)
-
-JS;
-
-    $this->getSession()->executeScript($script);
   }
 
   /**

@@ -163,10 +163,13 @@ class ManageDisplayTest extends WebDriverTestBase {
     // Change the region to content using the region field.
     $this->assertEquals('hidden', $field_region->getValue());
     $field_region->setValue('content');
+    $assert_session->elementExists('css', 'tr#field-test .tabledrag-changed');
 
-    // Confirm the region element retains focus after the AJAX update completes.
+    // The manually changed region remains focused until the user saves.
     $this->assertJsCondition('document.activeElement === document.querySelector("[name=\'fields[field_test][region]\']")');
     $button_save->click();
+
+    $assert_session->elementExists('css', '.region-content-message ~ tr#field-test:has(select.field-region option[value="content"]:checked)');
 
     // Change the format for the test field.
     $field_test_format_type->setValue('field_test_multiple');

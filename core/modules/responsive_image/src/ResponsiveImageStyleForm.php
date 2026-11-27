@@ -147,7 +147,7 @@ class ResponsiveImageStyleForm extends EntityForm {
           '#description' => $this->t('Select an image style for this breakpoint.'),
           '#states' => [
             'visible' => [
-              ':input[name="keyed_styles[' . $breakpoint_id . '][' . $multiplier . '][image_mapping_type]"]' => ['value' => 'image_style'],
+              '[name="keyed_styles[' . $breakpoint_id . '][' . $multiplier . '][image_mapping_type]"]' => ['value' => 'image_style'],
             ],
           ],
         ];
@@ -158,10 +158,10 @@ class ResponsiveImageStyleForm extends EntityForm {
           '#description' => $this->t('Enter the value for the sizes attribute, for example: %example_sizes.', ['%example_sizes' => '(min-width:700px) 700px, 100vw']),
           '#states' => [
             'visible' => [
-              ':input[name="keyed_styles[' . $breakpoint_id . '][' . $multiplier . '][image_mapping_type]"]' => ['value' => 'sizes'],
+              '[name="keyed_styles[' . $breakpoint_id . '][' . $multiplier . '][image_mapping_type]"]' => ['value' => 'sizes'],
             ],
             'required' => [
-              ':input[name="keyed_styles[' . $breakpoint_id . '][' . $multiplier . '][image_mapping_type]"]' => ['value' => 'sizes'],
+              '[name="keyed_styles[' . $breakpoint_id . '][' . $multiplier . '][image_mapping_type]"]' => ['value' => 'sizes'],
             ],
           ],
         ];
@@ -173,10 +173,10 @@ class ResponsiveImageStyleForm extends EntityForm {
           '#default_value' => $image_style_mapping['image_mapping']['sizes_image_styles'] ?? [],
           '#states' => [
             'visible' => [
-              ':input[name="keyed_styles[' . $breakpoint_id . '][' . $multiplier . '][image_mapping_type]"]' => ['value' => 'sizes'],
+              '[name="keyed_styles[' . $breakpoint_id . '][' . $multiplier . '][image_mapping_type]"]' => ['value' => 'sizes'],
             ],
             'required' => [
-              ':input[name="keyed_styles[' . $breakpoint_id . '][' . $multiplier . '][image_mapping_type]"]' => ['value' => 'sizes'],
+              '[name="keyed_styles[' . $breakpoint_id . '][' . $multiplier . '][image_mapping_type]"]' => ['value' => 'sizes'],
             ],
           ],
         ];

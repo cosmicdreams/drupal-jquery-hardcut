@@ -108,7 +108,7 @@ class TaxonomyIndexTid extends PrerenderList {
       '#default_value' => $this->options['vids'],
       '#states' => [
         'visible' => [
-          ':input[name="options[limit]"]' => ['checked' => TRUE],
+          '[name="options[limit]"]' => ['checked' => TRUE],
         ],
       ],
 

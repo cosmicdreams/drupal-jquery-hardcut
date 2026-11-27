@@ -79,7 +79,7 @@ final class ConfigHandlerExtraFormTest extends WebDriverTestBase {
     $assert->waitForField('override[controls][options_search]');
     $page->findField('name[node__field_test.field_test_target_id]')
       ->click();
-    $page->find('css', 'button.button.button--primary.form-submit.ui-button')
+    $page->find('css', '.drupal-dialog-buttonset .button--primary.form-submit')
       ->click();
 
     // Wait for the selection handler to show up.

@@ -289,7 +289,7 @@ class Table extends StylePluginBase implements CacheableDependencyInterface {
     }
 
     foreach ($columns as $field => $column) {
-      $column_selector = ':input[name="style_options[columns][' . $field . ']"]';
+      $column_selector = '[name="style_options[columns][' . $field . ']"]';
 
       $form['columns'][$field] = [
         '#title' => $this->t('Columns for @field', ['@field' => $field]),
@@ -319,7 +319,7 @@ class Table extends StylePluginBase implements CacheableDependencyInterface {
           '#states' => [
             'visible' => [
               $column_selector => ['value' => $field],
-              ':input[name="style_options[info][' . $field . '][sortable]"]' => ['checked' => TRUE],
+              '[name="style_options[info][' . $field . '][sortable]"]' => ['checked' => TRUE],
             ],
           ],
         ];

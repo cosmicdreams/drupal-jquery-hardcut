@@ -1,0 +1,29 @@
+states_test.form:
+  path: '/states-test'
+  defaults:
+    _controller: '\Drupal\states_test\Controller\StatesTestController::form'
+    _title: 'States test'
+  requirements:
+    _access: 'TRUE'
+
+states_test.native_form:
+  path: '/states-test/native-form'
+  defaults:
+    _form: '\Drupal\states_test\Form\NativeStatesForm'
+    _title: 'Native States test'
+  requirements:
+    _access: 'TRUE'
+
+states_test.remove_dependent:
+  path: '/states-test/remove-dependent'
+  defaults:
+    _controller: '\Drupal\states_test\Controller\StatesTestController::removeDependent'
+  requirements:
+    _access: 'TRUE'
+
+states_test.replace_dependee:
+  path: '/states-test/replace-dependee'
+  defaults:
+    _controller: '\Drupal\states_test\Controller\StatesTestController::replaceDependee'
+  requirements:
+    _access: 'TRUE'

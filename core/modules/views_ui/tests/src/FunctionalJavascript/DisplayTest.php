@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Drupal\Tests\views_ui\FunctionalJavascript;
 
+use Drupal\FunctionalJavascriptTests\DrupalSelenium2Driver;
 use Drupal\FunctionalJavascriptTests\WebDriverTestBase;
 use Drupal\language\Entity\ConfigurableLanguage;
 use Drupal\locale\SourceString;
@@ -61,6 +62,7 @@ class DisplayTest extends WebDriverTestBase {
       'administer site configuration',
       'administer views',
       'administer nodes',
+      'administer blocks',
       'access content overview',
       'access contextual links',
     ]);
@@ -75,17 +77,43 @@ class DisplayTest extends WebDriverTestBase {
    */
   public function testAddDisplay(): void {
     $this->drupalGet('admin/structure/views/view/test_content_ajax');
-    $page = $this->getSession()->getPage();
+    $session = $this->getSession();
+    $assert = $this->assertSession();
+    $trigger_selector = '#views-display-menu-tabs .add > a';
+    $trigger = $assert->elementExists('css', $trigger_selector);
+    $trigger->focus();
 
-    $page->find('css', '#views-display-menu-tabs .add')->click();
+    $driver = $session->getDriver();
+    $this->assertInstanceOf(DrupalSelenium2Driver::class, $driver);
+    $keyboard = $driver->getWebDriverSession();
+    $press_key = static function (string $key) use ($keyboard): void {
+      $keyboard->postActions([
+        'actions' => [
+          [
+            'type' => 'key',
+            'id' => 'keyboard',
+            'actions' => [
+              ['type' => 'keyDown', 'value' => $key],
+              ['type' => 'keyUp', 'value' => $key],
+            ],
+          ],
+        ],
+      ]);
+    };
+    // WebDriver key codes for Space, Tab and Escape.
+    $press_key("\u{E00D}");
+    $this->assertSame('true', $trigger->getAttribute('aria-expanded'));
+    $press_key("\u{E004}");
+    $this->assertJsCondition('document.activeElement.matches("#views-add-display-options input")');
+    $press_key("\u{E00C}");
+    $this->assertSame('false', $trigger->getAttribute('aria-expanded'));
+    $this->assertJsCondition("document.activeElement.matches('$trigger_selector')");
 
-    // Wait for the animation to complete.
-    $this->getSession()->wait(1000, "jQuery(':animated').length === 0;");
+    // Add the display once the menu opens.
+    $trigger->click();
+    $assert->waitForElementVisible('css', '#edit-displays-top-add-display-block')->click();
 
-    // Add the display.
-    $page->find('css', '#edit-displays-top-add-display-block')->click();
-
-    $element = $page->findById('views-display-menu-tabs')->findLink('Block');
+    $element = $session->getPage()->findById('views-display-menu-tabs')->findLink('Block');
     $this->assertNotEmpty($element);
   }
 
@@ -132,12 +160,42 @@ class DisplayTest extends WebDriverTestBase {
 
       $admin_name_field = $this->assertSession()
         ->waitForField('Administrative name');
-      $dialog_buttons = $page->find('css', '.ui-dialog-buttonset');
+      $dialog_buttons = $page->find('css', '.drupal-dialog-buttonset');
       $admin_name_field->setValue($new_title);
 
       $dialog_buttons->pressButton('Apply');
       $this->assertJsCondition("document.title === '" . $new_title . " (Content) | " . \Drupal::config('system.site')->get('name') . "'");
     }
+  }
+
+  /**
+   * Tests selection from the Views tag and block category suggestion routes.
+   */
+  public function testDisplayAutocomplete(): void {
+    View::load('test_content_ajax')->set('tag', 'Editorial review')->save();
+    $this->drupalGet('admin/structure/views/view/test_display/edit/block_1');
+    $page = $this->getSession()->getPage();
+    $assert = $this->assertSession();
+
+    $page->clickLink('Edit view name/description');
+    $tag = $assert->waitForField('Administrative tags');
+    $tag->focus();
+    $tag->setValue('review');
+    $this->assertNotNull($suggestion = $assert->waitOnAutocomplete());
+    $this->assertSame('Editorial review', $suggestion->getText());
+    $suggestion->click();
+    $this->assertSame('Editorial review', $tag->getValue());
+    $page->find('css', '.drupal-dialog-buttonset')->pressButton('Apply');
+    $assert->assertNoElementAfterWait('css', 'dialog[open]');
+
+    $page->find('css', 'a[href*="/display/test_display/block_1/block_category"]')->click();
+    $category = $assert->waitForField('block_category');
+    $category->focus();
+    $category->setValue('Menus');
+    $this->assertNotNull($suggestion = $assert->waitOnAutocomplete());
+    $this->assertSame('Menus', $suggestion->getText());
+    $suggestion->click();
+    $this->assertSame('Menus', $category->getValue());
   }
 
   /**
@@ -189,7 +247,7 @@ class DisplayTest extends WebDriverTestBase {
   protected function toggleContextualTriggerVisibility($selector): void {
     // Hovering over the element itself with should be enough, but does not
     // work. Manually remove the visually-hidden class.
-    $this->getSession()->executeScript("jQuery('{$selector} .contextual .trigger').toggleClass('visually-hidden');");
+    $this->getSession()->executeScript("document.querySelectorAll('{$selector} .contextual .trigger').forEach((trigger) => trigger.classList.toggle('visually-hidden'));");
   }
 
   /**
@@ -214,8 +272,7 @@ class DisplayTest extends WebDriverTestBase {
 
     $page->find('css', '#views-display-menu-tabs .add')->click();
 
-    // Wait for the animation to complete.
-    $this->getSession()->wait(1000, "jQuery(':animated').length === 0;");
+    $this->assertNotNull($this->assertSession()->waitForElementVisible('css', '.add ul input'));
 
     // Look for the input element, always in second spot.
     $elements = $page->findAll('css', '.add ul input');

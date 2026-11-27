@@ -78,7 +78,7 @@ class FileUrlGeneratorTest extends FileTestBase {
 
     // Test alteration of file URLs to use a CDN.
     \Drupal::state()->set('file_test.hook_file_url_alter', 'cdn');
-    $filepath = 'core/assets/vendor/jquery/jquery.min.js';
+    $filepath = 'core/assets/vendor/once/once.min.js';
     $url = $this->fileUrlGenerator->generateAbsoluteString($filepath);
     $this->assertEquals(FileTestCdn::First->value . '/' . $filepath, $url, 'Correctly generated a CDN URL for a shipped file.');
     $filepath = 'core/misc/favicon.ico';
@@ -87,7 +87,7 @@ class FileUrlGeneratorTest extends FileTestBase {
 
     // Test alteration of file URLs to use root-relative URLs.
     \Drupal::state()->set('file_test.hook_file_url_alter', 'root-relative');
-    $filepath = 'core/assets/vendor/jquery/jquery.min.js';
+    $filepath = 'core/assets/vendor/once/once.min.js';
     $url = $this->fileUrlGenerator->generateAbsoluteString($filepath);
     $this->assertEquals(base_path() . '/' . $filepath, $url, 'Correctly generated a root-relative URL for a shipped file.');
     $filepath = 'core/misc/favicon.ico';
@@ -96,7 +96,7 @@ class FileUrlGeneratorTest extends FileTestBase {
 
     // Test alteration of file URLs to use protocol-relative URLs.
     \Drupal::state()->set('file_test.hook_file_url_alter', 'protocol-relative');
-    $filepath = 'core/assets/vendor/jquery/jquery.min.js';
+    $filepath = 'core/assets/vendor/once/once.min.js';
     $url = $this->fileUrlGenerator->generateAbsoluteString($filepath);
     $this->assertEquals('/' . base_path() . '/' . $filepath, $url, 'Correctly generated a protocol-relative URL for a shipped file.');
     $filepath = 'core/misc/favicon.ico';
@@ -162,7 +162,7 @@ class FileUrlGeneratorTest extends FileTestBase {
     \Drupal::setContainer($this->container);
 
     // Shipped file.
-    $filepath = 'core/assets/vendor/jquery/jquery.min.js';
+    $filepath = 'core/assets/vendor/once/once.min.js';
     $url = $this->fileUrlGenerator->generateAbsoluteString($filepath);
     $this->assertSame(base_path() . $filepath, $this->fileUrlGenerator->transformRelative($url));
 
@@ -223,58 +223,58 @@ class FileUrlGeneratorTest extends FileTestBase {
     return [
       'schemaless' =>
         [
-          '//core/assets/vendor/jquery/jquery.min.js',
-          '//core/assets/vendor/jquery/jquery.min.js',
+          '//core/assets/vendor/once/once.min.js',
+          '//core/assets/vendor/once/once.min.js',
         ],
       'query string' =>
         [
-          '//core/assets/vendor/jquery/jquery.min.js?foo',
-          '//core/assets/vendor/jquery/jquery.min.js?foo',
+          '//core/assets/vendor/once/once.min.js?foo',
+          '//core/assets/vendor/once/once.min.js?foo',
         ],
       'query string and hashes' =>
         [
-          '//core/assets/vendor/jquery/jquery.min.js?foo=bar#whizz',
-          '//core/assets/vendor/jquery/jquery.min.js?foo=bar#whizz',
+          '//core/assets/vendor/once/once.min.js?foo=bar#whizz',
+          '//core/assets/vendor/once/once.min.js?foo=bar#whizz',
         ],
       'hashes' =>
         [
-          '//core/assets/vendor/jquery/jquery.min.js#whizz',
-          '//core/assets/vendor/jquery/jquery.min.js#whizz',
+          '//core/assets/vendor/once/once.min.js#whizz',
+          '//core/assets/vendor/once/once.min.js#whizz',
         ],
       'root-relative' =>
         [
-          '/core/assets/vendor/jquery/jquery.min.js',
-          'base:/core/assets/vendor/jquery/jquery.min.js',
+          '/core/assets/vendor/once/once.min.js',
+          'base:/core/assets/vendor/once/once.min.js',
         ],
       'relative' =>
         [
-          'core/assets/vendor/jquery/jquery.min.js',
-          'base:core/assets/vendor/jquery/jquery.min.js',
+          'core/assets/vendor/once/once.min.js',
+          'base:core/assets/vendor/once/once.min.js',
         ],
       'external' =>
         [
-          'https://www.example.com/core/assets/vendor/jquery/jquery.min.js',
-          'https://www.example.com/core/assets/vendor/jquery/jquery.min.js',
+          'https://www.example.com/core/assets/vendor/once/once.min.js',
+          'https://www.example.com/core/assets/vendor/once/once.min.js',
         ],
       'external stream wrapper' =>
         [
-          'dummy-external-readonly://core/assets/vendor/jquery/jquery.min.js',
-          'https://www.dummy-external-readonly.com/core/assets/vendor/jquery/jquery.min.js',
+          'dummy-external-readonly://core/assets/vendor/once/once.min.js',
+          'https://www.dummy-external-readonly.com/core/assets/vendor/once/once.min.js',
         ],
       'external stream wrapper with query string' =>
         [
-          'dummy-external-readonly://core/assets/vendor/jquery/jquery.min.js?foo=bar',
-          'https://www.dummy-external-readonly.com/core/assets/vendor/jquery/jquery.min.js?foo=bar',
+          'dummy-external-readonly://core/assets/vendor/once/once.min.js?foo=bar',
+          'https://www.dummy-external-readonly.com/core/assets/vendor/once/once.min.js?foo=bar',
         ],
       'external stream wrapper with hashes' =>
         [
-          'dummy-external-readonly://core/assets/vendor/jquery/jquery.min.js#whizz',
-          'https://www.dummy-external-readonly.com/core/assets/vendor/jquery/jquery.min.js#whizz',
+          'dummy-external-readonly://core/assets/vendor/once/once.min.js#whizz',
+          'https://www.dummy-external-readonly.com/core/assets/vendor/once/once.min.js#whizz',
         ],
       'external stream wrapper with query string and hashes' =>
         [
-          'dummy-external-readonly://core/assets/vendor/jquery/jquery.min.js?foo=bar#whizz',
-          'https://www.dummy-external-readonly.com/core/assets/vendor/jquery/jquery.min.js?foo=bar#whizz',
+          'dummy-external-readonly://core/assets/vendor/once/once.min.js?foo=bar#whizz',
+          'https://www.dummy-external-readonly.com/core/assets/vendor/once/once.min.js?foo=bar#whizz',
         ],
     ];
   }

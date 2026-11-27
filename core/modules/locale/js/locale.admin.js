@@ -3,96 +3,121 @@
  * Locale admin behavior.
  */
 
-(function ($, Drupal) {
+(function (Drupal) {
+  const listeners = new WeakMap();
+
   /**
-   * Marks changes of translations.
-   *
-   * @type {Drupal~behavior}
-   *
-   * @prop {Drupal~behaviorAttach} attach
-   *   Attaches behavior to show the user if translations has changed.
-   * @prop {Drupal~behaviorDetach} detach
-   *   Detach behavior to show the user if translations has changed.
+   * Marks altered rows and displays a warning above the table.
    */
   Drupal.behaviors.localeTranslateDirty = {
     attach() {
-      const form = once('localetranslatedirty', '#locale-translate-edit-form');
-      if (form.length) {
-        const $form = $(form);
-        // Display a notice if any row changed.
-        $form.one('formUpdated.localeTranslateDirty', 'table', function () {
-          const $marker = $(
-            Drupal.theme('localeTranslateChangedWarning'),
-          ).hide();
-          $(this).addClass('changed').before($marker);
-          $marker.fadeIn('slow');
-        });
-        // Highlight changed row.
-        $form.on('formUpdated.localeTranslateDirty', 'tr', function () {
-          const $row = $(this);
-          const rowToMark = once('localemark', $row);
-          const marker = Drupal.theme('localeTranslateChangedMarker');
+      once('localetranslatedirty', '#locale-translate-edit-form').forEach(
+        (form) => {
+          const stopWarning = Drupal.form.listen(
+            form,
+            'formUpdated',
+            (event, table) => {
+              stopWarning();
+              const template = document.createElement('template');
+              template.innerHTML = Drupal.theme(
+                'localeTranslateChangedWarning',
+              );
+              const marker = template.content.firstElementChild;
+              table.classList.add('changed');
+              if (!marker) {
+                return;
+              }
+              const { opacity, transition } = marker.style;
+              marker.style.opacity = '0';
+              marker.style.transition = 'opacity 600ms ease-in-out';
+              table.before(marker);
 
-          $row.addClass('changed');
-          // Add an asterisk only once if row changed.
-          if (rowToMark.length) {
-            $(rowToMark).find('td:first-child .js-form-item').append(marker);
-          }
-        });
-      }
+              // Commit the starting opacity before changing it to start the fade.
+              marker.getBoundingClientRect();
+              marker.style.opacity = opacity;
+              Promise.allSettled(
+                marker
+                  .getAnimations()
+                  .map(
+                    (animation) => Drupal.trackAnimation(animation).finished,
+                  ),
+              ).then(() => {
+                marker.style.transition = transition;
+              });
+            },
+            'table',
+          );
+          const stopRows = Drupal.form.listen(
+            form,
+            'formUpdated',
+            (event, row) => {
+              row.classList.add('changed');
+              if (once('localemark', row).length) {
+                row
+                  .querySelectorAll('td:first-child .js-form-item')
+                  .forEach((item) => {
+                    item.insertAdjacentHTML(
+                      'beforeend',
+                      Drupal.theme('localeTranslateChangedMarker'),
+                    );
+                  });
+              }
+            },
+            'tr',
+          );
+          listeners.set(form, [stopWarning, stopRows]);
+        },
+      );
     },
     detach(context, settings, trigger) {
       if (trigger === 'unload') {
-        const form = once.remove(
-          'localetranslatedirty',
-          '#locale-translate-edit-form',
-        );
-        if (form.length) {
-          $(form).off('formUpdated.localeTranslateDirty');
-        }
+        once
+          .remove('localetranslatedirty', '#locale-translate-edit-form')
+          .forEach((form) => {
+            listeners.get(form)?.forEach((stop) => stop());
+            listeners.delete(form);
+          });
       }
     },
   };
 
   /**
-   * Show/hide the description details on Available translation updates page.
-   *
-   * @type {Drupal~behavior}
-   *
-   * @prop {Drupal~behaviorAttach} attach
-   *   Attaches behavior for toggling details on the translation update page.
+   * Shows or hides details on the Available translation updates page.
    */
   Drupal.behaviors.hideUpdateInformation = {
-    attach(context, settings) {
-      const table = once('expand-updates', '#locale-translation-status-form');
-      if (table.length) {
-        const $table = $(table);
-        const $tableBodies = $table.find('tbody');
-
-        // Open/close the description details by toggling a tr class.
-        $tableBodies.on('click keydown', '.description', function (e) {
-          if (e.keyCode && e.keyCode !== 13 && e.keyCode !== 32) {
-            return;
-          }
-          e.preventDefault();
-          const $tr = $(this).closest('tr');
-
-          $tr.toggleClass('expanded');
-
-          const $localePrefix = $tr.find('.locale-translation-update__prefix');
-          if ($localePrefix.length) {
-            // Change screen reader text.
-            $localePrefix[0].textContent = $tr.hasClass('expanded')
-              ? Drupal.t('Hide description')
-              : Drupal.t('Show description');
-          }
-        });
-        $table.find('.requirements, .links').hide();
-      }
+    attach() {
+      once('expand-updates', '#locale-translation-status-form').forEach(
+        (form) => {
+          const toggle = (event, description) => {
+            if (event.keyCode && event.keyCode !== 13 && event.keyCode !== 32) {
+              return;
+            }
+            event.preventDefault();
+            const row = description.closest('tr');
+            const expanded = row.classList.toggle('expanded');
+            const prefix = row.querySelector(
+              '.locale-translation-update__prefix',
+            );
+            if (prefix) {
+              prefix.textContent = expanded
+                ? Drupal.t('Hide description')
+                : Drupal.t('Show description');
+            }
+          };
+          form.querySelectorAll('tbody').forEach((body) => {
+            ['click', 'keydown'].forEach((type) => {
+              Drupal.form.listen(body, type, toggle, '.description');
+            });
+          });
+          form.querySelectorAll('.requirements, .links').forEach((element) => {
+            element.style.display = 'none';
+          });
+        },
+      );
     },
   };
 
-  $.extend(
+  Object.assign(
     Drupal.theme,
     /** @lends Drupal.theme */ {
       /**
@@ -122,4 +147,4 @@
       },
     },
   );
-})(jQuery, Drupal);
+})(Drupal);

@@ -6,6 +6,7 @@ namespace Drupal\file_module_test\Form;
 
 use Drupal\Core\Form\FormBase;
 use Drupal\Core\Form\FormStateInterface;
+use Drupal\file\Element\ManagedFile;
 
 /**
  * Form controller for file_module_test module.
@@ -50,6 +51,25 @@ class FileModuleTestForm extends FormBase {
       '#size' => 13,
       '#multiple' => (bool) $multiple,
     ];
+    if ($this->getRequest()->query->getBoolean('validate_upload')) {
+      $form['nested']['file']['#upload_validators'] = [
+        'FileExtension' => ['extensions' => 'txt'],
+      ];
+      $form['other_file'] = $form['nested']['file'];
+      $form['other_file']['#title'] = $this->t('Other managed file');
+    }
+    if ($this->getRequest()->query->getBoolean('blank_extensions')) {
+      $form['nested']['file']['#upload_validators']['FileExtension'] = ['extensions' => " \t "];
+    }
+    if ($this->getRequest()->query->getBoolean('upload_progress')) {
+      $form['nested']['file']['#progress_indicator'] = 'bar';
+      if (!extension_loaded('uploadprogress')) {
+        $form['nested']['file']['#process'] = [
+          [ManagedFile::class, 'processManagedFile'],
+          [static::class, 'useFileUploadEvent'],
+        ];
+      }
+    }
     if ($default_fids) {
       $default_fids = explode(',', $default_fids);
       $form['nested']['file']['#default_value'] = $extended ? ['fids' => $default_fids] : $default_fids;
@@ -66,6 +86,20 @@ class FileModuleTestForm extends FormBase {
     ];
 
     return $form;
+  }
+
+  /**
+   * Exercises the upload event on servers without the UploadProgress extension.
+   *
+   * @param array $element
+   *   The processed managed file element.
+   *
+   * @return array
+   *   The element with the custom Ajax event.
+   */
+  public static function useFileUploadEvent(array $element): array {
+    $element['upload_button']['#ajax']['event'] = 'fileUpload';
+    return $element;
   }
 
   /**

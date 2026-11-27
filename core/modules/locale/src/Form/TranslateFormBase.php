@@ -164,7 +164,7 @@ abstract class TranslateFormBase extends FormBase {
       ],
       'states' => [
         'visible' => [
-          ':input[name=translation]' => ['value' => 'translated'],
+          'select[name=translation]' => ['value' => 'translated'],
         ],
       ],
       'default' => 'all',

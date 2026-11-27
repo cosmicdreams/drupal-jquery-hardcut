@@ -56,17 +56,17 @@ class ConfigImportUIAjaxTest extends WebDriverTestBase {
 
     // Click the dropbutton to show the differences in a modal and close it.
     $page->find('css', '.dropbutton-action')->click();
-    $assert_session->waitForElementVisible('css', '.ui-dialog');
-    $assert_session->assertVisibleInViewport('css', '.ui-dialog .ui-dialog-content');
+    $assert_session->waitForElementVisible('css', '.drupal-dialog');
+    $assert_session->assertVisibleInViewport('css', '.drupal-dialog .drupal-dialog-content');
     $page->pressButton('Close');
-    $assert_session->assertNoElementAfterWait('css', '.ui-dialog');
+    $assert_session->assertNoElementAfterWait('css', '.drupal-dialog');
 
     // Do this again to make sure no JavaScript errors occur on revisits.
     $page->find('css', '.dropbutton-action')->click();
-    $assert_session->waitForElementVisible('css', '.ui-dialog');
-    $assert_session->assertVisibleInViewport('css', '.ui-dialog .ui-dialog-content');
+    $assert_session->waitForElementVisible('css', '.drupal-dialog');
+    $assert_session->assertVisibleInViewport('css', '.drupal-dialog .drupal-dialog-content');
     $page->pressButton('Close');
-    $assert_session->assertNoElementAfterWait('css', '.ui-dialog');
+    $assert_session->assertNoElementAfterWait('css', '.drupal-dialog');
   }
 
 }

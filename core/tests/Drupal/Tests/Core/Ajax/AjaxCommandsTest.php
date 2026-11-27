@@ -15,18 +15,22 @@ use Drupal\Core\Ajax\CloseDialogCommand;
 use Drupal\Core\Ajax\CloseModalDialogCommand;
 use Drupal\Core\Ajax\CssCommand;
 use Drupal\Core\Ajax\DataCommand;
+use Drupal\Core\Ajax\DispatchEventCommand;
+use Drupal\Core\Ajax\FocusCommand;
 use Drupal\Core\Ajax\HtmlCommand;
 use Drupal\Core\Ajax\InsertCommand;
-use Drupal\Core\Ajax\InvokeCommand;
 use Drupal\Core\Ajax\OpenDialogCommand;
 use Drupal\Core\Ajax\PrependCommand;
 use Drupal\Core\Ajax\RedirectCommand;
 use Drupal\Core\Ajax\RemoveCommand;
 use Drupal\Core\Ajax\ReplaceCommand;
 use Drupal\Core\Ajax\RestripeCommand;
+use Drupal\Core\Ajax\SetAttributeCommand;
 use Drupal\Core\Ajax\SetDialogOptionCommand;
 use Drupal\Core\Ajax\SetDialogTitleCommand;
 use Drupal\Core\Ajax\SettingsCommand;
+use Drupal\Core\Ajax\SetValueCommand;
+use Drupal\Core\Ajax\ToggleClassCommand;
 use Drupal\Core\Ajax\UpdateBuildIdCommand;
 use Drupal\Core\Asset\AttachedAssets;
 use Drupal\Tests\UnitTestCase;
@@ -315,6 +319,19 @@ class AjaxCommandsTest extends UnitTestCase {
   }
 
   /**
+   * Tests the native command payloads.
+   */
+  public function testNativeCommandPayloads(): void {
+    self::assertSame(['command' => 'focus', 'selector' => '#target'], new FocusCommand('#target')->render());
+    self::assertSame(['command' => 'setValue', 'selector' => '#target', 'value' => 'new'], new SetValueCommand('#target', 'new')->render());
+    self::assertSame(['command' => 'dispatchEvent', 'selector' => '#target', 'event' => 'change'], new DispatchEventCommand('#target', 'change')->render());
+    self::assertSame(['command' => 'toggleClass', 'selector' => '#target', 'className' => 'active', 'enabled' => FALSE], new ToggleClassCommand('#target', 'active', FALSE)->render());
+    self::assertSame(['command' => 'setAttribute', 'selector' => '#target', 'name' => 'title', 'value' => 'New'], new SetAttributeCommand('#target', 'title', 'New')->render());
+    self::assertSame(['command' => 'css', 'selector' => '#target', 'argument' => ['color' => 'blue']], new CssCommand('#target', ['color' => 'blue'])->render());
+    self::assertSame(['command' => 'data', 'selector' => '#target', 'name' => 'value', 'value' => 0], new DataCommand('#target', 'value', 0)->render());
+  }
+
+  /**
    * Tests html command.
    *
    * @see \Drupal\Core\Ajax\HtmlCommand
@@ -347,24 +364,6 @@ class AjaxCommandsTest extends UnitTestCase {
       'selector' => '#page-title',
       'data' => '<p>New Text!</p>',
       'settings' => ['my-setting' => 'setting'],
-    ];
-
-    $this->assertEquals($expected, $command->render());
-  }
-
-  /**
-   * Tests invoke command.
-   *
-   * @see \Drupal\Core\Ajax\InvokeCommand
-   */
-  public function testInvokeCommand(): void {
-    $command = new InvokeCommand('#page-title', 'myMethod', ['var1', 'var2']);
-
-    $expected = [
-      'command' => 'invoke',
-      'selector' => '#page-title',
-      'method' => 'myMethod',
-      'args' => ['var1', 'var2'],
     ];
 
     $this->assertEquals($expected, $command->render());
@@ -463,7 +462,7 @@ class AjaxCommandsTest extends UnitTestCase {
    * @see \Drupal\Core\Ajax\OpenDialogCommand
    */
   public function testOpenDialogCommand(): void {
-    $command = new OpenDialogCommand('#some-dialog', 'Title', '<p>Text!</p>', [
+    $command = new OpenDialogCommand('#some-dialog', 'Release <draft>', '<p>Text!</p>', [
       'url' => FALSE,
       'width' => 500,
     ]);
@@ -476,7 +475,7 @@ class AjaxCommandsTest extends UnitTestCase {
       'dialogOptions' => [
         'url' => FALSE,
         'width' => 500,
-        'title' => 'Title',
+        'title' => 'Release <draft>',
         'modal' => FALSE,
       ],
     ];

@@ -102,6 +102,18 @@ class WidgetUploadTest extends MediaLibraryTestBase {
     $assert_session->elementExists('css', '.js-media-library-add-form');
     $assert_session->fieldExists('Add files');
 
+    // An attach rooted at an upload form should preserve the live count.
+    $this->getSession()->executeScript(<<<'JS'
+      const form = document.querySelector('.js-media-library-add-form');
+      const count = document.querySelector('.js-media-library-selected-count');
+      const observer = new MutationObserver(() => {});
+      observer.observe(count, { childList: true });
+      Drupal.behaviors.MediaLibraryItemSelection.attach(form, drupalSettings);
+      window.mediaCountChanges = observer.takeRecords().length;
+      observer.disconnect();
+      JS);
+    $this->assertJsCondition('window.mediaCountChanges === 0');
+
     // Assert we can upload a file to the default tab type_three.
     $assert_session->elementNotExists('css', '.js-media-library-add-form[data-input]');
     $this->addMediaFileToField('Add files', $this->container->get('file_system')->realpath($png_image->uri));
@@ -124,7 +136,7 @@ class WidgetUploadTest extends MediaLibraryTestBase {
     $this->waitForText('Alternative text field is required');
     $page->fillField('Alternative text', $this->randomString());
     $this->pressSaveButton();
-    $this->assertJsCondition('jQuery("input[name=\'media_library_select_form[1]\']").is(":focus")');
+    $this->assertJsCondition('document.activeElement.matches("input[name=\'media_library_select_form[1]\']")');
     // The file should be permanent now.
     $files = $file_storage->loadMultiple();
     $file = array_pop($files);
@@ -263,7 +275,8 @@ class WidgetUploadTest extends MediaLibraryTestBase {
     $this->pressSaveButton();
     $page->uncheckField('media_library_select_form[2]');
     $this->waitForText('1 item selected');
-    $this->waitForText("Select $existing_media_name");
+    // The existing item may be below the dialog's scroll viewport.
+    $this->waitForFieldExists("Select $existing_media_name");
     $media_items = Media::loadMultiple();
     $added_media = array_pop($media_items);
     $added_media_name = $added_media->label();
@@ -291,7 +304,7 @@ class WidgetUploadTest extends MediaLibraryTestBase {
     // Assert the focus is shifted to the first tabbable element of the add
     // form, which should be the source field.
     $this->assertNoMediaAdded();
-    $assert_session->elementExists('css', '.ui-dialog-titlebar-close')->click();
+    $assert_session->elementExists('css', '.drupal-dialog-titlebar-close')->click();
 
     // Assert uploading multiple files.
     $this->openMediaLibraryForField('field_unlimited_media');
@@ -331,7 +344,7 @@ class WidgetUploadTest extends MediaLibraryTestBase {
     // of the next media item and field values are still correct.
     $page->pressButton('media-1-remove-button');
     $this->assertTrue($assert_session->waitForText('The media item ' . $filenames[1] . ' has been removed.'));
-    $this->assertJsCondition('jQuery("[data-media-library-added-delta=2]").is(":focus")');
+    $this->assertJsCondition('document.activeElement.matches("[data-media-library-added-delta=\'2\']")');
     // Assert the file was deleted.
     $this->assertEmpty($file_storage->loadByProperties(['filename' => $filenames[1]]));
     $this->assertFileDoesNotExist($file_1_uri);
@@ -470,7 +483,7 @@ class WidgetUploadTest extends MediaLibraryTestBase {
     $this->waitForText('Alternative text field is required');
     $page->fillField('Alternative text', $this->randomString());
     $this->saveAnd('select');
-    $this->assertJsCondition('jQuery("input[name=\'media_library_select_form[1]\']").is(":focus")');
+    $this->assertJsCondition('document.activeElement.matches("input[name=\'media_library_select_form[1]\']")');
     // The file should be permanent now.
     $files = $file_storage->loadMultiple();
     $file = array_pop($files);
@@ -608,7 +621,7 @@ class WidgetUploadTest extends MediaLibraryTestBase {
     $this->switchToMediaType('Three');
     // Set the hidden field with the current selection via JavaScript and upload
     // a file.
-    $this->getSession()->executeScript("jQuery('.js-media-library-add-form-current-selection').val('1,2,{$unpublished_media->id()}')");
+    $this->getSession()->executeScript("document.querySelector('.js-media-library-add-form-current-selection').value = '1,2,{$unpublished_media->id()}'");
     $this->addMediaFileToField('Add files', $this->container->get('file_system')->realpath($png_uri_3));
     $this->assertMediaAdded();
     // Assert the pre-selected items are shown.
@@ -618,7 +631,7 @@ class WidgetUploadTest extends MediaLibraryTestBase {
     $this->waitForText(Media::load(1)->label());
     $this->waitForText(Media::load(2)->label());
     $assert_session->pageTextNotContains('Mosquito');
-    $page->find('css', '.ui-dialog-titlebar-close')->click();
+    $page->find('css', '.drupal-dialog-titlebar-close')->click();
 
     // Assert we can also remove selected items from the selection area in the
     // upload form.
@@ -645,7 +658,8 @@ class WidgetUploadTest extends MediaLibraryTestBase {
     //   fails. https://www.drupal.org/project/drupal/issues/3055648
     $selection_area->find('css', 'summary')->click();
     $this->saveAnd('select');
-    $this->waitForText("Select $existing_media_name");
+    // The existing item may be below the dialog's scroll viewport.
+    $this->waitForFieldExists("Select $existing_media_name");
     $media_items = Media::loadMultiple();
     $added_media = array_pop($media_items);
     $added_media_name = $added_media->label();
@@ -670,7 +684,7 @@ class WidgetUploadTest extends MediaLibraryTestBase {
     // Assert the remove message is shown.
     $this->waitForText("The media item $png_image->filename has been removed.");
     $this->assertNoMediaAdded();
-    $assert_session->elementExists('css', '.ui-dialog-titlebar-close')->click();
+    $assert_session->elementExists('css', '.drupal-dialog-titlebar-close')->click();
 
     // Assert uploading multiple files.
     $this->openMediaLibraryForField('field_unlimited_media');
@@ -711,7 +725,7 @@ class WidgetUploadTest extends MediaLibraryTestBase {
     // Remove the second file and assert the focus is shifted to the container
     // of the next media item and field values are still correct.
     $page->pressButton('media-1-remove-button');
-    $this->assertJsCondition('jQuery("[data-media-library-added-delta=2]").is(":focus")');
+    $this->assertJsCondition('document.activeElement.matches("[data-media-library-added-delta=\'2\']")');
     $assert_session->pageTextContains('The media item ' . $filenames[1] . ' has been removed.');
     // Assert the file was deleted.
     $this->assertEmpty($file_storage->loadByProperties(['filename' => $filenames[1]]));
@@ -754,7 +768,7 @@ class WidgetUploadTest extends MediaLibraryTestBase {
     // of the first media item and field values are still correct.
     $page->pressButton('media-2-remove-button');
     $this->assertTrue($assert_session->waitForText('The media item ' . $filenames[2] . ' has been removed.'));
-    $this->assertJsCondition('jQuery("[data-media-library-added-delta=0]").is(":focus")');
+    $this->assertJsCondition('document.activeElement.matches("[data-media-library-added-delta=\'0\']")');
     $assert_session->pageTextContains('The media item ' . $filenames[2] . ' has been removed.');
     $assert_session->elementNotExists('css', '[data-media-library-added-delta=1]');
     $assert_session->elementNotExists('css', '[data-media-library-added-delta=2]');
