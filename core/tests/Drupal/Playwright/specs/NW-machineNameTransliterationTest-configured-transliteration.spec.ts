@@ -16,6 +16,20 @@ import { expect, test } from '../fixtures/base.fixture';
 // cSpell:disable
 const transliterationCases = [
   {
+    machineName: 'Bob',
+    replacePattern: '[^a-zA-Z0-9-_.~]+',
+    replaceChar: '_',
+    maxlength: 64,
+    expectedMachineName: 'bob',
+  },
+  {
+    machineName: 'Äwesome',
+    replacePattern: '[^a-zA-Z0-9-_.~]+',
+    replaceChar: '_',
+    maxlength: 64,
+    expectedMachineName: 'awesome',
+  },
+  {
     machineName: 'B?!"@\\/-ob@e',
     replacePattern: '[^a-zA-Z0-9_.~]+',
     replaceChar: '_',
@@ -51,6 +65,15 @@ const transliterationCases = [
     replaceChar: '_',
     maxlength: 64,
     expectedMachineName: 'aaaaaaaeceeeeiiii',
+  },
+  // Nightwatch expected 'dnoooooxouuuuuthss'. The transliteration library
+  // update from 2.6.1 to 2.7.0 (commit 5776d7ded4d) now maps Ý to 'y'.
+  {
+    machineName: 'ÐÑÒÓÔÕÖ×ØÙÚÛÜÝÞß',
+    replacePattern: '[^a-zA-Z0-9-_.~]+',
+    replaceChar: '_',
+    maxlength: 64,
+    expectedMachineName: 'dnoooooxouuuuythss',
   },
   {
     machineName: 'àáâãäåæçèéêëìíîï',

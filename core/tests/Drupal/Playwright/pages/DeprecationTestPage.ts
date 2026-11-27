@@ -2,6 +2,8 @@ import type { Page } from '@playwright/test';
 import { DrupalPage } from './DrupalPage';
 
 export class DeprecationTestPage extends DrupalPage {
+  // Nightwatch matched '[Deprecation]' anywhere in a warning, so a prefixed
+  // message such as 'States: [Deprecation] …' is still caught.
   readonly warnings: string[] = [];
 
   constructor(page: Page) {
@@ -9,7 +11,7 @@ export class DeprecationTestPage extends DrupalPage {
     page.on('console', (message) => {
       if (
         message.type() === 'warning' &&
-        message.text().startsWith('[Deprecation] ')
+        message.text().includes('[Deprecation]')
       ) {
         this.warnings.push(message.text());
       }

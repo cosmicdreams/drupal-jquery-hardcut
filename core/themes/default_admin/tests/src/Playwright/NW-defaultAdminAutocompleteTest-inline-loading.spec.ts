@@ -48,6 +48,7 @@ test(
         await expect(denylistAutocomplete.input).not.toHaveClass(
           /(^|\s)is-autocompleting(\s|$)/,
         );
+        await expect(autocompleteTestPage.busyFields).toHaveCount(0);
       });
 
       // Tests both the autocomplete-message nor the autocomplete dropdown are

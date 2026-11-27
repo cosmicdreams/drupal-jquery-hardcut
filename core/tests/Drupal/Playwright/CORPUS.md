@@ -96,7 +96,7 @@ All five original cases have coverage. S1 has no retirements.
 
 ## S2
 
-<!-- cspell:ignore Äwesome dnoooooxouuuuythss ÐÑÒÓÔÕÖ ØÙÚÛÜÝ -->
+<!-- cspell:ignore Äwesome dnoooooxouuuuythss dnoooooxouuuuuthss ÐÑÒÓÔÕÖ ØÙÚÛÜÝ -->
 
 Core origins are relative to `core/tests/Drupal/Nightwatch/Tests/`.
 The Default Admin original is in `core/themes/default_admin/tests/src/Nightwatch/`.
@@ -111,9 +111,9 @@ Admin as the default theme and signs in a disposable account with
 | `statesTest.js:13` | The textfield controlled by an OR condition starts hidden | Adapt. Existing browser coverage uses the same route and verifies both inputs in the condition. | `JavascriptStatesTest::testNumberTrigger()` |
 | `statesTest.js:14` | The full States form logs no deprecation warnings | Adapt. Subscribe to the browser console for Drupal's `[Deprecation]` warnings. | `NW-statesTest-form-deprecations` |
 | `statesTest.js:20,32` | The dependent item starts hidden and appears after the number spinner changes | Adapt. Existing browser coverage sends Arrow Up and Tab, suppresses key-release handlers, and checks the trusted change event. | `JavascriptStatesTest::testNumberTrigger()` |
-| `machineNameTransliterationTest.js:31` | The filtered module checkbox is visible as part of setup | Adapt. Provision the module through the installer and verify its fixture is reachable. | `NW-machineNameTransliterationTest-configured-transliteration` |
-| `machineNameTransliterationTest.js:257`, vectors at lines 8, 15 | English `Bob → bob` and `Äwesome → awesome` | Adapt. Existing browser coverage fills the role label and verifies its generated machine name. | `MachineNameTransliterationTest::testMachineNameTransliterations()` |
-| `machineNameTransliterationTest.js:257`, vector at line 59 | English uppercase Latin-1 transliteration | Adapt. The current library yields `dnoooooxouuuuythss` for `ÐÑÒÓÔÕÖ×ØÙÚÛÜÝÞß`. That output is covered by `6f31c914380`. | `MachineNameTransliterationTest::testMachineNameTransliterations()` |
+| `machineNameTransliterationTest.js:231` | The filtered module checkbox is visible as part of setup | Adapt. Provision the module through the installer and verify its fixture is reachable. | `NW-machineNameTransliterationTest-configured-transliteration` |
+| `machineNameTransliterationTest.js:257`, vectors at lines 8, 15 | English `Bob → bob` and `Äwesome → awesome` through `Drupal.behaviors.machineName.transliterate()` with the original settings | Port. | `NW-machineNameTransliterationTest-configured-transliteration` |
+| `machineNameTransliterationTest.js:257`, vector at line 59 | English uppercase Latin-1 transliteration through the same call and settings | Port, expected value updated. Nightwatch expected `dnoooooxouuuuuthss`; transliteration 2.7.0 (`5776d7ded4d`, merged by `abf9f022c68`) maps `Ý` to `y`, giving `dnoooooxouuuuythss`. | `NW-machineNameTransliterationTest-configured-transliteration` |
 | `machineNameTransliterationTest.js:257`, other 28 vectors | Exact output for each input with its original replacement pattern, character, and maximum length | Port faithfully. The same synchronous browser method accepts the original settings. | `NW-machineNameTransliterationTest-configured-transliteration` |
 | `defaultAdminAutocompleteTest.js:12` | The themes list is visible after setup | Adapt. The installer selects Default Admin and the spec confirms its loading markup on the fixture. | `NW-defaultAdminAutocompleteTest-inline-loading` |
 | `defaultAdminAutocompleteTest.js:28` | The form page body is visible | Port faithfully. | `NW-defaultAdminAutocompleteTest-inline-loading` |

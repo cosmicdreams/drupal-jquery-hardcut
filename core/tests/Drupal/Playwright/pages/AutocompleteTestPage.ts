@@ -1,10 +1,13 @@
-import type { Page } from '@playwright/test';
+import type { Locator, Page } from '@playwright/test';
 import { AutocompleteComponent } from '../components/AutocompleteComponent';
 import { DrupalPage } from './DrupalPage';
 
 export class AutocompleteTestPage extends DrupalPage {
   readonly inlineAutocomplete: AutocompleteComponent;
   readonly denylistAutocomplete: AutocompleteComponent;
+  // Any field showing the autocomplete busy state. Nightwatch asserted on the
+  // class form-wide; the class is the widget's only busy signal.
+  readonly busyFields: Locator;
 
   constructor(page: Page) {
     super(page);
@@ -18,6 +21,7 @@ export class AutocompleteTestPage extends DrupalPage {
       'Autocomplete 4',
       'label',
     );
+    this.busyFields = page.locator('.is-autocompleting');
   }
 
   async typeDeniedTerm(): Promise<void> {
