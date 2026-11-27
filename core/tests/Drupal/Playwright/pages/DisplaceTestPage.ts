@@ -45,7 +45,14 @@ export class DisplaceTestPage extends DrupalPage {
     });
   }
 
-  async displaceAndCaptureEvents(broadcast = true): Promise<Offsets[]> {
+  /**
+   * Calls Drupal.displace() and returns the detail of each event it fires.
+   *
+   * With no argument, Drupal.displace() is called with no argument too, so its
+   * own default for the broadcast parameter is under test.
+   * @param broadcast
+   */
+  async displaceAndCaptureEvents(broadcast?: boolean): Promise<Offsets[]> {
     return this.page.evaluate((shouldBroadcast) => {
       const events: Offsets[] = [];
       const capture = (event: Event) => {
@@ -55,11 +62,15 @@ export class DisplaceTestPage extends DrupalPage {
       };
       document.addEventListener('drupalViewportOffsetChange', capture);
       try {
-        Drupal.displace(shouldBroadcast);
+        if (shouldBroadcast === null) {
+          Drupal.displace();
+        } else {
+          Drupal.displace(shouldBroadcast);
+        }
         return events;
       } finally {
         document.removeEventListener('drupalViewportOffsetChange', capture);
       }
-    }, broadcast);
+    }, broadcast ?? null);
   }
 }
