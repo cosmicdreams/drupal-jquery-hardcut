@@ -41,7 +41,7 @@ The Reports fixture seeds the account, role, and permissions.
 | `drupalCreateRole.js:39` | The role-added message appears | Harness setup, not ported | `UserRoleAdminTest::testRoleAdministration()` checks the message after submitting the add-role form |
 | `drupalCreateRole.js:44` | The permissions table appears | Harness setup, not ported | `UserPermissionsTest::testPermissionTableHtml()` checks the cell count of a module header row. See [coverage gaps](COVERAGE-GAPS.md) for the table selector and visibility. |
 | `drupalCreateRole.js:57` | The permissions-saved message appears | Harness setup, not ported | `UserPermissionsTest::testUserPermissionChanges()` checks the message after saving |
-| `drupalCreateUser.js:35,40` | The password input is visible | Harness setup, not ported | See [coverage gaps](COVERAGE-GAPS.md) |
+| `drupalCreateUser.js:39–40` | The password input is visible | Harness setup, not ported | See [coverage gaps](COVERAGE-GAPS.md) |
 | `drupalCreateUser.js:49,54–57` | The account-created message appears | Harness setup, not ported | `UserCreateTest::testUserAdd()` checks the confirmation after submitting the form |
 | `drupalLogout.js:24` | Logout confirmation removes the browser session cookie | Harness setup, not ported | See [coverage gaps](COVERAGE-GAPS.md) |
 
@@ -229,7 +229,7 @@ Their seven cases are in `core/modules/navigation/tests/src/Playwright/`.
 | `navigationMobileFocusTrapTest.js:47–197`, close button | `NW-navigationMobileFocusTrapTest-sidebar-inert` | Adapt. On the 375 × 800 homepage, verify the body is visible and the burger reports closed, open, and closed in order. After opening, every original non-sidebar body child has both inert attributes and the population is nonempty. The sidebar and overlay remain exempt. The original conditional focus probe becomes a guaranteed attempt on the real skip link, with a successful baseline attempt while the sidebar is closed. Closing clears every tracking marker. |
 | `navigationMobileFocusTrapTest.js:199–251`, overlay | Same file, overlay case | Adapt. Verify the body, open burger state, and active tracking markers. Click the exposed edge of the actual overlay with a pointer. Verify the closed burger state and that all tracking markers clear. |
 | `navigationMobileFocusTrapTest.js:253–304`, resize | Same file, resize case | Port faithfully. Load at 375 × 800, resize to 1280 × 800, and verify the sidebar is visible and tracking markers are absent. Resize back, verify the burger is visible and reports open after clicking, and verify tracking markers are present. |
-| `a11yTest.js:15–45`, account edit | `NW-a11yTest-navigation-sidebar` | Adapt. Scan `body` on `/user/1/edit` at 1220 × 800 and 1000 × 800 in the same session. At the narrow width, verify the Expand sidebar button is visible and click it. Verify the original Create button, named “Extend Create”, is visible before scanning. Both scans require zero violations with empty axe options. The original loaded the page at the runner's initial window size before resizing, so its wide-scan sidebar state depended on that size; the port seeds the collapsed preference so the wide scan always sees one state. |
+| `a11yTest.js:15–45`, account edit | `NW-a11yTest-navigation-sidebar` | Adapt. Scan `body` on `/user/1/edit` at 1220 × 800 and 1000 × 800 in the same session. At the narrow width, verify the Expand sidebar button is visible and click it. Verify the original Create button, named “Extend Create”, is visible before scanning. Both scans require zero violations with empty axe options. The original loaded the page at the CI runner's 800 × 600 headless window before resizing, so the sidebar initialized collapsed and stored that preference; the port seeds the same collapsed preference. |
 
 The non-accessibility cases use `playwright_testing` and install Navigation
 with its dependencies through `siteOptions.modules`. The wide, narrow, and
@@ -281,10 +281,9 @@ with the historical `administer nodes` grant.
 Core theme scans use fresh `playwright_a11y_testing` sites and require a
 successful response on the requested route before running axe. Nightwatch
 ended the browser session once per test file, in the global `afterEach`.
-Seven admin scans and two public scans used the old runner's unrecorded
-initial window. Playwright uses its default 1280 × 720 for these nine scans
-as an intentional coverage boundary. Revisit when an old continuous
-integration (CI) artifact or matched runner shows the historical window.
+Seven admin scans and two public scans ran at the historical CI window:
+the GitLab job passed `--headless` with no `--window-size`, so headless Chrome
+used its default 800 × 600. The port scans those nine at 800 × 600.
 The two admin scans at 415 × 823 preserve the explicit mobile resize and
 the Block case's inherited viewport.
 

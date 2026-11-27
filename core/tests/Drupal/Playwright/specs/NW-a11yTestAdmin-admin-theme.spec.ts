@@ -4,10 +4,10 @@ import type { DrupalPage } from '../pages/DrupalPage';
 /**
  * Ports a11yTestAdmin.js.
  *
- * Seven of the nine historical initial-window scans are in this file. Those
- * scans used the old runner's unrecorded initial window. They now use
- * Playwright's default 1280 × 720 as an intentional coverage boundary.
- * Revisit when an old CI artifact or matched runner shows the historical window.
+ * The historical GitLab job ran Chrome with --headless and no --window-size
+ * (DRUPAL_TEST_WEBDRIVER_CHROME_ARGS in 949d5a22038^:.gitlab-ci.yml), and
+ * headless Chrome's default window is 800 × 600. Cases without an explicit
+ * size therefore scanned at 800 × 600, and the port keeps that size.
  * @see https://www.drupal.org/i/3223147
  * @see https://www.drupal.org/i/3293469
  * @see https://www.drupal.org/i/3318394
@@ -17,6 +17,7 @@ import type { DrupalPage } from '../pages/DrupalPage';
 const adminTheme = process.env.DRUPAL_TEST_ADMIN_THEME;
 test.use({
   siteOptions: { profile: 'playwright_a11y_testing' },
+  viewport: { width: 800, height: 600 },
   // If an admin theme other than Default Admin is requested, install it.
   siteThemes:
     adminTheme && adminTheme !== 'default_admin' ? { admin: adminTheme } : {},
