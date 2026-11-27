@@ -146,6 +146,75 @@ The file history also includes #3174884, #3264940, and #3560682.
 The native selectors carry the original user-visible contracts. S2 has no
 retirements, new `PW-` cases, or uncovered assertions.
 
+## S3 htmx
+
+<!-- cSpell:ignore beforebegin afterbegin beforeend afterend -->
+
+The source is `core/tests/Drupal/Nightwatch/Tests/htmx/htmxTest.js` at
+`949d5a22038^`. The file history traces #3521173, #3522597, #3532159,
+#3555916, and #3560659. All assertions below are faithful ports.
+
+| Original case | Body, trigger, and direct-route assertions | Asset assertions (before / after) | Swap result assertions | Playwright spec |
+|---|---|---|---|---|
+| Asset Load | 32–33, 40, 43 | 41–42 / 47–48 | 45–46 | `NW-htmxTest-load-assets` |
+| Asset Load with wrapper format | 58, 61 | 59–60 / 65–66 | 63–64 | `NW-htmxTest-wrapper-assets` |
+| innerHTML | 75, 78 | 76–77 / 82–83 | 80–81 | `NW-htmxTest-swap-strategies` / `inner-html` |
+| outerHTML | 88, 91 | 89–90 / 95–96 | 93–94 | same / `outer-html` |
+| textContent | 101, 104 | 102–103 / — | 106–112 | same / `text-content` |
+| beforebegin | 117, 120 | 118–119 / 124–125 | 122–123 | same / `beforebegin` |
+| afterbegin | 130, 133 | 131–132 / 137–138 | 135–136 | same / `afterbegin` |
+| beforeend | 143, 146 | 144–145 / 150–151 | 148–149 | same / `beforeend` |
+| afterend | 156, 159 | 157–158 / 163–164 | 161–162 | same / `afterend` |
+| innerMorph | 169, 172 | 170–171 / 176–177 | 174–175 | same / `inner-morph` |
+| outerMorph | 182, 185 | 183–184 / 189–190 | 187–188 | same / `outer-morph` |
+| outerSync | 195, 198 | 196–197 / 202–203 | 200–201 | same / `outer-sync` |
+| delete | 208–211 | — | 213–217 | `NW-htmxTest-delete-detach` |
+| Ajax Load HTMX Element | 224–225, 232, 235, 238 | 233–234 / 243–244 | 241–242 | `NW-htmxTest-ajax-inserted-trigger` |
+| Boosted a tag | 252–253, 259, 262 | 260–261 / 266–267 | 264–265 | `NW-htmxTest-boosted-body` |
+
+The original already exercised htmx 4 after `2aa5aede43f`. The current
+controller still maps the original route segments to these swap values.
+
+| Original route suffix | Current htmx swap |
+|---|---|
+| `inner-html/swap` | `innerHTML` |
+| `outer-html/swap` | `outerHTML` |
+| `text-content/swap` | `textContent` |
+| `beforebegin/swap` | `beforebegin` |
+| `afterbegin/swap` | `afterbegin` |
+| `beforeend/swap` | `beforeend` |
+| `afterend/swap` | `afterend` |
+| `inner-morph/swap` | `innerMorph` |
+| `outer-morph/swap` | `outerMorph` |
+| `outer-sync/swap` | `outerSync` |
+| `delete` | `delete` |
+
+Each test installs Minimal and `test_htmx` through `siteOptions.modules`.
+This replaces `HtmxAssetLoadTestSetup.php`, whose only action was to install
+`test_htmx`. The ten swap variants share a spec file because they use the same fixture
+and sequence. Each variant runs as a separate test on a fresh site. The Ajax case waits for Drupal's Ajax behavior binding and
+for the inserted button in place of the two fixed pauses.
+
+The named swap tests verify the strategy sent by the fixture. The default
+case verifies the absence of an explicit strategy. The boosted case requires
+a real htmx request so a full-page fallback cannot pass the asset assertions.
+All six named routes and all ten swap variants still exist. The historical
+`reveal-merged-settings.js` reference is retained as written. The current
+fixture loads `test_htmx/js/behavior.js` and `test_htmx/css/style.css`.
+
+`HtmxDynamicFormTest::testWrapperFormat()` already checks the wrapper flag on
+the same route. The Playwright case verifies the script, stylesheet, visible
+response and behavior marker. `HtmxDynamicFormTest::testPartialDelete()`
+deletes a different target on the form-builder route and has no detach
+assertion. `HtmxRequestTest` checks render attributes, `HtmxRendererTest`
+checks response markup, and `HtmxRendererCacheTest` checks response caching.
+The `6f31c914380` vendor regression test covers guarded swap cancellation
+and history. For the hard-cut workspace changes (`7f3688850a9`,
+`2d250ebbb6f`), `NavigationWorkspacesDialogTest::testSharedTrayOpeningOrder()`
+delays the competing Workspaces and Layout Builder requests and checks the
+winning content in the same tray. `211a73d75ab` removes jQuery references.
+S3 introduces no retirement, new `PW-` spec, or uncovered corpus assertion.
+
 ## Pending slices
 
 Each pending case and assertion from the following files maps to the pending
@@ -153,7 +222,6 @@ corpus entry in [COVERAGE-GAPS.md](COVERAGE-GAPS.md).
 
 | Slice | Original files |
 |---|---|
-| S3 | `htmx/htmxTest.js` |
 | S4 | Navigation tests `expandCollapseTest.js`, `navigationDisplaceTest.js`, `navigationMobileFocusTrapTest.js`, and `a11yTest.js` |
 | S5 | `defaultAdminDrupalMessageTest.js`, `defaultAdminPrimaryTabsTest.js`, `a11yTestAdmin.js`, `a11yTestDefault.js` |
 | S6 | `drupalHtmlBuilderTest.js` |

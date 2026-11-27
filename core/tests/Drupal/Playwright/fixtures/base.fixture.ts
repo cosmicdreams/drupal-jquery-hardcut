@@ -7,6 +7,7 @@ import { AutocompleteTestPage } from '../pages/AutocompleteTestPage';
 import { DeprecationTestPage } from '../pages/DeprecationTestPage';
 import { DisplaceTestPage } from '../pages/DisplaceTestPage';
 import { DrupalPage } from '../pages/DrupalPage';
+import { HtmxAttachmentsPage } from '../pages/HtmxAttachmentsPage';
 import { LoginPage } from '../pages/LoginPage';
 import { MachineNameTestPage } from '../pages/MachineNameTestPage';
 import { OnceTestPage } from '../pages/OnceTestPage';
@@ -25,6 +26,7 @@ type Fixtures = {
   autocompleteTestPage: AutocompleteTestPage;
   deprecationTestPage: DeprecationTestPage;
   displaceTestPage: DisplaceTestPage;
+  htmxAttachmentsPage: HtmxAttachmentsPage;
   machineNameTestPage: MachineNameTestPage;
   onceTestPage: OnceTestPage;
   tabbingManagerTestPage: TabbingManagerTestPage;
@@ -143,6 +145,9 @@ export const test = base.extend<Fixtures>({
   },
   displaceTestPage: async ({ page }, use) => {
     await use(new DisplaceTestPage(page));
+  },
+  htmxAttachmentsPage: async ({ page }, use) => {
+    await use(new HtmxAttachmentsPage(page));
   },
   machineNameTestPage: async ({ page }, use) => {
     await use(new MachineNameTestPage(page));
