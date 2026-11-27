@@ -103,6 +103,7 @@ datelist
 datestamp
 datetimeiso
 dburl
+ddev
 dealerdirect
 defaultable
 defgroup

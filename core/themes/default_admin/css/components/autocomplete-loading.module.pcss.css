@@ -14,7 +14,6 @@
 /* The "Loading" message gets positioned to the top right. */
 .admin-autocomplete__message {
   position: absolute;
-  display: none;
   max-width: 100%;
   margin-block-end: 0.15rem;
   color: var(--admin-color-primary);
@@ -23,6 +22,11 @@
   line-height: calc(18rem / 16);
   inset-inline-end: 0;
   inset-block-end: 100%;
+
+  /* Override the generic display rule for divs in an inline form. */
+  .admin-autocomplete > & {
+    display: none;
+  }
 
   .form-autocomplete.is-autocompleting + & {
     display: block;
