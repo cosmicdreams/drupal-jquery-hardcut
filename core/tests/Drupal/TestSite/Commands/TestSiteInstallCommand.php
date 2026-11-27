@@ -105,7 +105,7 @@ class TestSiteInstallCommand extends Command {
       ->addOption('install-profile', NULL, InputOption::VALUE_OPTIONAL, 'Install profile to install the site in. Defaults to testing.', 'testing')
       ->addOption('langcode', NULL, InputOption::VALUE_OPTIONAL, 'The language to install the site in. Defaults to en.', 'en')
       ->addOption('json', NULL, InputOption::VALUE_NONE, 'Output test site connection details in JSON.')
-      ->addOption('fixture-prefix-file', NULL, InputOption::VALUE_REQUIRED, 'Record the allocated prefix before installation. Requests must use the signed test user agent instead of a sites.php mapping.')
+      ->addOption('fixture-prefix-file', NULL, InputOption::VALUE_REQUIRED, 'Record the allocated prefix before installation in a file relative to the Drupal root. Requests must use the signed test user agent instead of a sites.php mapping.')
       ->addUsage('--setup-file core/tests/Drupal/TestSite/TestSiteMultilingualInstallTestScript.php --json')
       ->addUsage('--install-profile demo_umami --langcode fr')
       ->addUsage('--base-url "http://example.com" --db-url "mysql://username:password@localhost/database_name#table_prefix"');

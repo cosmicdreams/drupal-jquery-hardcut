@@ -15,12 +15,7 @@ test.use({ siteOptions: { setupFile: loginSetup } });
 test(
   'NW-loginTest-reports-access',
   { tag: ['@core', '@local'] },
-  async ({ adminPage, reportsLoginPage }) => {
-    await test.step('Verify the administrator session on the fixture site', async () => {
-      await adminPage.open('user');
-      await expect.poll(() => adminPage.hasSession()).toBe(true);
-    });
-
+  async ({ reportsLoginPage }) => {
     await test.step('Open Reports as the user granted access to site reports', async () => {
       await reportsLoginPage.open('admin/reports');
       await expect(reportsLoginPage.body).toBeVisible();

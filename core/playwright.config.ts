@@ -9,6 +9,8 @@ export default defineConfig({
   testMatch: [
     'tests/Drupal/Playwright/specs/**/*.spec.ts',
     'modules/*/tests/src/Playwright/**/*.spec.ts',
+    'modules/*/modules/*/tests/src/Playwright/**/*.spec.ts',
+    'profiles/**/tests/src/Playwright/**/*.spec.ts',
     'themes/*/tests/src/Playwright/**/*.spec.ts',
   ].map((pattern) => resolve(__dirname, pattern)),
   testIgnore: ['**/node_modules/**', '**/.yarn/**'],

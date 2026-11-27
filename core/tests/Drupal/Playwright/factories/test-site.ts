@@ -10,8 +10,25 @@ const repositoryRoot = resolve(coreRoot, '..');
 const prefixPattern = /^test[0-9]{8}$/;
 const uuidPattern = /^[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}$/;
 const staleRunAge = 24 * 60 * 60 * 1000;
-const registryScript =
-  './tests/Drupal/Playwright/support/test-site-registry.sh';
+const installTimeout = process.env.DRUPAL_TEST_INSTALL_TIMEOUT || '40';
+const installTimeoutSeconds = Number(installTimeout);
+if (
+  !/^[1-9][0-9]*$/.test(installTimeout) ||
+  !Number.isSafeInteger(installTimeoutSeconds * 1000 + 20_000)
+) {
+  throw new Error(
+    'DRUPAL_TEST_INSTALL_TIMEOUT must be a positive integer in seconds.',
+  );
+}
+
+// Leave time for the install deadline, kill grace, and registry operations.
+export const siteFixtureTimeout = installTimeoutSeconds * 1000 + 20_000;
+const registryCommand = [
+  'env',
+  `DRUPAL_TEST_INSTALL_TIMEOUT=${installTimeout}`,
+  'sh',
+  './tests/Drupal/Playwright/support/test-site-registry.sh',
+];
 
 export interface SiteOptions {
   profile?: string;
@@ -115,8 +132,7 @@ async function cleanupSite(record: string, recover = false): Promise<void> {
   }
   try {
     await containerCommand([
-      'sh',
-      registryScript,
+      ...registryCommand,
       recover ? 'recover' : 'cleanup',
       record,
       `--db-url=${databaseURL()}`,
@@ -137,8 +153,7 @@ export async function installSite(options: SiteOptions): Promise<TestSite> {
   const record = `${registryDirectory()}/${randomUUID()}`;
   await mkdir(resolve(repositoryRoot, record), { recursive: true });
   const install = await containerCommand([
-    'sh',
-    registryScript,
+    ...registryCommand,
     'install',
     record,
     `--base-url=${url.href}`,

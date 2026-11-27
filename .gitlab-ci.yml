@@ -344,6 +344,7 @@ default:
   variables:
     KUBERNETES_CPU_REQUEST: "9"
     DRUPAL_TEST_BASE_URL: "http://localhost/subdirectory"
+    # DRUPAL_TEST_INSTALL_TIMEOUT overrides the 40-second site install deadline.
     PLAYWRIGHT_BROWSERS_PATH: "/ms-playwright"
   services:
     - <<: *with-database

@@ -14,6 +14,7 @@ use PHPUnit\Framework\Attributes\CoversNothing;
 use PHPUnit\Framework\Attributes\Group;
 use PHPUnit\Framework\Attributes\PreserveGlobalState;
 use PHPUnit\Framework\Attributes\RunTestsInSeparateProcesses;
+use Symfony\Component\Filesystem\Filesystem as SymfonyFilesystem;
 use Symfony\Component\Process\PhpExecutableFinder;
 use Symfony\Component\Process\Process;
 
@@ -89,6 +90,39 @@ class TestSiteApplicationTest extends KernelTestBase {
 
     $this->assertStringContainsString('The class Drupal\KernelTests\Scripts\TestSiteApplicationTest contained in', $process->getErrorOutput());
     $this->assertStringContainsString('needs to implement \Drupal\TestSite\TestSetupInterface', $process->getErrorOutput());
+  }
+
+  /**
+   * Tests install when the fixture prefix file cannot be written.
+   */
+  public function testInstallWhenFixturePrefixFileCannotBeWritten(): void {
+    $filesystem = new SymfonyFilesystem();
+    $lock_directory = $filesystem->tempnam(FileSystem::getOsTemporaryDirectory(), 'fixture-lock-');
+    $filesystem->remove($lock_directory);
+    $filesystem->mkdir($lock_directory);
+
+    try {
+      $sites_file = $this->root . '/sites/sites.php';
+      $sites_contents = is_file($sites_file) ? file_get_contents($sites_file) : NULL;
+
+      // An existing directory cannot be replaced by a file, even as root.
+      $process = new Process([
+        $this->php,
+        '-d',
+        'upload_tmp_dir=' . $lock_directory,
+        'core/scripts/test-site.php',
+        'install',
+        '--fixture-prefix-file=sites/simpletest',
+      ], $this->root, ['COLUMNS' => '200']);
+      $this->assertSame(1, $process->run());
+      $this->assertStringContainsString('to "sites/simpletest"', $process->getErrorOutput());
+      $this->assertSame([], glob($lock_directory . '/test_*'));
+      clearstatcache(TRUE, $sites_file);
+      $this->assertSame($sites_contents, is_file($sites_file) ? file_get_contents($sites_file) : NULL);
+    }
+    finally {
+      $filesystem->remove($lock_directory);
+    }
   }
 
   /**

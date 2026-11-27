@@ -1,6 +1,6 @@
 import { expect, test as base } from '@playwright/test';
 import type { APIRequest, BrowserContext } from '@playwright/test';
-import { installSite } from '../factories/test-site';
+import { installSite, siteFixtureTimeout } from '../factories/test-site';
 import type { SiteOptions, TestSite } from '../factories/test-site';
 import { DrupalPage } from '../pages/DrupalPage';
 import { LoginPage } from '../pages/LoginPage';
@@ -51,14 +51,17 @@ async function captureAuthState(
 
 export const test = base.extend<Fixtures>({
   siteOptions: [{}, { option: true }],
-  site: async ({ siteOptions }, use) => {
-    const site = await installSite(siteOptions);
-    try {
-      await use(site);
-    } finally {
-      await site.cleanup();
-    }
-  },
+  site: [
+    async ({ siteOptions }, use) => {
+      const site = await installSite(siteOptions);
+      try {
+        await use(site);
+      } finally {
+        await site.cleanup();
+      }
+    },
+    { timeout: siteFixtureTimeout },
+  ],
   baseURL: async ({ site }, use) => {
     await use(site.baseURL);
   },

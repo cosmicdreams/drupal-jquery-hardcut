@@ -6,6 +6,7 @@ set -eu
 operation=$1
 record=$2
 shift 2
+kill_grace=2
 
 case "$operation" in
   install)
@@ -13,18 +14,20 @@ case "$operation" in
     # Keep the lock until the group has been stopped, even if DDEV disconnects.
     exec flock -n -E 75 "../$record" sh -eu -c '
       record=$1
-      shift
+      kill_grace=$2
+      shift 2
       test -d "../$record"
-      timeout --verbose --kill-after=2s 40s php ./scripts/test-site.php install --json \
+      timeout --verbose --kill-after="${kill_grace}s" "${DRUPAL_TEST_INSTALL_TIMEOUT}s" \
+        php ./scripts/test-site.php install --json \
         "--fixture-prefix-file=$record/pending" "$@"
       mv "../$record/pending" "../$record/complete"
-    ' sh "$record" "$@"
+    ' sh "$record" "$kill_grace" "$@"
     ;;
   cleanup|recover)
     lock_wait=-n
     if [ "$operation" = cleanup ]; then
-      # Allow the 40-second installer deadline and its 2-second kill grace.
-      lock_wait=-w45
+      # Allow the installer deadline, kill grace, and a three-second margin.
+      lock_wait="-w$((DRUPAL_TEST_INSTALL_TIMEOUT + kill_grace + 3))"
     fi
     directory="../$record"
     db_option=$1
