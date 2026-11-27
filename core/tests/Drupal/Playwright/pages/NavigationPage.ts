@@ -34,6 +34,11 @@ export class NavigationPage extends DrupalPage {
       ),
       this.clearCaches.click(),
     ]);
+    // The 303 arrives before the redirected page commits. Wait for the
+    // confirmation that only the redirected page renders, so later assertions
+    // cannot pass against the page that was open before the submission.
+    // Improvement: a role-based locator once the message has a stable role.
+    await expect(this.page.getByText('Caches cleared.')).toBeVisible();
     return submission;
   }
 

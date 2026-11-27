@@ -89,6 +89,15 @@ test(
       await expect(navigation.configuration).toHaveCount(1);
       await expect(navigation.configuration).toBeHidden();
       await expect(navigation.mobileToggle).toBeFocused();
+      // The original located the trigger by its "Expand sidebar" text, so its
+      // focus check also required the trigger to have reset its label.
+      await expect(navigation.mobileToggle).toHaveAccessibleName(
+        'Expand sidebar',
+      );
+      await expect(navigation.mobileToggle).toHaveAttribute(
+        'aria-expanded',
+        'false',
+      );
     });
   },
 );

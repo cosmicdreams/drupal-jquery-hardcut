@@ -31,7 +31,7 @@ test(
       await navigationPage.open('user/1/edit');
       await expect(navigation.desktopToggle).toHaveAttribute(
         'aria-expanded',
-        /^(true|false)$/,
+        'false',
       );
       const { violations } = await navigationPage.scanAccessibility('body', {});
       expect.soft(violations).toEqual([]);
