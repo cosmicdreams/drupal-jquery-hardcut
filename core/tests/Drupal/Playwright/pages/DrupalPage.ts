@@ -17,6 +17,20 @@ export class DrupalPage {
     return this.page.goto(path);
   }
 
+  async openForAccessibilityScan(path: string): Promise<void> {
+    const response = await this.open(path);
+    if (!response?.ok() || response.request().redirectedFrom()) {
+      // The response must be the requested page, including its query string.
+      throw new Error(
+        `Could not open ${path} for an accessibility scan (HTTP ${response?.status()}, ${response?.url()}).`,
+      );
+    }
+  }
+
+  async resize(width: number, height: number): Promise<void> {
+    await this.page.setViewportSize({ width, height });
+  }
+
   async scanAccessibility(
     context = 'body',
     options: Parameters<AxeBuilder['options']>[0] = {},

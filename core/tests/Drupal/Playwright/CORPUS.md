@@ -256,15 +256,48 @@ username. `NavigationBlockUiTest::testNavigationBlockAdminUiPageNestedForm()`
 checks layout editing. The sidebar behavior remains native on the hard-cut
 branch. There are no jQuery-only retirements or new `PW-` cases.
 
+## S5 Default Admin and core theme accessibility
+
+The theme originals were under `core/themes/default_admin/tests/src/Nightwatch/`.
+The accessibility originals were under `core/tests/Drupal/Nightwatch/Tests/`.
+All four are available in `949d5a22038^`.
+
+| Original case                                                                                                                          | Playwright spec                                      | Classification and assertion mapping                                                                                                                                                                                                                                                                                                                             |
+| -------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `defaultAdminDrupalMessageTest.js:36–62`                                                                                               | `NW-defaultAdminDrupalMessageTest-message-placement` | Adapt. On the original system-message route, require visible content and the default wrapper. Assert three immediate message children, one of each type, then click the three Add buttons and assert six children, two of each type. Default Admin uses `.messages__wrapper` for the original destination.                                                       |
+| `defaultAdminDrupalMessageTest.js:64–100`                                                                                              | Same file, custom area                               | Port faithfully. Require visible content and the custom wrapper. Assert it starts empty and ends with three immediate children, one of each type, after the three Add clicks.                                                                                                                                                                                    |
+| `defaultAdminPrimaryTabsTest.js:28–35`                                                                                                 | `NW-defaultAdminPrimaryTabsTest-responsive-tabs`     | Port faithfully. At 1600 × 800 on `/node/1`, require the primary tabs and the active and first inactive tab to be visible. The toggle exists and is hidden.                                                                                                                                                                                                      |
+| `defaultAdminPrimaryTabsTest.js:36–62`                                                                                                 | Same file, mobile case                               | Port visible primary navigation and active tab, the first inactive tab hidden, visible toggle, and exact expanded values `false`, `true`, `false` at 699 × 800. The first inactive tab becomes visible after opening and is still attached but hidden after closing. The twelve assertions targeting two distinct icons have a [coverage gap](COVERAGE-GAPS.md). |
+| `a11yTestAdmin.js:18–27,75–79`, User Edit, Create Article, Create Page, Content Page, Structure Page, Add content type, Add vocabulary | `NW-a11yTestAdmin-admin-theme`                       | Port faithfully. Scan `body` with empty options on each of the seven routes as user 1. Preserve the destination query on both creation forms.                                                                                                                                                                                                                    |
+| `a11yTestAdmin.js:29–50,75–79`, Manage text format, mobile                                                                             | Same file, mobile case                               | Port faithfully. Scan `body` on the restricted HTML format at 415 × 823 with the exact seven historical tags.                                                                                                                                                                                                                                                    |
+| `a11yTestAdmin.js:52–62,75–79`, Structure \| Block                                                                                     | Same file, block case                                | Port faithfully. Scan `body` on the block layout at the runner’s default size. Disable only `color-contrast`, `duplicate-id-active`, and `region`.                                                                                                                                                                                                               |
+| `a11yTestDefault.js:22–41,48–51`, Homepage and Login                                                                                   | `NW-a11yTestDefault-default-theme`                   | Port faithfully. Scan the same two public pages anonymously with `region` disabled.                                                                                                                                                                                                                                                                              |
+
+The messages fixture installs `js_message_test` into `playwright_testing`
+and makes Default Admin the default theme. The tabs fixture restores the
+Minimal profile setup and content. It authenticates as a separate account
+with the historical `administer nodes` grant.
+
+Core theme scans use fresh `playwright_a11y_testing` sites and require a
+successful response on the requested route before running axe. Nightwatch
+ended the browser session after each case. Cases without an explicit
+resize used the runner's initial window size.
+Playwright uses its runner default for those cases. Override the installed
+theme with `DRUPAL_TEST_ADMIN_THEME` or `DRUPAL_TEST_DEFAULT_THEME`.
+For example, run `DRUPAL_TEST_DEFAULT_THEME=default_admin yarn test:playwright --grep @a11y-default`
+with the test environment configured below. The restored
+`playwright_theme_install_utility` is installed only on sites with a theme
+override. The authenticated installation request returns a confirmation
+without rendering through the newly installed theme on that request.
+
 ## Pending slices
 
 Each pending case and assertion from the following files maps to the pending
 corpus entry in [COVERAGE-GAPS.md](COVERAGE-GAPS.md).
 
-| Slice | Original files |
-|---|---|
-| S5 | `defaultAdminDrupalMessageTest.js`, `defaultAdminPrimaryTabsTest.js`, `a11yTestAdmin.js`, `a11yTestDefault.js` |
-| S6 | `drupalHtmlBuilderTest.js` |
+| Slice | Original files             |
+| ----- | -------------------------- |
+| S6    | `drupalHtmlBuilderTest.js` |
 
 ## Run the Playwright suite
 

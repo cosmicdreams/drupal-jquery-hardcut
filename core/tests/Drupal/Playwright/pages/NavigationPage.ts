@@ -42,10 +42,6 @@ export class NavigationPage extends DrupalPage {
     return submission;
   }
 
-  async resize(width: number, height: number): Promise<void> {
-    await this.page.setViewportSize({ width, height });
-  }
-
   async startWithCollapsedSidebar(): Promise<void> {
     await this.page.addInitScript(() => {
       if (localStorage.getItem('Drupal.navigation.sidebarExpanded') === null) {

@@ -10,8 +10,10 @@ import { DrupalPage } from '../pages/DrupalPage';
 import { HtmxAttachmentsPage } from '../pages/HtmxAttachmentsPage';
 import { LoginPage } from '../pages/LoginPage';
 import { MachineNameTestPage } from '../pages/MachineNameTestPage';
+import { MessageTestPage } from '../pages/MessageTestPage';
 import { NavigationPage } from '../pages/NavigationPage';
 import { OnceTestPage } from '../pages/OnceTestPage';
+import { PrimaryTabsTestPage } from '../pages/PrimaryTabsTestPage';
 import { TabbingManagerTestPage } from '../pages/TabbingManagerTestPage';
 import { UmamiTestPage } from '../pages/UmamiTestPage';
 
@@ -20,6 +22,12 @@ type AuthState = Awaited<ReturnType<BrowserContext['storageState']>>;
 type Fixtures = {
   siteOptions: SiteOptions;
   site: TestSite;
+  siteThemes: Partial<Record<'admin' | 'default', string>>;
+  themeSetup: void;
+  a11yAdminPage: DrupalPage;
+  a11yDefaultPage: DrupalPage;
+  messageTestPage: MessageTestPage;
+  primaryTabsTestPage: PrimaryTabsTestPage;
   siteCleanup: (site: TestSite) => void;
   drupalPage: DrupalPage;
   umamiPage: UmamiTestPage;
@@ -73,6 +81,71 @@ async function captureAuthState(
 
 export const test = base.extend<Fixtures>({
   siteOptions: [{}, { option: true }],
+  siteThemes: [{}, { option: true }],
+  themeSetup: async ({ siteThemes, site, playwright, storageState }, use) => {
+    const themes = Object.entries(siteThemes);
+    if (themes.length) {
+      const state = await captureAuthState(
+        playwright.request,
+        site,
+        storageState,
+        1,
+      );
+      const request = await playwright.request.newContext({
+        baseURL: site.baseURL,
+        storageState: state,
+      });
+      try {
+        for (const [role, theme] of themes) {
+          if (!/^[a-z][a-z0-9_]*$/.test(theme)) {
+            throw new Error(`Invalid theme machine name: ${theme}`);
+          }
+          const response = await request.post(
+            `admin/theme/install_${role}/${theme}`,
+          );
+          const installed = response.ok() ? await response.json() : null;
+          if (installed?.theme !== theme || installed?.role !== role) {
+            throw new Error(
+              `Could not install ${theme} as the ${role} theme (HTTP ${response.status()}).`,
+            );
+          }
+        }
+      } finally {
+        await request.dispose();
+      }
+    }
+    await use();
+  },
+  a11yAdminPage: async ({ themeSetup, adminPage }, use) => {
+    void themeSetup;
+    await use(adminPage);
+  },
+  a11yDefaultPage: async ({ themeSetup, drupalPage }, use) => {
+    void themeSetup;
+    await use(drupalPage);
+  },
+  messageTestPage: async ({ themeSetup, page }, use) => {
+    void themeSetup;
+    await use(new MessageTestPage(page));
+  },
+  primaryTabsTestPage: async (
+    { browser, baseURL, playwright, site, storageState },
+    use,
+  ) => {
+    // The primary tabs setup creates the node administrator immediately after UID 1.
+    const state = await captureAuthState(
+      playwright.request,
+      site,
+      storageState,
+      2,
+    );
+    const context = await browser.newContext({ baseURL, storageState: state });
+    try {
+      await use(new PrimaryTabsTestPage(await context.newPage()));
+    } finally {
+      await context.close();
+    }
+  },
   // Give cleanup its own timeout so a slow install cannot use its lock budget.
   siteCleanup: [
     // Playwright requires an object pattern even for fixtures without dependencies.
@@ -90,8 +163,13 @@ export const test = base.extend<Fixtures>({
     { timeout: siteFixtureTimeout },
   ],
   site: [
-    async ({ siteOptions, siteCleanup }, use) => {
-      const site = await installSite(siteOptions);
+    async ({ siteOptions, siteThemes, siteCleanup }, use) => {
+      const site = await installSite({
+        ...siteOptions,
+        modules: Object.keys(siteThemes).length
+          ? [...(siteOptions.modules ?? []), 'playwright_theme_install_utility']
+          : siteOptions.modules,
+      });
       siteCleanup(site);
       await use(site);
     },

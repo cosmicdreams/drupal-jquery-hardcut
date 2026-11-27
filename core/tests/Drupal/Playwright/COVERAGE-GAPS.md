@@ -1,11 +1,12 @@
 # Playwright coverage gaps
 
-| Area | Uncovered behavior | Why | Unlock signal |
-|---|---|---|---|
-| Nightwatch corpus beyond S4 | Administration, theme accessibility and editor tests | S4 covers the Navigation sidebar and its accessibility scans. | Complete S5 and S6 and account for each original assertion in CORPUS.md. |
-| `drupalCreateRole.js:44` | The `table.permissions` selector identifies a visible permissions table | `UserPermissionsTest::testPermissionTableHtml()` checks the cell count of a module header row. | Assert that `table.permissions` is visible on `/admin/people/permissions`. |
-| `drupalCreateUser.js:35,40` | Password field is visible on the administrative create-user form with notification unchecked | `UserCreateTest::testUserAdd()` submits the field through a non-browser client. `PasswordConfirmWidgetTest::testPasswordConfirmWidgetJsComponents()` exercises the widget on the account edit form. | Add a browser visibility assertion on `/admin/people/create` with notification unchecked. |
-| `drupalLogout.js:24` | The browser removes the session cookie after logout confirmation | `UserLogoutTest::testLogout()` checks server-side session invalidation. `SessionTest::testEmptyAnonymousSession()` checks cookie removal on empty anonymous sessions. | Assert the browser cookie is absent after submitting `/user/logout/confirm`. |
+| Area                                                     | Uncovered behavior                                                                                            | Why                                                                                                                                                                                                 | Unlock signal                                                                             |
+| -------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------- |
+| Nightwatch corpus beyond S5                              | Editor tests                                                                                                  | S6 is pending.                                                                                                                                                                                      | Complete S6 and account for each original assertion in CORPUS.md.                         |
+| `defaultAdminPrimaryTabsTest.js:44–45,47–48,52–55,59–62` | Separate hamburger and close icons swap visibility and `aria-hidden` in the initial, open, and closed states. | #3500425 implemented this in Claro. #3582098 copied the test to Default Admin, whose toggle already used a single hamburger SVG.                                                                    | Port these assertions when Default Admin renders distinct open and close icons.           |
+| `drupalCreateRole.js:44`                                 | The `table.permissions` selector identifies a visible permissions table                                       | `UserPermissionsTest::testPermissionTableHtml()` checks the cell count of a module header row.                                                                                                      | Assert that `table.permissions` is visible on `/admin/people/permissions`.                |
+| `drupalCreateUser.js:35,40`                              | Password field is visible on the administrative create-user form with notification unchecked                  | `UserCreateTest::testUserAdd()` submits the field through a non-browser client. `PasswordConfirmWidgetTest::testPasswordConfirmWidgetJsComponents()` exercises the widget on the account edit form. | Add a browser visibility assertion on `/admin/people/create` with notification unchecked. |
+| `drupalLogout.js:24`                                     | The browser removes the session cookie after logout confirmation                                              | `UserLogoutTest::testLogout()` checks server-side session invalidation. `SessionTest::testEmptyAnonymousSession()` checks cookie removal on empty anonymous sessions.                               | Assert the browser cookie is absent after submitting `/user/logout/confirm`.              |
 
 S1 introduces no uncovered assertions. The two deprecation warnings use Playwright console events.
 
@@ -16,3 +17,6 @@ S3 covers every htmx corpus assertion. See the swap and route mapping in [CORPUS
 S4 covers all four Navigation originals. Both scans return zero axe
 violations with the historical rules and context. The cross-reference is in
 [CORPUS.md](CORPUS.md).
+
+S5 covers the remaining primary tabs assertions, both message cases and all
+eleven core theme scans. See [CORPUS.md](CORPUS.md).
