@@ -96,7 +96,7 @@ All five original cases have coverage. S1 has no retirements.
 
 ## S2
 
-<!-- cspell:ignore Äwesome dnoooooxouuuuythss dnoooooxouuuuuthss ÐÑÒÓÔÕÖ ØÙÚÛÜÝ -->
+<!-- cspell:ignore Äwesome dnoooooxouuuuythss dnoooooxouuuuuthss ÐÑÒÓÔÕÖ ØÙÚÛÜÝ drupalhtmlbuilder -->
 
 Core origins are relative to `core/tests/Drupal/Nightwatch/Tests/`.
 The Default Admin original is in `core/themes/default_admin/tests/src/Nightwatch/`.
@@ -310,7 +310,7 @@ string assertion in `NW-drupalHtmlBuilderTest-fragment-serialization.spec.ts`.
 | Line 146           | `void-element`         | `<hr>`                                                                              |
 | Lines 158–161      | `attribute-escaping`   | `<div data-caption="Kittens &amp; llamas are &lt;em&gt;cute&lt;/em&gt;">foo</div>`  |
 
-The Playwright fixture imports the production JavaScript module in Chromium.
+The Playwright fixture imports the checked-in builder source (`drupalHtmlEngine/src/drupalhtmlbuilder.js`) into Chromium through a blob URL. Like the Nightwatch unit test, it bypasses Drupal library loading and the compiled bundle.
 Each case constructs its own detached document fragment and builder, as in
 the original. The original unit tests had no Drupal install, routes, login,
 viewport changes, or state to carry forward. The `@ckeditor5` tag carries
