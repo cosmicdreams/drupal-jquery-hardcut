@@ -59,6 +59,9 @@ const cases: readonly {
   {
     name: 'Structure | Block',
     path: 'admin/structure/block',
+    // Nightwatch ended the browser once per file, so this case inherited the
+    // window size set by the preceding mobile case.
+    viewport: { width: 415, height: 823 },
     options: {
       rules: {
         'color-contrast': { enabled: false },
