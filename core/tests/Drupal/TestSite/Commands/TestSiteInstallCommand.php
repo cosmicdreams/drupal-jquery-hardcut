@@ -131,12 +131,7 @@ class TestSiteInstallCommand extends Command {
     putenv("SIMPLETEST_BASE_URL=$base_url");
 
     // Manage site fixture.
-    $this->setup($input->getOption('install-profile'), $class_name, $input->getOption('langcode'));
-
-    $modules = $input->getOption('module');
-    if ($modules !== []) {
-      \Drupal::service('module_installer')->install($modules);
-    }
+    $this->setup($input->getOption('install-profile'), $class_name, $input->getOption('langcode'), $input->getOption('module'));
 
     if ($this->fixturePrefixFile === NULL) {
       // Make sure there is an entry in sites.php for the new site.
@@ -233,14 +228,19 @@ class TestSiteInstallCommand extends Command {
    *   test.
    * @param string $langcode
    *   (optional) The language to install the site in.
+   * @param string[] $modules
+   *   Additional modules to install before running the setup class.
    */
-  public function setup($profile = 'testing', $setup_class = NULL, $langcode = 'en'): void {
+  public function setup($profile = 'testing', $setup_class = NULL, $langcode = 'en', array $modules = []): void {
     $this->profile = $profile;
     $this->langcode = $langcode;
     $this->setupBaseUrl();
     $this->prepareEnvironment();
     $this->executePreinstallClass($setup_class);
     $this->installDrupal();
+    if ($modules !== []) {
+      \Drupal::service('module_installer')->install($modules);
+    }
     $this->executeSetupClass($setup_class);
   }
 

@@ -94,6 +94,58 @@ case checked return values and computed styles.
 
 All five original cases have coverage. S1 has no retirements.
 
+## S2
+
+<!-- cspell:ignore Äwesome dnoooooxouuuuythss ÐÑÒÓÔÕÖ ØÙÚÛÜÝ -->
+
+Core origins are relative to `core/tests/Drupal/Nightwatch/Tests/`.
+The Default Admin original is in `core/themes/default_admin/tests/src/Nightwatch/`.
+Each Playwright case has an isolated site. The installer provisions `form_test`
+and its dependencies for all three cases. The autocomplete setup selects Default
+Admin as the default theme and signs in a disposable account with
+`access autocomplete test` through the shared fixture.
+
+| Origin | Assertion | Disposition | Coverage |
+|---|---|---|---|
+| `statesTest.js:12,19` | The full States form page body is visible | Port faithfully. Both visits used the same fixture and initial state. | `NW-statesTest-form-deprecations` |
+| `statesTest.js:13` | The textfield controlled by an OR condition starts hidden | Adapt. Existing browser coverage uses the same route and verifies both inputs in the condition. | `JavascriptStatesTest::testNumberTrigger()` |
+| `statesTest.js:14` | The full States form logs no deprecation warnings | Adapt. Subscribe to the browser console for Drupal's `[Deprecation]` warnings. | `NW-statesTest-form-deprecations` |
+| `statesTest.js:20,32` | The dependent item starts hidden and appears after the number spinner changes | Adapt. Existing browser coverage sends Arrow Up and Tab, suppresses key-release handlers, and checks the trusted change event. | `JavascriptStatesTest::testNumberTrigger()` |
+| `machineNameTransliterationTest.js:31` | The filtered module checkbox is visible as part of setup | Adapt. Provision the module through the installer and verify its fixture is reachable. | `NW-machineNameTransliterationTest-configured-transliteration` |
+| `machineNameTransliterationTest.js:257`, vectors at lines 8, 15 | English `Bob → bob` and `Äwesome → awesome` | Adapt. Existing browser coverage fills the role label and verifies its generated machine name. | `MachineNameTransliterationTest::testMachineNameTransliterations()` |
+| `machineNameTransliterationTest.js:257`, vector at line 59 | English uppercase Latin-1 transliteration | Adapt. The current library yields `dnoooooxouuuuythss` for `ÐÑÒÓÔÕÖ×ØÙÚÛÜÝÞß`. That output is covered by `6f31c914380`. | `MachineNameTransliterationTest::testMachineNameTransliterations()` |
+| `machineNameTransliterationTest.js:257`, other 28 vectors | Exact output for each input with its original replacement pattern, character, and maximum length | Port faithfully. The same synchronous browser method accepts the original settings. | `NW-machineNameTransliterationTest-configured-transliteration` |
+| `defaultAdminAutocompleteTest.js:12` | The themes list is visible after setup | Adapt. The installer selects Default Admin and the spec confirms its loading markup on the fixture. | `NW-defaultAdminAutocompleteTest-inline-loading` |
+| `defaultAdminAutocompleteTest.js:28` | The form page body is visible | Port faithfully. | `NW-defaultAdminAutocompleteTest-inline-loading` |
+| `defaultAdminAutocompleteTest.js:36` | Entering `/` in the denylisted field does not start the throbber | Adapt. Check the same class after advancing the browser clock through the debounce while requests are held. | `NW-defaultAdminAutocompleteTest-inline-loading` |
+| `defaultAdminAutocompleteTest.js:44` | The loading message starts hidden | Adapt. The Default Admin loading text identifies the message after removal of its old data selector. | `NW-defaultAdminAutocompleteTest-inline-loading` |
+| `defaultAdminAutocompleteTest.js:46` | The suggestions start hidden | Adapt. Use the native listbox named for the combobox. | `NW-defaultAdminAutocompleteTest-inline-loading` |
+| `defaultAdminAutocompleteTest.js:55–57` | The loading message appears before suggestions | Adapt. Hold the request until the message is visible and the listbox is still hidden. | `NW-defaultAdminAutocompleteTest-inline-loading` |
+| `defaultAdminAutocompleteTest.js:58` | The suggestions appear | Adapt. Release the request and check the named option in the native listbox. | `NW-defaultAdminAutocompleteTest-inline-loading` |
+| `defaultAdminAutocompleteTest.js:61` | The loading message disappears after suggestions appear | Adapt. Check the same loading text after the server result appears. | `NW-defaultAdminAutocompleteTest-inline-loading` |
+
+Commit `20cd593597b` moved States to native conditions, `79f64edb511` updated
+the fixture selectors, and `1f5fd93f2f3` removed the compatibility bridges.
+`NativeStatesPublicationTest::testNativeNumberTriggerNoDeprecations()` covers
+the separate `/states-test/native-form` route. The Playwright deprecation guard
+uses the original, larger `/form-test/javascript-states-form` fixture.
+
+Commit `30270eb59f1` converted machine-name field events to native events.
+The Playwright case exercises inputs and exact settings beyond the browser
+preview checks in `MachineNameTest::testMachineName()` and
+`MachineNameTest::testReplacementAndTruncation()`.
+
+Commit `fc35bee38e1` replaced the jQuery UI autocomplete menu and changed the
+loading markup to use the input's busy class. Its idle styles lost to
+`.container-inline div` in Default Admin. The scoped theme rule restores hidden
+loading text before and after the request. `DialogTest::testAutocompleteKeyboardAndRequests()`
+covers request suppression in a modal. The Playwright case covers the themed
+throbber and the inline message lifecycle on the standalone form.
+The file history also includes #3174884, #3264940, and #3560682.
+
+The native selectors carry the original user-visible contracts. S2 has no
+retirements, new `PW-` cases, or uncovered assertions.
+
 ## Pending slices
 
 Each pending case and assertion from the following files maps to the pending
@@ -101,7 +153,6 @@ corpus entry in [COVERAGE-GAPS.md](COVERAGE-GAPS.md).
 
 | Slice | Original files |
 |---|---|
-| S2 | `statesTest.js`, `machineNameTransliterationTest.js`, `defaultAdminAutocompleteTest.js` |
 | S3 | `htmx/htmxTest.js` |
 | S4 | Navigation tests `expandCollapseTest.js`, `navigationDisplaceTest.js`, `navigationMobileFocusTrapTest.js`, and `a11yTest.js` |
 | S5 | `defaultAdminDrupalMessageTest.js`, `defaultAdminPrimaryTabsTest.js`, `a11yTestAdmin.js`, `a11yTestDefault.js` |

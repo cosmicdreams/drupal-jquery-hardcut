@@ -3,10 +3,12 @@ import type { APIRequest, BrowserContext } from '@playwright/test';
 import { installSite, siteFixtureTimeout } from '../factories/test-site';
 import type { SiteOptions, TestSite } from '../factories/test-site';
 import { AjaxPromiseFormPage } from '../pages/AjaxPromiseFormPage';
+import { AutocompleteTestPage } from '../pages/AutocompleteTestPage';
 import { DeprecationTestPage } from '../pages/DeprecationTestPage';
 import { DisplaceTestPage } from '../pages/DisplaceTestPage';
 import { DrupalPage } from '../pages/DrupalPage';
 import { LoginPage } from '../pages/LoginPage';
+import { MachineNameTestPage } from '../pages/MachineNameTestPage';
 import { OnceTestPage } from '../pages/OnceTestPage';
 import { TabbingManagerTestPage } from '../pages/TabbingManagerTestPage';
 import { UmamiTestPage } from '../pages/UmamiTestPage';
@@ -20,8 +22,10 @@ type Fixtures = {
   drupalPage: DrupalPage;
   umamiPage: UmamiTestPage;
   ajaxPromiseFormPage: AjaxPromiseFormPage;
+  autocompleteTestPage: AutocompleteTestPage;
   deprecationTestPage: DeprecationTestPage;
   displaceTestPage: DisplaceTestPage;
+  machineNameTestPage: MachineNameTestPage;
   onceTestPage: OnceTestPage;
   tabbingManagerTestPage: TabbingManagerTestPage;
   /**
@@ -34,6 +38,8 @@ type Fixtures = {
   adminPage: DrupalPage;
 };
 
+const autocompleteSetup =
+  'core/tests/Drupal/TestSite/PlaywrightAutocompleteTestSetup.php';
 const loginSetup = 'core/tests/Drupal/TestSite/PlaywrightLoginTestSetup.php';
 
 async function captureAuthState(
@@ -114,11 +120,32 @@ export const test = base.extend<Fixtures>({
   ajaxPromiseFormPage: async ({ page }, use) => {
     await use(new AjaxPromiseFormPage(page));
   },
+  autocompleteTestPage: async (
+    { browser, baseURL, playwright, site, storageState },
+    use,
+  ) => {
+    // The setup creates the autocomplete account immediately after UID 1.
+    const state = await captureAuthState(
+      playwright.request,
+      site,
+      storageState,
+      2,
+    );
+    const context = await browser.newContext({ baseURL, storageState: state });
+    try {
+      await use(new AutocompleteTestPage(await context.newPage()));
+    } finally {
+      await context.close();
+    }
+  },
   deprecationTestPage: async ({ page }, use) => {
     await use(new DeprecationTestPage(page));
   },
   displaceTestPage: async ({ page }, use) => {
     await use(new DisplaceTestPage(page));
+  },
+  machineNameTestPage: async ({ page }, use) => {
+    await use(new MachineNameTestPage(page));
   },
   onceTestPage: async ({ page }, use) => {
     await use(new OnceTestPage(page));
@@ -175,4 +202,4 @@ export const test = base.extend<Fixtures>({
   },
 });
 
-export { expect, loginSetup };
+export { autocompleteSetup, expect, loginSetup };
