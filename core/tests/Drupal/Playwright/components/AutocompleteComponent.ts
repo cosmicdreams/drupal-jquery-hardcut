@@ -10,6 +10,8 @@ export class AutocompleteComponent {
     this.input = page.getByRole('combobox', { name, exact: true });
     // Default Admin places the visual loading text alongside the input in
     // its dedicated wrapper. The text has no landmark or status role.
+    // A role="status" (or a stable hook) on .admin-autocomplete__message would
+    // replace this text locator and announce the message to screen readers.
     this.loading = this.input.locator('..').getByText('Loading…', {
       exact: true,
     });

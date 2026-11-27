@@ -66,8 +66,9 @@ const transliterationCases = [
     maxlength: 64,
     expectedMachineName: 'aaaaaaaeceeeeiiii',
   },
-  // Nightwatch expected 'dnoooooxouuuuuthss'. The transliteration library
-  // update from 2.6.1 to 2.7.0 (commit 5776d7ded4d) now maps Ý to 'y'.
+  // The corpus (949d5a22038^) expected 'dnoooooxouuuuuthss'. Upstream commit
+  // 5776d7ded4d (#3638970) updated transliteration from 2.6.1 to 2.7.0, which
+  // maps Ý to 'y', and changed this Nightwatch expectation itself.
   {
     machineName: 'ÐÑÒÓÔÕÖ×ØÙÚÛÜÝÞß',
     replacePattern: '[^a-zA-Z0-9-_.~]+',

@@ -229,7 +229,7 @@ class TestSiteInstallCommand extends Command {
    * @param string $langcode
    *   (optional) The language to install the site in.
    * @param string[] $modules
-   *   Additional modules to install before running the setup class.
+   *   (optional) Additional modules to install before running the setup class.
    */
   public function setup($profile = 'testing', $setup_class = NULL, $langcode = 'en', array $modules = []): void {
     $this->profile = $profile;

@@ -9,4 +9,4 @@
 
 S1 introduces no uncovered assertions. The two deprecation warnings use Playwright console events.
 
-S2 introduces no uncovered assertions. The corpus identifies the existing browser tests that cover the States spinner and three machine-name vectors.
+S2 introduces no uncovered assertions. The corpus identifies the existing browser test that covers the States visibility and spinner assertions.
