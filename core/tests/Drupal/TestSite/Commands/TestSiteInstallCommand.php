@@ -88,6 +88,11 @@ class TestSiteInstallCommand extends Command {
   protected $root;
 
   /**
+   * A file in which a browser fixture runner records the allocated prefix.
+   */
+  protected ?string $fixturePrefixFile = NULL;
+
+  /**
    * {@inheritdoc}
    */
   protected function configure(): void {
@@ -100,6 +105,7 @@ class TestSiteInstallCommand extends Command {
       ->addOption('install-profile', NULL, InputOption::VALUE_OPTIONAL, 'Install profile to install the site in. Defaults to testing.', 'testing')
       ->addOption('langcode', NULL, InputOption::VALUE_OPTIONAL, 'The language to install the site in. Defaults to en.', 'en')
       ->addOption('json', NULL, InputOption::VALUE_NONE, 'Output test site connection details in JSON.')
+      ->addOption('fixture-prefix-file', NULL, InputOption::VALUE_REQUIRED, 'Record the allocated prefix before installation. Requests must use the signed test user agent instead of a sites.php mapping.')
       ->addUsage('--setup-file core/tests/Drupal/TestSite/TestSiteMultilingualInstallTestScript.php --json')
       ->addUsage('--install-profile demo_umami --langcode fr')
       ->addUsage('--base-url "http://example.com" --db-url "mysql://username:password@localhost/database_name#table_prefix"');
@@ -116,6 +122,7 @@ class TestSiteInstallCommand extends Command {
     $class_name = $this->getSetupClass($input->getOption('setup-file'));
     // Ensure we can install a site in the sites/simpletest directory.
     $this->ensureDirectory($root);
+    $this->fixturePrefixFile = $input->getOption('fixture-prefix-file');
 
     $db_url = $input->getOption('db-url');
     $base_url = $input->getOption('base-url');
@@ -125,17 +132,19 @@ class TestSiteInstallCommand extends Command {
     // Manage site fixture.
     $this->setup($input->getOption('install-profile'), $class_name, $input->getOption('langcode'));
 
-    // Make sure there is an entry in sites.php for the new site.
-    $fs = new Filesystem();
-    if (!$fs->exists($root . '/sites/sites.php')) {
-      $fs->copy($root . '/sites/example.sites.php', $root . '/sites/sites.php');
+    if ($this->fixturePrefixFile === NULL) {
+      // Make sure there is an entry in sites.php for the new site.
+      $fs = new Filesystem();
+      if (!$fs->exists($root . '/sites/sites.php')) {
+        $fs->copy($root . '/sites/example.sites.php', $root . '/sites/sites.php');
+      }
+      $parsed = parse_url($base_url);
+      $port = $parsed['port'] ?? 80;
+      $host = $parsed['host'] ?? 'localhost';
+      // Remove 'sites/' from the beginning of the path.
+      $site_path = substr($this->siteDirectory, 6);
+      $fs->appendToFile($root . '/sites/sites.php', "\$sites['$port.$host'] = '$site_path';");
     }
-    $parsed = parse_url($base_url);
-    $port = $parsed['port'] ?? 80;
-    $host = $parsed['host'] ?? 'localhost';
-    // Remove 'sites/' from the beginning of the path.
-    $site_path = substr($this->siteDirectory, 6);
-    $fs->appendToFile($root . '/sites/sites.php', "\$sites['$port.$host'] = '$site_path';");
 
     $user_agent = drupal_generate_test_ua($this->databasePrefix);
     if ($input->getOption('json')) {
@@ -301,6 +310,15 @@ class TestSiteInstallCommand extends Command {
     $test_db = new TestDatabase(NULL, TRUE);
     $this->siteDirectory = $test_db->getTestSitePath();
     $this->databasePrefix = $test_db->getDatabasePrefix();
+    if ($this->fixturePrefixFile !== NULL) {
+      try {
+        (new Filesystem())->dumpFile($this->fixturePrefixFile, $this->databasePrefix);
+      }
+      catch (\Throwable $error) {
+        $test_db->releaseLock();
+        throw $error;
+      }
+    }
   }
 
 }

@@ -5,6 +5,7 @@ import prettierConfig from 'eslint-plugin-prettier/recommended';
 import ymlConfig from 'eslint-plugin-yml';
 import jsdoc from 'eslint-plugin-jsdoc';
 import js from '@eslint/js';
+import tsParser from '@typescript-eslint/parser';
 import globals from 'globals';
 import { jqueryPlugin } from './scripts/js/jquery-ratchet.mjs';
 
@@ -120,5 +121,18 @@ export default defineConfig(
         },
       },
     ],
+  },
+  {
+    files: [
+      'playwright.config.ts',
+      'tests/Drupal/Playwright/**/*.ts',
+      '{modules,themes}/*/tests/src/Playwright/**/*.ts',
+    ],
+    languageOptions: { parser: tsParser },
+    rules: {
+      // TypeScript checks types and resolves imports for these files.
+      'no-undef': 'off',
+      'import/no-unresolved': 'off',
+    },
   },
 );

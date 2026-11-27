@@ -29,12 +29,16 @@
     "check:ckeditor5": "node ./scripts/js/ckeditor5-check-plugins.js",
     "build:ckeditor5-types": "node ./scripts/js/ckeditor5-types-documentation.js",
     "build:ckeditor5-dev": "yarn build:ckeditor5 --mode=development",
-    "watch:ckeditor5-dev": "yarn watch:ckeditor5 --mode=development"
+    "watch:ckeditor5-dev": "yarn watch:ckeditor5 --mode=development",
+    "test:playwright": "playwright test"
   },
   "devDependencies": {
     "@drupal/once": "^1.0.1",
     "@floating-ui/dom": "^1.8.0",
     "@gitlab-formatters/stylelint-formatter-gitlab": "^1.0.2",
+    "@playwright/test": "^1.65.1",
+    "@types/node": "^24",
+    "@typescript-eslint/parser": "8.70.0",
     "chokidar": "^6.0.0",
     "ckeditor5": "^49.1.0",
     "cspell": "^10.5.2",
@@ -71,6 +75,7 @@
     "terser-webpack-plugin": "^5.6.1",
     "transliteration": "^2.7.0",
     "tua-body-scroll-lock": "^1.6.3",
+    "typescript": "~6.0.0",
     "webpack": "^5.112.2",
     "webpack-cli": "^7.3.1"
   },
