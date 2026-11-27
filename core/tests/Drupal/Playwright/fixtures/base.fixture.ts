@@ -1,5 +1,12 @@
+import { readFile } from 'node:fs/promises';
+import { resolve } from 'node:path';
 import { expect, test as base } from '@playwright/test';
-import type { APIRequest, BrowserContext, Page } from '@playwright/test';
+import type {
+  APIRequest,
+  BrowserContext,
+  JSHandle,
+  Page,
+} from '@playwright/test';
 import { installSite, siteFixtureTimeout } from '../factories/test-site';
 import type { SiteOptions, TestSite } from '../factories/test-site';
 import { AjaxPromiseFormPage } from '../pages/AjaxPromiseFormPage';
@@ -30,6 +37,7 @@ type Fixtures = {
   primaryTabsTestPage: PrimaryTabsTestPage;
   siteCleanup: (site: TestSite) => void;
   drupalPage: DrupalPage;
+  drupalHtmlBuilder: JSHandle<(fragment: DocumentFragment) => string>;
   umamiPage: UmamiTestPage;
   ajaxPromiseFormPage: AjaxPromiseFormPage;
   autocompleteTestPage: AutocompleteTestPage;
@@ -196,6 +204,34 @@ export const test = base.extend<Fixtures>({
   },
   drupalPage: async ({ page }, use) => {
     await use(new DrupalPage(page));
+  },
+  drupalHtmlBuilder: async ({ page }, use) => {
+    const build = await test.step('Import the HTML builder', async () => {
+      const source = await readFile(
+        resolve(
+          __dirname,
+          // cspell:ignore drupalhtmlbuilder
+          '../../../../modules/ckeditor5/js/ckeditor5_plugins/drupalHtmlEngine/src/drupalhtmlbuilder.js',
+        ),
+        'utf8',
+      );
+      return page.evaluateHandle(async (moduleSource) => {
+        const url = URL.createObjectURL(
+          new Blob([moduleSource], { type: 'text/javascript' }),
+        );
+        try {
+          const { default: DrupalHtmlBuilder } = await import(url);
+          return (fragment: DocumentFragment) => {
+            const builder = new DrupalHtmlBuilder();
+            builder.appendNode(fragment);
+            return builder.build() as string;
+          };
+        } finally {
+          URL.revokeObjectURL(url);
+        }
+      }, source);
+    });
+    await use(build);
   },
   umamiPage: async ({ page }, use) => {
     await use(new UmamiTestPage(page));

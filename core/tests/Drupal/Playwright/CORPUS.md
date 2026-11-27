@@ -291,14 +291,30 @@ with the test environment configured below. The restored
 override. The authenticated installation request returns a confirmation
 without rendering through the newly installed theme on that request.
 
-## Pending slices
+## S6 CKEditor 5 HTML fragment serialization
 
-Each pending case and assertion from the following files maps to the pending
-corpus entry in [COVERAGE-GAPS.md](COVERAGE-GAPS.md).
+The original is
+`core/modules/ckeditor5/tests/src/Nightwatch/Tests/drupalHtmlBuilderTest.js`
+at `949d5a22038^`. It contains nine unit cases. Each row maps to one exact
+string assertion in `NW-drupalHtmlBuilderTest-fragment-serialization.spec.ts`.
 
-| Slice | Original files             |
-| ----- | -------------------------- |
-| S6    | `drupalHtmlBuilderTest.js` |
+| Original assertion | Playwright test suffix | Expected output                                                                     |
+| ------------------ | ---------------------- | ----------------------------------------------------------------------------------- |
+| Line 32            | `empty-fragment`       | Empty string                                                                        |
+| Line 42            | `single-text-node`     | `foo bar`                                                                           |
+| Line 52            | `paragraph`            | `<p>foo bar</p>`                                                                    |
+| Lines 71–74        | `multiple-children`    | `foo bar<p>foo</p><div>bar</div>`                                                   |
+| Lines 97–105       | `script-and-style`     | The typed style tag, newline, and script tag with raw text and original line breaks |
+| Line 119           | `comment`              | `<div>bar</div><!--bar-->`                                                          |
+| Lines 132–135      | `attributes`           | `<div id="foo" class="bar">baz</div>`                                               |
+| Line 146           | `void-element`         | `<hr>`                                                                              |
+| Lines 158–161      | `attribute-escaping`   | `<div data-caption="Kittens &amp; llamas are &lt;em&gt;cute&lt;/em&gt;">foo</div>`  |
+
+The Playwright fixture imports the production JavaScript module in Chromium.
+Each case constructs its own detached document fragment and builder, as in
+the original. The original unit tests had no Drupal install, routes, login,
+viewport changes, or state to carry forward. The `@ckeditor5` tag carries
+forward the Nightwatch selection. There are no gaps or retirements.
 
 ## Run the Playwright suite
 
