@@ -20,7 +20,9 @@ import {
  * @see https://www.drupal.org/project/drupal/issues/3483908
  */
 test.describe('Drupal HTML builder', { tag: '@ckeditor5' }, () => {
-  // These unit cases only need the browser DOM. Use Playwright's defaults.
+  // These unit cases only need the browser DOM. Overriding an option with
+  // undefined restores Playwright's default, so no site-backed baseURL or
+  // login state is resolved for this file.
   test.use({ baseURL: undefined, storageState: undefined });
 
   test('NW-drupalHtmlBuilderTest-empty-fragment', async ({

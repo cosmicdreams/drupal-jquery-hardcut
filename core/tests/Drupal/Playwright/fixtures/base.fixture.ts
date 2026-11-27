@@ -205,7 +205,10 @@ export const test = base.extend<Fixtures>({
   drupalPage: async ({ page }, use) => {
     await use(new DrupalPage(page));
   },
-  drupalHtmlBuilder: async ({ page }, use) => {
+  // Uses its own blank context, not `page`, so it never depends on a site.
+  drupalHtmlBuilder: async ({ browser }, use) => {
+    const context = await browser.newContext();
+    const page = await context.newPage();
     const build = await test.step('Import the HTML builder', async () => {
       const source = await readFile(
         resolve(
@@ -231,7 +234,12 @@ export const test = base.extend<Fixtures>({
         }
       }, source);
     });
-    await use(build);
+    try {
+      await use(build);
+    } finally {
+      await build.dispose();
+      await context.close();
+    }
   },
   umamiPage: async ({ page }, use) => {
     await use(new UmamiTestPage(page));
