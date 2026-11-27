@@ -84,6 +84,9 @@ test(
 
     await test.step('Press Escape and verify the sidebar closes and focus returns', async () => {
       await navigationPage.pressEscape();
+      // The original waited for the item to become not visible, which needs it
+      // to stay in the document. toBeHidden() alone also passes on removal.
+      await expect(navigation.configuration).toHaveCount(1);
       await expect(navigation.configuration).toBeHidden();
       await expect(navigation.mobileToggle).toBeFocused();
     });

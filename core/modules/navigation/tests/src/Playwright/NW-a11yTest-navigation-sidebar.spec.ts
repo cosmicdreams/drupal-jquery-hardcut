@@ -23,6 +23,9 @@ test(
   async ({ navigationPage }) => {
     const { navigation } = navigationPage;
     await test.step('Scan the account edit page at the wide viewport', async () => {
+      // The original loaded the page at the runner's initial window size and
+      // then resized, so the sidebar state it scanned depended on that size.
+      // Seed the collapsed preference so the wide scan always sees one state.
       await navigationPage.resize(1220, 800);
       await navigationPage.startWithCollapsedSidebar();
       await navigationPage.open('user/1/edit');

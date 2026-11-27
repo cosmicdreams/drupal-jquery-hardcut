@@ -48,13 +48,15 @@ export class NavigationSidebarComponent {
       exact: true,
     });
     // The overlay uses the authored trigger attribute. The zero-size
-    // displacement placeholder has no role or authored hook.
+    // displacement placeholder has no role or authored hook. Improvement: give
+    // the placeholder a data-drupal-selector hook in the Navigation template.
     this.overlay = page.locator('[admin-toolbar-trigger]');
     this.displacePlaceholder = this.sidebar.locator(
       '.admin-toolbar__displace-placeholder',
     );
     // Preserve the original population of direct body children. The control
-    // bar has no role or authored hook on its wrapper.
+    // bar has no role or authored hook on its wrapper. Improvement: give the
+    // control-bar wrapper a data-drupal-selector hook in its template.
     this.outsideElements = page.locator(
       'body > :not(#admin-toolbar, [admin-toolbar-trigger], .admin-toolbar-control-bar)',
     );
