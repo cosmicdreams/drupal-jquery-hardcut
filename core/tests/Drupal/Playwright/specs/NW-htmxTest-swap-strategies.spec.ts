@@ -56,7 +56,10 @@ swapStrategies.forEach(([route, strategy]) => {
 
       if (strategy === 'textContent') {
         await test.step('Verify the target received text without the response element', async () => {
-          await expect.soft(attachments.target).toHaveText('Initial Content');
+          await expect.soft(attachments.target).toBeVisible();
+          await expect.soft(attachments.target).toHaveText('Initial Content', {
+            useInnerText: true,
+          });
           await expect(attachments.content).toHaveCount(0);
         });
       } else {

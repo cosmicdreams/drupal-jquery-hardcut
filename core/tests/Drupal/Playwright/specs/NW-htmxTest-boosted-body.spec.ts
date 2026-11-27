@@ -42,9 +42,10 @@ test(
 
     await test.step('Request the replacement content', async () => {
       const response = await htmxAttachmentsPage.followBoostedLink();
-      expect
-        .soft(await response.request().headerValue('hx-request'))
-        .toBe('true');
+      const request = response.request();
+      expect.soft(await request.headerValue('hx-request')).toBe('true');
+      expect.soft(await request.headerValue('hx-boosted')).toBe('true');
+      expect.soft(await request.headerValue('hx-target')).toBe('body');
     });
 
     await test.step('Verify inserted markup, Drupal behavior and loaded assets', async () => {

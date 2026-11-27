@@ -7,8 +7,12 @@
       document.body.dataset.htmxBehaviorTest = 'attached';
     },
     detach(context, settings, trigger) {
-      once.remove('htmx-init', '.ajax-content', context);
-      document.body.dataset.htmxBehaviorTest = 'detached';
+      if (
+        trigger === 'unload' &&
+        once.remove('htmx-init', '.ajax-content', context).length > 0
+      ) {
+        document.body.dataset.htmxBehaviorTest = 'detached';
+      }
     },
   };
 })(Drupal, once);

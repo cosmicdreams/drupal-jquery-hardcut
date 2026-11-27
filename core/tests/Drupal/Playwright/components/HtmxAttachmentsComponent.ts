@@ -32,6 +32,9 @@ export class HtmxAttachmentsComponent {
   async expectAssetsPresent(): Promise<void> {
     await expect.soft(this.script).toBeAttached();
     await expect.soft(this.stylesheet).toBeAttached();
+    await expect
+      .soft(this.content)
+      .toHaveCSS('background-color', 'rgb(255, 0, 0)');
   }
 
   async expectVisibleInitializedContent(): Promise<void> {

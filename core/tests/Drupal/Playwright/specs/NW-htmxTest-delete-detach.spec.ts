@@ -33,7 +33,7 @@ test(
       await htmxAttachmentsPage.deleteButton.click();
     });
 
-    await test.step('Verify the content was removed and the behavior detached', async () => {
+    await test.step('Verify the behavior detached from the deleted content', async () => {
       await expect.soft(attachments.content).toHaveCount(0);
       await expect.soft(attachments.initializedContent).toHaveCount(0);
       await expect(htmxAttachmentsPage.body).toHaveAttribute(
